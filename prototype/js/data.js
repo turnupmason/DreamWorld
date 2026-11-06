@@ -2,6 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, and what it costs.
 // Item names are bilingual; nm(item) picks the current language.
 
+const VERSION = '0.2.1';                // keep in step with CHANGELOG.md and the git tag
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 20;                  // farm actions per day (planting, stealing). Harvesting, selling and shopping are free.

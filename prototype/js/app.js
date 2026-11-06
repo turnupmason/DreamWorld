@@ -507,7 +507,7 @@ function renderConsole() {
   if (!S) { el.innerHTML = `<div class="console-head"><b>🛠 ${t('console_title')}</b></div><p class="muted">${t('console_wait')}</p>`; return; }
   const b = (act, arg, label) => `<button class="btn small" data-act="${act}" data-arg="${arg}">${label}</button>`;
   el.innerHTML = `
-    <div class="console-head"><b>🛠 ${t('console_title')}</b><button class="x" data-act="consoleClose">✕</button></div>
+    <div class="console-head"><b>🛠 ${t('console_title')} <span class="muted">v${VERSION}</span></b><button class="x" data-act="consoleClose">✕</button></div>
     <p class="muted">${t('console_desc')}</p>
     <div class="con-group"><h4>${t('con_health')}</h4>
       ${b('simSteps', 1000, '+1,000 ' + t('steps_unit'))}${b('simSteps', 3000, '+3,000 ' + t('steps_unit'))}</div>
