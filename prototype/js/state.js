@@ -13,22 +13,21 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function now() { return Date.now() + (S ? S.timeOffset : 0); }
 function dayKey(ms) { const d = new Date(ms); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
 function freshDay() {
-  return { date: dayKey(now()), steps: 0, stepBlocks: 0, focusMin: 0, distractMin: 0, actions: 0, steals: 0,
-           goalPaid: false, restDay: false, liked: {}, earned: { coins: 0, wood: 0 } };
+  return {
+    date: dayKey(now()),
+    // health for today (from Apple Health in the app; from the console in the prototype)
+    steps: 0, pushes: 0, kcal: 0, exMin: 0, standH: 0, mindful: 0, workouts: [],
+    focusMin: 0, distractMin: 0, actions: 0, steals: 0, restDay: false, liked: {},
+    earned: { coins: 0, wood: 0 },
+    paid: { stepBlocks: 0, goal: false, rings: {}, workouts: {}, mindful: 0, sleep: false },
+  };
 }
 
 function load() {
   try { S = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { S = null; }
-  if (!S || S.v !== 2) S = null;
+  if (!S || S.v !== 3) S = null;
   if (S) [S.me, ...S.friends].forEach(fixLayout);
   return S;
-}
-// If the lot layout changed between versions, move yard items that now sit somewhere they can't.
-function fixLayout(h) {
-  h.yard.splice(0).forEach(it => {
-    if (canPlace(h, 'yard', it.k, it.x, it.y, it.rot)) h.yard.push(it);
-    else autoPlace(h, 'yard', it.k, it.tint);
-  });
 }
 function save() { if (S) localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); }
 
@@ -36,22 +35,24 @@ function save() { if (S) localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); }
 function emptyHome(id) {
   return {
     id, name: '', look: null, coins: 0, wood: 0,
-    house: 0, wall: WALL_COLORS[0], roof: ROOF_COLORS[0],
+    house: 0, houses: [0], wall: WALL_COLORS[0], roof: ROOF_COLORS[0],
     room: { wall: 0, floor: 0, items: [] },
     yard: [], store: {},                       // store: bought but not placed, keyed "room:sofa" / "yard:bench"
     fieldLv: 0, fields: [null, null, null, null],
     pastureLv: 0, animals: [],
+    orchardLv: 0, trees: [null, null, null, null, null, null],
+    pondLv: 0, pond: { fish: 0, at: 0 },
     cars: [], car: -1,
     seeds: {}, barn: {},
-    likes: 0, shareGoal: false, goalToday: false,
+    likes: 0, shareGoal: false, goalToday: false, energy: 75, live: null,
   };
 }
 
 function homeFromPreset(p) {
-  const h = emptyHome(p.id);
+  const h = emptyHome(p.id), t = now();
   Object.assign(h, {
-    name: clone(p.name), look: clone(p.look), coins: p.coins, wood: p.wood, house: p.house, wall: p.wall, roof: p.roof,
-    likes: p.likes, shareGoal: p.shareGoal, earn: p.earn, simAt: now(),
+    name: clone(p.name), look: clone(p.look), coins: p.coins, wood: p.wood, house: p.house, houses: [p.house], wall: p.wall, roof: p.roof,
+    likes: p.likes, shareGoal: p.shareGoal, earn: p.earn, simAt: t, energy: 60 + Math.round(Math.random() * 35),
   });
   h.room.wall = p.roomWall; h.room.floor = p.floor;
   h.fieldLv = p.fieldLv;
@@ -59,10 +60,14 @@ function homeFromPreset(p) {
   p.crops.forEach((c, i) => {
     if (!c) return;
     const age = p.ripe.includes(i) ? 1.3 : 0.1 + Math.random() * 0.8;
-    h.fields[i] = { crop: c, at: now() - CROPS[c].grow * age, left: CROPS[c].yield, thieves: [] };
+    h.fields[i] = { crop: c, at: t - CROPS[c].grow * MIN * age, left: CROPS[c].yield, thieves: [] };
   });
   h.pastureLv = p.pastureLv;
   p.animals.forEach(([k, st]) => h.animals.push(newAnimal(k, st)));
+  h.orchardLv = p.orchardLv || 0;
+  (p.trees || []).forEach(([k, st], i) => { h.trees[i] = newTree(k, st); });
+  h.pondLv = p.pondLv || 0;
+  h.pond = { fish: h.pondLv ? 3 : 0, at: t };
   p.cars.forEach(([k, color]) => h.cars.push({ k, color }));
   h.car = h.cars.length - 1;
   p.furn.forEach(f => { const [k, tint] = Array.isArray(f) ? f : [f]; autoPlace(h, 'room', k, tint); });
@@ -72,26 +77,27 @@ function homeFromPreset(p) {
 
 function newGame(o) {
   S = {
-    v: 2, lang: o.lang, apps: o.apps, limitMin: o.limitMin, timeOffset: 0,
+    v: 3, lang: o.lang, apps: o.apps, limitMin: o.limitMin, timeOffset: 0,
     created: Date.now(), seenHint: false, welcomed: false, pending: [], feed: [],
+    mail: { inbox: [], sent: [] }, sleep: null, vitals: { resp: 14.5, rhr: 61, hrv: 48 }, live: null, native: false,
   };
+  S.today = freshDay();
   const me = emptyHome('me');
   Object.assign(me, { name: o.name, look: o.look, coins: 300, wood: 20, roof: o.look.shirt });
-  me.seeds = { wheat: 4, carrot: 3, cabbage: 1 };
+  me.seeds = { wheat: 4, carrot: 3, potato: 2 };
   // A head start so the first minute already shows things growing.
-  me.fields[0] = { crop: 'wheat', at: now() - CROPS.wheat.grow * 0.85, left: CROPS.wheat.yield, thieves: [] };
-  me.fields[1] = { crop: 'carrot', at: now() - CROPS.carrot.grow * 0.3, left: CROPS.carrot.yield, thieves: [] };
+  me.fields[0] = { crop: 'wheat', at: now() - CROPS.wheat.grow * MIN * 0.85, left: CROPS.wheat.yield, thieves: [] };
+  me.fields[1] = { crop: 'carrot', at: now() - CROPS.carrot.grow * MIN * 0.3, left: CROPS.carrot.yield, thieves: [] };
   me.pastureLv = 1;
   me.animals = [newAnimal('chicken', 2), newAnimal('chicken', 0)];
-  me.animals[0].last = now() - ANIMALS.chicken.every * 0.8;
+  me.animals[0].last = now() - ANIMALS.chicken.every * MIN * 0.8;
   S.me = me;
   autoPlace(me, 'room', 'sleepbag', TINTS[4]);
   autoPlace(me, 'room', 'lamp');
-  autoPlace(me, 'yard', 'mailbox');
   autoPlace(me, 'yard', 'flowers');
   S.friends = FRIEND_PRESETS.map(homeFromPreset);
   S.slots = SLOTS.map((p, i) => ({ c: p[0], r: p[1], owner: i === 6 ? 'me' : (FRIEND_PRESETS.find(f => f.slot === i) || {}).id || null }));
-  S.today = freshDay();
+  simSleep(78);
   save();
 }
 
@@ -100,7 +106,8 @@ function checkDay() {
   const k = dayKey(now());
   if (S.today.date === k) return false;
   S.today = freshDay();
-  S.friends.forEach(f => { f.goalToday = false; });
+  S.friends.forEach(f => { f.goalToday = false; f.energy = 55 + Math.round(Math.random() * 40); });
+  if (!S.native) simSleep(rand([92, 84, 78, 70, 61]));   // the prototype invents last night's sleep
   return true;
 }
 
@@ -110,6 +117,8 @@ function homeOf(id) { return id === 'me' ? S.me : friendById(id); }
 function slotOf(id) { return S.slots.find(s => s.owner === id); }
 function friendIds() { return S.slots.filter(s => s.owner && s.owner !== 'me').map(s => s.owner); }
 function residents() { return S.slots.filter(s => s.owner).map(s => homeOf(s.owner)); }
+// Where a home's lot starts in the town (world tiles).
+function lotOrigin(id) { const s = slotOf(id); return s ? [s.c * SLOT_W, s.r * SLOT_D] : [0, 0]; }
 
 // ---------- resources ----------
 function canAfford(c, h = S.me) { return h.coins >= (c.coins || 0) && h.wood >= (c.wood || 0); }
@@ -131,18 +140,43 @@ function useAction() { if (S.today.actions >= ACTION_CAP) return false; S.today.
 function actionsLeft() { return ACTION_CAP - S.today.actions; }
 function addBarn(h, k, n) { h.barn[k] = (h.barn[k] || 0) + n; }
 function seedCount(h = S.me) { return Object.values(h.seeds).reduce((a, b) => a + b, 0); }
-function barnCount(h = S.me) { return Object.values(h.barn).reduce((a, b) => a + b, 0); }
 
-// Energy shows mood only; it never changes how the avatar looks.
-function energyLevel() {
-  const s = S.today.steps;
-  if (s >= STEP_GOAL) return 'high';
-  if (S.today.restDay || s >= 2000) return 'mid';
-  return 'low';
+// ---------- energy: last night's sleep sets today's mood and the exercise multiplier ----------
+// Our own sleep score, used when no device gives one: duration 50, deep + REM share 30, interruptions 20.
+function sleepScore(s) {
+  const asleep = s.asleep || (s.deep + s.rem + s.core);
+  const dur = asleep > 540 ? Math.max(40, 50 - (asleep - 540) / 12) : Math.min(50, 50 * asleep / 420);
+  const staged = (s.deep || 0) + (s.rem || 0);
+  const q = staged > 0 ? Math.min(30, staged / Math.max(1, asleep) / 0.4 * 30) : 18;
+  const intr = Math.max(0, 20 - (s.awake || 0) / 3);
+  return clamp(Math.round(dur + q + intr), 0, 100);
 }
-function friendEnergy(h) { return h.goalToday ? 'high' : 'mid'; }
+function setSleep(raw) {
+  const s = { asleep: raw.asleep || 0, deep: raw.deep || 0, rem: raw.rem || 0, core: raw.core || 0, awake: raw.awake || 0, source: raw.source || '' };
+  if (!s.asleep) s.asleep = s.deep + s.rem + s.core;
+  s.score = raw.score != null ? Math.round(raw.score) : sleepScore(s);
+  S.sleep = s;
+}
+// Prototype only: a believable night for a given score.
+function simSleep(score) {
+  const t = { 92: [478, 98, 112, 268, 10], 84: [452, 82, 96, 274, 18], 78: [430, 70, 84, 276, 26], 70: [400, 58, 70, 272, 34], 61: [372, 44, 58, 270, 46], 44: [318, 28, 40, 250, 70] };
+  const k = Object.keys(t).map(Number).reduce((a, b) => Math.abs(b - score) < Math.abs(a - score) ? b : a);
+  const [asleep, deep, rem, core, awake] = t[k];
+  setSleep({ asleep, deep, rem, core, awake, score, source: 'sim' });
+  processHealth();
+}
+function energyScore() {
+  const base = S.sleep ? S.sleep.score : 75;
+  return clamp(Math.round(base + Math.min(5, S.today.mindful)), 0, 100);
+}
+function energyLevel(score = energyScore()) { return ENERGY_LEVELS.find(e => score >= e.min).id; }
+function energyMult() {
+  const m = ENERGY_LEVELS.find(e => e.id === energyLevel()).mult;
+  return S.today.restDay ? Math.max(1, m) : m;   // on a rest / sick day nothing is discounted
+}
+function friendEnergy(h) { return h.energy != null ? energyLevel(h.energy + (h.goalToday ? 8 : 0)) : 'good'; }
 
-// ---------- real-life inputs (simulated in the prototype) ----------
+// ---------- real-life inputs ----------
 function addPending(src, reward, info) {
   if (src === 'steps') {
     const ex = S.pending.find(p => p.src === 'steps');
@@ -150,34 +184,74 @@ function addPending(src, reward, info) {
   }
   S.pending.push({ id: uid(), src, reward, info: info || {} });
 }
-function recordSteps(n) {
-  S.today.steps += n;
-  const blocks = Math.floor(S.today.steps / 1000) - S.today.stepBlocks;
-  if (blocks > 0) {
-    S.today.stepBlocks += blocks;
-    addPending('steps', { coins: STEP_REWARD.coins * blocks, wood: STEP_REWARD.wood * blocks }, { steps: blocks * 1000 });
-  }
-  if (S.today.steps >= STEP_GOAL && !S.today.goalPaid) {
-    S.today.goalPaid = true;
-    addPending('goal', clone(GOAL_REWARD));
-    return 'goal';
-  }
-  return 'ok';
+// Turns any new progress today into rewards waiting to be collected. Safe to call any number of times.
+function processHealth() {
+  const d = S.today, p = d.paid, mult = energyMult();
+  const scale = r => {
+    const o = { coins: Math.round((r.coins || 0) * mult), wood: Math.round((r.wood || 0) * mult) };
+    if (r.seeds) o.seeds = clone(r.seeds);
+    return o;
+  };
+  const steps = d.steps + d.pushes;
+  const blocks = Math.floor(steps / 1000) - p.stepBlocks;
+  if (blocks > 0) { p.stepBlocks += blocks; addPending('steps', scale({ coins: STEP_REWARD.coins * blocks, wood: STEP_REWARD.wood * blocks }), { steps: blocks * 1000, mult }); }
+  if (steps >= STEP_GOAL && !p.goal) { p.goal = true; addPending('goal', scale(GOAL_REWARD), { mult }); }
+  [['move', d.kcal, RINGS.move], ['exercise', d.exMin, RINGS.exercise], ['stand', d.standH, RINGS.stand]].forEach(([ring, val, goal]) => {
+    if (val >= goal && !p.rings[ring]) { p.rings[ring] = true; addPending('ring', scale(RING_REWARD[ring]), { ring, mult }); }
+  });
+  if (p.rings.move && p.rings.exercise && p.rings.stand && !p.rings.all) { p.rings.all = true; addPending('rings', scale(RING_REWARD.all), { mult }); }
+  d.workouts.forEach(w => {
+    if (w.min >= 10 && !p.workouts[w.id]) { p.workouts[w.id] = true; addPending('workout', scale({ coins: Math.round(w.min * 1.2), wood: Math.floor(w.min / 10) }), { type: w.type, min: w.min, mult }); }
+  });
+  const mind = Math.min(10, Math.floor(d.mindful)) - p.mindful;
+  if (mind > 0) { p.mindful += mind; addPending('mindful', { coins: mind * MINDFUL_REWARD }, { min: mind }); }
+  if (S.sleep && S.sleep.score >= 80 && !p.sleep) { p.sleep = true; addPending('sleep', clone(SLEEP_REWARD), { score: S.sleep.score }); }
 }
+function recordSteps(n) { S.today.steps += n; processHealth(); }
 function recordFocus(min) {
   S.today.focusMin += min;
   addPending('focus', clone(FOCUS_REWARD[min]), { min });
 }
 function recordDistract(min) { S.today.distractMin += min; } // no penalty, ever
 function setRestDay() {
-  if (S.today.goalPaid) return false;
-  S.today.restDay = true; S.today.goalPaid = true;
-  addPending('rest', clone(GOAL_REWARD));
+  if (S.today.restDay) return false;
+  S.today.restDay = true;
+  if (!S.today.paid.goal) { S.today.paid.goal = true; addPending('rest', clone(GOAL_REWARD)); }
   return true;
+}
+function addWorkout(type, min) {
+  const kcal = Math.round(min * WORKOUTS[type].kcal);
+  const w = { id: uid(), type, min, kcal, at: now() };
+  S.today.workouts.push(w);
+  S.today.kcal += kcal; S.today.exMin += min;
+  processHealth();
+  return w;
+}
+// "Mini me": while the real you works out, your townie does the same thing.
+function startLive(type, start, hr) { S.live = { type, start: start || now(), hr: hr || 0 }; }
+function liveMin() { return S.live ? (now() - S.live.start) / MIN : 0; }
+function stopLive() {
+  if (!S.live) return null;
+  const min = Math.max(1, Math.round(liveMin())), type = S.live.type;
+  S.live = null;
+  return S.native ? null : addWorkout(type, min);   // in the app the finished workout arrives from Apple Health
+}
+// Data from the iPhone app (Apple Health). Only ever raises today's numbers.
+function applyNative(d) {
+  if (!d || d.available === false) return;
+  S.native = true;
+  const t = S.today;
+  ['steps', 'pushes', 'kcal', 'exMin', 'standH', 'mindful'].forEach(k => { if (typeof d[k] === 'number') t[k] = Math.max(t[k], Math.round(d[k] * 10) / 10); });
+  (d.workouts || []).forEach(w => {
+    if (!t.workouts.some(x => x.id === w.id)) t.workouts.push({ id: w.id, type: WORKOUTS[w.type] ? w.type : 'walk', min: Math.round(w.min || 0), kcal: Math.round(w.kcal || 0), at: w.start || now() });
+  });
+  if (d.sleep && (d.sleep.asleep > 0 || d.sleep.score != null)) setSleep(d.sleep);
+  S.vitals = { resp: d.resp || S.vitals.resp, rhr: d.rhr || S.vitals.rhr, hrv: d.hrv || S.vitals.hrv };
+  processHealth();
 }
 
 // ---------- crops ----------
-function cropProg(f) { return f ? Math.min(1, (now() - f.at) / CROPS[f.crop].grow) : 0; }
+function cropProg(f) { return f ? Math.min(1, (now() - f.at) / (CROPS[f.crop].grow * MIN)) : 0; }
 function cropStage(f) { const p = cropProg(f); return p >= 1 ? 4 : p >= 0.65 ? 3 : p >= 0.35 ? 2 : p >= 0.1 ? 1 : 0; }
 function isRipe(f) { return !!f && cropProg(f) >= 1; }
 function fieldPos(i) { return [AREA.fields.x + i % 4, AREA.fields.y + Math.floor(i / 4)]; }
@@ -191,17 +265,6 @@ function plant(i, crop) {
   h.fields[i] = { crop, at: now(), left: CROPS[crop].yield, thieves: [] };
   return 'ok';
 }
-// Plants every empty plot with one kind of seed. Returns how many were planted.
-function plantAll(crop) {
-  let n = 0;
-  for (let i = 0; i < S.me.fields.length; i++) {
-    if (S.me.fields[i] || !(S.me.seeds[crop] > 0)) continue;
-    const r = plant(i, crop);
-    if (r === 'cap') return { n, cap: true };
-    if (r === 'ok') n++;
-  }
-  return { n, cap: false };
-}
 function harvest(i) {
   const f = S.me.fields[i];
   if (!isRipe(f)) return null;
@@ -209,86 +272,118 @@ function harvest(i) {
   S.me.fields[i] = null;
   return { crop: f.crop, n: f.left, i };
 }
-function harvestAll() {
-  const out = [];
-  S.me.fields.forEach((f, i) => { const r = isRipe(f) && harvest(i); if (r) out.push(r); });
-  return out;
-}
 
-// Stealing takes a small share and never more than half the plot, so the owner always keeps most of it.
+// Sneaking takes a small share and never more than half, so the owner always keeps most of it.
 const stealKeep = crop => Math.ceil(CROPS[crop].yield / 2);
 const stealSize = crop => Math.max(1, Math.round(CROPS[crop].yield * 0.25));
-function hasGuardDog(h) { return h.animals.some(a => a.k === 'dog' && animalStage(a) === 2); }
+function hasGuardDog(h) { return h.animals.some(a => ANIMALS[a.k].guard && animalStage(a) === 2); }
 function stealable(h, i, who = 'me') {
   const f = h.fields[i];
   return isRipe(f) && !f.thieves.includes(who) && f.left > stealKeep(f.crop);
+}
+// Shared checks for every kind of sneaking. Returns an error code or null.
+function sneakCheck() {
+  if (S.today.steals >= STEAL_CAP) return 'limit';
+  if (!useAction()) return 'cap';
+  S.today.steals++;
+  return null;
 }
 function steal(fid, i) {
   const h = friendById(fid), f = h.fields[i];
   if (!isRipe(f)) return { r: 'no' };
   if (f.thieves.includes('me')) return { r: 'done' };
   if (f.left <= stealKeep(f.crop)) return { r: 'empty' };
-  if (S.today.steals >= STEAL_CAP) return { r: 'limit' };
-  if (!useAction()) return { r: 'cap' };
-  S.today.steals++;
+  const err = sneakCheck(); if (err) return { r: err };
   f.thieves.push('me');
-  if (hasGuardDog(h) && Math.random() < 0.35) return { r: 'dog', crop: f.crop };
+  if (hasGuardDog(h) && Math.random() < 0.35) return { r: 'dog' };
   const n = Math.min(f.left - stealKeep(f.crop), stealSize(f.crop));
   f.left -= n;
   addBarn(S.me, f.crop, n);
-  return { r: 'ok', crop: f.crop, n };
+  return { r: 'ok', k: f.crop, n };
+}
+function stealProduct(fid, aid) {
+  const h = friendById(fid), a = h.animals.find(x => x.id === aid);
+  if (!a || !animalReady(a) || nextIsBaby(a) || !ANIMALS[a.k].prod) return { r: 'no' };
+  a.thieves = a.thieves || [];
+  if (a.thieves.includes('me')) return { r: 'done' };
+  if ((a.stolen || 0) >= ANIMALS[a.k].n - 1) return { r: 'empty' };
+  const err = sneakCheck(); if (err) return { r: err };
+  a.thieves.push('me');
+  if (hasGuardDog(h) && Math.random() < 0.35) return { r: 'dog' };
+  a.stolen = (a.stolen || 0) + 1;
+  addBarn(S.me, ANIMALS[a.k].prod, 1);
+  return { r: 'ok', k: ANIMALS[a.k].prod, n: 1 };
+}
+function stealFruit(fid, i) {
+  const h = friendById(fid), t = h.trees[i];
+  if (!treeReady(t)) return { r: 'no' };
+  t.thieves = t.thieves || [];
+  if (t.thieves.includes('me')) return { r: 'done' };
+  if ((t.stolen || 0) >= Math.floor(TREES[t.k].n / 2)) return { r: 'empty' };
+  const err = sneakCheck(); if (err) return { r: err };
+  t.thieves.push('me');
+  if (hasGuardDog(h) && Math.random() < 0.35) return { r: 'dog' };
+  t.stolen = (t.stolen || 0) + 1;
+  addBarn(S.me, TREES[t.k].fruit, 1);
+  return { r: 'ok', k: TREES[t.k].fruit, n: 1 };
 }
 function friendStealsFromMe(fid) {
-  const idx = S.me.fields.map((f, i) => i).filter(i => stealable(S.me, i, fid));
-  if (!idx.length) return null;
-  const f = S.me.fields[rand(idx)];
-  f.thieves.push(fid);
-  if (hasGuardDog(S.me) && Math.random() < 0.5) return addFeed({ kind: 'caught', from: fid, crop: f.crop });
-  const n = Math.min(f.left - stealKeep(f.crop), stealSize(f.crop));
-  f.left -= n;
-  return addFeed({ kind: 'stole', from: fid, crop: f.crop, n });
+  const crops = S.me.fields.map((f, i) => i).filter(i => stealable(S.me, i, fid));
+  const eggs = S.me.animals.filter(a => animalReady(a) && !nextIsBaby(a) && ANIMALS[a.k].prod && !(a.thieves || []).includes(fid) && (a.stolen || 0) < ANIMALS[a.k].n - 1);
+  if (!crops.length && !eggs.length) return null;
+  const dog = hasGuardDog(S.me) && Math.random() < 0.5;
+  if (crops.length && (!eggs.length || Math.random() < 0.6)) {
+    const f = S.me.fields[rand(crops)];
+    f.thieves.push(fid);
+    if (dog) return addFeed({ kind: 'caught', from: fid, k: f.crop });
+    const n = Math.min(f.left - stealKeep(f.crop), stealSize(f.crop));
+    f.left -= n;
+    return addFeed({ kind: 'stole', from: fid, k: f.crop, n });
+  }
+  const a = rand(eggs);
+  a.thieves = [...(a.thieves || []), fid];
+  if (dog) return addFeed({ kind: 'caught', from: fid, k: ANIMALS[a.k].prod });
+  a.stolen = (a.stolen || 0) + 1;
+  return addFeed({ kind: 'stole', from: fid, k: ANIMALS[a.k].prod, n: 1 });
 }
 
 // ---------- animals ----------
 function newAnimal(k, stage = 0) {
   const d = ANIMALS[k], t = now();
-  return { id: uid(), k, born: t - d.grow * [0, 0.6, 1.2][stage], cycles: 0,
-           last: stage === 2 && d.every ? t - d.every * Math.random() * 0.7 : null };
+  return { id: uid(), k, born: t - d.grow * MIN * [0, 0.6, 1.2][stage], cycles: 0,
+           last: stage === 2 && d.every ? t - d.every * MIN * Math.random() * 0.7 : null };
 }
-function animalProg(a) { return Math.min(1, (now() - a.born) / ANIMALS[a.k].grow); }
+function animalProg(a) { return Math.min(1, (now() - a.born) / (ANIMALS[a.k].grow * MIN)); }
 function animalStage(a) { const p = animalProg(a); return p >= 1 ? 2 : p >= 0.4 ? 1 : 0; }
-function animalName(a) { const d = ANIMALS[a.k], s = animalStage(a); return s === 0 ? nm(d.baby) : nm(d); }
+function animalName(a) { const d = ANIMALS[a.k]; return animalStage(a) === 0 ? nm(d.baby) : nm(d); }
 function prodProg(a) {
   const d = ANIMALS[a.k];
   if (!d.every || animalStage(a) < 2) return 0;
-  return Math.min(1, (now() - (a.last || a.born + d.grow)) / d.every);
+  return Math.min(1, (now() - (a.last || a.born + d.grow * MIN)) / (d.every * MIN));
 }
 function animalReady(a) { return ANIMALS[a.k].every > 0 && animalStage(a) === 2 && prodProg(a) >= 1; }
 function nextIsBaby(a) { const d = ANIMALS[a.k]; return d.babyEvery > 0 && (a.cycles + 1) % d.babyEvery === 0; }
 function pastureCap(h = S.me) { return h.pastureLv ? PASTURE[h.pastureLv].cap : 0; }
 function pastureCount(h = S.me) { return h.animals.filter(a => !ANIMALS[a.k].pet).length; }
+// Smaller pastures sit in the front-left corner of the pasture area, closest to the middle of the screen.
 function pastureRect(h) {
   const p = PASTURE[h.pastureLv];
-  // smaller pastures sit in the front-left corner of the pasture area, closest to the middle of the screen
   return p ? { x: AREA.pasture.x, y: AREA.pasture.y + AREA.pasture.d - p.d, w: p.w, d: p.d } : null;
 }
-
 function collectAnimal(id, h = S.me) {
   const a = h.animals.find(x => x.id === id);
   if (!a || !animalReady(a)) return null;
   const d = ANIMALS[a.k];
-  const baby = nextIsBaby(a);
-  a.cycles++; a.last = now();
+  const baby = nextIsBaby(a), stolen = a.stolen || 0;
+  a.cycles++; a.last = now(); a.thieves = []; a.stolen = 0;
   if (baby) {
     if (pastureCount(h) < pastureCap(h)) { h.animals.push(newAnimal(a.k, 0)); return { type: 'baby', k: a.k, placed: true, id: a.id }; }
     addBarn(h, 'baby_' + a.k, 1);
     return { type: 'baby', k: a.k, placed: false, id: a.id };
   }
-  addBarn(h, d.prod, d.n);
-  return { type: 'prod', k: d.prod, n: d.n, id: a.id };
-}
-function collectAllAnimals() {
-  return S.me.animals.filter(animalReady).map(a => collectAnimal(a.id)).filter(Boolean);
+  const n = Math.max(1, d.n - stolen);
+  addBarn(h, d.prod, n);
+  return { type: 'prod', k: d.prod, n, id: a.id };
 }
 function sellAnimal(id) {
   const h = S.me, i = h.animals.findIndex(a => a.id === id);
@@ -298,13 +393,72 @@ function sellAnimal(id) {
   h.coins += v;
   return v;
 }
-// A baby waiting in the barn can move into the pasture once there's room.
 function releaseBaby(k) {
   const h = S.me, key = 'baby_' + k;
   if (!h.barn[key] || pastureCount(h) >= pastureCap(h)) return false;
   h.barn[key]--; if (!h.barn[key]) delete h.barn[key];
   h.animals.push(newAnimal(k, 0));
   return true;
+}
+
+// ---------- orchard ----------
+function newTree(k, stage = 0) {
+  const d = TREES[k], t = now();
+  return { k, planted: t - d.grow * MIN * [0, 0.6, 1.2][stage], last: stage === 2 ? t - d.every * MIN * Math.random() * 0.8 : null, thieves: [], stolen: 0 };
+}
+function orchardSlots(h = S.me) { return h.orchardLv ? ORCHARD[h.orchardLv].slots : 0; }
+function treeProg(t) { return Math.min(1, (now() - t.planted) / (TREES[t.k].grow * MIN)); }
+function treeStage(t) { const p = treeProg(t); return p >= 1 ? 2 : p >= 0.4 ? 1 : 0; }
+function fruitProg(t) {
+  if (!t || treeStage(t) < 2) return 0;
+  const d = TREES[t.k];
+  return Math.min(1, (now() - (t.last || t.planted + d.grow * MIN)) / (d.every * MIN));
+}
+function treeReady(t) { return !!t && treeStage(t) === 2 && fruitProg(t) >= 1; }
+function buyTree(k) {
+  const h = S.me, d = TREES[k];
+  if (!h.orchardLv) return 'noorchard';
+  const i = h.trees.findIndex((t, j) => j < orchardSlots(h) && !t);
+  if (i < 0) return 'full';
+  if (h.coins < d.price) return 'poor';
+  h.coins -= d.price;
+  h.trees[i] = newTree(k, 0);
+  return 'ok';
+}
+function collectTree(i, h = S.me) {
+  const t = h.trees[i];
+  if (!treeReady(t)) return null;
+  const d = TREES[t.k], n = Math.max(1, d.n - (t.stolen || 0));
+  addBarn(h, d.fruit, n);
+  t.last = now(); t.thieves = []; t.stolen = 0;
+  return { k: d.fruit, n, i };
+}
+
+// ---------- pond ----------
+function pondCap(h = S.me) { return h.pondLv ? POND[h.pondLv].cap : 0; }
+function fishCount(h = S.me) {
+  if (!h.pondLv) return 0;
+  return Math.min(pondCap(h), h.pond.fish + Math.floor((now() - h.pond.at) / (FISH_EVERY * MIN)));
+}
+function catchFish(h = S.me) {
+  const n = fishCount(h);
+  if (n < 1) return null;
+  h.pond = { fish: n - 1, at: now() };
+  let r = Math.random(), k = FISH_KINDS[0][0];
+  for (const [kind, p] of FISH_KINDS) { if (r < p) { k = kind; break; } r -= p; }
+  addBarn(h, k, 1);
+  return { k, n: 1 };
+}
+
+// ---------- yard things that make something (beehive) ----------
+function yardReady(it) { const d = YARD[it.k]; return !!d.prod && now() - (it.last || it.placed || 0) >= d.every * MIN; }
+function collectYard(id, h = S.me) {
+  const it = h.yard.find(x => x.id === id);
+  if (!it || !yardReady(it)) return null;
+  const d = YARD[it.k];
+  addBarn(h, d.prod, d.n);
+  it.last = now();
+  return { k: d.prod, n: d.n };
 }
 
 // ---------- barn ----------
@@ -336,7 +490,8 @@ const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r
 const PORCH = { x: AREA.house.x, y: AREA.house.y + AREA.house.d, w: AREA.house.w, d: 1 }; // keep the front of the house clear
 function yardReserved(x, y) {
   if (x < 0 || y < 0 || x >= LOT_W || y >= LOT_D) return true;
-  return ['house', 'pasture', 'fields', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || inRect(PORCH, x, y);
+  if (x === MAILBOX[0] && y === MAILBOX[1]) return true;
+  return ['house', 'pasture', 'fields', 'orchard', 'pond', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || inRect(PORCH, x, y);
 }
 function canPlace(h, scope, k, x, y, rot, ignoreId) {
   const def = itemDef(scope, k);
@@ -378,7 +533,7 @@ function autoPlace(h, scope, k, tint) {
   for (const [x, y] of spots) for (const rot of (scope === 'room' && x === 0 && y > 0 ? [1, 0] : [0, 1])) {
     if (rot && def.w === def.d && !(scope === 'room' && x === 0 && y > 0)) continue;
     if (canPlace(h, scope, k, x, y, rot)) {
-      const it = { id: uid(), k, x, y, rot, tint: def.tint ? (tint || rand(TINTS)) : null };
+      const it = { id: uid(), k, x, y, rot, tint: def.tint ? (tint || rand(TINTS)) : null, placed: now() };
       scopeItems(h, scope).push(it);
       return it;
     }
@@ -387,11 +542,17 @@ function autoPlace(h, scope, k, tint) {
   h.store[key] = (h.store[key] || 0) + 1;
   return null;
 }
+function fixLayout(h) {
+  h.yard.splice(0).forEach(it => {
+    if (canPlace(h, 'yard', it.k, it.x, it.y, it.rot)) h.yard.push(it);
+    else autoPlace(h, 'yard', it.k, it.tint);
+  });
+}
 function placeFromStore(scope, k, x, y, rot, tint) {
   const h = S.me, key = scope + ':' + k;
   if (!h.store[key] || !canPlace(h, scope, k, x, y, rot)) return null;
   h.store[key]--; if (!h.store[key]) delete h.store[key];
-  const it = { id: uid(), k, x, y, rot, tint: itemDef(scope, k).tint ? (tint || rand(TINTS)) : null };
+  const it = { id: uid(), k, x, y, rot, tint: itemDef(scope, k).tint ? (tint || rand(TINTS)) : null, placed: now() };
   scopeItems(h, scope).push(it);
   return it;
 }
@@ -402,11 +563,7 @@ function moveItem(scope, id, x, y, rot) {
   Object.assign(it, { x, y, rot });
   return true;
 }
-function rotateItem(scope, id) {
-  const it = findItem(scope, id);
-  if (!it) return false;
-  return moveItem(scope, id, it.x, it.y, it.rot ? 0 : 1);
-}
+function rotateItem(scope, id) { const it = findItem(scope, id); return !!it && moveItem(scope, id, it.x, it.y, it.rot ? 0 : 1); }
 function tintItem(scope, id) {
   const it = findItem(scope, id);
   if (!it || !it.tint) return false;
@@ -441,29 +598,23 @@ function buyAnimal(k) {
   h.animals.push(newAnimal(k, 0));
   return 'ok';
 }
-function buyFieldLv(h = S.me) {
-  if (h.fieldLv >= FIELD_LEVELS.length - 1) return 'max';
-  const c = FIELD_COST[h.fieldLv + 1];
-  if (!canAfford(c, h)) return 'poor';
-  pay(c, h);
-  h.fieldLv++;
-  while (h.fields.length < FIELD_LEVELS[h.fieldLv]) h.fields.push(null);
-  return 'ok';
-}
-function buyPastureLv(h = S.me) {
-  if (h.pastureLv >= PASTURE.length - 1) return 'max';
-  const c = PASTURE[h.pastureLv + 1].cost;
-  if (!canAfford(c, h)) return 'poor';
-  pay(c, h);
-  h.pastureLv++;
+function buyLand(kind, h = S.me) {
+  const table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];
+  const [levels, key] = table;
+  if (h[key] >= levels.length - 1) return 'max';
+  const next = levels[h[key] + 1], cost = next.cost || next;
+  if (!canAfford(cost, h)) return 'poor';
+  pay(cost, h);
+  h[key]++;
+  if (kind === 'field') while (h.fields.length < FIELD_LEVELS[h.fieldLv]) h.fields.push(null);
+  if (kind === 'pond') h.pond = { fish: 2, at: now() };
   return 'ok';
 }
 function buyItem(scope, k, h = S.me) {
   const d = itemDef(scope, k);
   if (h.coins < d.price) return { r: 'poor' };
   h.coins -= d.price;
-  const it = autoPlace(h, scope, k);
-  return { r: 'ok', item: it };
+  return { r: 'ok', item: autoPlace(h, scope, k) };
 }
 function buyCar(k, h = S.me) {
   if (h.cars.some(c => c.k === k)) return 'own';
@@ -474,34 +625,39 @@ function buyCar(k, h = S.me) {
   h.car = h.cars.length - 1;
   return 'ok';
 }
+// You can own several houses and pick which one to live in; furniture and yard come along.
 function buyHouse(i, h = S.me) {
-  if (i <= h.house) return 'own';
+  if (h.houses.includes(i)) return 'own';
   const c = HOUSES[i].cost;
   if (!canAfford(c, h)) return 'poor';
   pay(c, h);
+  h.houses.push(i);
   h.house = i;
   return 'ok';
 }
+function moveHouse(i, h = S.me) { if (!h.houses.includes(i)) return false; h.house = i; return true; }
 
 // ---------- assets & ranking ----------
 const costValue = c => (c.coins || 0) + (c.wood || 0) * 5; // wood only comes from real life, so it counts extra
 function assetBreakdown(h) {
-  const b = { cash: h.coins + h.wood * 5, house: costValue(HOUSES[h.house].cost), land: 0, items: 0, cars: 0, animals: 0, goods: 0 };
+  const b = { cash: h.coins + h.wood * 5, house: 0, land: 0, items: 0, cars: 0, animals: 0, goods: 0 };
+  h.houses.forEach(i => { b.house += costValue(HOUSES[i].cost); });
   for (let i = 1; i <= h.fieldLv; i++) b.land += costValue(FIELD_COST[i]);
   for (let i = 1; i <= h.pastureLv; i++) b.land += costValue(PASTURE[i].cost);
+  for (let i = 1; i <= h.orchardLv; i++) b.land += costValue(ORCHARD[i].cost);
+  for (let i = 1; i <= h.pondLv; i++) b.land += costValue(POND[i].cost);
   h.room.items.forEach(it => { b.items += FURN[it.k].price; });
   h.yard.forEach(it => { b.items += YARD[it.k].price; });
   Object.entries(h.store).forEach(([key, n]) => { const [sc, k] = key.split(':'); b.items += itemDef(sc, k).price * n; });
   h.cars.forEach(c => { b.cars += costValue(CARS[c.k].cost); });
   h.animals.forEach(a => { b.animals += ANIMALS[a.k].sell[animalStage(a)]; });
+  h.trees.forEach(t => { if (t) b.land += TREES[t.k].price; });
   b.goods = barnValue(h) + Object.entries(h.seeds).reduce((s, [k, n]) => s + CROPS[k].seed * n, 0);
   b.total = b.cash + b.house + b.land + b.items + b.cars + b.animals + b.goods;
   return b;
 }
 const assetValue = h => assetBreakdown(h).total;
-function ranking() {
-  return residents().map(h => ({ h, v: assetValue(h) })).sort((a, b) => b.v - a.v);
-}
+function ranking() { return residents().map(h => ({ h, v: assetValue(h) })).sort((a, b) => b.v - a.v); }
 function rankOf(id) { return ranking().findIndex(r => r.h.id === id) + 1; }
 function townTotal() { return residents().reduce((s, h) => s + assetValue(h), 0); }
 function townLevel(total = townTotal()) {
@@ -511,8 +667,8 @@ function townLevel(total = townTotal()) {
 }
 
 // ---------- friends live their lives too ----------
-// Every 5 simulated minutes each friend earns a little (their own steps and focus time),
-// tends their farm and now and then buys something, so the ranking keeps moving.
+// Every 5 simulated minutes each friend earns a little, tends their farm, now and then buys something,
+// and sometimes goes for a workout (shown only if they share it).
 function simFriends() {
   const t = now(), STEP = 5 * MIN;
   S.friends.forEach(h => {
@@ -528,12 +684,13 @@ function simFriends() {
 function simFriendStep(h) {
   h.coins += Math.round(Math.random() * h.earn);
   if (Math.random() < 0.15) h.wood += 1;
+  if (h.live && now() - h.live.start > h.live.len) h.live = null;
+  else if (!h.live && Math.random() < 0.03) h.live = { type: rand(['run', 'walk', 'cycle', 'yoga', 'strength', 'dance']), start: now(), len: (15 + Math.random() * 30) * MIN };
   h.fields.forEach((f, i) => {
     if (!isRipe(f) || Math.random() > 0.2) return;
     h.coins += f.left * CROPS[f.crop].sell;
-    const opts = Object.keys(CROPS).filter(c => !CROPS[c].rare);
-    const c = rand(opts);
-    h.fields[i] = { crop: c, at: now() - Math.random() * CROPS[c].grow * 0.3, left: CROPS[c].yield, thieves: [] };
+    const c = rand(Object.keys(CROPS).filter(c => !CROPS[c].rare));
+    h.fields[i] = { crop: c, at: now() - Math.random() * CROPS[c].grow * MIN * 0.3, left: CROPS[c].yield, thieves: [] };
   });
   h.animals.forEach(a => {
     if (!animalReady(a) || Math.random() > 0.3) return;
@@ -541,14 +698,19 @@ function simFriendStep(h) {
     if (r && r.type === 'prod') { h.coins += h.barn[r.k] * GOODS[r.k].sell; delete h.barn[r.k]; }
     if (r && r.type === 'baby' && !r.placed) { h.coins += ANIMALS[r.k].sell[0]; delete h.barn['baby_' + r.k]; }
   });
+  h.trees.forEach((tr, i) => {
+    if (!treeReady(tr) || Math.random() > 0.3) return;
+    const r = collectTree(i, h);
+    if (r) { h.coins += h.barn[r.k] * GOODS[r.k].sell; delete h.barn[r.k]; }
+  });
   if (Math.random() > 0.05) return;
-  const nextHouse = HOUSES[h.house + 1];
-  if (nextHouse && h.coins > costValue(nextHouse.cost) * 1.3 && h.wood >= (nextHouse.cost.wood || 0)) { buyHouse(h.house + 1, h); return; }
-  if (h.fieldLv < 3 && h.coins > FIELD_COST[h.fieldLv + 1].coins * 2 && h.wood >= (FIELD_COST[h.fieldLv + 1].wood || 0)) { buyFieldLv(h); return; }
+  const next = HOUSES.findIndex((H, i) => i > h.house && !h.houses.includes(i));
+  if (next > 0 && h.coins > costValue(HOUSES[next].cost) * 1.3 && h.wood >= (HOUSES[next].cost.wood || 0)) { buyHouse(next, h); return; }
+  if (h.fieldLv < 3 && h.coins > FIELD_COST[h.fieldLv + 1].coins * 2) { buyLand('field', h); return; }
   if (!h.cars.length && h.coins > 1500) { buyCar(h.coins > 3000 ? 'pickup' : 'mini', h); return; }
   if (h.coins > 400) {
     if (Math.random() < 0.5) buyItem('room', rand(Object.keys(FURN)), h);
-    else buyItem('yard', rand(['flowers', 'hedge', 'tree', 'pine', 'lamp', 'bench', 'gnome']), h);
+    else buyItem('yard', rand(['flowers', 'hedge', 'tree', 'pine', 'lamp', 'bench', 'gnome', 'birdbath']), h);
   }
 }
 
@@ -593,20 +755,44 @@ function claimGift(feedId) {
 }
 function randomGift() {
   return clone(rand([
-    { type: 'barn', k: 'carrot', n: 3 }, { type: 'barn', k: 'egg', n: 4 }, { type: 'barn', k: 'milk', n: 2 },
+    { type: 'barn', k: 'carrot', n: 3 }, { type: 'barn', k: 'egg', n: 4 }, { type: 'barn', k: 'milk', n: 2 }, { type: 'barn', k: 'apple', n: 3 },
     { type: 'seed', k: 'tomato', n: 2 }, { type: 'seed', k: 'strawberry', n: 2 }, { type: 'seed', k: 'corn', n: 2 },
     { type: 'coins', n: 30 }, { type: 'wood', n: 3 },
   ]));
 }
+
+// ---------- letters ----------
+function sendLetter(to, text, paper, gift) {
+  if (gift && !giveGift(to, gift)) return null;
+  const l = { id: uid(), to, text, paper, gift: gift || null, t: now() };
+  S.mail.sent.unshift(l);
+  if (S.mail.sent.length > 50) S.mail.sent.pop();
+  return l;
+}
+function receiveLetter(from, text, paper, gift) {
+  const l = { id: uid(), from, text, paper, gift: gift || null, t: now(), read: false, claimed: false };
+  S.mail.inbox.unshift(l);
+  if (S.mail.inbox.length > 50) S.mail.inbox.pop();
+  return l;
+}
+const unreadMail = () => (S.mail ? S.mail.inbox.filter(l => !l.read).length : 0);
+function claimLetterGift(id) {
+  const l = S.mail.inbox.find(x => x.id === id);
+  if (!l || !l.gift || l.claimed) return null;
+  applyGift(l.gift); l.claimed = true;
+  return l.gift;
+}
+
 function randomFriendEvent() {
   const ids = friendIds();
   if (!ids.length) return null;
   const f = friendById(rand(ids));
   const r = Math.random();
   if (r < 0.22) { const ev = friendStealsFromMe(f.id); if (ev) return ev; }
-  if (r < 0.5) return addFeed({ kind: 'gift', from: f.id, gift: randomGift() });
-  if (r < 0.68) { S.me.likes++; return addFeed({ kind: 'like', from: f.id }); }
-  if (r < 0.84 && f.shareGoal && !f.goalToday) { f.goalToday = true; return addFeed({ kind: 'goal', from: f.id }); }
+  if (r < 0.45) return addFeed({ kind: 'gift', from: f.id, gift: randomGift() });
+  if (r < 0.6) { S.me.likes++; return addFeed({ kind: 'like', from: f.id }); }
+  if (r < 0.72 && f.shareGoal && !f.goalToday) { f.goalToday = true; return addFeed({ kind: 'goal', from: f.id }); }
+  if (r < 0.86) return { kind: 'letter', from: f.id };   // the UI writes the letter text
   return addFeed({ kind: 'msg', from: f.id, msgKey: rand(MSG_KEYS) });
 }
 // Invite reward goes to both sides.

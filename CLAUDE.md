@@ -1,8 +1,10 @@
 # 镜像小镇 Mirror Town
 
-一款 iPhone 手机游戏（正式版用 Swift 做原生 App，先上美国 App Store）：现实里运动、睡好、少刷短视频，游戏里那个迷你的你就能种地养殖、盖房买车、布置自己的家，和朋友住在同一条街上。
+一款 iPhone 手机游戏（Swift 原生外壳 + 网页画面，先上美国 App Store）：现实里运动、睡好、少刷短视频，游戏里那个迷你的你就能种地养殖、盖房买车、布置自己的家，和朋友住在同一条街上。
 
-画风：沿用网页版（`prototype/`）的 2.5D 等距卡通风格，在它的基础上完善。不用 Unity、不用 3D 低多边形素材（Mason 试过，觉得丑）。
+结构：`prototype/` 是游戏本体（画面、玩法、界面），`ios/` 是 Swift 外壳（全屏运行 prototype，读 Apple 健康）。改游戏就改 `prototype/`。
+
+画风：网页版的 2.5D 等距卡通风格，在它的基础上完善。不用 Unity、不用 3D 低多边形素材（Mason 试过，觉得丑）。
 
 ## 新对话先读这些（按顺序），读完就能接着做，不要再问 Mason 已经写在文档里的事
 
@@ -10,10 +12,11 @@
 2. `docs/需求记录.md`：Mason 每次提的需求和状态。
 3. `docs/决策记录.md`：做过的决定和原因。
 4. `docs/游戏设计.md`：正式版玩法。
-5. `docs/数值表.md`：全部内容和数值（由 `docs/数值草案.js` 生成）。
-6. `docs/技术方案.md`：原生 App 技术方案。
-7. `docs/产品概念.md`：最初的产品概念（Mason 的 PDF 转写）。
-8. 要改网页原型时读 `docs/原型代码说明.md`。
+5. `docs/数值表.md`：全部内容和数值（由 `prototype/js/data.js` 生成）。
+6. `docs/技术方案.md`：App 技术方案（Swift 壳 + 网页画面）。
+7. `ios/README.md`：iPhone App 在 Mac 上怎么跑、JS 桥。
+8. 要改游戏代码时读 `docs/原型代码说明.md`。
+9. `docs/产品概念.md`：最初的产品概念（Mason 的 PDF 转写）。
 
 ## 和 Mason 沟通
 
@@ -29,10 +32,11 @@
    - `docs/需求记录.md`：Mason 这次提的新需求（原话要点 + 状态），旧需求状态有变也要改。
    - `docs/决策记录.md`：新决定，或者改了哪条旧决定。
    - `docs/交接.md`：现状、下一步、等谁决定什么、环境变化、「最后更新」日期和版本。
-   - 改了玩法或数值，就同步改 `docs/游戏设计.md` 和 `docs/数值草案.js`，再运行 `node docs/生成数值表.js`。
+   - 改了玩法或数值，就同步改 `docs/游戏设计.md`；数值只改 `prototype/js/data.js`，再运行 `node docs/生成数值表.js`。
+   - 改了 `ios/` 或 JS 桥，同步改 `ios/README.md`。Swift 在这台电脑上编译不了，改完要在交接里写明「等 Mason 在 Mac 上编译」。
 3. 定新版本号：原型阶段用 `0.x.y`。新功能或大改动升 `x`，小修小补和只改文档升 `y`。
 4. 在 `CHANGELOG.md` 最上面加一节：`## vX.Y.Z · 日期`，用中文写这一版改了什么。
-5. 网页原型的版本号同步改：`prototype/js/data.js` 的 `VERSION`。如果改了原型的 JS 或 CSS，把 `prototype/index.html` 里的 `?v=` 也加一，避免浏览器用旧缓存。
+5. 版本号同步改：`prototype/js/data.js` 的 `VERSION`，以及 `ios/MirrorTown.xcodeproj/project.pbxproj` 里的 `MARKETING_VERSION`（两处）。如果改了原型的 JS 或 CSS，把 `prototype/index.html` 里的 `?v=` 也加一，避免浏览器用旧缓存。
 6. 提交（提交说明用简短英文），打标签并推送：
 
    ```bash

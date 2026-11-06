@@ -1,7 +1,7 @@
-// Turns the v0.3 catalog draft into markdown tables for docs/数值表.md
+// Turns the game catalog (prototype/js/data.js) into markdown tables for docs/数值表.md
 const fs = require('fs'), vm = require('vm');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '数值草案.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'prototype', 'js', 'data.js'), 'utf8');
 const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FIELD_LEVELS, FIELD_COST, PASTURE, ORCHARD, POND, FISH_KINDS, FISH_EVERY,
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS})`);
@@ -12,11 +12,11 @@ const table = (head, rows) => { P('| ' + head.join(' | ') + ' |'); P('|' + head.
 const RARE = { sleep: '睡眠分 80+ 获得', rings: '三环全合获得', focus: '离线 2 小时获得', steps: '6,000 步获得' };
 const good = k => `${D.GOODS[k].e} ${D.GOODS[k].zh}`;
 
-P('# 数值表（v0.3 草案）');
+P('# 数值表（v' + D.VERSION + '）');
 P('');
-P('正式版要用的全部内容和数值，从草案数据自动生成。时间单位是分钟（原型为了演示用得很短，正式版要按真实节奏放大）。玩法说明见 `游戏设计.md`。');
+P('游戏里的全部内容和数值，从 `prototype/js/data.js` 自动生成。时间单位是分钟（现在为了演示用得很短，正式上线前要按真实节奏放大）。玩法说明见 `游戏设计.md`。');
 P('');
-P('> 生成方式：草案数据保存在 `docs/数值草案.js`，用 `node docs/生成数值表.js` 重新生成本文件。改数值时改草案文件，再重新生成。');
+P('> 生成方式：数据在 `prototype/js/data.js`（游戏实际用的就是这份），运行 `node docs/生成数值表.js` 重新生成本文件。改数值只改 data.js。');
 P('');
 P('## 基础规则');
 P('');

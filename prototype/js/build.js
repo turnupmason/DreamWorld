@@ -43,9 +43,9 @@ function drawHouse(h, ox, oy, ts) {
   const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, x = ox + fx, y = oy + fy, z = cam.z;
   const c = iso(x + w / 2, y + d / 2);
   ellipse(c.x, c.y + 6 * z, (w + d) * 17 * z, (w + d) * 8.5 * z, 'rgba(0,0,0,.08)');
-  const du = (DOOR_X - fx) / w, wall = h.wall, roof = h.roof;
+  const du = (DOOR_X - fx) / w, wall = h.wall, roof = h.roof, id = H.id;
   let top = c.y;
-  if (h.house === 0) {
+  if (id === 'tent') {
     const g = gableY(x + 0.1, y + 0.1, w - 0.2, d - 0.2, 0, 46, roof, shade(roof, 0.22));
     const a = lerp(g.Du, g.Cu, 0.3), b = lerp(g.Du, g.Cu, 0.7), tp = lerp(mid(g.Du, g.Cu), g.R2, 0.74);
     poly([a, b, tp], shade(roof, -0.55));
@@ -54,7 +54,7 @@ function drawHouse(h, ox, oy, ts) {
     line(g.R2.x, g.R2.y, p1.x, p1.y, 'rgba(90,70,50,.5)', 0.8 * z); line(g.R2.x, g.R2.y, p2.x, p2.y, 'rgba(90,70,50,.5)', 0.8 * z);
     if (NIGHT > 0.3) glow(mid(a, b).x, mid(a, b).y - 8 * z, 30 * z);
     top = g.R1.y;
-  } else if (h.house === 1) {
+  } else if (id === 'cabin') {
     const log = '#b0703f', wh = 28;
     const b = box(x, y, w, d, wh, log);
     for (let k = 1; k < 5; k++) {
@@ -66,7 +66,7 @@ function drawHouse(h, ox, oy, ts) {
     winFace(b.right, 0.5, 0.12, 9, 21, { frame: '#f3e3c3' });
     const g = gableX(x - 0.15, y - 0.12, w + 0.3, d + 0.24, wh, 24, roof, log, () => chimney(x + w - 0.8, y + 0.4, wh - 4, 34, '#9a948a'));
     top = g.R1.y - 12 * z;
-  } else if (h.house === 2) {
+  } else if (id === 'cottage') {
     const wh = 32, b = box(x, y, w, d, wh, wall);
     wallRect(b.left, 0, 0, 1, 0, 3.2, shade(wall, -0.35)); wallRect(b.right, 0, 0, 1, 0, 3.2, shade(wall, -0.3));
     const sh = shade(roof, -0.1);
@@ -78,7 +78,7 @@ function drawHouse(h, ox, oy, ts) {
     winFace(b.right, 0.72, 0.08, 11, 24, { shutters: sh });
     const g = gableX(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, 30, roof, wall, () => chimney(x + w - 0.9, y + 0.5, wh, 40));
     top = g.R1.y - 12 * z;
-  } else if (h.house === 3) {
+  } else if (id === 'twostory') {
     const wh = 62, b = box(x, y, w, d, wh, wall);
     wallRect(b.left, 0, 0, 1, 0, 3.2, shade(wall, -0.35)); wallRect(b.right, 0, 0, 1, 0, 3.2, shade(wall, -0.3));
     wallRect(b.left, 0, 0, 1, 30, 32, shade(wall, -0.12)); wallRect(b.right, 0, 0, 1, 30, 32, shade(wall, -0.1));
@@ -91,7 +91,13 @@ function drawHouse(h, ox, oy, ts) {
     box(DOOR_X - 0.65 + ox, y + d + 0.36, 1.3, 0.05, 8, '#fffaf0', 33.5, { left: 'rgba(255,250,240,.8)' });
     const g = gableX(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, 30, roof, wall, () => chimney(x + w - 1, y + 0.5, wh, 42));
     top = g.R1.y - 12 * z;
-  } else if (h.house === 4) {
+  } else if (id === 'modern') {
+    top = drawModern(x, y, w, d, du, wall, roof, ts);
+  } else if (id === 'chinese') {
+    top = drawChinese(x, y, w, d, du, wall, ts);
+  } else if (id === 'castle') {
+    top = drawCastle(x, y, w, d, du, roof, ts);
+  } else if (id === 'villa') {
     const wh = 62, mw = 4;
     const m = box(x, y, mw, d, wh, wall);
     wallRect(m.left, 0, 0, 1, 0, 3.2, shade(wall, -0.35));
@@ -125,17 +131,8 @@ function drawHouse(h, ox, oy, ts) {
     [0.25, 0.5, 0.75].forEach(u => { winFace(b.right, u, 0.07, 10, 28); winFace(b.right, u, 0.07, 42, 60); });
     doorFace(b.left, du, 0.05, 26, '#5a3a22');
     hipRoof(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, 32, roof);
-    // corner towers
-    [[x - 0.4, y + d - 1], [x + w - 0.9, y + d - 1]].forEach(([tx, ty]) => {
-      const t = box(tx, ty, 1.3, 1.3, 98, wall);
-      wallRect(t.left, 0, 0, 1, 67, 72, shade(wall, 0.25)); wallRect(t.right, 0, 0, 1, 67, 72, shade(wall, 0.2));
-      winFace(t.left, 0.5, 0.18, 42, 60); winFace(t.right, 0.5, 0.18, 42, 60); winFace(t.left, 0.5, 0.18, 76, 90);
-      const apex = pyramid(tx - 0.1, ty - 0.1, 1.5, 1.5, 98, 40, roof);
-      line(apex.x, apex.y, apex.x, apex.y - 16 * z, '#555', 1.2 * z);
-      const fl = Math.sin(ts / 300 + tx) * 2 * z;
-      pg([[apex.x, apex.y - 16 * z], [apex.x + 11 * z, apex.y - 13 * z + fl], [apex.x, apex.y - 9 * z]], '#ffd23f');
-      top = Math.min(top, apex.y - 16 * z);
-    });
+    chimney(x + 0.6, y + 0.6, wh + 6, 34); chimney(x + w - 1, y + 0.6, wh + 6, 34);
+    top = iso(x, y).y - (wh + 40) * z;
     // portico with columns and a pediment
     const py = y + d + 0.15;
     [-0.75, -0.25, 0.25, 0.75].forEach(dx => box(ox + DOOR_X + dx - 0.06, py, 0.12, 0.12, 40, '#fffaf0'));
@@ -187,37 +184,52 @@ function rail(ax, ay, bx, by) {
 
 // ---------- vehicles (front faces the road, +y) ----------
 const CAR_SPEC = {
-  mini:   { len: 1.6, wid: 0.82, body: 9,   cab: [0.32, 0.9],  cabH: 8 },
-  suv:    { len: 1.9, wid: 0.95, body: 12,  cab: [0.2, 1.38],  cabH: 10, rack: true },
-  sports: { len: 1.9, wid: 0.92, body: 6.5, cab: [0.55, 0.72], cabH: 6, spoiler: true },
-  pickup: { len: 2.0, wid: 0.95, body: 11,  cab: [1.0, 0.66],  cabH: 9, bed: true },
+  mini:        { len: 1.6, wid: 0.82, body: 9,   cab: [0.32, 0.9],  cabH: 8 },
+  sedan:       { len: 2.0, wid: 0.9,  body: 8,   cab: [0.55, 0.92], cabH: 7.5 },
+  convertible: { len: 2.0, wid: 0.9,  body: 7,   cab: [0.7, 0.6],   cabH: 0, open: true },
+  suv:         { len: 1.9, wid: 0.95, body: 12,  cab: [0.2, 1.38],  cabH: 10, rack: true },
+  jeep:        { len: 1.8, wid: 0.95, body: 12,  cab: [0.25, 1.15], cabH: 10, lift: 3, lights: true, big: true },
+  sports:      { len: 1.9, wid: 0.92, body: 6.5, cab: [0.55, 0.72], cabH: 6, spoiler: true },
+  pickup:      { len: 2.0, wid: 0.95, body: 11,  cab: [1.0, 0.66],  cabH: 9, bed: true },
 };
-function carWheel(face, base, u) {
-  const p = wallPt(face, base, u, 0), z = cam.z;
-  ellipse(p.x, p.y, 3.4 * z, 4.4 * z, '#2b2b2e', null, 0, -0.45);
-  ellipse(p.x, p.y, 1.6 * z, 2 * z, '#bfc4c9', null, 0, -0.45);
+function carWheel(face, base, u, big) {
+  const p = wallPt(face, base, u, 0), z = cam.z, k = big ? 1.35 : 1;
+  ellipse(p.x, p.y, 3.4 * z * k, 4.4 * z * k, '#2b2b2e', null, 0, -0.45);
+  ellipse(p.x, p.y, 1.6 * z * k, 2 * z * k, '#bfc4c9', null, 0, -0.45);
 }
+// Cars park on the driveway with the front towards the road (+y).
 function drawCar(c, x, y, ts) {
-  const z = cam.z, col = c.color;
-  if (c.k === 'bike' || c.k === 'scooter') return drawTwoWheeler(c, x, y);
+  const z = cam.z, col = c.color, def = CARS[c.k] || {};
+  if (def.kind === 'two') return drawTwoWheeler(c, x, y, ts);
   if (c.k === 'camper') return drawCamper(c, x, y);
-  const s = CAR_SPEC[c.k], cx = x + (1 - s.wid) / 2;
+  if (c.k === 'tractor') return drawTractor(c, x, y, ts);
+  const s = CAR_SPEC[c.k] || CAR_SPEC.mini, cx = x + (1 - s.wid) / 2, base = 3.5 + (s.lift || 0);
   const ctr = iso(cx + s.wid / 2, y + s.len / 2);
   ellipse(ctr.x, ctr.y + 2 * z, (s.wid + s.len) * 15 * z, (s.wid + s.len) * 7 * z, 'rgba(0,0,0,.2)');
-  const b = box(cx, y, s.wid, s.len, s.body, col, 3.5);
-  wallRect(b.left, 3.5, 0, 1, 0, 2, '#d5d5d0');
-  wallRect(b.left, 3.5, 0.06, 0.24, 4, 7, '#fff6c8'); wallRect(b.left, 3.5, 0.76, 0.94, 4, 7, '#fff6c8');
-  wallRect(b.left, 3.5, 0.34, 0.66, 3, 6, shade(col, -0.45));
-  wallRect(b.right, 3.5, 0, 1, s.body * 0.45, s.body * 0.45 + 1, shade(col, 0.25));
-  if (s.bed) flatRect(cx + 0.08, y + 0.08, s.wid - 0.16, 0.86, shade(col, -0.4), null, 3.5 + s.body);
-  const cb = box(cx + 0.07, y + s.cab[0], s.wid - 0.14, s.cab[1], s.cabH, '#bfe1f2', 3.5 + s.body,
-    { left: '#8fc6e3', right: '#aad6ee', top: shade(col, 0.08) });
-  wallLine(cb.right, 3.5 + s.body, 0.5, 0, 0.5, s.cabH, shade(col, -0.1), 1.6);
-  if (s.rack) { const h = 3.5 + s.body + s.cabH + 2; [0.25, 0.75].forEach(u => { const a = up(iso(cx + 0.12, y + s.cab[0] + s.cab[1] * u), h * z), q = up(iso(cx + s.wid - 0.12, y + s.cab[0] + s.cab[1] * u), h * z); line(a.x, a.y, q.x, q.y, '#555', 1.2 * z); }); }
-  if (s.spoiler) box(cx + 0.06, y + 0.02, s.wid - 0.12, 0.14, 1.4, shade(col, -0.25), 3.5 + s.body + 4);
-  carWheel(b.right, 0, 0.2); carWheel(b.right, 0, 0.8);
-  if (NIGHT > 0.3) { const p = wallPt(b.left, 3.5, 0.5, 5); glow(p.x, p.y + 10 * z, 40 * z); }
-  return { x0: iso(cx, y + s.len).x - 4, x1: iso(cx + s.wid, y).x + 4, y0: iso(cx, y).y - (s.body + s.cabH + 6) * z, y1: iso(cx + s.wid, y + s.len).y + 4 };
+  const b = box(cx, y, s.wid, s.len, s.body, col, base);
+  wallRect(b.left, base, 0, 1, 0, 2, s.big ? '#3a3a3a' : '#d5d5d0');
+  wallRect(b.left, base, 0.06, 0.24, 4, 7, '#fff6c8'); wallRect(b.left, base, 0.76, 0.94, 4, 7, '#fff6c8');
+  wallRect(b.left, base, 0.34, 0.66, 3, 6, shade(col, -0.45));
+  wallRect(b.right, base, 0, 1, s.body * 0.45, s.body * 0.45 + 1, shade(col, 0.25));
+  if (s.big) wallRect(b.right, base, 0, 1, 0, 3, '#3a3a3a');
+  if (s.bed) flatRect(cx + 0.08, y + 0.08, s.wid - 0.16, 0.86, shade(col, -0.4), null, base + s.body);
+  const top = base + s.body;
+  if (s.open) {
+    // windshield, then two seats in the open cabin
+    box(cx + 0.08, y + s.cab[0] + s.cab[1] - 0.06, s.wid - 0.16, 0.05, 6, '#bfe1f2', top, { left: 'rgba(150,200,230,.6)', right: 'rgba(170,215,240,.6)', top: '#ddd' });
+    flatRect(cx + 0.08, y + s.cab[0], s.wid - 0.16, s.cab[1] - 0.08, shade(col, -0.35), null, top);
+    [0.2, 0.55].forEach(u => box(cx + 0.12 + u * (s.wid - 0.24) - 0.02, y + s.cab[0] + 0.05, 0.22, 0.2, 6, '#3b3b3b', top));
+  } else {
+    const cb = box(cx + 0.07, y + s.cab[0], s.wid - 0.14, s.cab[1], s.cabH, '#bfe1f2', top, { left: '#8fc6e3', right: '#aad6ee', top: shade(col, 0.08) });
+    wallLine(cb.right, top, 0.5, 0, 0.5, s.cabH, shade(col, -0.1), 1.6);
+    const roofH = top + s.cabH;
+    if (s.rack) [0.25, 0.75].forEach(u => { const a = up(iso(cx + 0.12, y + s.cab[0] + s.cab[1] * u), (roofH + 2) * z), q = up(iso(cx + s.wid - 0.12, y + s.cab[0] + s.cab[1] * u), (roofH + 2) * z); line(a.x, a.y, q.x, q.y, '#555', 1.2 * z); });
+    if (s.lights) box(cx + 0.15, y + s.cab[0] + s.cab[1] - 0.15, s.wid - 0.3, 0.1, 2, '#333', roofH, { left: '#fff6c8' });
+  }
+  if (s.spoiler) box(cx + 0.06, y + 0.02, s.wid - 0.12, 0.14, 1.4, shade(col, -0.25), top + 4);
+  carWheel(b.right, 0, 0.2, s.big); carWheel(b.right, 0, 0.8, s.big);
+  if (NIGHT > 0.3) { const p = wallPt(b.left, base, 0.5, 5); glow(p.x, p.y + 10 * z, 40 * z); }
+  return { x0: iso(cx, y + s.len).x - 4, x1: iso(cx + s.wid, y).x + 4, y0: iso(cx, y).y - (top + s.cabH + 6) * z, y1: iso(cx + s.wid, y + s.len).y + 4 };
 }
 function drawCamper(c, x, y) {
   const z = cam.z, cx = x - 0.02, wid = 1.05, len = 2.5, col = c.color;
@@ -233,25 +245,78 @@ function drawCamper(c, x, y) {
   carWheel(b.right, 0, 0.18); carWheel(b.right, 0, 0.82);
   return { x0: iso(cx, y + len).x - 4, x1: iso(cx + wid, y).x + 4, y0: iso(cx, y).y - 40 * z, y1: iso(cx + wid, y + len).y + 4 };
 }
-function drawTwoWheeler(c, x, y) {
-  const z = cam.z, col = c.color, scooter = c.k === 'scooter', cx = x + 0.5;
-  const wheel = (wy) => { const p = up(iso(cx, wy), 5 * z); ellipse(p.x, p.y, 3 * z, 5.2 * z, null, '#2b2b2e', 1.8 * z, -0.46); return p; };
+function drawTractor(c, x, y, ts) {
+  const z = cam.z, col = c.color, cx = x + 0.1;
+  const ctr = iso(cx + 0.4, y + 1);
+  ellipse(ctr.x, ctr.y + 2 * z, 40 * z, 18 * z, 'rgba(0,0,0,.2)');
+  const hood = box(cx + 0.15, y + 1.0, 0.5, 0.85, 12, col, 6);
+  wallRect(hood.left, 6, 0.15, 0.85, 2, 9, '#444');
+  [0.25, 0.5, 0.75].forEach(u => wallLine(hood.left, 6, u, 2, u, 9, '#777', 0.7));
+  box(cx + 0.1, y + 0.2, 0.6, 0.85, 8, col, 6);
+  // cab posts and roof
+  [[cx + 0.12, y + 0.25], [cx + 0.6, y + 0.25], [cx + 0.12, y + 0.95], [cx + 0.6, y + 0.95]].forEach(([px, py]) => box(px, py, 0.06, 0.06, 26, '#333', 14));
+  box(cx + 0.06, y + 0.18, 0.72, 0.9, 2, shade(col, -0.15), 40);
+  box(cx + 0.25, y + 0.4, 0.3, 0.3, 4, '#333', 14);
+  const pipe = up(iso(cx + 0.45, y + 1.6), 18 * z);
+  line(pipe.x, pipe.y, pipe.x, pipe.y - 14 * z, '#555', 2 * z);
+  const ph = (ts / 900) % 1;
+  circle(pipe.x + ph * 4 * z, pipe.y - (16 + ph * 14) * z, (2 + ph * 3) * z, `rgba(200,200,200,${0.6 * (1 - ph)})`);
+  // big back wheels, small front wheels
+  const wb = iso(cx + 0.8, y + 0.55), wf = iso(cx + 0.72, y + 1.55);
+  ellipse(wb.x, wb.y - 9 * z, 6 * z, 10 * z, '#2b2b2e', null, 0, -0.45); ellipse(wb.x, wb.y - 9 * z, 3 * z, 5 * z, '#f2c230', null, 0, -0.45);
+  ellipse(wf.x, wf.y - 5 * z, 3.4 * z, 5.4 * z, '#2b2b2e', null, 0, -0.45); ellipse(wf.x, wf.y - 5 * z, 1.6 * z, 2.6 * z, '#f2c230', null, 0, -0.45);
+  return { x0: iso(cx, y + 1.9).x - 6, x1: iso(cx + 0.8, y).x + 10, y0: iso(cx, y).y - 46 * z, y1: iso(cx + 0.8, y + 1.9).y + 4 };
+}
+// Bicycles, e-bikes, scooters and motorbikes stand on the driveway along y.
+function drawTwoWheeler(c, x, y, ts) {
+  const z = cam.z, col = c.color, k = c.k, cx = x + 0.5, motor = k !== 'bike';
+  const wheelR = k === 'vespa' ? 3.6 : k === 'bike' || k === 'scooter' ? 5 : 5.6;
+  const wheel = (wy) => { const p = up(iso(cx, wy), wheelR * z); ellipse(p.x, p.y, wheelR * 0.6 * z, wheelR * z, null, '#2b2b2e', (motor ? 2.6 : 1.8) * z, -0.46); return p; };
   ellipse(iso(cx, y + 0.8).x, iso(cx, y + 0.8).y, 22 * z, 7 * z, 'rgba(0,0,0,.16)');
   const r = wheel(y + 0.3), f = wheel(y + 1.25);
-  if (scooter) {
+  const P = (wy, h) => up(iso(cx, wy), h * z);
+  const L = (a, b, c2, w) => line(a.x, a.y, b.x, b.y, c2, w * z);
+  if (k === 'bike') {
+    const seat = P(y + 0.55, 17), bar = P(y + 1.1, 19), ped = P(y + 0.72, 6);
+    [[r, ped], [ped, f], [r, seat], [seat, ped], [seat, bar], [ped, bar], [bar, f]].forEach(([a, b]) => L(a, b, col, 1.6));
+    ellipse(seat.x, seat.y - 1 * z, 3.4 * z, 1.4 * z, '#333');
+    L(up(iso(cx - 0.22, y + 1.1), 21 * z), up(iso(cx + 0.22, y + 1.1), 21 * z), '#333', 1.5);
+  } else if (k === 'scooter') {
     box(cx - 0.18, y + 0.35, 0.36, 0.8, 5, col, 4);
     box(cx - 0.14, y + 0.4, 0.28, 0.45, 3, '#3b3b3b', 9);
-    const h0 = up(iso(cx, y + 1.15), 9 * z), h1 = up(iso(cx, y + 1.2), 26 * z);
-    line(h0.x, h0.y, h1.x, h1.y, col, 2.4 * z);
-    const a = up(iso(cx - 0.25, y + 1.2), 26 * z), b = up(iso(cx + 0.25, y + 1.2), 26 * z);
-    line(a.x, a.y, b.x, b.y, '#333', 1.6 * z);
+    box(cx - 0.12, y + 0.35, 0.24, 0.18, 6, '#2f2f2f', 4);   // battery
+    L(P(y + 1.15, 9), P(y + 1.2, 26), col, 2.4);
+    L(up(iso(cx - 0.25, y + 1.2), 26 * z), up(iso(cx + 0.25, y + 1.2), 26 * z), '#333', 1.6);
+  } else if (k === 'vespa') {
+    const b = box(cx - 0.17, y + 0.22, 0.34, 0.6, 9, col, 3);
+    wallRect(b.right, 3, 0.2, 0.8, 3, 6, shade(col, 0.2));
+    box(cx - 0.12, y + 0.28, 0.24, 0.45, 2.5, '#5a3a22', 12);
+    box(cx - 0.1, y + 0.82, 0.2, 0.3, 1.5, '#444', 3);
+    const sh = box(cx - 0.16, y + 1.1, 0.32, 0.07, 15, col, 3);
+    wallRect(sh.left, 3, 0.3, 0.7, 10, 13, '#fff6c8');
+    L(P(y + 1.15, 18), P(y + 1.12, 25), '#bbb', 1.8);
+    L(up(iso(cx - 0.24, y + 1.12), 25 * z), up(iso(cx + 0.24, y + 1.12), 25 * z), '#333', 1.6);
+    const m = up(iso(cx + 0.24, y + 1.12), 27 * z); circle(m.x, m.y, 1.4 * z, '#ddd');
   } else {
-    const seat = up(iso(cx, y + 0.55), 17 * z), bar = up(iso(cx, y + 1.1), 19 * z), ped = up(iso(cx, y + 0.72), 6 * z);
-    [[r, ped], [ped, f], [r, seat], [seat, ped], [seat, bar], [ped, bar], [bar, f]].forEach(([a, b]) => line(a.x, a.y, b.x, b.y, col, 1.6 * z));
-    ellipse(seat.x, seat.y - 1 * z, 3.4 * z, 1.4 * z, '#333');
-    const a = up(iso(cx - 0.22, y + 1.1), 21 * z), b = up(iso(cx + 0.22, y + 1.1), 21 * z);
-    line(a.x, a.y, b.x, b.y, '#333', 1.5 * z);
+    const sport = k === 'sportbike';
+    L(P(y + 0.3, wheelR), P(y + 0.75, 10), '#555', 1.6);
+    box(cx - 0.11, y + 0.55, 0.22, 0.35, 6, '#666', 4);                       // engine
+    L(P(y + 0.45, 6), P(y + 0.05, 7), '#ccc', 1.6);                            // exhaust
+    if (sport) {
+      const fr = box(cx - 0.15, y + 0.65, 0.3, 0.55, 9, col, 6);
+      wallRect(fr.left, 6, 0.3, 0.7, 4, 8, '#fff6c8');
+      box(cx - 0.1, y + 0.18, 0.2, 0.4, 4, col, 11);
+      box(cx - 0.09, y + 0.45, 0.18, 0.25, 1.5, '#222', 12);
+      box(cx - 0.12, y + 1.0, 0.24, 0.06, 6, 'rgba(160,210,235,.8)', 15);
+    } else {
+      box(cx - 0.12, y + 0.78, 0.24, 0.3, 5, col, 11);                         // tank
+      box(cx - 0.1, y + 0.36, 0.2, 0.44, 2.5, '#222', 12);                     // seat
+      L(f, P(y + 1.18, 24), '#999', 1.6);                                      // fork
+      L(up(iso(cx - 0.28, y + 1.15), 25 * z), up(iso(cx + 0.28, y + 1.15), 25 * z), '#333', 1.6);
+      const hl = P(y + 1.27, 20); circle(hl.x, hl.y, 2.2 * z, '#fff6c8', '#888', 0.6 * z);
+    }
   }
+  if (motor && NIGHT > 0.3) { const p = P(y + 1.3, 16); glow(p.x, p.y + 8 * z, 26 * z); }
   return { x0: iso(cx, y + 1.4).x - 14 * z, x1: iso(cx, y).x + 14 * z, y0: iso(cx, y).y - 30 * z, y1: iso(cx, y + 1.4).y + 6 };
 }
 
@@ -447,6 +512,7 @@ function drawFurn(it, x, y, ts) {
       }
       break;
     }
+    default: drawFurn2(it, x, y, w, d, rot, tint, ts);
   }
 }
 function tvScreen(face, ts) {
@@ -492,15 +558,6 @@ function drawYardItem(it, x, y, ts) {
         ellipse(c.x + 5 * z + sw, c.y - 37 * z, 8 * z, 7 * z, '#74c169');
         [[-7, -26], [6, -30], [-1, -36], [8, -22], [-9, -33]].forEach(([dx, dy]) => circle(c.x + dx * z + sw, c.y + dy * z, 2 * z, '#e5483b'));
       }
-      break;
-    }
-    case 'mailbox': {
-      box(x + 0.46, y + 0.46, 0.08, 0.08, 16, '#8a5a36');
-      const b = box(x + 0.32, y + 0.38, 0.36, 0.24, 8, '#3e7cc9', 16);
-      wallRect(b.left, 16, 0.2, 0.8, 2, 6, shade('#3e7cc9', -0.25));
-      const p = up(iso(x + 0.68, y + 0.5), 24 * z);
-      line(p.x, p.y, p.x, p.y - 7 * z, '#555', 1 * z);
-      rrect(p.x, p.y - 7 * z, 5 * z, 3 * z, 0.5 * z, '#e5483b');
       break;
     }
     case 'lamp': {
@@ -594,6 +651,7 @@ function drawYardItem(it, x, y, ts) {
       [l1, l2].forEach(p => line(p.x, p.y, p.x, p.y - 10 * z, '#d9d9d9', 1.4 * z));
       break;
     }
+    default: drawYard2(it, x, y, ts);
   }
 }
 
@@ -633,4 +691,480 @@ function drawTownHall(x, y, lv, ts) {
   const fl = Math.sin(ts / 250) * 2 * z;
   pg([[fp.x, fp.y - 60 * z], [fp.x + 16 * z, fp.y - 56 * z + fl], [fp.x + 16 * z, fp.y - 49 * z + fl], [fp.x, fp.y - 52 * z]], '#ef7d3c');
   return { top, x0: iso(hx, hy + d).x, x1: iso(hx + w, hy).x, y1: iso(hx + w, hy + d).y };
+}
+
+// ---------- newer houses ----------
+function drawModern(x, y, w, d, du, wall, roof, ts) {
+  const z = cam.z, glass = NIGHT > 0.3 ? '#ffe39a' : '#9fd3ee', dark = '#3d434c', slab = '#ecebe6';
+  const b = box(x, y, w, d, 30, wall);
+  wallRect(b.left, 0, 0, 1, 0, 3, dark); wallRect(b.right, 0, 0, 1, 0, 3, dark);
+  wallRect(b.left, 0, 0.04, du - 0.09, 5, 26, glass, dark, 1.2);
+  wallLine(b.left, 0, (0.04 + du - 0.09) / 2, 5, (0.04 + du - 0.09) / 2, 26, dark, 1);
+  wallRect(b.left, 0, du + 0.09, 0.96, 5, 26, glass, dark, 1.2);
+  [0.6, 0.78].forEach(u => wallLine(b.left, 0, u, 5, u, 26, dark, 1));
+  doorFace(b.left, du, 0.06, 22, '#6b4a2e');
+  wallRect(b.right, 0, 0.15, 0.85, 8, 24, glass, dark, 1.2);
+  if (NIGHT > 0.3) { [0.2, 0.7].forEach(u => { const p = wallPt(b.left, 0, u, 16); glow(p.x, p.y, 40 * z, 0.8); }); }
+  box(x - 0.15, y - 0.15, w + 0.3, d + 0.3, 3, slab, 30);
+  // terrace railing in front of the upper floor
+  box(x + 0.1, y + d - 0.35, 1.8, 0.05, 8, 'rgba(180,220,240,.5)', 33, { left: 'rgba(170,215,240,.45)', right: 'rgba(170,215,240,.45)', top: 'rgba(255,255,255,.5)', edge: 'rgba(255,255,255,.75)' });
+  const pp = up(iso(x + 0.6, y + 1.2), 33 * z);
+  rrect(pp.x - 4 * z, pp.y - 6 * z, 8 * z, 6 * z, 1.5 * z, '#c8754a'); circle(pp.x, pp.y - 10 * z, 5 * z, '#5fae55');
+  // upper floor, set back, clad in wood
+  const ub = box(x + 2, y, w - 2, d - 1.2, 26, '#b9875a', 33);
+  for (let k = 1; k < 12; k++) { wallLine(ub.left, 33, k / 12, 0, k / 12, 26, 'rgba(90,55,25,.25)', 0.7); wallLine(ub.right, 33, k / 12, 0, k / 12, 26, 'rgba(90,55,25,.25)', 0.7); }
+  wallRect(ub.left, 33, 0.08, 0.62, 5, 22, glass, dark, 1.2);
+  wallRect(ub.right, 33, 0.25, 0.75, 5, 22, glass, dark, 1.2);
+  box(x + 1.85, y - 0.12, w - 1.7, d - 0.9, 3, slab, 59);
+  flatRect(x + 2.4, y + 0.3, 1.6, 1.3, '#2f4b7c', '#9fb4d6', 62.5, 0.8);   // solar panels
+  flatRect(x + 4.2, y + 0.3, 1.2, 1.3, '#2f4b7c', '#9fb4d6', 62.5, 0.8);
+  return iso(x + 2, y).y - 64 * z;
+}
+function latticeWin(face, base, u, uw, h0, h1, red) {
+  const lit = NIGHT > 0.3;
+  wallRect(face, base, u - uw, u + uw, h0, h1, red);
+  wallRect(face, base, u - uw * 0.8, u + uw * 0.8, h0 + 1.5, h1 - 1.5, lit ? '#ffd98a' : '#f6ead0');
+  for (let k = 1; k < 4; k++) wallLine(face, base, u - uw * 0.8 + k * uw * 0.4, h0 + 1.5, u - uw * 0.8 + k * uw * 0.4, h1 - 1.5, red, 0.6);
+  for (let k = 1; k < 3; k++) wallLine(face, base, u - uw * 0.8, h0 + 1.5 + k * (h1 - h0 - 3) / 3, u + uw * 0.8, h0 + 1.5 + k * (h1 - h0 - 3) / 3, red, 0.6);
+  if (lit) { const p = wallPt(face, base, u, (h0 + h1) / 2); glow(p.x, p.y, 26 * cam.z, 0.7); }
+}
+function drawChinese(x, y, w, d, du, wall, ts) {
+  const z = cam.z, red = '#b8322a', tileCol = '#7a8796', wh = 36, base = 4;
+  box(x - 0.25, y - 0.25, w + 0.5, d + 0.75, base, '#aaa49a');
+  const b = box(x, y, w, d, wh, wall, base);
+  wallRect(b.left, base, 0, 1, 0, 4, '#8e8a84'); wallRect(b.right, base, 0, 1, 0, 4, '#8e8a84');
+  [0.15, 0.8].forEach(u => latticeWin(b.left, base, u, 0.075, 9, 24, red));
+  [0.3, 0.7].forEach(u => latticeWin(b.right, base, u, 0.1, 9, 24, red));
+  wallRect(b.left, base, du - 0.1, du + 0.1, 0, 22, red, '#7a1f19', 1);
+  wallLine(b.left, base, du, 0, du, 22, '#7a1f19', 1);
+  [du - 0.025, du + 0.025].forEach(u => { const p = wallPt(b.left, base, u, 11); circle(p.x, p.y, 1.3 * z, '#f2c230'); });
+  wallRect(b.left, base, du - 0.08, du + 0.08, 24, 28.5, '#2d2d2d');
+  wallRect(b.left, base, du - 0.06, du + 0.06, 25, 27.5, '#d4a82a');
+  for (let i = 0; i <= 4; i++) box(x + 0.1 + i * (w - 0.34) / 4, y + d + 0.28, 0.14, 0.14, wh, red, base);
+  hipRoof(x - 0.3, y - 0.3, w + 0.6, d + 0.9, wh + base, 24, tileCol);
+  const eave = (px, py, dir) => {
+    const p = up(iso(px, py), (wh + base) * z);
+    ctx.beginPath(); ctx.moveTo(p.x - dir * 9 * z, p.y + 2 * z); ctx.quadraticCurveTo(p.x, p.y + 2 * z, p.x + dir * 3 * z, p.y - 8 * z);
+    ctx.lineWidth = 3 * z; ctx.lineCap = 'round'; ctx.strokeStyle = shade(tileCol, -0.25); ctx.stroke();
+  };
+  eave(x - 0.3, y + d + 0.6, -1); eave(x + w + 0.3, y + d + 0.6, 1); eave(x + w + 0.3, y - 0.3, 1);
+  [0.12, 0.88].forEach(u => {
+    const p = up(iso(x + u * w, y + d + 0.45), (wh - 2) * z);
+    line(p.x, p.y - 5 * z, p.x, p.y, '#555', 0.6 * z);
+    ellipse(p.x, p.y + 4 * z, 3.6 * z, 4.6 * z, '#e0352b');
+    rrect(p.x - 2 * z, p.y - 0.4 * z, 4 * z, 1.4 * z, 0.4 * z, '#f2c230'); rrect(p.x - 2 * z, p.y + 7.8 * z, 4 * z, 1.4 * z, 0.4 * z, '#f2c230');
+    line(p.x, p.y + 9 * z, p.x, p.y + 13 * z, '#f2c230', 0.8 * z);
+    glow(p.x, p.y + 4 * z, 30 * z, 1);
+  });
+  return iso(x + w / 2, y).y - (wh + base + 30) * z;
+}
+// Battlements: back edges first (before anything on the roof), front edges last.
+function merlons(x, y, w, d, h, col, front) {
+  const n = Math.max(2, Math.round(w * 2)), m = Math.max(2, Math.round(d * 2));
+  if (!front) {
+    for (let i = 0; i < n; i += 2) box(x + i * w / n, y, w / n, 0.22, 5, col, h);
+    for (let j = 2; j < m; j += 2) box(x, y + j * d / m, 0.22, d / m, 5, col, h);
+  } else {
+    for (let j = 0; j < m; j += 2) box(x + w - 0.22, y + j * d / m, 0.22, d / m, 5, col, h);
+    for (let i = 0; i < n; i += 2) box(x + i * w / n, y + d - 0.22, w / n, 0.22, 5, col, h);
+  }
+}
+function flag(p, col, ts, len = 12) {
+  const z = cam.z;
+  line(p.x, p.y, p.x, p.y - 16 * z, '#555', 1.2 * z);
+  const fl = Math.sin(ts / 300 + p.x) * 2 * z;
+  pg([[p.x, p.y - 16 * z], [p.x + len * z, p.y - 13 * z + fl], [p.x, p.y - 9 * z]], col);
+}
+function drawCastle(x, y, w, d, du, bannerCol, ts) {
+  const z = cam.z, stone = '#bfb8ac', wh = 54;
+  const b = box(x, y, w, d, wh, stone);
+  for (let r = 1; r < 9; r++) { wallLine(b.left, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); wallLine(b.right, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); }
+  const arch = [];
+  for (let k = 0; k <= 10; k++) { const a = k / 10 * Math.PI; arch.push(wallPt(b.left, 0, du + Math.cos(a) * 0.1, 22 + Math.sin(a) * 8)); }
+  poly([wallPt(b.left, 0, du + 0.1, 0), ...arch, wallPt(b.left, 0, du - 0.1, 0)], '#5a3a22', '#8a8478', 1.5 * z);
+  for (let k = 1; k < 5; k++) wallLine(b.left, 0, du - 0.1 + k * 0.04, 0, du - 0.1 + k * 0.04, 26, 'rgba(30,20,10,.5)', 0.8);
+  [0.27, 0.6].forEach(u => { wallRect(b.left, 0, u - 0.035, u + 0.035, 24, 46, bannerCol); const p1 = wallPt(b.left, 0, u - 0.035, 24), p2 = wallPt(b.left, 0, u + 0.035, 24), p3 = wallPt(b.left, 0, u, 28); poly([p1, p2, p3], stone); });
+  [0.3, 0.7].forEach(u => { winFace(b.right, u, 0.035, 14, 26); winFace(b.right, u, 0.035, 34, 46); });
+  merlons(x, y, w, d, wh, stone, false);
+  const kx = x + w / 2 - 0.8, ky = y + 0.4, kt = box(kx, ky, 1.6, 1.6, 34, stone, wh);
+  winFace(kt.left, 0.5, 0.08, wh + 12, wh + 26);
+  merlons(kx, ky, 1.6, 1.6, wh + 34, stone, false); merlons(kx, ky, 1.6, 1.6, wh + 34, stone, true);
+  let top = up(iso(kx + 0.8, ky + 0.8), (wh + 39) * z);
+  flag(top, bannerCol, ts, 14);
+  merlons(x, y, w, d, wh, stone, true);
+  [[x - 0.55, y + d - 1], [x + w - 0.95, y + d - 1]].forEach(([tx, ty]) => {
+    const t = box(tx, ty, 1.5, 1.5, wh + 20, stone);
+    for (let r = 1; r < 12; r++) { wallLine(t.left, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); wallLine(t.right, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); }
+    winFace(t.left, 0.5, 0.12, 36, 50); winFace(t.right, 0.5, 0.12, 36, 50);
+    merlons(tx, ty, 1.5, 1.5, wh + 20, stone, false);
+    const apex = pyramid(tx - 0.12, ty - 0.12, 1.74, 1.74, wh + 22, 30, bannerCol);
+    merlons(tx, ty, 1.5, 1.5, wh + 20, stone, true);
+    flag(apex, '#ffd23f', ts);
+    top = apex.y - 16 * z < top.y ? { x: apex.x, y: apex.y - 16 * z } : top;
+  });
+  return top.y;
+}
+
+// ---------- mailbox (every home has one by the gate) ----------
+function drawMailbox(x, y, flagUp, ts) {
+  const z = cam.z, c = iso(x + 0.5, y + 0.5);
+  ellipse(c.x, c.y, 8 * z, 3.5 * z, 'rgba(0,0,0,.15)');
+  box(x + 0.46, y + 0.46, 0.08, 0.08, 16, '#8a5a36');
+  const b = box(x + 0.3, y + 0.36, 0.4, 0.28, 8, '#3e7cc9', 16);
+  wallRect(b.left, 16, 0.2, 0.8, 2, 6, shade('#3e7cc9', -0.25));
+  const p = up(iso(x + 0.7, y + 0.5), 24 * z), wv = Math.sin(ts / 200) * (flagUp ? 1 : 0);
+  if (flagUp) { line(p.x, p.y, p.x, p.y - 9 * z, '#555', 1 * z); rrect(p.x, p.y - 9 * z + wv * z, 6 * z, 3.5 * z, 0.5 * z, '#e5484d'); }
+  else { line(p.x, p.y, p.x + 7 * z, p.y - 1 * z, '#555', 1 * z); rrect(p.x + 4 * z, p.y - 2 * z, 4 * z, 3 * z, 0.5 * z, '#e5484d'); }
+  return { x0: c.x - 12 * z, x1: c.x + 12 * z, y0: c.y - 36 * z, y1: c.y + 4 * z };
+}
+
+// ---------- more furniture ----------
+function drawFurn2(it, x, y, w, d, rot, tint, ts) {
+  const z = cam.z, F = b => (rot ? b.right : b.left);
+  const strip = (t, inset = 0.06) => (rot ? [x + inset, y + inset, t, d - inset * 2] : [x + inset, y + inset, w - inset * 2, t]);
+  const P = (u, v, h) => up(iso(x + u, y + v), h * z);
+  switch (it.k) {
+    case 'nightstand': {
+      const b = box(x + 0.22, y + 0.22, 0.56, 0.56, 14, WOOD);
+      wallLine(F(b), 0, 0.08, 7, 0.92, 7, DARKWOOD, 0.8);
+      const k = wallPt(F(b), 0, 0.5, 10.5); circle(k.x, k.y, 1 * z, '#f2c230');
+      const p = P(0.5, 0.5, 14);
+      line(p.x, p.y, p.x, p.y - 7 * z, '#888', 1 * z);
+      pg([[p.x - 4 * z, p.y - 6 * z], [p.x + 4 * z, p.y - 6 * z], [p.x + 2.6 * z, p.y - 12 * z], [p.x - 2.6 * z, p.y - 12 * z]], '#fff3d6');
+      GLOWS.push({ x: p.x, y: p.y - 9 * z, r: 30 * z, a: 0.25 + NIGHT * 0.45 });
+      break;
+    }
+    case 'wardrobe': {
+      const s = strip(0.6), b = box(s[0], s[1], s[2], s[3], 50, '#a8754a'), f = F(b);
+      wallLine(f, 0, 0.5, 3, 0.5, 48, DARKWOOD, 1);
+      [0.44, 0.56].forEach(u => { const p = wallPt(f, 0, u, 26); circle(p.x, p.y, 1.1 * z, '#f2c230'); });
+      wallRect(f, 0, 0.02, 0.98, 0, 3, DARKWOOD);
+      break;
+    }
+    case 'beanbag': {
+      const c = iso(x + 0.5, y + 0.5);
+      ellipse(c.x, c.y - 4 * z, 15 * z, 9 * z, tint);
+      ellipse(c.x - 3 * z, c.y - 9 * z, 9 * z, 6 * z, shade(tint, 0.12));
+      ellipse(c.x + 5 * z, c.y - 2 * z, 6 * z, 3 * z, shade(tint, -0.12));
+      break;
+    }
+    case 'rocker': {
+      const rk = Math.sin(ts / 800) * 1.5;
+      [0.25, 0.75].forEach(u => { const a = rot ? P(0.15, u, 0) : P(u, 0.15, 0), b = rot ? P(0.85, u, 0) : P(u, 0.85, 0), m = rot ? P(0.5, u, -2) : P(u, 0.5, -2); ctx.beginPath(); ctx.moveTo(a.x, a.y - rk * z); ctx.quadraticCurveTo(m.x, m.y + 3 * z, b.x, b.y + rk * z); ctx.strokeStyle = DARKWOOD; ctx.lineWidth = 1.6 * z; ctx.stroke(); });
+      legs(x + 0.25, y + 0.25, 0.5, 0.5, 9, DARKWOOD, 0.02);
+      box(x + 0.25, y + 0.25, 0.5, 0.5, 2, WOOD, 9 + rk * 0.3);
+      if (rot) box(x + 0.22, y + 0.25, 0.07, 0.5, 20, WOOD, 10); else box(x + 0.25, y + 0.22, 0.5, 0.07, 20, WOOD, 10);
+      break;
+    }
+    case 'coffeetable': {
+      legs(x + 0.2, y + 0.2, w - 0.4, d - 0.4, 7, DARKWOOD);
+      box(x + 0.15, y + 0.15, w - 0.3, d - 0.3, 2.5, WOOD, 7);
+      const p = P(w * 0.35, d * 0.5, 9.5), q = P(w * 0.65, d * 0.45, 9.5);
+      pg([[p.x - 6 * z, p.y], [p.x, p.y - 3 * z], [p.x + 6 * z, p.y], [p.x, p.y + 3 * z]], '#5aa2e0');
+      rrect(q.x - 2 * z, q.y - 5 * z, 4 * z, 5 * z, 1 * z, '#fff', '#ccc', 0.5 * z);
+      break;
+    }
+    case 'monstera': {
+      box(x + 0.3, y + 0.3, 0.4, 0.4, 11, '#e8e2d6');
+      const p = P(0.5, 0.5, 11), sw = Math.sin(ts / 1400 + x) * 0.06;
+      local(p.x, p.y, z, 1, () => {
+        [[-2.3, 15], [-1.6, 18], [-0.9, 17], [-0.2, 15], [0.5, 13]].forEach(([a, len], i) => {
+          ctx.save(); ctx.rotate(a - Math.PI / 2 + 1.3 + sw);
+          ellipse(len * 0.55, 0, len * 0.5, len * 0.32, i % 2 ? '#2f7d4a' : '#3a9157');
+          for (let k = 1; k < 4; k++) line(len * (0.25 + k * 0.18), -len * 0.3, len * (0.25 + k * 0.18), -len * 0.08, '#e9f2e0', 0.6);
+          ctx.restore();
+        });
+      });
+      break;
+    }
+    case 'kitchen': {
+      const s = strip(0.75), b = box(s[0], s[1], s[2], s[3], 22, '#f1ede6'), f = F(b);
+      flatRect(s[0] - 0.02, s[1] - 0.02, s[2] + 0.04, s[3] + 0.04, '#9a948a', null, 22);
+      [0.25, 0.5, 0.75].forEach(u => wallLine(f, 0, u, 2, u, 20, '#d8d2c6', 0.8));
+      [0.18, 0.43, 0.57, 0.82].forEach(u => { const p = wallPt(f, 0, u, 16); circle(p.x, p.y, 0.9 * z, '#888'); });
+      const sk = rot ? [x + 0.15, y + 0.3, 0.45, 0.6] : [x + 0.3, y + 0.15, 0.6, 0.45];
+      flatRect(sk[0], sk[1], sk[2], sk[3], '#b8c2cc', '#8a949e', 22.2, 0.8);
+      const fp = P(rot ? 0.12 : 0.6, rot ? 0.6 : 0.12, 22);
+      line(fp.x, fp.y, fp.x, fp.y - 8 * z, '#9aa3ad', 1.5 * z); line(fp.x, fp.y - 8 * z, fp.x + 3 * z, fp.y - 6 * z, '#9aa3ad', 1.5 * z);
+      const pp = P(rot ? 0.4 : 1.5, rot ? 1.5 : 0.4, 22);
+      ellipse(pp.x, pp.y - 2 * z, 4 * z, 2 * z, '#e5675f'); ellipse(pp.x, pp.y - 4 * z, 3 * z, 1.4 * z, '#6cbf4a');
+      break;
+    }
+    case 'washer': {
+      const b = box(x + 0.16, y + 0.16, 0.68, 0.68, 24, '#f4f5f7'), f = F(b);
+      wallRect(f, 0, 0.1, 0.9, 19, 22.5, '#dfe3e8');
+      const p = wallPt(f, 0, 0.5, 10);
+      ellipse(p.x, p.y, 6 * z, 6.5 * z, '#c9d3dd'); ellipse(p.x, p.y, 4.6 * z, 5 * z, '#7fb7dd');
+      const a = ts / 180;
+      line(p.x + Math.cos(a) * 3 * z, p.y + Math.sin(a) * 3 * z, p.x - Math.cos(a) * 3 * z, p.y - Math.sin(a) * 3 * z, 'rgba(255,255,255,.7)', 1.4 * z);
+      break;
+    }
+    case 'bathtub': {
+      const s = strip(0.85), b = box(s[0], s[1], s[2], s[3], 13, '#fbfbfb'), f = F(b);
+      flatRect(s[0] + 0.08, s[1] + 0.08, s[2] - 0.16, s[3] - 0.16, '#a9dcf2', null, 12.5);
+      for (let k = 0; k < 6; k++) { const u = hash(k, 3), v = hash(k, 7), p = up(iso(s[0] + 0.15 + u * (s[2] - 0.3), s[1] + 0.15 + v * (s[3] - 0.3)), (13 + Math.sin(ts / 400 + k) * 0.6) * z); circle(p.x, p.y, (1.6 + hash(k, 9)) * z, 'rgba(255,255,255,.9)'); }
+      [0.1, 0.9].forEach(u => { const p = wallPt(f, 0, u, 0); circle(p.x, p.y, 1.4 * z, '#d4a82a'); });
+      const fp = P(rot ? 0.2 : 0.15, rot ? 0.15 : 0.2, 13);
+      line(fp.x, fp.y, fp.x, fp.y - 8 * z, '#c0c6cc', 1.5 * z);
+      break;
+    }
+    case 'spinbike': {
+      const a = P(0.5, 0.25, 0), b = P(0.5, 0.75, 0), seat = P(0.5, 0.35, 20), bar = P(0.5, 0.72, 24), wheel = P(0.5, 0.75, 9);
+      line(a.x - 5 * z, a.y, a.x + 5 * z, a.y, '#333', 2 * z); line(b.x - 5 * z, b.y, b.x + 5 * z, b.y, '#333', 2 * z);
+      line(a.x, a.y, seat.x, seat.y, '#444', 2.2 * z); line(b.x, b.y, bar.x, bar.y, '#444', 2.2 * z); line(a.x, a.y - 4 * z, b.x, b.y - 6 * z, '#444', 2 * z);
+      ellipse(wheel.x, wheel.y, 4 * z, 7 * z, '#bbb', '#555', 1 * z, -0.45);
+      ellipse(seat.x, seat.y - 1 * z, 4 * z, 1.8 * z, '#222');
+      line(bar.x - 4 * z, bar.y, bar.x + 4 * z, bar.y - 1 * z, '#222', 1.6 * z);
+      break;
+    }
+    case 'dumbbells': {
+      const b = box(x + 0.15, y + 0.3, 0.7, 0.4, 12, '#555');
+      [0.25, 0.5, 0.75].forEach((u, i) => { const p = P(0.15 + u * 0.7, 0.5, 12.5); rrect(p.x - 4 * z, p.y - 1 * z, 8 * z, 2 * z, 0.8 * z, '#777'); circle(p.x - 4 * z, p.y, (1.8 + i * 0.3) * z, '#2d2d2d'); circle(p.x + 4 * z, p.y, (1.8 + i * 0.3) * z, '#2d2d2d'); });
+      break;
+    }
+    case 'boxing': {
+      const base = P(0.2, 0.2, 0), topP = P(0.2, 0.2, 50), arm = P(0.55, 0.55, 50);
+      line(base.x, base.y, topP.x, topP.y, '#444', 2.4 * z); line(topP.x, topP.y, arm.x, arm.y, '#444', 2 * z);
+      ellipse(base.x, base.y, 7 * z, 3 * z, '#333');
+      const sw = Math.sin(ts / 260) * 2 * z;
+      line(arm.x, arm.y, arm.x + sw, arm.y + 8 * z, '#888', 0.8 * z);
+      rrect(arm.x - 5 * z + sw, arm.y + 8 * z, 10 * z, 26 * z, 4 * z, '#d6303a');
+      rrect(arm.x - 5 * z + sw, arm.y + 14 * z, 10 * z, 2 * z, 0, '#9e1f28');
+      break;
+    }
+    case 'guitar': {
+      const p = P(0.5, 0.5, 0);
+      line(p.x - 5 * z, p.y, p.x, p.y - 8 * z, '#333', 1 * z); line(p.x + 5 * z, p.y, p.x, p.y - 8 * z, '#333', 1 * z);
+      local(p.x, p.y - 10 * z, z, 1, () => {
+        ctx.rotate(-0.2);
+        circle(0, 0, 6, '#c27c3e'); circle(0, -7, 4.6, '#c27c3e'); circle(0, -2.5, 1.8, '#3a2412');
+        line(0, -8, 0, -26, '#5a3a22', 2); rrect(-1.6, -30, 3.2, 5, 1, '#3a2412');
+        for (let k = -1; k <= 1; k++) line(k * 0.6, 4, k * 0.6, -27, 'rgba(255,255,255,.6)', 0.25);
+      });
+      break;
+    }
+    case 'drums': {
+      const c = P(0.5, 0.55, 0);
+      local(c.x, c.y, z, 1, () => {
+        ellipse(0, -9, 9, 9, '#e5484d'); ellipse(0, -9, 7, 7, '#fbfbf7'); ellipse(0, -9, 2, 2, '#e5484d');
+        ellipse(-9, -15, 5, 2.4, '#ddd', '#888', 0.6); line(-9, -15, -9, 0, '#888', 0.8);
+        ellipse(6, -20, 4, 2, '#e5484d'); ellipse(6, -21, 4, 1.6, '#eee');
+        line(10, -28, 10, 0, '#888', 0.8); ellipse(10, -28, 7, 1.8, '#e2b13c');
+      });
+      break;
+    }
+    case 'record': {
+      const b = box(x + 0.15, y + 0.2, 0.7, 0.6, 14, DARKWOOD);
+      flatRect(x + 0.17, y + 0.22, 0.66, 0.56, '#3a3a3a', null, 14);
+      const p = P(0.45, 0.5, 14.3), a = ts / 300;
+      ellipse(p.x, p.y, 8 * z, 4 * z, '#111'); ellipse(p.x, p.y, 2.5 * z, 1.2 * z, '#e5484d');
+      line(p.x + Math.cos(a) * 5 * z, p.y + Math.sin(a) * 2.5 * z, p.x + Math.cos(a) * 7 * z, p.y + Math.sin(a) * 3.5 * z, 'rgba(255,255,255,.4)', 0.8 * z);
+      const q = P(0.75, 0.3, 14.3); line(q.x, q.y, p.x + 4 * z, p.y - 1 * z, '#ccc', 1 * z);
+      const u = (ts / 1200) % 1;
+      ctx.save(); ctx.globalAlpha = 1 - u; ctx.font = `${9 * z}px sans-serif`; ctx.fillStyle = '#6b5bd0'; ctx.fillText('♪', p.x + 6 * z, p.y - (10 + u * 16) * z); ctx.restore();
+      break;
+    }
+    case 'easel': {
+      const p = P(0.5, 0.55, 0);
+      local(p.x, p.y, z, 1, () => {
+        line(-6, 0, 0, -36, WOOD, 1.4); line(6, 0, 0, -36, WOOD, 1.4); line(0, -30, 2, 0, WOOD, 1.2);
+        rrect(-9, -34, 18, 14, 1, '#fffaf0', '#8a5a36', 0.8);
+        rrect(-8, -33, 16, 7, 0, '#a9dcf5'); ellipse(-2, -26, 10, 4, '#6cbf4a'); circle(5, -30, 2, '#f6d04d');
+        line(-9, -20, 9, -20, WOOD, 1.2);
+      });
+      break;
+    }
+    case 'cattree': {
+      const sisal = '#d9c39a', carpet = '#c9b8e0';
+      box(x + 0.15, y + 0.15, 0.7, 0.7, 3, carpet);
+      box(x + 0.45, y + 0.45, 0.12, 0.12, 42, sisal, 3);
+      box(x + 0.2, y + 0.45, 0.12, 0.12, 22, sisal, 3);
+      box(x + 0.12, y + 0.35, 0.45, 0.45, 3, carpet, 24);
+      box(x + 0.35, y + 0.2, 0.5, 0.5, 3, carpet, 44);
+      const p = P(0.6, 0.45, 47); ellipse(p.x, p.y, 5 * z, 2 * z, shade(carpet, -0.15));
+      break;
+    }
+    case 'grandclock': {
+      const b = box(x + 0.27, y + 0.27, 0.46, 0.46, 60, DARKWOOD), f = F(b);
+      wallRect(f, 0, 0.15, 0.85, 12, 36, 'rgba(255,240,200,.25)', '#5a3a22', 1);
+      const piv = wallPt(f, 0, 0.5, 34), sw = Math.sin(ts / 500) * 0.35;
+      line(piv.x, piv.y, piv.x + Math.sin(sw) * 16 * z, piv.y + Math.cos(sw) * 16 * z, '#d4a82a', 0.8 * z);
+      circle(piv.x + Math.sin(sw) * 16 * z, piv.y + Math.cos(sw) * 16 * z, 2.4 * z, '#d4a82a');
+      const cp = wallPt(f, 0, 0.5, 49), dd = new Date(now());
+      circle(cp.x, cp.y, 6 * z, '#fffaf0', '#d4a82a', 1 * z);
+      const ha = (dd.getHours() % 12 + dd.getMinutes() / 60) / 12 * Math.PI * 2, ma = dd.getMinutes() / 60 * Math.PI * 2;
+      line(cp.x, cp.y, cp.x + Math.sin(ha) * 3 * z, cp.y - Math.cos(ha) * 3 * z, '#333', 1.2 * z);
+      line(cp.x, cp.y, cp.x + Math.sin(ma) * 4.6 * z, cp.y - Math.cos(ma) * 4.6 * z, '#333', 0.8 * z);
+      pyramid(x + 0.25, y + 0.25, 0.5, 0.5, 60, 6, DARKWOOD);
+      break;
+    }
+  }
+}
+
+// ---------- more yard things ----------
+function drawYard2(it, x, y, ts) {
+  const k = it.k, z = cam.z, c = iso(x + 0.5, y + 0.5), P = (u, v, h) => up(iso(x + u, y + v), h * z);
+  switch (k) {
+    case 'birdbath': {
+      box(x + 0.42, y + 0.42, 0.16, 0.16, 12, '#d9d1c2');
+      const p = P(0.5, 0.5, 12);
+      ellipse(p.x, p.y, 14 * z, 6.5 * z, '#e6dccb'); ellipse(p.x, p.y - 0.5 * z, 11 * z, 4.8 * z, '#8fd0ee');
+      const hop = Math.max(0, Math.sin(ts / 300)) * 3 * z, bx = p.x + 7 * z;
+      local(bx, p.y - 1 * z - hop, z, -1, () => { ellipse(0, -3, 3.4, 2.4, '#7a8aa6'); circle(2.6, -5, 1.8, '#7a8aa6'); pg([[4, -5.4], [6, -5], [4, -4.4]], '#f2a23a'); });
+      break;
+    }
+    case 'scarecrow': {
+      const b0 = P(0.5, 0.5, 0), sw = Math.sin(ts / 1000) * 0.05;
+      local(b0.x, b0.y, z, 1, () => {
+        ctx.rotate(sw);
+        line(0, 0, 0, -36, '#8a5a36', 1.8); line(-12, -26, 12, -26, '#8a5a36', 1.6);
+        rrect(-7, -30, 14, 14, 3, '#5aa2e0'); pg([[-12, -27], [-7, -29], [-7, -24]], '#5aa2e0'); pg([[12, -27], [7, -29], [7, -24]], '#5aa2e0');
+        [-12, 12].forEach(hx => { line(hx, -26, hx + (hx > 0 ? 2 : -2), -23, '#e2bd5a', 0.8); line(hx, -26, hx + (hx > 0 ? 3 : -3), -26, '#e2bd5a', 0.8); });
+        circle(0, -35, 5, '#e8d2a6'); circle(-1.6, -35.5, 0.7, '#333'); circle(1.6, -35.5, 0.7, '#333');
+        ellipse(0, -39, 9, 2.4, '#d9b545'); rrect(-4.5, -45, 9, 6, 2.5, '#d9b545'); rrect(-4.5, -41, 9, 1.4, 0, '#e5484d');
+      });
+      break;
+    }
+    case 'beehive': {
+      box(x + 0.3, y + 0.3, 0.4, 0.4, 3, '#8a5a36');
+      [0, 1, 2].forEach(i => box(x + 0.28, y + 0.28, 0.44, 0.44, 7, i % 2 ? '#f6e3a3' : '#f2d36b', 3 + i * 7));
+      box(x + 0.24, y + 0.24, 0.52, 0.52, 2, '#c99a3a', 24);
+      for (let i = 0; i < 4; i++) {
+        const a = ts / (500 + i * 90) + i * 1.6, bx = c.x + Math.cos(a) * (10 + i * 2) * z, by = c.y - (16 + Math.sin(a * 1.7) * 6) * z;
+        circle(bx, by, 1.4 * z, '#2d2d2d'); circle(bx + 0.6 * z, by, 1.1 * z, '#f2c230');
+      }
+      if (yardReady(it)) { const p = P(0.5, 0.5, 4); ellipse(p.x + 5 * z, p.y + 2 * z, 3 * z, 1.4 * z, '#e9a72a'); }
+      break;
+    }
+    case 'doghouse': {
+      const b = box(x + 0.15, y + 0.15, 0.7, 0.7, 14, '#c0453a');
+      const pts = [];
+      for (let k2 = 0; k2 <= 8; k2++) { const a = k2 / 8 * Math.PI; pts.push(wallPt(b.left, 0, 0.5 + Math.cos(a) * 0.2, 6 + Math.sin(a) * 4)); }
+      poly([wallPt(b.left, 0, 0.7, 0), ...pts, wallPt(b.left, 0, 0.3, 0)], '#3a2618');
+      gableX(x + 0.08, y + 0.08, 0.84, 0.84, 14, 10, '#6b3a30', '#c0453a');
+      const p = P(0.85, 0.5, 0); ellipse(p.x + 4 * z, p.y + 2 * z, 4 * z, 2 * z, '#e5e5e5');
+      break;
+    }
+    case 'well': {
+      const p = P(0.5, 0.5, 0);
+      for (let k2 = 0; k2 < 3; k2++) { ellipse(p.x, p.y - k2 * 4 * z, 15 * z, 7 * z, k2 % 2 ? '#a9a39a' : '#9a948a'); }
+      ellipse(p.x, p.y - 10 * z, 15 * z, 7 * z, '#b8b2a6'); ellipse(p.x, p.y - 10 * z, 11 * z, 5 * z, '#2f4b6a');
+      [[0.15, 0.5], [0.85, 0.5]].forEach(([u, v]) => { const a = P(u, v, 8), b = P(u, v, 34); line(a.x, a.y, b.x, b.y, DARKWOOD, 2 * z); });
+      gableX(x + 0.05, y + 0.25, 0.9, 0.5, 32, 9, '#8a5a36', '#6b4428');
+      const r = P(0.5, 0.5, 28); line(r.x, r.y, r.x, r.y + 10 * z, '#888', 0.6 * z); rrect(r.x - 2.5 * z, r.y + 10 * z, 5 * z, 4 * z, 1 * z, '#8a5a36');
+      break;
+    }
+    case 'campfire': {
+      for (let k2 = 0; k2 < 8; k2++) { const a = k2 / 8 * Math.PI * 2; circle(c.x + Math.cos(a) * 10 * z, c.y + Math.sin(a) * 5 * z, 2.6 * z, '#8f8a82'); }
+      line(c.x - 7 * z, c.y + 2 * z, c.x + 7 * z, c.y - 2 * z, '#6b4428', 2.6 * z); line(c.x - 7 * z, c.y - 2 * z, c.x + 7 * z, c.y + 2 * z, '#7a4f2e', 2.6 * z);
+      for (let i = 0; i < 4; i++) { const fl = 8 + Math.sin(ts / 90 + i * 2) * 3 + Math.sin(ts / 170 + i) * 2; ellipse(c.x + (i - 1.5) * 2.4 * z, c.y - fl * z * 0.55, 2.6 * z, fl * z * 0.6, i % 2 ? '#f2a33a' : '#f6d04d'); }
+      for (let i = 0; i < 3; i++) { const ph = (ts / 1600 + i / 3) % 1; circle(c.x + Math.sin(ph * 5 + i) * 3 * z, c.y - (14 + ph * 24) * z, (1.5 + ph * 3.5) * z, `rgba(200,200,200,${0.45 * (1 - ph)})`); }
+      GLOWS.push({ x: c.x, y: c.y - 6 * z, r: 50 * z, a: 0.25 + NIGHT * 0.7 });
+      break;
+    }
+    case 'picnic': {
+      const [w, d] = it.rot ? [1, 2] : [2, 1];
+      legs(x + 0.25, y + 0.3, w - 0.5, d - 0.6, 14, DARKWOOD, 0.02);
+      box(x + 0.2, y + 0.25, w - 0.4, d - 0.5, 2, WOOD, 14);
+      const tc = it.rot ? [x + 0.25, y + 0.35, w - 0.5, d - 0.7] : [x + 0.35, y + 0.25, w - 0.7, d - 0.5];
+      flatRect(tc[0], tc[1], tc[2], tc[3], '#fff', null, 16.2);
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2 === 0) flatRect(tc[0] + i * tc[2] / 4, tc[1] + j * tc[3] / 2, tc[2] / 4, tc[3] / 2, '#e5484d', null, 16.3);
+      if (it.rot) { box(x + 0.02, y + 0.3, 0.16, d - 0.6, 2, WOOD, 8); box(x + w - 0.18, y + 0.3, 0.16, d - 0.6, 2, WOOD, 8); }
+      else { box(x + 0.3, y + 0.02, w - 0.6, 0.16, 2, WOOD, 8); box(x + 0.3, y + d - 0.18, w - 0.6, 0.16, 2, WOOD, 8); }
+      break;
+    }
+    case 'hammock': {
+      const [w, d] = it.rot ? [1, 2] : [2, 1];
+      const e = it.rot ? [[0.5, 0.1], [0.5, d - 0.1]] : [[0.1, 0.5], [w - 0.1, 0.5]];
+      const tops = e.map(([u, v]) => { const a = P(u, v, 0), b = P(u, v, 30); line(a.x, a.y, b.x, b.y, DARKWOOD, 2.6 * z); return P(u, v, 24); });
+      const m = P(w / 2, d / 2, 8 + Math.sin(ts / 900) * 2);
+      ctx.beginPath(); ctx.moveTo(tops[0].x, tops[0].y); ctx.quadraticCurveTo(m.x, m.y + 8 * z, tops[1].x, tops[1].y);
+      ctx.quadraticCurveTo(m.x, m.y + 2 * z, tops[0].x, tops[0].y); ctx.fillStyle = '#ef7d3c'; ctx.fill();
+      ctx.strokeStyle = '#fff3d6'; ctx.lineWidth = 0.8 * z; ctx.stroke();
+      break;
+    }
+    case 'slide': {
+      const [w, d] = it.rot ? [2, 1] : [1, 2];
+      const back = it.rot ? [x + 0.15, y + 0.2] : [x + 0.2, y + 0.15];
+      [[0, 0], [0.5, 0], [0, 0.5], [0.5, 0.5]].forEach(([a, b]) => box(back[0] + a * 1.2, back[1] + b * 1.2, 0.08, 0.08, 30, '#3e7cc9'));
+      box(back[0], back[1], 0.66, 0.66, 2, '#f2c230', 28);
+      for (let k2 = 1; k2 < 5; k2++) { const a = P(it.rot ? 0.2 : 0.25, it.rot ? 0.25 : 0.2, k2 * 6), b = P(it.rot ? 0.2 : 0.75, it.rot ? 0.75 : 0.2, k2 * 6); line(a.x, a.y, b.x, b.y, '#3e7cc9', 1 * z); }
+      const s0 = it.rot ? [x + 0.85, y + 0.25] : [x + 0.25, y + 0.85], s1 = it.rot ? [x + w - 0.1, y + 0.25] : [x + 0.25, y + d - 0.1];
+      const q = [up(iso(s0[0], s0[1]), 28 * z), up(iso(s0[0] + (it.rot ? 0 : 0.5), s0[1] + (it.rot ? 0.5 : 0)), 28 * z), up(iso(s1[0] + (it.rot ? 0 : 0.5), s1[1] + (it.rot ? 0.5 : 0)), 2 * z), up(iso(s1[0], s1[1]), 2 * z)];
+      poly(q, '#e5484d', 'rgba(0,0,0,.15)', z);
+      break;
+    }
+    case 'trampoline': {
+      const p = iso(x + 1, y + 1), bounce = Math.max(0, Math.sin(ts / 260)) * 2 * z;
+      [[0.35, 0.35], [1.65, 0.35], [0.35, 1.65], [1.65, 1.65]].forEach(([u, v]) => { const a = P(u, v, 0), b = P(u, v, 10); line(a.x, a.y, b.x, b.y, '#555', 1.6 * z); });
+      ellipse(p.x, p.y - 10 * z, 40 * z, 20 * z, '#3e7cc9');
+      ellipse(p.x, p.y - 10 * z + bounce, 34 * z, 17 * z, '#2b2b2e');
+      ellipse(p.x, p.y - 10 * z + bounce, 20 * z * (bounce / (2 * z) || 0.2), 10 * z * (bounce / (2 * z) || 0.2), null, 'rgba(255,255,255,.2)', 1 * z);
+      break;
+    }
+    case 'arch': {
+      const pts = [], A = [x + 0.5, y + 0.1], Bp = [x + 0.5, y + 0.9];
+      [A, Bp].forEach(([u, v]) => { const a = iso(u, v), b = up(a, 30 * z); line(a.x, a.y, b.x, b.y, '#fffaf0', 2.2 * z); });
+      for (let k2 = 0; k2 <= 12; k2++) { const a = k2 / 12 * Math.PI; pts.push(up(iso(x + 0.5, y + 0.5 - Math.cos(a) * 0.4), (30 + Math.sin(a) * 10) * z)); }
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); pts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.strokeStyle = '#fffaf0'; ctx.lineWidth = 2.2 * z; ctx.stroke();
+      pts.forEach((p, i) => { circle(p.x, p.y, 3 * z, i % 2 ? '#4f9a3a' : '#5fae47'); if (i % 3 === 1) circle(p.x + 1 * z, p.y - 1 * z, 2 * z, '#e5484d'); });
+      [A, Bp].forEach(([u, v]) => { for (let h = 6; h < 30; h += 8) { const p = up(iso(u, v), h * z); circle(p.x + 2 * z, p.y, 2.4 * z, '#5fae47'); circle(p.x - 1 * z, p.y - 3 * z, 1.6 * z, '#e5484d'); } });
+      break;
+    }
+    case 'windmill': {
+      const b0 = P(0.5, 0.5, 0);
+      local(b0.x, b0.y, z, 1, () => {
+        pg([[-8, 0], [8, 0], [5, -40], [-5, -40]], '#f4ecdf', 'rgba(0,0,0,.1)', 0.6);
+        pg([[0, 0], [8, 0], [5, -40], [0, -40]], 'rgba(0,0,0,.06)');
+        rrect(-2.5, -12, 5, 12, 2, '#8a5a36');
+        pg([[-7, -40], [7, -40], [0, -50]], '#c0453a');
+        const hub = [0, -38], a = ts / 700;
+        for (let i = 0; i < 4; i++) {
+          const ang = a + i * Math.PI / 2, ex = Math.cos(ang) * 22, ey = Math.sin(ang) * 22;
+          line(hub[0], hub[1], hub[0] + ex, hub[1] + ey, '#8a5a36', 1.4);
+          const nx = -Math.sin(ang) * 4, ny = Math.cos(ang) * 4;
+          pg([[hub[0] + ex * 0.3, hub[1] + ey * 0.3], [hub[0] + ex, hub[1] + ey], [hub[0] + ex + nx, hub[1] + ey + ny], [hub[0] + ex * 0.3 + nx, hub[1] + ey * 0.3 + ny]], 'rgba(255,250,240,.92)', '#c9b98f', 0.4);
+        }
+        circle(hub[0], hub[1], 2, '#555');
+      });
+      break;
+    }
+  }
+}
+
+// ---------- nature around town ----------
+function drawWildTree(x, y, v, ts) {
+  const z = cam.z, c = iso(x, y), s = (0.8 + v * 0.6) * z, sw = Math.sin(ts / 1500 + x * 0.7) * 1.2 * z;
+  ellipse(c.x, c.y, 16 * s, 7 * s, 'rgba(0,0,0,.14)');
+  if (v < 0.45) {
+    line(c.x, c.y, c.x, c.y - 12 * s, '#7a4f2e', 3 * s);
+    [[34, 16, '#2f7d4a'], [46, 13, '#38905a'], [57, 9, '#45a368']].forEach(([h, r, col]) => pg([[c.x - r * s, c.y - (h - 20) * s], [c.x + r * s, c.y - (h - 20) * s], [c.x + sw, c.y - (h + 4) * s]], col));
+  } else {
+    line(c.x, c.y, c.x, c.y - 16 * s, '#8a5a36', 3.4 * s);
+    ellipse(c.x + sw * 0.5, c.y - 28 * s, 16 * s, 13 * s, v > 0.8 ? '#5a9a3e' : '#4f9a4b');
+    ellipse(c.x - 5 * s + sw, c.y - 33 * s, 10 * s, 9 * s, v > 0.8 ? '#6fb04a' : '#62b05a');
+    ellipse(c.x + 5 * s + sw, c.y - 37 * s, 8 * s, 7 * s, v > 0.8 ? '#86c25a' : '#74c169');
+  }
+}
+function drawRock(x, y, v) {
+  const z = cam.z, c = iso(x, y), s = (0.6 + v) * z;
+  ellipse(c.x, c.y, 10 * s, 4 * s, 'rgba(0,0,0,.12)');
+  ellipse(c.x, c.y - 3 * s, 9 * s, 5.5 * s, '#a9a49b'); ellipse(c.x - 2 * s, c.y - 5 * s, 5 * s, 3 * s, '#c2bdb4');
+}
+function drawBushWild(x, y, v) {
+  const z = cam.z, c = iso(x, y), s = (0.7 + v * 0.5) * z;
+  [[-6, -5, 7], [5, -6, 6.5], [0, -10, 7.5]].forEach(([dx, dy, r], i) => circle(c.x + dx * s, c.y + dy * s, r * s, i === 2 ? '#6cb85a' : '#5aa64a'));
+  if (v > 0.6) [[-4, -10], [4, -12], [0, -6]].forEach(([dx, dy]) => circle(c.x + dx * s, c.y + dy * s, 1.6 * s, '#f7a8c8'));
+}
+// A lake as an ellipse in world space.
+function drawLake(cx, cy, rx, ry, ts) {
+  const z = cam.z, ring = (k, ox = 0) => { const pts = []; for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2; pts.push(iso(cx + Math.cos(a) * (rx + k), cy + Math.sin(a) * (ry + k) + ox)); } return pts; };
+  poly(ring(0.35), '#d8cba6');
+  poly(ring(0), '#4aa8d6');
+  poly(ring(-0.4), '#5dbbe6');
+  for (let i = 0; i < 4; i++) {
+    const u = (ts / 5000 + i / 4) % 1, a = iso(cx - rx * 0.5, cy - ry * 0.6 + u * ry * 1.2), b = iso(cx + rx * 0.2, cy - ry * 0.6 + u * ry * 1.2);
+    line(a.x, a.y, b.x, b.y, `rgba(255,255,255,${0.4 * Math.sin(u * Math.PI)})`, 1.2 * z);
+  }
+  [[0.3, -0.4], [-0.5, 0.2]].forEach(([u, v]) => { const p = iso(cx + u * rx, cy + v * ry); ellipse(p.x, p.y, 7 * z, 3 * z, '#5fae47'); circle(p.x + 2 * z, p.y - 1 * z, 1.5 * z, '#f7a8c8'); });
 }
