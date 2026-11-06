@@ -2,6 +2,16 @@
 
 每个版本在 GitHub 上都有同名标签（tag），可以随时切回去看。
 
+## v0.2.3 · 2026-11-06
+
+试过 Unity，最后决定：正式版用 Swift，画风沿用网页版。
+
+- 在 Windows 电脑上装了 Unity 6.3 LTS，用免费的 3D 素材（Kenney、Quaternius）做了一个 3D 试玩版：家园、邻居街道、点哪走哪、走过去蹲下种菜收菜、牧场动物。
+- Mason 看了截图觉得 3D 太丑，不用 Unity；网页版的 2.5D 样子很好，在它基础上完善。
+- Unity 试玩工程和截图挪出仓库，存档在 Windows 电脑的 `D:\Unity\archive\mirror-town-unity-test`。
+- 文档改成新方向：`技术方案.md` 写了 Swift 版的两种做法（A：Swift 原生壳 + 在 App 里运行现有网页画面，推荐；B：SpriteKit 纯 Swift 重画），等 Mason 选；`交接.md` 写了下一步要在网页版上完善的内容。
+- 需求记录加了 #9（试 Unity）、#10（改用 Swift、保留网页画风），决策记录加了 D18–D20。
+
 ## v0.2.2 · 2026-11-06
 
 所有信息都写成 md 文档，新对话直接读文档就能接着做。
