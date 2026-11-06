@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#f6f1e7">
+  <title>镜像小镇 · Mirror Town prototype</title>
+  <link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body>
+  <div class="stage">
+    <div class="phone">
+      <div class="screen">
+        <header class="hud" id="hud"></header>
+        <main class="view">
+          <canvas id="town"></canvas>
+          <button class="home-btn" id="homeBtn" data-act="home" aria-label="Home">🏠</button>
+          <div class="hint" id="hint" hidden>
+            <span data-i18n="hint_text"></span>
+            <button class="btn small" data-act="hintOk" data-i18n="hint_ok"></button>
+          </div>
+          <section class="panel" id="panel" hidden></section>
+        </main>
+        <nav class="tabbar" id="tabbar"></nav>
+        <div class="snack" id="snack" hidden></div>
+        <div class="toasts" id="toasts"></div>
+        <div class="sheet-backdrop" id="backdrop" hidden></div>
+        <div class="sheet" id="sheet" hidden></div>
+        <div class="onboard" id="onboard" hidden></div>
+      </div>
+    </div>
+    <aside class="console" id="console"></aside>
+  </div>
+  <button class="console-toggle" data-act="consoleToggle" aria-label="Prototype console">🛠</button>
+
+  <script src="js/i18n.js?v=2"></script>
+  <script src="js/state.js?v=2"></script>
+  <script src="js/town.js?v=2"></script>
+  <script src="js/app.js?v=2"></script>
+</body>
+</html>
