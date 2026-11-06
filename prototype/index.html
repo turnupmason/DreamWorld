@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
   <meta name="theme-color" content="#f6f1e7">
   <title>镜像小镇 · Mirror Town prototype</title>
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <div class="stage">
@@ -14,11 +14,14 @@
         <header class="hud" id="hud"></header>
         <main class="view">
           <canvas id="town"></canvas>
-          <button class="home-btn" id="homeBtn" data-act="home" aria-label="Home">🏠</button>
+          <div class="ctxbar" id="ctxbar" hidden></div>
+          <div class="fab" id="fab" hidden></div>
+          <button class="harvest-all" id="harvestAll" data-act="harvestAll" hidden></button>
           <div class="hint" id="hint" hidden>
             <span data-i18n="hint_text"></span>
             <button class="btn small" data-act="hintOk" data-i18n="hint_ok"></button>
           </div>
+          <div class="tray" id="tray" hidden></div>
           <section class="panel" id="panel" hidden></section>
         </main>
         <nav class="tabbar" id="tabbar"></nav>
@@ -33,9 +36,13 @@
   </div>
   <button class="console-toggle" data-act="consoleToggle" aria-label="Prototype console">🛠</button>
 
-  <script src="js/i18n.js?v=2"></script>
-  <script src="js/state.js?v=2"></script>
-  <script src="js/town.js?v=2"></script>
-  <script src="js/app.js?v=2"></script>
+  <script src="js/i18n.js?v=4"></script>
+  <script src="js/data.js?v=4"></script>
+  <script src="js/state.js?v=4"></script>
+  <script src="js/gfx.js?v=4"></script>
+  <script src="js/sprites.js?v=4"></script>
+  <script src="js/build.js?v=4"></script>
+  <script src="js/scene.js?v=4"></script>
+  <script src="js/app.js?v=4"></script>
 </body>
 </html>
