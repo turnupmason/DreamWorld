@@ -2,6 +2,10 @@
 
 每个版本在 GitHub 上都有同名标签（tag），可以随时切回去看。
 
+## v0.6.1 · 2026-11-07
+
+- Mason 打开了 GitHub Pages，网页版线上地址开通：https://turnupmason.github.io/DreamWorld/ ，之后每次推送自动更新。
+
 ## v0.6.0 · 2026-11-06
 
 Mason 需求 #14 的另一半：一个真正的小镇世界、买地、搬家、真实天气。
