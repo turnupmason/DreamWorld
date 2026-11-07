@@ -584,3 +584,34 @@ body.dark .wpin.home .wpin-dot { background: #6b5320; }
 .online-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #34c759; margin: 0 3px 1px 0; box-shadow: 0 0 0 2px rgba(52,199,89,.2); }
 .world-head { justify-content: space-between; }
 .tabbar .tab { font-size: 10.5px; }
+
+/* ================= v0.10: trophies and exclusives ================= */
+.shop-cats { grid-template-columns: repeat(6, 1fr); }
+.cat { font-size: 10.5px; }
+.cat span { font-size: 21px; }
+.medals { display: inline-flex; gap: 3px; }
+.medals i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+.tro-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.tro-row:last-of-type { border-bottom: 0; }
+.tro-row .bar { margin: 6px 0 0; height: 7px; }
+.tro-ic { font-size: 26px; width: 34px; text-align: center; flex: none; }
+.tro-sports { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tro-chip { font-size: 12px; font-weight: 800; padding: 4px 9px; border-radius: 999px; background: var(--chip); box-shadow: inset 0 0 0 2px var(--c); }
+.tro-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.tro-group { margin-bottom: 12px; }
+.tro-group > .row { margin-bottom: 6px; font-size: 14px; }
+.tro-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tro-tile { background: var(--card); border-radius: 14px; padding: 6px 4px; text-align: center; box-shadow: var(--shadow); display: flex; flex-direction: column; align-items: center; gap: 1px; opacity: .55; }
+.tro-tile.got { opacity: 1; box-shadow: inset 0 0 0 2.5px var(--c), var(--shadow); }
+.tro-tile span { font-size: 20px; }
+.tro-tile b { font-size: 10.5px; line-height: 1.2; }
+.tro-tile i { font-style: normal; font-size: 10px; color: var(--muted); font-weight: 700; }
+.tro-medal { width: 110px; height: 110px; margin: 6px auto 10px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff8, transparent 40%), var(--c); box-shadow: 0 0 0 6px #fff, 0 0 0 9px var(--c), 0 10px 30px rgba(0,0,0,.2); display: flex; align-items: center; justify-content: center; animation: pop .5s cubic-bezier(.2,1.3,.4,1); }
+.tro-medal span { font-size: 54px; }
+.tro-unlock { display: flex; gap: 10px; align-items: center; text-align: left; }
+.item-card.excl.open { box-shadow: 0 0 0 2px #f2c230 inset, var(--shadow); }
+.item-card.excl.shut { opacity: .78; }
+.item-card.excl.shut .thumb { filter: grayscale(.6); }
+.tag.lock { background: #ece8f6; color: #5b52a3; }
+body.dark .tag.lock { background: #2c2840; color: #b9b0f0; }
+body.dark .tro-medal { box-shadow: 0 0 0 6px #2a2622, 0 0 0 9px var(--c), 0 10px 30px rgba(0,0,0,.4); }

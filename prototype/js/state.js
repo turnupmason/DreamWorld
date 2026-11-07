@@ -55,6 +55,7 @@ function migrate() {
   // v0.8: dogs and cats become pets with a breed, a name and needs; sign-in and light / dark look
   [S.me, ...S.friends].forEach(h => { h.animals.filter(isPet).forEach(a => setupPet(a, null, h)); h.petFood = h.petFood || {}; });
   if (S.theme === undefined) S.theme = 'auto';
+  if (S.trophyV !== 1) { S.friends.forEach(showOffExclusives); S.trophySeen = S.trophySeen || {}; S.trophyV = 1; }   // v0.10
   if (S.petRemind === undefined) S.petRemind = true;
   if (S.layoutV !== 2) {   // v0.5: furniture must be reachable; re-arrange the simulated friends' rooms once
     S.friends.forEach(h => { for (let lv = 0; lv < floorsOf(h); lv++) relayoutRoom(h, lv); });
@@ -140,6 +141,7 @@ function newGame(o) {
   S.lots = Object.entries(START_LOTS).map(([id, [st, p, n]]) => ({ id, st, p, n: n || CORE_PARCELS, paid: 0 }));
   S.friends = FRIEND_PRESETS.map(homeFromPreset);
   S.friends.forEach(h => h.animals.filter(isPet).forEach(a => setupPet(a, null, h)));
+  S.friends.forEach(showOffExclusives); S.trophyV = 1; S.trophySeen = {};
   genNPCs();
   simSleep(78);
   S.pending.push({ id: uid(), src: 'welcome', reward: { coins: 100, wood: 10, seeds: { tomato: 2 } }, info: {} });
@@ -158,6 +160,9 @@ function checkDay() {
     S.stepGoal = clamp(Math.round(avg * 1.1 / 500) * 500, STEP_GOAL_RANGE[0], STEP_GOAL_RANGE[1]);
   }
   if (!y.paid.sleep) st.sleepStreak = 0;
+  // trophy streaks: 10k / 20k steps and all three rings, day after day
+  ['steps10k', 'steps20k'].forEach(id => { const ok = y.steps + y.pushes >= STREAK_TROPHIES[id].need; st['cur_' + id] = ok ? (st['cur_' + id] || 0) + 1 : 0; st['best_' + id] = Math.max(st['best_' + id] || 0, st['cur_' + id]); });
+  st.cur_rings = y.paid.rings.all ? (st.cur_rings || 0) + 1 : 0; st.best_rings = Math.max(st.best_rings || 0, st.cur_rings);
   st.days++;
   S.today = freshDay();
   S.friends.forEach(f => { f.goalToday = false; f.energy = 55 + Math.round(Math.random() * 40); });
@@ -296,6 +301,7 @@ function ensureNPCs(t) {
     // the extra land of a bigger lot: a garden with trees, a pool or a swing set
     for (let k = 0; k < (spec.n - CORE_PARCELS) * 3; k++) autoPlace(h, 'yard', pick(['tree', 'pine', 'flowers', 'hedge', 'fountain', 'pool', 'picnic', 'trampoline', 'windmill']));
     h.animals.filter(isPet).forEach(a => setupPet(a, null, h));
+    showOffExclusives(h);
     return h;
   }));
 }
@@ -393,6 +399,8 @@ function processHealth() {
     const paid = Object.values(p.workouts).reduce((a, b) => a + (typeof b === 'number' ? b : 0), 0);
     const min = Math.max(0, Math.min(w.min, WORKOUT_PAY_MAX - paid));   // only the first 90 minutes a day pay
     p.workouts[w.id] = min; S.stats.workouts++;
+    const sp = w.sport && SPORT_BY_ID[w.sport] ? w.sport : SPORT_OF_TYPE[w.type] || 'other';   // one more for this sport's trophy
+    S.stats.sports = S.stats.sports || {}; S.stats.sports[sp] = (S.stats.sports[sp] || 0) + 1;
     if (min > 0) addPending('workout', scale({ coins: Math.round(min * 1.2), wood: Math.floor(min / 10) }), { type: w.type, min: w.min, mult });
   });
   const mind = Math.min(10, Math.floor(d.mindful)) - p.mindful;
@@ -415,9 +423,10 @@ function setRestDay() {
   if (!S.today.paid.goal) { S.today.paid.goal = true; addPending('rest', clone(GOAL_REWARD)); }
   return true;
 }
-function addWorkout(type, min) {
+// sport: the exact Apple Watch workout type (SPORTS), when known.
+function addWorkout(type, min, sport) {
   const kcal = Math.round(min * WORKOUTS[type].kcal);
-  const w = { id: uid(), type, min, kcal, at: now() };
+  const w = { id: uid(), type, min, kcal, at: now(), sport };
   S.today.workouts.push(w);
   S.today.kcal += kcal; S.today.exMin += min;
   processHealth();
@@ -439,7 +448,7 @@ function applyNative(d) {
   const t = S.today;
   ['steps', 'pushes', 'kcal', 'exMin', 'standH', 'mindful'].forEach(k => { if (typeof d[k] === 'number') t[k] = Math.max(t[k], Math.round(d[k] * 10) / 10); });
   (d.workouts || []).forEach(w => {
-    if (!t.workouts.some(x => x.id === w.id)) t.workouts.push({ id: w.id, type: WORKOUTS[w.type] ? w.type : 'walk', min: Math.round(w.min || 0), kcal: Math.round(w.kcal || 0), at: w.start || now() });
+    if (!t.workouts.some(x => x.id === w.id)) t.workouts.push({ id: w.id, type: WORKOUTS[w.type] ? w.type : 'walk', min: Math.round(w.min || 0), kcal: Math.round(w.kcal || 0), at: w.start || now(), sport: SPORT_BY_RAW[w.sport] });
   });
   if (d.sleep && (d.sleep.asleep > 0 || d.sleep.score != null)) setSleep(d.sleep);
   S.vitals = { resp: d.resp || S.vitals.resp, rhr: d.rhr || S.vitals.rhr, hrv: d.hrv || S.vitals.hrv };
@@ -933,6 +942,7 @@ function buySeed(crop, n) {
 function buyAnimal(k) {
   const h = S.me, d = ANIMALS[k];
   if (d.pet) return 'pet';   // dogs and cats are adopted by breed (adoptPet)
+  if (d.excl && !exclOK(d.excl, h)) return 'locked';
   if (!h.pastureLv) return 'nopasture';
   else if (pastureCount(h) >= pastureCap(h)) return 'full';
   if (h.coins < d.price) return 'poor';
@@ -975,6 +985,7 @@ const petAsks = a => (a.care ? Object.entries(petCare(a)).filter(([, n]) => n <=
 function adoptPet(breed, h = S.me) {
   const B = PET_BREEDS[breed];
   if (!B) return { r: 'none' };
+  if (B.excl && !exclOK(B.excl, h)) return { r: 'locked' };
   if (myPets(h).length >= PET_MAX) return { r: 'full' };
   if (h.coins < B.price) return { r: 'poor' };
   h.coins -= B.price;
@@ -1037,6 +1048,65 @@ function petSchedule() {
   });
   return out;
 }
+// ---------- trophies (v0.10) ----------
+// Streaks count today as soon as today's target is reached; finished days are in S.stats.cur_* / best_*.
+// Friends and other players: made up from their id for now (the server will have their real ones).
+const SIM_TROPHY = {};
+function simTrophyStats(h) {
+  if (SIM_TROPHY[h.id]) return SIM_TROPHY[h.id];
+  const r = seeded(7 + [...h.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 99991, 0)), fit = (h.likes || 0) > 10 || r() < 0.45;
+  const streak = { steps10k: Math.floor(r() * (fit ? 40 : 12)), steps20k: Math.floor(r() * (fit ? 18 : 4)), rings: Math.floor(r() * (fit ? 60 : 10)) };
+  const sports = {};
+  for (let k = 0; k < 3 + Math.floor(r() * 6); k++) { const s = SPORTS[Math.floor(r() * SPORTS.length)]; sports[s.id] = Math.floor(r() * (fit ? 70 : 15)); }
+  return (SIM_TROPHY[h.id] = { streak, sports });
+}
+function streakNow(id, h = S.me) {
+  if (h !== S.me) return simTrophyStats(h).streak[id];
+  const st = S.stats, d = S.today, met = id === 'rings' ? !!d.paid.rings.all : d.steps + d.pushes >= STREAK_TROPHIES[id].need;
+  return (st['cur_' + id] || 0) + (met ? 1 : 0);
+}
+function streakBest(id, h = S.me) { return h !== S.me ? simTrophyStats(h).streak[id] : Math.max(S.stats['best_' + id] || 0, streakNow(id)); }
+function sportCount(id, h = S.me) { return h === S.me ? (S.stats.sports || {})[id] || 0 : simTrophyStats(h).sports[id] || 0; }
+// How many tiers of a trophy someone has (0–3) and what the next one needs.
+function trophyLevel(id, h = S.me) {
+  const T = STREAK_TROPHIES[id], v = T ? streakBest(id, h) : sportCount(id, h);
+  return (T ? T.tiers : SPORT_TIERS).filter(n => v >= n).length;
+}
+const trophyValue = (id, h = S.me) => (STREAK_TROPHIES[id] ? streakBest(id, h) : sportCount(id, h));
+const allTrophyIds = () => [...Object.keys(STREAK_TROPHIES), ...SPORTS.map(s => s.id)];
+const trophyCount = (h = S.me) => allTrophyIds().reduce((a, id) => a + trophyLevel(id, h), 0);
+// May this home buy the exclusive with this key ("trophy:tier" or "g:group")?
+function exclOK(key, h = S.me) {
+  if (!key) return true;
+  const [a, b] = key.split(':');
+  if (a === 'g') return SPORTS.some(s => s.group === b && trophyLevel(s.id, h) >= 3);
+  return trophyLevel(a, h) > +b;
+}
+const exclDef = (kind, k) => (kind === 'yard' ? YARD[k] : kind === 'car' ? CARS[k] : kind === 'pet' ? PET_BREEDS[k] : ANIMALS[k]);
+// The trophy case shows one cup per trophy tier (up to 12).
+function placeTrophyCase(h) {
+  const n = trophyCount(h);
+  if (!n) return;
+  if (!hasFurn(h, 'trophycase')) autoPlace(h, 'room', 'trophycase', null, 0);
+  [h.room, ...(h.ups || [])].forEach(r => r.items.forEach(it => { if (it.k === 'trophycase') it.cups = Math.min(12, n); }));
+}
+// Trophy tiers you've just earned (each is shown once).
+function trophyNews() {
+  S.trophySeen = S.trophySeen || {};
+  const out = [];
+  allTrophyIds().forEach(id => {
+    const lv = trophyLevel(id), seen = S.trophySeen[id] || 0;
+    for (let t = seen; t < lv; t++) out.push({ id, tier: t });
+    if (lv > seen) S.trophySeen[id] = lv;
+  });
+  if (out.length) placeTrophyCase(S.me);
+  return out;
+}
+// Friends and strangers show off too: a trophy case and an exclusive or two they've unlocked.
+function showOffExclusives(h) {
+  placeTrophyCase(h);
+  EXCLUSIVES.filter(([kind, k]) => kind === 'yard' && exclOK(YARD[k].excl, h)).slice(-2).forEach(([, k]) => { if (!h.yard.some(i => i.k === k)) autoPlace(h, 'yard', k); });
+}
 function buyLand(kind, h = S.me) {
   const table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];
   const [levels, key] = table;
@@ -1051,16 +1121,18 @@ function buyLand(kind, h = S.me) {
 }
 function buyItem(scope, k, h = S.me) {
   const d = itemDef(scope, k);
+  if (d.excl && !exclOK(d.excl, h)) return { r: 'locked' };
   if (h.coins < d.price) return { r: 'poor' };
   h.coins -= d.price;
   return { r: 'ok', item: autoPlace(h, scope, k) };
 }
 function buyCar(k, h = S.me) {
   if (h.cars.some(c => c.k === k)) return 'own';
+  if (CARS[k].excl && !exclOK(CARS[k].excl, h)) return 'locked';
   const c = CARS[k].cost;
   if (!canAfford(c, h)) return 'poor';
   pay(c, h);
-  h.cars.push({ k, color: h === S.me ? CAR_COLORS[0] : rand(CAR_COLORS) });
+  h.cars.push({ k, color: CARS[k].color || (h === S.me ? CAR_COLORS[0] : rand(CAR_COLORS)) });
   h.car = h.cars.length - 1;
   return 'ok';
 }

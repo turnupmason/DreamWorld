@@ -154,8 +154,9 @@ final class HealthBridge {
         store.execute(HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: pred, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
             let list: [[String: Any]] = (samples as? [HKWorkout] ?? []).map { w in
                 let kcal = w.totalEnergyBurned?.doubleValue(for: .kilocalorie()) ?? 0
-                return ["id": w.uuid.uuidString, "type": HealthBridge.kind(w.workoutActivityType), "min": w.duration / 60, "kcal": kcal,
-                        "start": w.startDate.timeIntervalSince1970 * 1000]
+                // "sport" is Apple's own workout type number, so every kind of workout can have its own trophy (v0.10)
+                return ["id": w.uuid.uuidString, "type": HealthBridge.kind(w.workoutActivityType), "sport": Int(w.workoutActivityType.rawValue),
+                        "min": w.duration / 60, "kcal": kcal, "start": w.startDate.timeIntervalSince1970 * 1000]
             }
             done(list)
         })

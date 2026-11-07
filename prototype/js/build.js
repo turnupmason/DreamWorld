@@ -221,6 +221,7 @@ const CAR_SPEC = {
   luxury:      { len: 2.3, wid: 0.92, body: 8.5, cab: [0.6, 1.05],  cabH: 7.5, chrome: true },
   muscle:      { len: 2.15, wid: 0.96, sleek: 'muscle' },
   supercar:    { len: 2.05, wid: 1.02, sleek: 'super' },
+  champcar:    { len: 2.1, wid: 1.02, sleek: 'super' },
   minivan:     { len: 2.1, wid: 0.95, body: 10,  cab: [0.25, 1.6],  cabH: 12 },
   boxtruck:    { len: 2.4, wid: 1.0,  body: 7,   cab: [1.6, 0.72],  cabH: 12, cargo: [0.05, 1.5, 24] },
 };
@@ -243,6 +244,10 @@ function drawCar(c, x, y, ts) {
   wallRect(b.left, base, 0.06, 0.24, 4, 7, '#fff6c8'); wallRect(b.left, base, 0.76, 0.94, 4, 7, '#fff6c8');
   wallRect(b.left, base, 0.34, 0.66, 3, 6, shade(col, -0.45));
   wallRect(b.right, base, 0, 1, s.body * 0.45, s.body * 0.45 + 1, shade(col, 0.25));
+  // doors: a seam, a handle, and a side mirror
+  wallLine(b.right, base, 0.5, 1.2, 0.5, s.body - 0.8, shade(col, -0.3), 0.6);
+  wallRect(b.right, base, 0.38, 0.45, s.body * 0.62, s.body * 0.62 + 0.9, shade(col, -0.35));
+  { const m = wallPt(b.right, base, 0.78, s.body + 0.5); ellipse(m.x + 1.5 * z, m.y, 1.8 * z, 1.2 * z, shade(col, -0.2)); }
   if (s.big) wallRect(b.right, base, 0, 1, 0, 3, '#3a3a3a');
   if (s.bed) flatRect(cx + 0.08, y + 0.08, s.wid - 0.16, 0.86, shade(col, -0.4), null, base + s.body);
   if (s.stripes) { wallRect(b.right, base, 0, 1, s.body * 0.3, s.body * 0.55, '#fff'); flatRect(cx + s.wid * 0.38, y, s.wid * 0.24, s.len, '#fff', null, base + s.body); }
@@ -358,7 +363,7 @@ function drawTractor(c, x, y, ts) {
 }
 // Bicycles, e-bikes, scooters and motorbikes stand on the driveway along y.
 function drawTwoWheeler(c, x, y, ts) {
-  const z = cam.z, col = c.color, k = c.k, cx = x + 0.5, motor = k !== 'bike';
+  const z = cam.z, col = c.color, k = c.k === 'goldbike' ? 'bike' : c.k, cx = x + 0.5, motor = k !== 'bike';
   const wheelR = k === 'vespa' ? 3.6 : k === 'bike' || k === 'scooter' ? 5 : 5.6;
   const wheel = (wy) => { const p = up(iso(cx, wy), wheelR * z); wheelOn(p.x, p.y, AXIS_Y, wheelR * z, null, '#2b2b2e', (motor ? 2.6 : 1.8) * z); return p; };
   ellipse(iso(cx, y + 0.8).x, iso(cx, y + 0.8).y, 22 * z, 7 * z, 'rgba(0,0,0,.16)');
@@ -449,6 +454,7 @@ function rugFringe(x, y, w, d, rot, tint) {
   ctx.strokeStyle = col; ctx.lineWidth = 1 * z; ctx.lineCap = 'round'; ctx.stroke();
 }
 function drawFurn(it, x, y, ts) {
+  if (it.k === 'trophycase') return drawTrophyCase(it, x, y);
   const k = it.k, rot = it.rot, tint = it.tint || '#8d99a6', [w, d] = furnSize(k, rot), z = cam.z;
   const B = (bx, by, bw, bd, h, col, base, o) => box(bx, by, bw, bd, h, col, base, o);
   switch (k) {
@@ -648,6 +654,7 @@ function tvScreen(face, ts) {
 
 // ---------- yard ----------
 function drawYardItem(it, x, y, ts) {
+  if (YARD[it.k] && YARD[it.k].excl) return drawExcl(it, x, y, ts);
   const k = it.k, z = cam.z, c = iso(x + 0.5, y + 0.5);
   switch (k) {
     case 'flowers': {
@@ -1573,4 +1580,176 @@ function drawTub(x, y, ts) {
   for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; ellipse(c.x + Math.cos(a) * 27 * z, c.y - 7 * z + Math.sin(a) * 12.5 * z, 4 * z, 2.4 * z, k % 2 ? '#ffffff' : '#ffd84a'); }
   ellipse(c.x, c.y - 7 * z, 22 * z, 10 * z, '#5bb8e8');
   ellipse(c.x - 6 * z + Math.sin(ph) * 3 * z, c.y - 9 * z, 7 * z, 2 * z, 'rgba(255,255,255,.55)');
+}
+
+// ---------- exclusives (v0.10): things only trophy winners may own ----------
+const GOLD = '#f2c230', GOLD_D = '#c9961a', GOLD_L = '#ffe58a';
+// A little golden sparkle so exclusives catch the eye.
+function sparkle(x, y, ts, k = 0) {
+  const ph = (ts / 900 + k * 0.37) % 1, a = Math.sin(ph * Math.PI);
+  if (a > 0.05) star(x, y, 2.6 * cam.z * a, `rgba(255,248,210,${a})`);
+}
+function drawExcl(it, x, y, ts) {
+  const k = it.k, z = cam.z, [w, d] = itemSize('yard', it), P = (u, v, h) => up(iso(x + u, y + v), h * z), c = iso(x + w / 2, y + d / 2);
+  ellipse(c.x, c.y + 2 * z, (w + d) * 14 * z, (w + d) * 6 * z, 'rgba(0,0,0,.14)');
+  switch (k) {
+    case 'walkerstatue': {   // a golden walker striding on a marble plinth
+      box(x + 0.2, y + 0.2, 0.6, 0.6, 12, '#ece6da'); box(x + 0.16, y + 0.16, 0.68, 0.68, 2.5, '#d9d1c2', 12);
+      const p = P(0.5, 0.5, 14.5);
+      drawPerson(p.x, p.y, z * 0.75, { look: { shirt: GOLD, pants: GOLD_D, skin: GOLD_L, hair: 'short', hairCol: GOLD_D, mob: 'walk' }, face: 1, moving: true, phase: 1.1, energy: 'good', ts: 0, seed: 0 });
+      sparkle(p.x + 8 * z, p.y - 30 * z, ts);
+      break;
+    }
+    case 'goldginkgo': {   // a ginkgo with golden fan-shaped leaves, a few drifting down
+      line(c.x, c.y, c.x, c.y - 22 * z, '#7a4f2e', 4 * z);
+      [[0, -34, 17], [-9, -28, 11], [9, -29, 11], [0, -44, 11]].forEach(([dx, dy, r], i) => ellipse(c.x + dx * z, c.y + dy * z, r * z, r * 0.82 * z, i % 2 ? GOLD : '#f5cf4a'));
+      for (let i = 0; i < 9; i++) { const a = hash(i, 3) * Math.PI * 2, rr = hash(i, 4) * 14; const p = { x: c.x + Math.cos(a) * rr * z, y: c.y - (34 + Math.sin(a) * rr * 0.8) * z }; pg([[p.x, p.y], [p.x - 2.4 * z, p.y - 2.6 * z], [p.x + 2.4 * z, p.y - 2.6 * z]], GOLD_L); }
+      for (let i = 0; i < 3; i++) { const ph = (ts / 3000 + i / 3) % 1; ellipse(c.x + (i - 1) * 9 * z + Math.sin(ph * 6) * 3 * z, c.y - (24 - ph * 24) * z, 1.6 * z, 1 * z, GOLD); }
+      sparkle(c.x + 10 * z, c.y - 46 * z, ts);
+      break;
+    }
+    case 'triumph': {   // a stone triumphal arch with a golden top
+      const along = w >= d, L = along ? [x + 0.05, y + 0.25, 0.55, 0.5] : [x + 0.25, y + 0.05, 0.5, 0.55], R = along ? [x + w - 0.6, y + 0.25, 0.55, 0.5] : [x + 0.25, y + d - 0.6, 0.5, 0.55];
+      box(L[0], L[1], L[2], L[3], 38, '#e9e2d4'); box(R[0], R[1], R[2], R[3], 38, '#e9e2d4');
+      box(x + 0.02, y + 0.2, w - 0.04, d - 0.4, 12, '#f1ebdf', 38);
+      box(x + 0.15, y + 0.3, w - 0.3, d - 0.6, 4, GOLD, 50);
+      const t = P(w / 2, d / 2, 58); pg([[t.x - 7 * z, t.y + 2 * z], [t.x, t.y - 8 * z], [t.x + 7 * z, t.y + 2 * z]], GOLD_D);
+      sparkle(t.x, t.y - 10 * z, ts);
+      break;
+    }
+    case 'ringfountain': case 'ringgarden': {
+      const RC = ['#fa114f', '#92e82a', '#1eeaef'];
+      if (k === 'ringfountain') {
+        box(x + 0.1, y + 0.1, w - 0.2, d - 0.2, 7, '#d9d1c2'); flatRect(x + 0.22, y + 0.22, w - 0.44, d - 0.44, '#6fc3ea', null, 6.5);
+        const p = P(w / 2, d / 2, 7);
+        RC.forEach((col, i) => { ctx.beginPath(); ctx.ellipse(p.x + (i - 1) * 7 * z, p.y - 16 * z, 9 * z, 13 * z, 0, 0, Math.PI * 2); ctx.strokeStyle = col; ctx.lineWidth = 3 * z; ctx.stroke(); });
+        for (let i = 0; i < 8; i++) { const ph = (ts / 700 + i / 8) % 1; circle(p.x + Math.cos(i) * 18 * ph * z, p.y - (30 * Math.sin(ph * Math.PI)) * z, 1.4 * z, 'rgba(255,255,255,.8)'); }
+      } else {
+        flatRect(x + 0.08, y + 0.08, w - 0.16, d - 0.16, '#7ab55a');
+        RC.forEach((col, i) => { const r = 0.85 - i * 0.26, q = iso(x + w / 2, y + d / 2); ctx.beginPath(); ctx.ellipse(q.x, q.y - 1 * z, r * 32 * z, r * 16 * z, 0, 0, Math.PI * 2); ctx.strokeStyle = col; ctx.lineWidth = 6 * z; ctx.stroke();
+          for (let j = 0; j < 10; j++) { const a = j / 10 * Math.PI * 2; circle(q.x + Math.cos(a) * r * 32 * z, q.y - 2 * z + Math.sin(a) * r * 16 * z, 1.8 * z, shade(col, 0.4)); } });
+        const q = iso(x + w / 2, y + d / 2); line(q.x, q.y, q.x, q.y - 18 * z, '#8a5a36', 1.5 * z); circle(q.x, q.y - 20 * z, 3 * z, GOLD);
+      }
+      sparkle(c.x + 14 * z, c.y - 28 * z, ts);
+      break;
+    }
+    case 'ringtower': {   // a slim white tower with the three rings round it and a gold star
+      box(x + 0.32, y + 0.32, 0.36, 0.36, 70, '#f5f2ec'); box(x + 0.25, y + 0.25, 0.5, 0.5, 4, '#d9d1c2');
+      const p = P(0.5, 0.5, 0);
+      ['#fa114f', '#92e82a', '#1eeaef'].forEach((col, i) => { ctx.beginPath(); ctx.ellipse(p.x, p.y - (24 + i * 16) * z, 14 * z, 6 * z, 0, 0, Math.PI * 2); ctx.strokeStyle = col; ctx.lineWidth = 3 * z; ctx.stroke(); });
+      star(p.x, p.y - 80 * z, 6 * z, GOLD);
+      sparkle(p.x + 10 * z, p.y - 84 * z, ts);
+      break;
+    }
+    case 'finisharch': {   // an inflatable finish arch with a FINISH banner and flags
+      const along = w >= d, a = along ? P(0.15, d / 2, 0) : P(w / 2, 0.15, 0), b = along ? P(w - 0.15, d / 2, 0) : P(w / 2, d - 0.15, 0);
+      ctx.lineCap = 'round';
+      [[a, b]].forEach(() => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x, a.y - 30 * z); ctx.quadraticCurveTo((a.x + b.x) / 2, (a.y + b.y) / 2 - 52 * z, b.x, b.y - 30 * z); ctx.lineTo(b.x, b.y); ctx.strokeStyle = '#ef7d3c'; ctx.lineWidth = 7 * z; ctx.stroke(); });
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 36 * z };
+      rrect(m.x - 18 * z, m.y - 5 * z, 36 * z, 10 * z, 2 * z, '#fffaf0'); ctx.fillStyle = '#3b3125'; ctx.font = `800 ${7 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('FINISH', m.x, m.y + 0.5 * z);
+      [a, b].forEach((q, i) => { line(q.x + 5 * z, q.y, q.x + 5 * z, q.y - 22 * z, '#888', 1 * z); pg([[q.x + 5 * z, q.y - 22 * z], [q.x + 12 * z, q.y - 19 * z], [q.x + 5 * z, q.y - 16 * z]], i ? '#3f6fb5' : '#e5484d'); });
+      sparkle(m.x, m.y - 20 * z, ts);
+      break;
+    }
+    case 'dolphinfountain': {   // a round pool with a leaping dolphin spouting water
+      box(x + 0.1, y + 0.1, w - 0.2, d - 0.2, 6, '#d9d1c2'); flatRect(x + 0.2, y + 0.2, w - 0.4, d - 0.4, '#5bb8e8', null, 5.6);
+      const p = P(w / 2, d / 2, 6);
+      ctx.save(); ctx.translate(p.x, p.y - 14 * z); ctx.rotate(-0.5);
+      ellipse(0, 0, 12 * z, 5 * z, '#7d9fb8'); ellipse(2 * z, 1.5 * z, 8 * z, 2.5 * z, '#e8f1f6');
+      pg([[-11 * z, 0], [-17 * z, -5 * z], [-15 * z, 0], [-17 * z, 5 * z]], '#6b8ca3'); pg([[-1 * z, -4 * z], [3 * z, -10 * z], [5 * z, -4 * z]], '#6b8ca3');
+      circle(8 * z, -1.5 * z, 0.9 * z, '#1a2a36'); ctx.restore();
+      for (let i = 0; i < 9; i++) { const ph = (ts / 600 + i / 9) % 1; circle(p.x + 6 * z + (i - 4) * 2.2 * ph * z, p.y - 22 * z - Math.sin(ph * Math.PI) * 20 * z, 1.4 * z, 'rgba(255,255,255,.85)'); }
+      sparkle(p.x - 16 * z, p.y - 30 * z, ts);
+      break;
+    }
+    case 'cabin': {   // a log cabin with a steep roof, a chimney and a summit flag
+      const b = box(x + 0.2, y + 0.3, w - 0.4, d - 0.6, 22, '#9a6a3e');
+      [b.left, b.right].forEach(f => { for (let k2 = 1; k2 < 6; k2++) wallLine(f, 0, 0, k2 * 4, 1, k2 * 4, 'rgba(60,30,10,.35)', 0.8); });
+      wallRect(b.left, 0, 0.4, 0.6, 0, 14, '#5a3a20'); wallRect(b.right, 0, 0.3, 0.55, 9, 16, '#f6e7b0');
+      box(x + w - 0.75, y + 0.4, 0.25, 0.25, 40, '#8a8a88');
+      gableY(x + 0.1, y + 0.2, w - 0.2, d - 0.4, 22, 26, '#5a6b4f', '#9a6a3e');
+      const f = P(0.3, 0.5, 48); line(f.x, f.y, f.x, f.y - 16 * z, '#555', 1 * z); pg([[f.x, f.y - 16 * z], [f.x + 9 * z, f.y - 13 * z], [f.x, f.y - 10 * z]], '#e5484d');
+      const ch = P(w - 0.62, 0.52, 40), ph = (ts / 1600) % 1; circle(ch.x + ph * 5 * z, ch.y - ph * 14 * z, (2 + ph * 3) * z, `rgba(220,220,220,${0.6 * (1 - ph)})`);
+      sparkle(f.x + 10 * z, f.y - 20 * z, ts);
+      break;
+    }
+    case 'zengarden': {   // raked sand, three rocks, a stone lantern and a little red maple
+      flatRect(x + 0.08, y + 0.08, w - 0.16, d - 0.16, '#e9e0cc');
+      for (let i = 1; i < 8; i++) { const a = iso(x + 0.15, y + i * d / 8), b = iso(x + w - 0.15, y + i * d / 8); line(a.x, a.y, b.x, b.y, 'rgba(160,140,100,.45)', 0.8 * z); }
+      [[0.6, 0.7, 7], [1.3, 1.1, 5], [0.9, 1.5, 4]].forEach(([u, v, r]) => { const q = P(u, v, 0); ellipse(q.x, q.y - r * 0.4 * z, r * 1.4 * z, r * z, '#8f8a80'); ellipse(q.x - r * 0.3 * z, q.y - r * 0.7 * z, r * 0.6 * z, r * 0.4 * z, '#a9a49a'); });
+      box(x + w - 0.5, y + 0.25, 0.22, 0.22, 14, '#b9b3a6'); box(x + w - 0.56, y + 0.19, 0.34, 0.34, 3, '#a39d90', 14);
+      const l = P(w - 0.39, 0.36, 10); circle(l.x, l.y, 2 * z, NIGHT > 0.3 ? '#fff6c8' : '#e9e2d4');
+      const m = P(0.4, 0.4, 0); line(m.x, m.y, m.x, m.y - 14 * z, '#6b4428', 2 * z); circle(m.x, m.y - 18 * z, 7 * z, '#d9532a'); circle(m.x - 3 * z, m.y - 21 * z, 4 * z, '#e8743a');
+      sparkle(m.x + 8 * z, m.y - 26 * z, ts);
+      break;
+    }
+    case 'podium': {   // 2 · 1 · 3 steps, gold, silver and bronze
+      const along = w >= d, step = (i, hh, col) => { const u0 = i / 3 * (along ? w : d), u1 = (i + 1) / 3 * (along ? w : d); along ? box(x + u0 + 0.03, y + 0.15, u1 - u0 - 0.06, d - 0.3, hh, col) : box(x + 0.15, y + u0 + 0.03, w - 0.3, u1 - u0 - 0.06, hh, col); };
+      step(0, 14, '#d5dbe1'); step(1, 22, '#f5e08a'); step(2, 9, '#e3b483');
+      [[0, 14, '2'], [1, 22, '1'], [2, 9, '3']].forEach(([i, hh, n]) => { const u = (i + 0.5) / 3; const q = along ? P(u * w, d / 2, hh) : P(w / 2, u * d, hh); ctx.fillStyle = '#5d5448'; ctx.font = `800 ${8 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.fillText(n, q.x, q.y + 6 * z); });
+      const top = along ? P(w / 2, d / 2, 22) : P(w / 2, d / 2, 22);
+      pg([[top.x - 4 * z, top.y - 4 * z], [top.x + 4 * z, top.y - 4 * z], [top.x + 2.5 * z, top.y - 10 * z], [top.x - 2.5 * z, top.y - 10 * z]], GOLD); ellipse(top.x, top.y - 11 * z, 5 * z, 2 * z, GOLD_L);
+      sparkle(top.x + 7 * z, top.y - 16 * z, ts);
+      break;
+    }
+    case 'stage': {   // a wooden stage, red curtains, two spotlights
+      box(x + 0.05, y + 0.05, w - 0.1, d - 0.1, 8, '#a0703f');
+      for (let i = 1; i < 6; i++) { const a = up(iso(x + 0.1, y + i * d / 6), 8 * z), b = up(iso(x + w - 0.1, y + i * d / 6), 8 * z); line(a.x, a.y, b.x, b.y, 'rgba(60,30,10,.25)', 0.8 * z); }
+      box(x + 0.05, y + 0.05, w - 0.1, 0.12, 40, '#7a2a2a', 8);
+      const L = [iso(x + 0.1, y + 0.17), iso(x + w - 0.1, y + 0.17)];
+      wallRect(L, 8, 0, 0.3, 0, 40, '#c0392b'); wallRect(L, 8, 0.7, 1, 0, 40, '#c0392b'); wallRect(L, 8, 0, 1, 34, 40, '#a93226');
+      [0.25, w - 0.25].forEach((u, i) => { const q = P(u, d - 0.2, 8); line(q.x, q.y, q.x, q.y - 20 * z, '#333', 1.2 * z); circle(q.x, q.y - 22 * z, 3 * z, '#444'); if (Math.sin(ts / 500 + i) > 0) circle(q.x, q.y - 22 * z, 1.6 * z, '#fff6c8'); });
+      const n = P(w / 2, d / 2, 8), ph = (ts / 900) % 1; ctx.save(); ctx.globalAlpha = 1 - ph; ctx.fillStyle = '#8b5cf6'; ctx.font = `${10 * z}px sans-serif`; ctx.fillText('♪', n.x - 6 * z, n.y - (20 + ph * 14) * z); ctx.restore();
+      sparkle(n.x + 12 * z, n.y - 40 * z, ts);
+      break;
+    }
+    case 'court': {   // a little basketball court with a hoop
+      flatRect(x + 0.05, y + 0.05, w - 0.1, d - 0.1, '#d8794a'); flatRect(x + 0.15, y + 0.15, w - 0.3, d - 0.3, null, '#fff', 0.2, 1.4 * z);
+      const ctr = iso(x + w / 2, y + d / 2); ctx.beginPath(); ctx.ellipse(ctr.x, ctr.y, 10 * z, 5 * z, 0, 0, Math.PI * 2); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4 * z; ctx.stroke();
+      const pole = P(w / 2, 0.15, 0); line(pole.x, pole.y, pole.x, pole.y - 40 * z, '#666', 2 * z);
+      rrect(pole.x - 9 * z, pole.y - 52 * z, 18 * z, 12 * z, 1 * z, '#fff', '#999', 1 * z);
+      ctx.beginPath(); ctx.ellipse(pole.x, pole.y - 40 * z, 5 * z, 2 * z, 0, 0, Math.PI * 2); ctx.strokeStyle = '#e5484d'; ctx.lineWidth = 1.4 * z; ctx.stroke();
+      const bb = P(w * 0.65, d * 0.65, 0), bh = Math.abs(Math.sin(ts / 400)) * 10; circle(bb.x, bb.y - (3 + bh) * z, 3 * z, '#ef7d3c'); line(bb.x - 3 * z, bb.y - (3 + bh) * z, bb.x + 3 * z, bb.y - (3 + bh) * z, '#7a3a1a', 0.5 * z);
+      sparkle(pole.x + 12 * z, pole.y - 52 * z, ts);
+      break;
+    }
+    case 'igloo': {   // a snow dome made of blocks, with an entrance and a snowman
+      const p = P(w / 2 + 0.1, d / 2, 0);
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, 26 * z, 13 * z, 0, Math.PI, 0); ctx.lineTo(p.x + 26 * z, p.y); ctx.fillStyle = '#f4f8fb'; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 26 * z, Math.PI, 0); ctx.fillStyle = '#f4f8fb'; ctx.fill();
+      ctx.strokeStyle = 'rgba(140,170,200,.45)'; ctx.lineWidth = 0.8 * z;
+      for (let r = 1; r < 4; r++) { ctx.beginPath(); ctx.arc(p.x, p.y, 26 * z, Math.PI + r * 0.25, -r * 0.25); ctx.stroke(); }
+      for (let r = 1; r < 4; r++) { const yy = p.y - r * 7 * z, half = Math.sqrt(Math.max(0, 26 * 26 - (r * 7) ** 2)) * z; line(p.x - half, yy, p.x + half, yy, 'rgba(140,170,200,.45)', 0.8 * z); }
+      ctx.beginPath(); ctx.arc(p.x + 8 * z, p.y, 7 * z, Math.PI, 0); ctx.fillStyle = '#5b7a96'; ctx.fill();
+      const s = P(w - 0.3, d - 0.3, 0); circle(s.x, s.y - 5 * z, 5 * z, '#fff'); circle(s.x, s.y - 13 * z, 3.6 * z, '#fff'); circle(s.x + 1 * z, s.y - 13.5 * z, 0.6 * z, '#333'); pg([[s.x + 2 * z, s.y - 12.5 * z], [s.x + 6 * z, s.y - 12 * z], [s.x + 2 * z, s.y - 11.5 * z]], '#ef7d3c');
+      sparkle(p.x - 14 * z, p.y - 30 * z, ts);
+      break;
+    }
+    case 'flame': {   // a golden cauldron on a column with a dancing flame
+      box(x + 0.35, y + 0.35, 0.3, 0.3, 24, '#e9e2d4');
+      const p = P(0.5, 0.5, 24);
+      ellipse(p.x, p.y + 2 * z, 11 * z, 4 * z, GOLD_D); ctx.beginPath(); ctx.ellipse(p.x, p.y, 11 * z, 4 * z, 0, 0, Math.PI); ctx.lineTo(p.x - 11 * z, p.y); ctx.fillStyle = GOLD; ctx.fill();
+      ctx.beginPath(); ctx.moveTo(p.x - 9 * z, p.y); ctx.quadraticCurveTo(p.x, p.y + 9 * z, p.x + 9 * z, p.y); ctx.fillStyle = GOLD; ctx.fill();
+      const fl = Math.sin(ts / 120) * 2;
+      [[12, '#f28c28'], [8, '#f2c230'], [4.5, '#fff6c8']].forEach(([r, col]) => { ctx.beginPath(); ctx.moveTo(p.x - r * z, p.y - 1 * z); ctx.quadraticCurveTo(p.x - r * 0.8 * z, p.y - r * 1.6 * z, p.x + fl * z, p.y - (r * 2.6 + fl) * z); ctx.quadraticCurveTo(p.x + r * 0.8 * z, p.y - r * 1.6 * z, p.x + r * z, p.y - 1 * z); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); });
+      glow(p.x, p.y - 12 * z, 50 * z, 1);
+      break;
+    }
+  }
+}
+// The trophy case: a glass cabinet with gold, silver and bronze cups (it.cups of them).
+function drawTrophyCase(it, x, y) {
+  const z = cam.z, n = it.cups || 1, cols = ['#f2c230', '#aab4bf', '#c98a4a'];
+  const b = box(x + 0.12, y + 0.18, 0.76, 0.64, 46, '#7a4f2e');
+  box(x + 0.16, y + 0.22, 0.68, 0.56, 1.5, '#8a5a36', 46);
+  [b.left].forEach(f => {
+    wallRect(f, 0, 0.06, 0.94, 3, 43, 'rgba(200,230,245,.35)', 'rgba(255,255,255,.6)', 0.6);
+    [14, 26, 38].forEach(hh => wallRect(f, 0, 0.06, 0.94, hh - 0.8, hh, '#8a5a36'));
+    for (let i = 0; i < Math.min(12, n); i++) {
+      const row = Math.floor(i / 4), u = 0.18 + (i % 4) * 0.21, hh = 3 + row * 12, p = wallPt(f, 0, u, hh), col = cols[i % 3];
+      pg([[p.x - 2.2 * z, p.y - 6 * z], [p.x + 2.2 * z, p.y - 6 * z], [p.x + 1.4 * z, p.y - 2.5 * z], [p.x - 1.4 * z, p.y - 2.5 * z]], col);
+      line(p.x, p.y - 2.5 * z, p.x, p.y - 0.8 * z, col, 0.8 * z); rrect(p.x - 1.6 * z, p.y - 1 * z, 3.2 * z, 1 * z, 0.3 * z, shade(col, -0.2));
+    }
+    wallLine(f, 0, 0.2, 40, 0.35, 8, 'rgba(255,255,255,.45)', 1);
+  });
 }

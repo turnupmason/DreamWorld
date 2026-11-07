@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.9.0';
+const VERSION = '0.10.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -571,3 +571,95 @@ const REGIONS = {
   af: { e: '🦒', zh: '非洲', en: 'Africa' }, asia: { e: '🏯', zh: '亚洲', en: 'Asia' }, oc: { e: '🦘', zh: '大洋洲', en: 'Oceania' },
 };
 const HOME_TOWN = 'wutong';   // where everyone starts (and where your friends live in the prototype)
+
+// ---------- trophies (v0.10) ----------
+// Earned in real life only. Three tiers each. Streak trophies: days in a row; sport trophies: one for every
+// Apple Watch workout type (a workout of 10 minutes or more counts). Each trophy tier can unlock the right to
+// buy an exclusive thing (EXCLUSIVE below) that everyone visiting your home can see.
+const TROPHY_TIERS = [
+  { e: '🥉', zh: '铜', en: 'Bronze', col: '#c98a4a' },
+  { e: '🥈', zh: '银', en: 'Silver', col: '#aab4bf' },
+  { e: '🥇', zh: '金', en: 'Gold', col: '#f2c230' },
+];
+const STREAK_TROPHIES = {
+  steps10k: { e: '👟', zh: '万步达人', en: '10k Walker', need: 10000, tiers: [7, 15, 30], excl: ['walkerstatue', 'goldginkgo', 'champcar'],
+    desc: { zh: '连续 {n} 天，每天走 1 万步', en: '{n} days in a row with 10,000 steps' } },
+  steps20k: { e: '⚡', zh: '两万步传奇', en: '20k Legend', need: 20000, tiers: [7, 15, 30], excl: ['collie', 'triumph', 'rainbowalpaca'],
+    desc: { zh: '连续 {n} 天，每天走 2 万步', en: '{n} days in a row with 20,000 steps' } },
+  rings: { e: '⭕', zh: '三环连胜', en: 'Ring Streak', tiers: [7, 30, 100], excl: ['ringfountain', 'ringgarden', 'ringtower'],
+    desc: { zh: '连续 {n} 天合上三个圆环', en: 'Close all three rings {n} days in a row' } },
+};
+const SPORT_TIERS = [1, 10, 50];   // workouts of one kind for bronze / silver / gold
+// Sport groups: a gold trophy in any sport of a group unlocks the group's exclusive.
+const SPORT_GROUPS = {
+  walk: { e: '🚶', zh: '走路', en: 'Walking' }, run: { e: '🏃', zh: '跑步', en: 'Running', excl: 'finisharch' },
+  cycle: { e: '🚴', zh: '骑行', en: 'Cycling', excl: 'goldbike' }, swim: { e: '🏊', zh: '游泳和水上', en: 'Swimming & water', excl: 'dolphinfountain' },
+  hike: { e: '🥾', zh: '登山攀岩', en: 'Hiking & climbing', excl: 'cabin' }, mind: { e: '🧘', zh: '瑜伽身心', en: 'Yoga & mind', excl: 'zengarden' },
+  strength: { e: '🏋️', zh: '力量格斗', en: 'Strength & combat', excl: 'podium' }, cardio: { e: '🔥', zh: '有氧舞蹈', en: 'Cardio & dance', excl: 'stage' },
+  team: { e: '🏀', zh: '球类', en: 'Ball sports', excl: 'court' }, snow: { e: '⛷️', zh: '冰雪', en: 'Snow & ice', excl: 'igloo' },
+  outdoor: { e: '🏹', zh: '户外与其他', en: 'Outdoor & more', excl: 'flame' },
+};
+// Every Apple Watch workout type: [id, HealthKit raw value, emoji, 中文, English, group].
+const SPORTS = [
+  ['walking', 52, '🚶', '步行', 'Walking', 'walk'], ['wheelchairWalk', 70, '🦽', '轮椅步行速度', 'Wheelchair walk pace', 'walk'],
+  ['running', 37, '🏃', '跑步', 'Running', 'run'], ['trackAndField', 49, '🏟️', '田径', 'Track & field', 'run'], ['wheelchairRun', 71, '🦽', '轮椅跑步速度', 'Wheelchair run pace', 'run'],
+  ['cycling', 13, '🚴', '骑行', 'Cycling', 'cycle'], ['handCycling', 74, '🚲', '手摇车', 'Hand cycling', 'cycle'],
+  ['swimming', 46, '🏊', '游泳', 'Swimming', 'swim'], ['waterFitness', 53, '💦', '水中健身', 'Water fitness', 'swim'], ['waterPolo', 54, '🤽', '水球', 'Water polo', 'swim'],
+  ['paddleSports', 31, '🛶', '划桨', 'Paddle sports', 'swim'], ['sailing', 38, '⛵', '帆船', 'Sailing', 'swim'], ['surfingSports', 45, '🏄', '冲浪', 'Surfing', 'swim'],
+  ['waterSports', 55, '🌊', '水上运动', 'Water sports', 'swim'], ['underwaterDiving', 84, '🤿', '潜水', 'Underwater diving', 'swim'], ['swimBikeRun', 82, '🏅', '铁人三项', 'Swim bike run', 'swim'],
+  ['hiking', 24, '🥾', '徒步登山', 'Hiking', 'hike'], ['climbing', 9, '🧗', '攀岩', 'Climbing', 'hike'], ['stairClimbing', 44, '🪜', '爬楼梯', 'Stair climbing', 'hike'], ['stairs', 68, '🏢', '楼梯', 'Stairs', 'hike'],
+  ['yoga', 57, '🧘', '瑜伽', 'Yoga', 'mind'], ['pilates', 66, '🤸', '普拉提', 'Pilates', 'mind'], ['taiChi', 72, '☯️', '太极', 'Tai chi', 'mind'], ['mindAndBody', 29, '🪷', '身心训练', 'Mind & body', 'mind'],
+  ['flexibility', 62, '🙆', '柔韧训练', 'Flexibility', 'mind'], ['cooldown', 80, '🧊', '放松整理', 'Cooldown', 'mind'], ['preparationAndRecovery', 33, '🩹', '准备与恢复', 'Preparation & recovery', 'mind'], ['barre', 58, '🩰', '芭蕾杆', 'Barre', 'mind'],
+  ['traditionalStrength', 50, '🏋️', '传统力量训练', 'Traditional strength', 'strength'], ['functionalStrength', 20, '💪', '功能性力量训练', 'Functional strength', 'strength'], ['coreTraining', 59, '🎯', '核心训练', 'Core training', 'strength'],
+  ['boxing', 8, '🥊', '拳击', 'Boxing', 'strength'], ['kickboxing', 65, '🦵', '踢拳', 'Kickboxing', 'strength'], ['martialArts', 28, '🥋', '武术', 'Martial arts', 'strength'], ['wrestling', 56, '🤼', '摔跤', 'Wrestling', 'strength'], ['fencing', 18, '🤺', '击剑', 'Fencing', 'strength'],
+  ['hiit', 63, '🔥', '高强度间歇', 'HIIT', 'cardio'], ['mixedCardio', 73, '❤️‍🔥', '混合有氧', 'Mixed cardio', 'cardio'], ['crossTraining', 11, '🔁', '交叉训练', 'Cross training', 'cardio'], ['elliptical', 16, '🌀', '椭圆机', 'Elliptical', 'cardio'],
+  ['rowing', 35, '🚣', '划船机', 'Rowing', 'cardio'], ['stepTraining', 69, '🪜', '踏板操', 'Step training', 'cardio'], ['jumpRope', 64, '🪢', '跳绳', 'Jump rope', 'cardio'], ['fitnessGaming', 76, '🎮', '健身游戏', 'Fitness gaming', 'cardio'],
+  ['cardioDance', 77, '💃', '有氧舞蹈', 'Cardio dance', 'cardio'], ['socialDance', 78, '🕺', '交际舞', 'Social dance', 'cardio'],
+  ['basketball', 6, '🏀', '篮球', 'Basketball', 'team'], ['soccer', 41, '⚽', '足球', 'Soccer', 'team'], ['americanFootball', 1, '🏈', '美式橄榄球', 'American football', 'team'], ['australianFootball', 3, '🏉', '澳式足球', 'Australian football', 'team'],
+  ['rugby', 36, '🏉', '英式橄榄球', 'Rugby', 'team'], ['baseball', 5, '⚾', '棒球', 'Baseball', 'team'], ['softball', 42, '🥎', '垒球', 'Softball', 'team'], ['volleyball', 51, '🏐', '排球', 'Volleyball', 'team'],
+  ['handball', 23, '🤾', '手球', 'Handball', 'team'], ['hockey', 25, '🏑', '曲棍球', 'Hockey', 'team'], ['lacrosse', 27, '🥍', '长曲棍球', 'Lacrosse', 'team'], ['cricket', 10, '🏏', '板球', 'Cricket', 'team'],
+  ['discSports', 75, '🥏', '飞盘', 'Disc sports', 'team'], ['tennis', 48, '🎾', '网球', 'Tennis', 'team'], ['badminton', 4, '🏸', '羽毛球', 'Badminton', 'team'], ['tableTennis', 47, '🏓', '乒乓球', 'Table tennis', 'team'],
+  ['squash', 43, '🟢', '壁球', 'Squash', 'team'], ['racquetball', 34, '🔵', '短柄墙球', 'Racquetball', 'team'], ['pickleball', 79, '🟡', '匹克球', 'Pickleball', 'team'],
+  ['downhillSkiing', 61, '⛷️', '高山滑雪', 'Downhill skiing', 'snow'], ['crossCountrySkiing', 60, '🎿', '越野滑雪', 'Cross-country skiing', 'snow'], ['snowboarding', 67, '🏂', '单板滑雪', 'Snowboarding', 'snow'],
+  ['snowSports', 40, '❄️', '冰雪运动', 'Snow sports', 'snow'], ['skatingSports', 39, '⛸️', '滑冰', 'Skating', 'snow'], ['curling', 12, '🥌', '冰壶', 'Curling', 'snow'],
+  ['golf', 21, '⛳', '高尔夫', 'Golf', 'outdoor'], ['archery', 2, '🏹', '射箭', 'Archery', 'outdoor'], ['bowling', 7, '🎳', '保龄球', 'Bowling', 'outdoor'], ['equestrianSports', 17, '🏇', '马术', 'Equestrian', 'outdoor'],
+  ['fishing', 19, '🎣', '钓鱼', 'Fishing', 'outdoor'], ['hunting', 26, '🦌', '狩猎', 'Hunting', 'outdoor'], ['gymnastics', 22, '🤸', '体操', 'Gymnastics', 'outdoor'], ['play', 32, '🪁', '玩耍', 'Play', 'outdoor'],
+  ['other', 3000, '✨', '其他运动', 'Other', 'outdoor'],
+].map(([id, raw, e, zh, en, group]) => ({ id, raw, e, zh, en, group }));
+const SPORT_BY_ID = Object.fromEntries(SPORTS.map(s => [s.id, s]));
+const SPORT_BY_RAW = Object.fromEntries(SPORTS.map(s => [s.raw, s.id]));
+// The game's 9 workout animations, when we don't know the exact Apple Watch type.
+const SPORT_OF_TYPE = { walk: 'walking', run: 'running', cycle: 'cycling', swim: 'swimming', strength: 'traditionalStrength', yoga: 'yoga', hiit: 'hiit', dance: 'cardioDance', wheel: 'wheelchairWalk' };
+
+// ---------- exclusives: things only trophy winners may buy (v0.10) ----------
+// `excl` says what unlocks it: "trophyId:tier" (tier 0 bronze, 1 silver, 2 gold) or "g:group" (gold in any sport of the group).
+Object.assign(YARD, {
+  walkerstatue:    { zh: '金色步行者雕像', en: 'Golden walker statue', w: 1, d: 1, price: 400, excl: 'steps10k:0' },
+  goldginkgo:      { zh: '金叶银杏',       en: 'Golden ginkgo',        w: 1, d: 1, price: 800, excl: 'steps10k:1' },
+  triumph:         { zh: '凯旋门',         en: 'Triumph arch',         w: 2, d: 1, price: 2400, excl: 'steps20k:1' },
+  ringfountain:    { zh: '三环喷泉',       en: 'Rings fountain',       w: 2, d: 2, price: 900, excl: 'rings:0' },
+  ringgarden:      { zh: '三环花园',       en: 'Rings garden',         w: 2, d: 2, price: 1600, excl: 'rings:1' },
+  ringtower:       { zh: '三环之塔',       en: 'Rings tower',          w: 1, d: 1, price: 4000, excl: 'rings:2' },
+  finisharch:      { zh: '马拉松终点拱门', en: 'Marathon finish arch', w: 2, d: 1, price: 1200, excl: 'g:run' },
+  dolphinfountain: { zh: '海豚喷泉',       en: 'Dolphin fountain',     w: 2, d: 2, price: 1500, excl: 'g:swim' },
+  cabin:           { zh: '登山者小木屋',   en: 'Mountaineer cabin',    w: 2, d: 2, price: 1800, excl: 'g:hike' },
+  zengarden:       { zh: '禅意石庭',       en: 'Zen garden',           w: 2, d: 2, price: 1300, excl: 'g:mind' },
+  podium:          { zh: '冠军领奖台',     en: 'Champion podium',      w: 2, d: 1, price: 1200, excl: 'g:strength' },
+  stage:           { zh: '小舞台',         en: 'Little stage',         w: 2, d: 2, price: 1400, excl: 'g:cardio' },
+  court:           { zh: '篮球小球场',     en: 'Mini court',           w: 2, d: 2, price: 1500, excl: 'g:team' },
+  igloo:           { zh: '冰雪小屋',       en: 'Igloo',                w: 2, d: 2, price: 1300, excl: 'g:snow' },
+  flame:           { zh: '圣火台',         en: 'Champion flame',       w: 1, d: 1, price: 1100, excl: 'g:outdoor' },
+});
+Object.assign(CARS, {
+  champcar: { zh: '冠军金色超跑', en: 'Champion gold supercar', cost: { coins: 5000 }, excl: 'steps10k:2', color: '#f2c230' },
+  goldbike: { zh: '金色公路车',   en: 'Golden road bike',       cost: { coins: 1200 }, kind: 'two', excl: 'g:cycle', color: '#f2c230' },
+});
+PET_BREEDS.collie = { kind: 'dog', zh: '冠军边牧', en: 'Champion collie', price: 1500, col: '#2d2a28', belly: '#ffffff', ears: 'flop', tail: 'plume', mask: true, eyes: '#8a5a2a', excl: 'steps20k:0' };
+ANIMALS.rainbowalpaca = { ...ANIMALS.alpaca, e: '🦄', zh: '彩虹羊驼', en: 'Rainbow alpaca', baby: { zh: '彩虹小羊驼', en: 'Rainbow cria' }, price: 2600, sell: [400, 700, 1200], excl: 'steps20k:2' };
+// A trophy case appears in your home with your first trophy (not sold).
+FURN.trophycase = { zh: '奖杯柜', en: 'Trophy case', w: 1, d: 1, price: 0, award: true };
+const EXCLUSIVES = [
+  ...Object.keys(YARD).filter(k => YARD[k].excl).map(k => ['yard', k]),
+  ...Object.keys(CARS).filter(k => CARS[k].excl).map(k => ['car', k]),
+  ['pet', 'collie'], ['animal', 'rainbowalpaca'],
+];

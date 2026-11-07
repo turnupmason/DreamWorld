@@ -834,21 +834,27 @@ function drawPond(x, y, w, d, fish, ts) {
 }
 
 // ---------- animals ----------
-const ANIM_SHADOW = { chicken: 7, duck: 7, rabbit: 7, sheep: 11, goat: 11, pig: 11, cow: 15, alpaca: 11, dog: 9, cat: 7 };
+const ANIM_SHADOW = { chicken: 7, duck: 7, rabbit: 7, sheep: 11, goat: 11, pig: 11, cow: 15, alpaca: 11, rainbowalpaca: 11, dog: 9, cat: 7 };
 // o: { face, moving, phase, ts, seed }
 function drawAnimal(k, st, sx, sy, s, o) {
   const sz = [0.62, 0.82, 1][st];
   ellipse(sx, sy, ANIM_SHADOW[k] * sz * s, ANIM_SHADOW[k] * 0.4 * sz * s, 'rgba(0,0,0,.16)');
   local(sx, sy, s * sz, o.face || 1, () => ANIMAL_DRAW[k](st, o));
 }
+// Four legs, the far pair darker, with little hooves / paws at the bottom.
 function legs4(xs, top, w, col, o) {
-  const sw = o.moving ? Math.sin(o.phase || 0) * 2.4 : 0;
+  const sw = o.moving ? Math.sin(o.phase || 0) * 2.4 : 0, hoof = shade(col, -0.45);
   xs.forEach((x, i) => {
     const s1 = i ? sw : -sw;
     line(x + 1.4, top, x + 1.4 - s1, 0, shade(col, -0.28), w);
+    ellipse(x + 1.4 - s1, -0.2, w * 0.55, w * 0.32, hoof);
     line(x, top, x + s1, 0, col, w);
+    ellipse(x + s1, -0.2, w * 0.58, w * 0.34, hoof);
+    line(x - w * 0.25, top + 1, x + s1 * 0.5 - w * 0.25, -top * -0.5, 'rgba(255,255,255,.18)', w * 0.25);
   });
 }
+// An eye with a little glint, so animals look alive.
+function eyeDot(x, y, r) { circle(x, y, r, '#2a2018'); circle(x + r * 0.35, y - r * 0.35, r * 0.4, '#fff'); }
 const ANIMAL_DRAW = {
   chicken(st, o) {
     const ts = o.ts || 0, sw = o.moving ? Math.sin(o.phase || 0) * 1.6 : 0;
@@ -859,7 +865,7 @@ const ANIMAL_DRAW = {
       const hx = peck ? 5 : 3.6, hy = peck ? -5.5 : -11;
       circle(hx, hy, 3.7, '#ffe57a');
       pg([[hx + 3, hy - 0.6], [hx + 5.2, hy + 0.3], [hx + 3, hy + 1]], '#f2a23a');
-      circle(hx + 1.4, hy - 0.8, 0.75, '#2a2018');
+      eyeDot(hx + 1.4, hy - 0.8, 0.75);
       return;
     }
     const body = st === 2 ? '#fbfaf5' : '#f4e8cc';
@@ -874,7 +880,7 @@ const ANIMAL_DRAW = {
     circle(hx - 1.2, hy - 3.8, cr, '#e5483b'); circle(hx + 0.3, hy - 4.4, cr * 1.1, '#e5483b'); circle(hx + 1.7, hy - 3.8, cr, '#e5483b');
     pg([[hx + 3.4, hy - 1], [hx + 6.2, hy + 0.2], [hx + 3.4, hy + 1.3]], '#f2a23a');
     if (st === 2) ellipse(hx + 3.1, hy + 2.6, 1, 1.6, '#e5483b');
-    circle(hx + 1.6, hy - 0.9, 0.8, '#2a2018');
+    eyeDot(hx + 1.6, hy - 0.9, 0.8);
   },
   duck(st, o) {
     const sw = o.moving ? Math.sin(o.phase || 0) : 0;
@@ -882,7 +888,7 @@ const ANIMAL_DRAW = {
     if (st === 0) {
       line(-1, -3, -1 - sw, 0, '#f28c28', 1.2); line(1.6, -3, 1.6 + sw, 0, '#f28c28', 1.2);
       ellipse(0, -5.5, 5.4, 4.2, '#ffe57a'); circle(4, -10, 3.4, '#ffe57a');
-      rrect(6.4, -10.2, 3.6, 1.6, 0.8, '#f28c28'); circle(5, -10.8, 0.7, '#2a2018');
+      rrect(6.4, -10.2, 3.6, 1.6, 0.8, '#f28c28'); eyeDot(5, -10.8, 0.7);
       return;
     }
     const body = st === 2 ? '#fbfbf7' : '#f3ecd9';
@@ -893,7 +899,7 @@ const ANIMAL_DRAW = {
     line(5, -11, 6.5, -16, body, 4.2);
     circle(7, -17.5, 3.8, st === 2 && (o.seed || 0) % 2 > 1 ? '#3f8f5a' : body);
     rrect(9.6, -17.8, 5, 2.2, 1, '#f28c28');
-    circle(8.2, -18.5, 0.8, '#2a2018');
+    eyeDot(8.2, -18.5, 0.8);
   },
   rabbit(st, o) {
     const hop = o.moving ? Math.abs(Math.sin(o.phase || 0)) * 4 : 0;
@@ -902,14 +908,14 @@ const ANIMAL_DRAW = {
     if (st === 0) {
       circle(0, -4.5, 4.6, col); circle(3.6, -7.6, 3.3, col);
       ellipse(2.6, -11.6, 0.9, 2.6, col, null, 0, -0.2); ellipse(4.4, -11.4, 0.9, 2.6, col, null, 0, 0.15);
-      circle(-4.2, -5, 1.5, '#fff'); circle(4.8, -8.2, 0.65, '#2a2018'); circle(6.7, -7.4, 0.55, '#f2a0ad');
+      circle(-4.2, -5, 1.5, '#fff'); eyeDot(4.8, -8.2, 0.65); circle(6.7, -7.4, 0.55, '#f2a0ad');
       return;
     }
     ellipse(-3, -1.6, 4, 1.8, dark); ellipse(0, -7, 7.5, 5.8, col); circle(-7.4, -8.4, 2.4, '#fff');
     ellipse(4.6, -1.2, 2, 1.2, dark); circle(6.6, -11, 4.3, col);
     const earW = Math.sin((o.ts || 0) / 800 + (o.seed || 0)) * 0.12;
     [[4.4, -14.2, -0.35], [6.6, -14.6, -0.05]].forEach(([x, y, a], k) => { ctx.save(); ctx.translate(x, y); ctx.rotate(a + earW); ellipse(0, -4.6, 1.6, 5, k ? col : shade(col, -0.06)); ellipse(0, -4.6, 0.8, 3.7, '#f6b7c0'); ctx.restore(); });
-    circle(8.2, -11.8, 0.85, '#2a2018'); circle(10.6, -10.2, 0.75, '#f2a0ad');
+    eyeDot(8.2, -11.8, 0.85); circle(10.6, -10.2, 0.75, '#f2a0ad');
   },
   sheep(st, o) {
     const wool = '#f7f5ee', face = '#3b3434';
@@ -933,7 +939,7 @@ const ANIMAL_DRAW = {
     ellipse(10, -18, 3.2, 3.8, fur);
     ellipse(12.5, -16.5, 1.8, 1.4, shade(fur, -0.1));
     ellipse(8, -19, 2.4, 1, fur, null, 0, -0.4);
-    circle(11, -19, 0.7, '#2a2018');
+    eyeDot(11, -19, 0.7);
     if (st >= 1) pg([[11.5, -14.5], [12.5, -11], [10.5, -14]], shade(fur, -0.15));   // beard
     if (st === 2) { ctx.beginPath(); ctx.arc(8.5, -24, 3.5, 0.6, 2.2); ctx.strokeStyle = dark; ctx.lineWidth = 1.4; ctx.stroke(); ctx.beginPath(); ctx.arc(10, -24.2, 3.5, 0.6, 2.2); ctx.stroke(); }
   },
@@ -942,7 +948,7 @@ const ANIMAL_DRAW = {
     if (st === 0) {
       legs4([-3, 3], -3, 1.4, pink, o);
       ellipse(0, -5.5, 6, 4.4, pink); circle(5.6, -7, 3.6, pink); ellipse(8.6, -6.6, 1.5, 1.8, dark);
-      pg([[4.6, -9.6], [5.8, -12.2], [7, -9.6]], dark); circle(6.4, -7.8, 0.6, '#2a2018');
+      pg([[4.6, -9.6], [5.8, -12.2], [7, -9.6]], dark); eyeDot(6.4, -7.8, 0.6);
       return;
     }
     legs4([-6, 6], -5, 2.6, pink, o);
@@ -950,7 +956,7 @@ const ANIMAL_DRAW = {
     ctx.beginPath(); ctx.arc(-12, -11, 1.8, 0, Math.PI * 1.6); ctx.strokeStyle = dark; ctx.lineWidth = 1.1; ctx.stroke();
     circle(10, -11, 5.4, pink); pg([[8, -14.6], [10.6, -18.6], [12, -14]], dark);
     ellipse(14.6, -10.2, 2.2, 2.6, dark); circle(14.1, -10.8, 0.5, '#9a4a5a'); circle(15.1, -9.6, 0.5, '#9a4a5a');
-    circle(11.4, -12.4, 0.75, '#2a2018');
+    eyeDot(11.4, -12.4, 0.75);
   },
   cow(st, o) {
     const calf = st === 0, base = calf ? '#c98f5b' : '#fbfbf7', spot = calf ? '#fff3e2' : '#2e2a28';
@@ -964,7 +970,7 @@ const ANIMAL_DRAW = {
     if (st === 2) ellipse(2, -8.4, 3, 2, '#f2a7b0');
     rrect(10, -27, 8, 9.5, 3, base); ellipse(14, -25, 2.5, 2, spot);
     rrect(13, -21, 6.4, 4.6, 2, '#f2b8b0'); circle(15, -19, 0.5, '#9a5a5a'); circle(17.4, -19, 0.5, '#9a5a5a');
-    circle(14.6, -23.4, 0.85, '#2a2018'); ellipse(10.2, -25, 2.6, 1.2, shade(base, -0.1), null, 0, 0.3);
+    eyeDot(14.6, -23.4, 0.85); ellipse(10.2, -25, 2.6, 1.2, shade(base, -0.1), null, 0, 0.3);
     if (st === 2) { line(11.6, -27, 10.6, -30.4, '#f1e3c2', 1.4); line(16, -27, 17, -30.4, '#f1e3c2', 1.4); circle(11, -16.4, 1.8, '#f2c230', '#c99a18', 0.5); }
   },
   alpaca(st, o) {
@@ -976,7 +982,21 @@ const ANIMAL_DRAW = {
     ellipse(7.5, -15 - neck, 3, 3.4, wool);
     ellipse(10, -14.4 - neck, 1.8, 1.4, shade(wool, -0.15));
     pg([[6, -18 - neck], [6.5, -21 - neck], [7.5, -18 - neck]], shade(wool, -0.1)); pg([[8, -18 - neck], [8.8, -21 - neck], [9.4, -18 - neck]], shade(wool, -0.1));
-    circle(8.6, -15.6 - neck, 0.7, '#2a2018');
+    eyeDot(8.6, -15.6 - neck, 0.7);
+  },
+  // The rainbow alpaca (an exclusive: 20,000 steps a day for 30 days): rainbow wool, a golden halter, sparkles.
+  rainbowalpaca(st, o) {
+    const RB = ['#ff8a8a', '#ffc46b', '#fff07a', '#9be58a', '#8ad3ff', '#b79cff'], ts = o.ts || 0;
+    legs4([-4, 4], -7, 1.8, '#f3e9ff', o);
+    [[-5, -11, 4.6], [0, -12.5, 5.2], [4, -11, 4.4], [-1, -8.5, 4.6], [-3, -14, 3.6], [2.5, -15, 3.4]].forEach(([x, y, r], i) => circle(x, y, r, RB[i % RB.length], 'rgba(255,255,255,.6)', 0.5));
+    const neck = st === 0 ? 7 : 10;
+    for (let j = 0; j < 4; j++) circle(5.5 + j * 0.4, -14 - j * neck / 4, 2.8, RB[(j + 2) % RB.length]);
+    ellipse(7.5, -15 - neck, 3, 3.4, '#fff8ff');
+    ellipse(10, -14.4 - neck, 1.8, 1.4, '#f0dff5');
+    pg([[6, -18 - neck], [6.5, -21 - neck], [7.5, -18 - neck]], '#e9d8f2'); pg([[8, -18 - neck], [8.8, -21 - neck], [9.4, -18 - neck]], '#e9d8f2');
+    line(6.2, -14 - neck, 10.4, -13.2 - neck, '#f2c230', 0.7);
+    eyeDot(8.6, -15.6 - neck, 0.7); circle(8.8, -15.9 - neck, 0.25, '#fff');
+    const ph = (ts / 900) % 1; if (Math.sin(ph * Math.PI) > 0.1) star(-6 + ph * 4, -20 - ph * 6, 1.6 * Math.sin(ph * Math.PI), '#fff8c8');
   },
   // Dogs and cats come in breeds (PET_BREEDS) and show how they feel (o.mood: happy / ok / sad).
   dog(st, o) {

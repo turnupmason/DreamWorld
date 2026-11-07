@@ -332,7 +332,7 @@ const Scene = (() => {
     }
     return null;
   }
-  const SPEED = { chicken: 0.7, duck: 0.6, rabbit: 0.9, sheep: 0.45, goat: 0.55, pig: 0.45, cow: 0.35, alpaca: 0.4, dog: 1.3, cat: 0.9 };
+  const SPEED = { chicken: 0.7, duck: 0.6, rabbit: 0.9, sheep: 0.45, goat: 0.55, pig: 0.45, cow: 0.35, alpaca: 0.4, rainbowalpaca: 0.4, dog: 1.3, cat: 0.9 };
 
   // ---------- live workouts ("mini me") ----------
   const roadLoop = h => { const w = homeW(h) + 0.4; return [[0.8, 14.7], [w, 14.7], [w, 15.4], [0.8, 15.4]]; };
@@ -1749,8 +1749,8 @@ const Scene = (() => {
       drawFurn({ k, rot: 0, tint: o.tint || (D.tint ? TINTS[4] : null) }, 0, 0, 1000);
     },
     yard(k, o, w, h) {
-      const D = YARD[k], tall = ['tree', 'pine', 'lamp', 'swing', 'windmill', 'scarecrow', 'arch', 'well', 'hammock', 'slide'].includes(k);
-      frameFoot(D.w, D.d, tall ? 56 : 30, w, h, 2);
+      const D = YARD[k], tall = ['tree', 'pine', 'lamp', 'swing', 'windmill', 'scarecrow', 'arch', 'well', 'hammock', 'slide', 'goldginkgo', 'finisharch', 'cabin', 'stage', 'court', 'flame', 'walkerstatue'].includes(k), huge = ['triumph', 'ringtower'].includes(k);
+      frameFoot(D.w, D.d, huge ? 90 : tall ? 56 : 30, w, h, 2);
       flatRect(-0.05, -0.05, D.w + 0.1, D.d + 0.1, '#b6e092');
       drawYardItem({ k, rot: 0, placed: now() }, 0, 0, 1000);
     },

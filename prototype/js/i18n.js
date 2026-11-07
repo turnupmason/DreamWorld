@@ -530,6 +530,34 @@ Object.assign(STR.en, {
   reg_na: 'North America', reg_sa: 'South America', reg_eu: 'Europe', reg_af: 'Africa', reg_asia: 'Asia', reg_oc: 'Oceania',
 });
 
+// ---------- v0.10 ----------
+Object.assign(STR.zh, {
+  cat_excl: '专属', fab_trophies: '奖杯', tro_title: '我的奖杯', tro_all: '全部 {n}/{total}', tro_maxed: '已经拿到金奖杯 🎉',
+  tro_streak_next: '现在连续 {cur} 天 · 下一个：{what}', tro_sport_hint: 'Apple Watch 里的 {n} 种运动，每种都有铜银金三个奖杯。去运动一次就有铜奖杯！',
+  tro_best: '最长连续 {n} 天', tro_mine: '我的奖杯', tro_theirs: '{name}的奖杯', tro_summary: '{n} / {total} 个奖杯 · 解锁 {x} 件专属',
+  tro_theirs_note: '奖杯只能在现实里赢得，买不到。', tro_sports: '{n} 种运动', tro_none: '还没有运动奖杯。',
+  tro_rule: '一次 10 分钟以上的运动算一次：{a} 次铜、{b} 次银、{c} 次金。', tro_new: '新奖杯', tro_sport_what: '{name}累计 {n} 次',
+  tro_unlock: '解锁专属', tro_unlock_note: '只有拿到这个奖杯的人才能买，别人来你家一看就知道。', tro_go_shop: '去看专属', tro_count: '累计 {n} 次',
+  excl_note: '只有在现实里赢得奖杯的人才能买。买了可以放在家里、院子里或车道上，来你家的人都能看见。', excl_locked: '还没解锁',
+  excl_locked_snack: '还没解锁，先去赢得对应的奖杯吧', excl_bought: '{name} 是你的了！🏆',
+  excl_req_tier: '{e} {name} · {tier}（{what}）', excl_req_group: '{e} {group}里任意一项拿到金奖杯（{n} 次）',
+  con_trophy: '奖杯', con_day10k: '万步 +1 天', con_day20k: '2 万步', con_rings: '三环', con_sport: '随机运动',
+  con_trophy_note: '模拟连续天数和某种运动的次数，看奖杯和专属。',
+});
+Object.assign(STR.en, {
+  cat_excl: 'Exclusive', fab_trophies: 'Trophies', tro_title: 'My trophies', tro_all: 'All {n}/{total}', tro_maxed: 'Gold trophy won 🎉',
+  tro_streak_next: '{cur} days in a row now · next: {what}', tro_sport_hint: 'Every one of the {n} Apple Watch workout types has bronze, silver and gold. One workout gets you bronze!',
+  tro_best: 'Best streak {n} days', tro_mine: 'My trophies', tro_theirs: '{name}’s trophies', tro_summary: '{n} / {total} trophies · {x} exclusives unlocked',
+  tro_theirs_note: 'Trophies can only be won in real life, never bought.', tro_sports: '{n} sports', tro_none: 'No sport trophies yet.',
+  tro_rule: 'A workout of 10 minutes or more counts once: {a} for bronze, {b} for silver, {c} for gold.', tro_new: 'New trophy', tro_sport_what: '{name} {n} times',
+  tro_unlock: 'Exclusive unlocked', tro_unlock_note: 'Only people with this trophy can buy it, so everyone visiting knows.', tro_go_shop: 'See exclusives', tro_count: '{n} so far',
+  excl_note: 'Only people who won the trophy in real life can buy these. Put them in your home, yard or driveway for every visitor to see.', excl_locked: 'Locked',
+  excl_locked_snack: 'Locked: win the trophy first', excl_bought: '{name} is yours! 🏆',
+  excl_req_tier: '{e} {name} · {tier} ({what})', excl_req_group: '{e} Gold in any {group} sport ({n} workouts)',
+  con_trophy: 'Trophies', con_day10k: '10k day +1', con_day20k: '20k', con_rings: 'Rings', con_sport: 'Random sport',
+  con_trophy_note: 'Pretend streak days and workouts of one sport to see trophies and exclusives.',
+});
+
 const LETTER_TPL = {
   zh: {
     friend: ['今天在湖边散步，看到一群小鸭子。你那边天气好吗？', '你家的菜长得真好，教教我怎么种！', '周末一起去湖边散步吗？', '我昨晚睡得特别好，今天精神满满！',

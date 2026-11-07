@@ -215,8 +215,8 @@ function renderOverlay() {
     const sub = fr ? (S.calm ? '' : ` · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}`) : ` · ${nm(street)}`;
     c = `<button class="btn small" data-act="backTown">← ${UI.tab === 'world' ? nm(COMMUNITIES[VIEW_TOWN]) : t('tab_town')}</button><div class="ctx-main">${t('home_of', { name: esc(homeName(h)) })}${sub}</div>${UI.visitInside ? floorChips(h) : ''}`;
     f = UI.visitInside ? b('goOut', '🌳', t('fab_exit'))
-      : fr ? b('goIn', '🚪', t('fab_peek')) + b('like', '❤️', t('like'), h.id) + b('friendSheet', '🎁', t('fab_gift'), h.id) + b('compose', '✉️', t('fab_letter'), h.id) + b('goHome', '🏡', t('fab_home'))
-        : b('goIn', '🚪', t('fab_peek')) + b('goHome', '🏡', t('fab_home'));
+      : fr ? b('goIn', '🚪', t('fab_peek')) + b('trophies', '🏆', t('fab_trophies'), h.id) + b('like', '❤️', t('like'), h.id) + b('friendSheet', '🎁', t('fab_gift'), h.id) + b('compose', '✉️', t('fab_letter'), h.id) + b('goHome', '🏡', t('fab_home'))
+        : b('goIn', '🚪', t('fab_peek')) + b('trophies', '🏆', t('fab_trophies'), h.id) + b('goHome', '🏡', t('fab_home'));
   } else if (UI.tab === 'world') {   // looking around a community somewhere in the world
     const cm = COMMUNITIES[VIEW_TOWN];
     c = `<button class="btn small" data-act="worldMap">← 🌍</button><div class="ctx-main">${cm.flag} ${nm(cm)} · ${nm(cm.place)} · <span class="online-dot"></span>${t('online_n', { n: onlineIn(VIEW_TOWN) })}</div>`;
@@ -292,7 +292,7 @@ function trayHTML(ed) {
 }
 
 // ---------- shop ----------
-const SHOP_CATS = [['seeds', '🌱'], ['trees', '🌳'], ['animals', '🐣'], ['pets', '🐾'], ['land', '🗺️'], ['furn', '🛋️'], ['yard', '⛲'], ['cars', '🚗'], ['houses', '🏠'], ['sell', '💰']];
+const SHOP_CATS = [['seeds', '🌱'], ['trees', '🌳'], ['animals', '🐣'], ['pets', '🐾'], ['land', '🗺️'], ['furn', '🛋️'], ['yard', '⛲'], ['cars', '🚗'], ['houses', '🏠'], ['excl', '🏆'], ['sell', '💰']];
 function shopCard(img, name, sub, btns, extra = '') {
   return `<div class="item-card">${img}<div class="item-name">${name}</div><div class="item-sub">${sub}</div>${extra}<div class="item-btns">${btns}</div></div>`;
 }
@@ -352,7 +352,7 @@ function panelShop() {
       buyBtn('buyTree', k, `${t('buy_sapling')} 🪙${d.price}`, h.coins >= d.price && free > 0))).join('');
   } else if (cat === 'animals') {
     note = h.pastureLv ? t('pasture_cap', { n: pastureCount(), cap: pastureCap() }) : `${t('no_pasture')} <button class="btn small" data-act="shopCat" data-arg="land">${t('go_land')}</button>`;
-    body = Object.entries(ANIMALS).filter(([k]) => keep(k)).map(([k, a]) => {
+    body = Object.entries(ANIMALS).filter(([k, a]) => keep(k) && !a.excl).map(([k, a]) => {
       let sub;
       if (a.pet) sub = t(a.guard ? 'dog_sub' : 'cat_sub');
       else if (!a.prod) sub = t('animal_sub_rabbit', { d: fmtDur(a.every * MIN) });
@@ -364,11 +364,21 @@ function panelShop() {
         own ? `<span class="tag ok">${t('owned')}</span>` : buyBtn('buyAnimal', k, `${t('buy_baby')} 🪙${a.price}`, ok),
         `<div class="baby-row">${[0, 1, 2].map(s => thumbImg('animal', k, { stage: s }, 60, 48, 'thumb xs')).join('<span>→</span>')}</div>`);
     }).join('');
+  } else if (cat === 'excl') {
+    // things only trophy winners may buy: locked until you've earned the trophy in real life
+    note = t('excl_note');
+    body = EXCLUSIVES.map(([kind, k]) => {
+      const d = exclDef(kind, k), ok = exclOK(d.excl), price = kind === 'car' ? d.cost.coins : d.price;
+      const img = kind === 'yard' ? thumbImg('yard', k) : kind === 'car' ? thumbImg('car', k, { color: d.color }) : kind === 'pet' ? thumbImg('pet', k, {}) : thumbImg('animal', k, { stage: 2 });
+      const owned = kind === 'car' ? h.cars.some(c => c.k === k) : kind === 'pet' ? myPets(h).some(a => a.breed === k) : false;
+      const btn = !ok ? `<span class="tag lock">🔒 ${t('excl_locked')}</span>` : owned ? `<span class="tag ok">${t('owned')}</span>` : buyBtn('buyExcl', kind + '|' + k, `🪙${fmtNum(price)}`, h.coins >= price);
+      return `<div class="item-card excl ${ok ? 'open' : 'shut'}">${img}<div class="item-name">${ok ? '🏆' : '🔒'} ${nm(d)}</div><div class="item-sub">${exclReqText(d.excl)}</div><div class="item-btns">${btn}</div></div>`;
+    }).join('');
   } else if (cat === 'pets') {
     // adopt a dog or a cat by breed; food and treats; bowls, litter box, beds
     const n = myPets(h).length, pf = h.petFood || {};
     note = t('pets_note', { n, max: PET_MAX, food: PET_START_FOOD });
-    body = Object.entries(PET_BREEDS).filter(([k]) => keep(k)).map(([k, B]) => shopCard(thumbImg('pet', k, {}), `${B.kind === 'dog' ? '🐕' : '🐈'} ${nm(B)}`,
+    body = Object.entries(PET_BREEDS).filter(([k, B]) => keep(k) && !B.excl).map(([k, B]) => shopCard(thumbImg('pet', k, {}), `${B.kind === 'dog' ? '🐕' : '🐈'} ${nm(B)}`,
       t('pet_sub_' + B.kind), buyBtn('adopt', k, `${t('adopt')} 🪙${B.price}`, h.coins >= B.price && n < PET_MAX))).join('')
       + Object.entries(PET_FOOD).filter(([k]) => keep(k)).map(([k, f]) => shopCard(`<div class="emoji-thumb">${f.e}</div>`, nm(f),
         t(k === 'treats' ? 'treat_sub' : 'petfood_sub', { n: f.n, have: pf[k] || 0, love: PET_LOVE.treat }), buyBtn('buyPetFood', k, `🪙${f.price}`, h.coins >= f.price))).join('')
@@ -381,7 +391,7 @@ function panelShop() {
   } else if (cat === 'furn' || cat === 'yard') {
     const scope = cat === 'furn' ? 'room' : 'yard', list = cat === 'furn' ? FURN : YARD;
     const owned = k => (scope === 'room' ? allRoomItems(h) : h.yard).filter(i => i.k === k).length + (h.store[scope + ':' + k] || 0);
-    body = Object.entries(list).filter(([k, d]) => !d.souv && keep(k)).map(([k, d]) => {
+    body = Object.entries(list).filter(([k, d]) => !d.souv && !d.excl && !d.award && keep(k)).map(([k, d]) => {
       const n = owned(k);
       const use = d.use ? ` · ${t('use_' + d.use)}` : d.prod ? ` · ${t('makes', { e: GOODS[d.prod].e, d: fmtDur(d.every * MIN) })}` : '';
       return shopCard(thumbImg(cat, k), nm(d), t('furn_sub', { w: d.w, d: d.d }) + use + (n ? ` · ${t('owned_n', { n })}` : ''),
@@ -391,7 +401,7 @@ function panelShop() {
     if (cat === 'furn') subs = subChips('furn', s => (s.id === 'souv' ? `${S.souv.length}/${SOUVENIRS.length}` : s.keys.length));
     if (sub && sub.id === 'souv') { note = ''; body = ''; subs += souvCard(); }
   } else if (cat === 'cars') {
-    body = Object.entries(CARS).filter(([k]) => keep(k)).map(([k, c]) => {
+    body = Object.entries(CARS).filter(([k, c]) => keep(k) && !c.excl).map(([k, c]) => {
       const i = h.cars.findIndex(x => x.k === k), color = i >= 0 ? h.cars[i].color : CAR_COLORS[0];
       let btn;
       if (i < 0) btn = buyBtn('buyCar', k, costText(c.cost), canAfford(c.cost));
@@ -530,6 +540,7 @@ function panelReal() {
     <div class="card earn"><h3>💰 ${t('earned_today')}</h3>
       <div class="big-num">🪙${fmtNum(d.earned.coins)} <small>🪵${d.earned.wood}</small></div>
       <p class="muted">${t('money_rule')}</p></div>
+    ${trophyCard()}
     ${souvCard()}
     <div class="card"><h3>⌚ ${t('devices_title')}</h3><p class="muted">${t('devices_text')}</p></div>
     ${privacyCard()}
@@ -579,10 +590,11 @@ function panelFeed() {
 // ---------- sheets ----------
 function openSheet(type, arg) {
   if (type === 'souvenir') Sound.play('chime');
+  if (type === 'trophyNew') { Sound.play('levelup'); setTimeout(() => Sound.play('coins'), 500); }
   UI.sheet = { type, arg };
   renderSheet();
   const compact = ['friend', 'field', 'animal', 'car', 'tree'].includes(type);
-  $('#sheet').className = 'sheet' + (compact ? ' compact' : '') + (type === 'pets' ? ' tall' : '');
+  $('#sheet').className = 'sheet' + (compact ? ' compact' : '') + (type === 'pets' || type === 'trophies' ? ' tall' : '');
   $('#sheet').hidden = false;
   $('#backdrop').hidden = false;
   $('#backdrop').classList.toggle('light', compact);
@@ -590,6 +602,7 @@ function openSheet(type, arg) {
 function closeSheet() {
   UI.sheet = null; $('#sheet').hidden = true; $('#backdrop').hidden = true; UI.welcome = false;
   if (UI.souvQ && UI.souvQ.length) setTimeout(() => { if (!UI.sheet && UI.souvQ.length) { openSheet('souvenir', UI.souvQ.shift()); refresh(); } }, 350);
+  else if (UI.trophyQ && UI.trophyQ.length) setTimeout(() => { if (!UI.sheet && UI.trophyQ.length) { openSheet('trophyNew', UI.trophyQ.shift()); refresh(); } }, 350);
 }
 function stagesRow(kind, k, n, cur, names, w = 72) {
   return `<div class="stages">${names.map((nmS, s) => `<div class="${s === cur ? 'on' : ''}">${thumbImg(kind, k, { stage: s }, w, 60, 'thumb xs')}<span>${nmS}</span></div>`).join('')}</div>`;
@@ -856,6 +869,10 @@ function renderConsole() {
       ${b('simSteps', 1000, '+1,000 ' + t('steps_unit'))}${b('simSteps', 3000, '+3,000 ' + t('steps_unit'))}
       ${b('simKcal', 100, '+100 ' + t('kcal'))}${b('simExMin', 10, '+10 ' + t('ex_min'))}${b('simStand', 1, '+1 ' + t('stand_h'))}
       ${b('simWorkout', 'run', t('add_workout'))}${b('simMindful', 5, '🧘 +5 ' + t('minutes'))}</div>
+    <div class="con-group"><h4>🏆 ${t('con_trophy')}</h4>
+      ${b('simStreak', 'steps10k|1', '👟 ' + t('con_day10k'))}${b('simStreak', 'steps10k|7', '👟 ×7')}${b('simStreak', 'steps20k|7', '⚡ ' + t('con_day20k') + ' ×7')}${b('simStreak', 'rings|7', '⭕ ' + t('con_rings') + ' ×7')}
+      ${b('simSport', 1, '🏅 ' + t('con_sport'))}${b('simSport', 10, '🏅 ' + t('con_sport') + ' ×10')}${b('simSport', 50, '🏅 ' + t('con_sport') + ' ×50')}
+      <p class="muted">${t('con_trophy_note')}</p></div>
     <div class="con-group"><h4>📵 ${t('con_screen')}</h4>
       ${b('simFocus', 30, t('offline_x', { d: fmtDur(30 * MIN) }))}${b('simFocus', 60, t('offline_x', { d: fmtDur(60 * MIN) }))}${b('simFocus', 120, t('offline_x', { d: fmtDur(120 * MIN) }))}
       ${b('simDistract', 20, t('distract_btn'))}</div>
@@ -1543,6 +1560,104 @@ function start() {
   syncPetReminders();
 }
 
+// ================= v0.10: trophies and exclusives =================
+const medalsHTML = lv => `<span class="medals">${[0, 1, 2].map(i => `<i style="background:${i < lv ? TROPHY_TIERS[i].col : 'rgba(120,100,70,.18)'}"></i>`).join('')}</span>`;
+const sportName = id => nm(SPORT_BY_ID[id]);
+// What unlocks an exclusive, in words.
+function exclReqText(key) {
+  const [a, b] = key.split(':');
+  if (a === 'g') { const G = SPORT_GROUPS[b]; return t('excl_req_group', { e: G.e, group: nm(G), n: SPORT_TIERS[2] }); }
+  const T = STREAK_TROPHIES[a];
+  return t('excl_req_tier', { e: T.e, name: nm(T), tier: nm(TROPHY_TIERS[+b]), what: nm(T.desc).replace('{n}', T.tiers[+b]) });
+}
+// The exclusive a trophy tier unlocks (if any).
+function exclFor(id, tier) {
+  if (STREAK_TROPHIES[id]) return STREAK_TROPHIES[id].excl[tier];
+  const g = SPORT_GROUPS[SPORT_BY_ID[id].group];
+  return tier === 2 && g.excl ? g.excl : null;
+}
+const exclKind = k => (YARD[k] ? 'yard' : CARS[k] ? 'car' : PET_BREEDS[k] ? 'pet' : 'animal');
+function exclThumb(k, w = 96, h = 80) { const kind = exclKind(k), d = exclDef(kind, k); return kind === 'yard' ? thumbImg('yard', k, {}, w, h, 'thumb sm') : kind === 'car' ? thumbImg('car', k, { color: d.color }, w, h, 'thumb sm') : kind === 'pet' ? thumbImg('pet', k, {}, w, h, 'thumb sm') : thumbImg('animal', k, { stage: 2 }, w, h, 'thumb sm'); }
+// Health page: your streaks and the sports you've got trophies in.
+function trophyCard() {
+  const n = trophyCount(), total = allTrophyIds().length * 3;
+  const rows = Object.entries(STREAK_TROPHIES).map(([id, T]) => {
+    const lv = trophyLevel(id), cur = streakNow(id), nxt = T.tiers[lv];
+    return `<div class="tro-row"><span class="tro-ic">${T.e}</span><div class="grow"><div class="row between"><b>${nm(T)}</b>${medalsHTML(lv)}</div>
+      <div class="muted">${nxt ? t('tro_streak_next', { cur, n: nxt, what: nm(T.desc).replace('{n}', nxt) }) : t('tro_maxed')}</div>
+      <div class="bar"><i style="width:${nxt ? Math.min(100, cur / nxt * 100) : 100}%"></i></div></div></div>`;
+  }).join('');
+  const got = SPORTS.filter(s => trophyLevel(s.id) > 0);
+  const chips = got.map(s => `<span class="tro-chip" style="--c:${TROPHY_TIERS[trophyLevel(s.id) - 1].col}">${s.e} ${nm(s)}</span>`).join('');
+  return `<div class="card trophy-card"><div class="row between"><h3>🏆 ${t('tro_title')}</h3><button class="btn small" data-act="trophies" data-arg="me">${t('tro_all', { n, total })}</button></div>
+    ${rows}<div class="tro-sports">${chips || `<span class="muted">${t('tro_sport_hint', { n: SPORTS.length })}</span>`}</div></div>`;
+}
+Object.assign(SHEETS, {
+  // Anyone's trophies: yours, a friend's, or someone you're visiting anywhere in the world.
+  trophies(id) {
+    const h = homeOf(id || 'me') || S.me, mine = h === S.me, n = trophyCount(h);
+    const exclN = EXCLUSIVES.filter(([kind, k]) => exclOK(exclDef(kind, k).excl, h)).length;
+    const streaks = Object.entries(STREAK_TROPHIES).map(([sid, T]) => {
+      const lv = trophyLevel(sid, h), v = streakBest(sid, h);
+      return `<div class="tro-row"><span class="tro-ic">${T.e}</span><div class="grow"><div class="row between"><b>${nm(T)}</b>${medalsHTML(lv)}</div>
+        <div class="muted">${t('tro_best', { n: v })} · ${T.tiers.map((d, i) => `${TROPHY_TIERS[i].e}${d}`).join(' ')}</div>
+        ${mine ? `<div class="muted">${T.excl.map((k, i) => `${i < lv ? '🏆' : '🔒'} ${nm(exclDef(exclKind(k), k))}`).join(' · ')}</div>` : ''}</div></div>`;
+    }).join('');
+    const groups = Object.entries(SPORT_GROUPS).map(([g, G]) => {
+      const list = SPORTS.filter(s => s.group === g && (mine || trophyLevel(s.id, h) > 0));
+      if (!list.length) return '';
+      const tiles = list.map(s => { const lv = trophyLevel(s.id, h), c = sportCount(s.id, h);
+        return `<div class="tro-tile ${lv ? 'got' : ''}" style="--c:${lv ? TROPHY_TIERS[lv - 1].col : 'transparent'}"><span>${s.e}</span><b>${nm(s)}</b><i>${lv === 3 ? '🥇' : `${c}/${SPORT_TIERS[lv]}`}</i></div>`; }).join('');
+      const unlock = G.excl ? `<span class="muted">${SPORTS.some(s => s.group === g && trophyLevel(s.id, h) >= 3) ? '🏆' : '🔒'} ${nm(YARD[G.excl] || CARS[G.excl])}</span>` : '';
+      return `<div class="tro-group"><div class="row between"><b>${G.e} ${nm(G)}</b>${unlock}</div><div class="tro-grid">${tiles}</div></div>`;
+    }).join('');
+    return `<div class="tro-head">${avatar(h.look, 'xl')}<div class="grow"><h2>${t(mine ? 'tro_mine' : 'tro_theirs', { name: esc(homeName(h)) })}</h2>
+        <div class="muted">${t('tro_summary', { n, total: allTrophyIds().length * 3, x: exclN })}</div></div></div>
+      ${mine ? '' : `<p class="muted">${t('tro_theirs_note')}</p>`}
+      <div class="card">${streaks}</div>
+      <div class="sec-title">🏅 ${t('tro_sports', { n: SPORTS.length })}</div>${groups || `<p class="muted">${t('tro_none')}</p>`}
+      ${mine ? `<p class="muted center">${t('tro_rule', { a: SPORT_TIERS[0], b: SPORT_TIERS[1], c: SPORT_TIERS[2] })}</p>` : ''}`;
+  },
+  // A new trophy: a big medal, and what it lets you buy.
+  trophyNew(a) {
+    const T = STREAK_TROPHIES[a.id], S2 = SPORT_BY_ID[a.id], tier = TROPHY_TIERS[a.tier], ex = exclFor(a.id, a.tier);
+    const name = T ? nm(T) : nm(S2), what = T ? nm(T.desc).replace('{n}', T.tiers[a.tier]) : t('tro_sport_what', { n: SPORT_TIERS[a.tier], name: nm(S2) });
+    return `<div class="center tro-new"><div class="tro-medal" style="--c:${tier.col}"><span>${T ? T.e : S2.e}</span></div>
+      <div class="souv-new">🏆 ${t('tro_new')}</div><h2>${name} · ${nm(tier)}</h2><p class="muted">${what}</p>
+      ${ex ? `<div class="card gap-top tro-unlock">${exclThumb(ex)}<div class="grow"><b>🔓 ${t('tro_unlock')}</b><div>${nm(exclDef(exclKind(ex), ex))}</div><div class="muted">${t('tro_unlock_note')}</div></div></div>
+        <button class="btn primary block gap-top" data-act="openShop" data-arg="excl">🏆 ${t('tro_go_shop')}</button>` : ''}
+      <button class="btn block gap-top" data-act="close">${t('souv_ok')}</button></div>`;
+  },
+});
+const GROUP_TYPE = { walk: 'walk', run: 'run', cycle: 'cycle', swim: 'swim', hike: 'walk', mind: 'yoga', strength: 'strength', cardio: 'hiit', team: 'hiit', snow: 'hiit', outdoor: 'walk' };
+Object.assign(ACT, {
+  trophies(id) { openSheet('trophies', id || 'me'); },
+  buyExcl(arg) {
+    const [kind, k] = arg.split('|'), d = exclDef(kind, k);
+    const r = kind === 'yard' ? buyItem('yard', k).r : kind === 'car' ? buyCar(k) : kind === 'pet' ? adoptPet(k).r : buyAnimal(k);
+    if (r === 'locked') return snack(t('excl_locked_snack'));
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r === 'nopasture' || r === 'full') return snack(t(r === 'full' ? 'pet_full' : 'no_pasture', { n: PET_MAX }));
+    if (r !== 'ok') return;
+    Sound.play('buy'); setTimeout(() => Sound.play('chime'), 300);
+    snack(t('excl_bought', { name: nm(d) }));
+    if (kind === 'pet') { const a = myPets().find(x => x.breed === k); if (a) { UI.pet = a.id; ACT.pets(); } }
+    save();
+  },
+  // prototype console: pretend streak days and workouts, to see trophies and exclusives
+  simStreak(arg) {
+    const [id, n] = arg.split('|'), st = S.stats;
+    st['cur_' + id] = (st['cur_' + id] || 0) + +n; st['best_' + id] = Math.max(st['best_' + id] || 0, st['cur_' + id]);
+    snack(`${STREAK_TROPHIES[id].e} ${nm(STREAK_TROPHIES[id])} · ${t('tro_best', { n: st['best_' + id] })}`);
+  },
+  simSport(n) {
+    UI.simSport = UI.simSport && Math.random() < 0.5 ? UI.simSport : rand(SPORTS).id;
+    const s = SPORT_BY_ID[UI.simSport];
+    for (let i = 0; i < +n; i++) addWorkout(GROUP_TYPE[s.group], 20, s.id);
+    snack(`${s.e} ${nm(s)} ×${n} · ${t('tro_count', { n: sportCount(s.id) })}`);
+  },
+});
+
 // ================= v0.9: the world =================
 // Every community on a map you can scroll; tap one to see it, look around it, or move your home there.
 const WMAP = { w: 1080, h: 384, lat0: 78, lat1: -50 };
@@ -1962,6 +2077,11 @@ setInterval(() => {
   if (UI.sheet && ['field', 'animal', 'tree'].includes(UI.sheet.type)) renderSheet();
   if (UI.tab === 'real' && S.live) renderPanel();
   rainGrow(1000);
+  // trophies: celebrate each new one (once)
+  if (!S.onboarding) {
+    const tn = trophyNews();
+    if (tn.length) { UI.trophyQ = [...(UI.trophyQ || []), ...tn]; if (!UI.sheet) openSheet('trophyNew', UI.trophyQ.shift()); save(); refresh(); }
+  }
   // pets: say once when one of them needs something; keep the phone reminders up to date
   if (!S.onboarding) {
     const news = petNews();

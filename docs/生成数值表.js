@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -120,6 +120,19 @@ table(['需要', '从 100 降到 0 要', '提醒'], Object.entries(D.PET_NEEDS).
 table(['宠物粮', '价格', '份数'], Object.values(D.PET_FOOD).map(f => [`${f.e} ${f.zh} (${f.en})`, `🪙${f.price}`, `${f.n}`]));
 P(`领养送 ${D.PET_START_FOOD} 顿饭和食盆（猫还送猫砂盆）。摸摸心情 +${D.PET_LOVE.pet}，玩耍 +${D.PET_LOVE.play}，零食 +${D.PET_LOVE.treat}。宠物不会生病、不会离开，忘了照顾只会难过。`);
 P('');
+
+P('## 奖杯（v0.10，只能在现实里赢得）');
+P('');
+P('每个奖杯分铜、银、金三级。连续天数的奖杯从今天达标起算；运动奖杯：一次 10 分钟以上的运动算一次。');
+P('');
+const exName = k => { const d = D.YARD[k] || D.CARS[k] || D.PET_BREEDS[k] || D.ANIMALS[k]; return `${d.zh}`; };
+table(['奖杯', '铜', '银', '金', '各级解锁的专属'], Object.values(D.STREAK_TROPHIES).map(T => [`${T.e} ${T.zh}（${T.desc.zh.replace('{n}', 'N')}）`, ...T.tiers.map(n => `${n} 天`), T.excl.map(exName).join(' / ')]));
+table(['运动类别', '运动（Apple Watch 里的类型）', '金奖杯解锁'], Object.entries(D.SPORT_GROUPS).map(([g, G]) => [`${G.e} ${G.zh}`, D.SPORTS.filter(s => s.group === g).map(s => s.zh).join('、'), G.excl ? exName(G.excl) : '—']));
+P(`运动奖杯：${D.SPORT_TIERS[0]} 次铜、${D.SPORT_TIERS[1]} 次银、${D.SPORT_TIERS[2]} 次金。共 ${D.SPORTS.length} 种运动。`);
+P('');
+P('## 专属（拿到奖杯才能买，' + D.EXCLUSIVES.length + ' 件）');
+P('');
+table(['专属', '类型', '价格'], D.EXCLUSIVES.map(([kind, k]) => { const d = kind === 'yard' ? D.YARD[k] : kind === 'car' ? D.CARS[k] : kind === 'pet' ? D.PET_BREEDS[k] : D.ANIMALS[k]; return [`${d.zh} (${d.en})`, { yard: '院子', car: '车', pet: '宠物', animal: '牲畜' }[kind], `🪙${kind === 'car' ? d.cost.coins : d.price}`]; }));
 
 P('## 庭院（' + Object.keys(D.YARD).length + ' 件）');
 P('');
