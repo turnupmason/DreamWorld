@@ -747,6 +747,15 @@ const Scene = (() => {
   const SIDEWALK = { avenue: 0.5, street: 0.42, lane: 0.36, dirt: 0 };
   function drawRoads(vr) {
     const z = cam.z, vis = r => !(r[2] < vr.x0 || r[0] > vr.x1 || r[3] < vr.y0 || r[1] > vr.y1), roads = TL.roads.filter(vis);
+    // v0.27: one-way arrows (white, every few tiles, pointing the way to go)
+    const arrows = () => roads.forEach(r => {
+      const ow = r[5]; if (!ow || z < 0.18) return;
+      const h = horiz(r), a0 = h ? r[0] : r[1], a1 = h ? r[2] : r[3], m = h ? (r[1] + r[3]) / 2 : (r[0] + r[2]) / 2, P = (u, v) => (h ? iso(u, m + v) : iso(m + v, u));
+      for (let u = a0 + 2.2; u < a1 - 2; u += 4.5) {
+        const b = u + 0.9 * ow, tip = u + 1.6 * ow;
+        poly([P(u, -0.13), P(b, -0.13), P(b, -0.38), P(tip, 0), P(b, 0.38), P(b, 0.13), P(u, 0.13)], 'rgba(255,255,255,.9)');
+      }
+    });
     const horiz = r => r[2] - r[0] >= r[3] - r[1];
     roads.forEach(([x0, y0, x1, y1, kind]) => {   // pavement (or the dirt road's edges)
       flatRect(x0, y0, x1 - x0, y1 - y0, kind === 'dirt' ? '#c9ad80' : '#ddd6c8');
@@ -767,9 +776,10 @@ const Scene = (() => {
         const A = h ? iso(u, p) : iso(p, u), B = h ? iso(u, q) : iso(q, u); line(A.x, A.y, B.x, B.y, 'rgba(150,140,120,.3)', 0.8 * z);
       }
     });
+    arrows();
     roads.forEach(r => {   // lane lines
       const [x0, y0, x1, y1, kind] = r;
-      if (kind === 'dirt') return;
+      if (kind === 'dirt' || r[5]) return;
       const h = horiz(r), [a0, a1, b0, b1] = h ? [x0, x1, y0, y1] : [y0, y1, x0, x1], m = (b0 + b1) / 2;
       const lo = Math.max(a0, Math.floor(h ? vr.x0 : vr.y0)), hi = Math.min(a1, h ? vr.x1 : vr.y1);
       const seg = (p, q, off, col, lw) => { const A = h ? iso(p, m + off) : iso(m + off, p), B = h ? iso(q, m + off) : iso(m + off, q); line(A.x, A.y, B.x, B.y, col, lw * z); };
@@ -922,7 +932,7 @@ const Scene = (() => {
     const Hw = TL.highway;
     if (!Hw) return;
     const z = cam.z, deck = smoothPts(Hw.pts, 3), ramps = Hw.ramps.map(r => smoothPts(r, 0.8));
-    const seg = (S2, i, w) => {
+    const seg = (S2, i, w, pil = true) => {
       const a = S2[i], b = S2[i + 1];
       if (Math.max(a[0], b[0]) < vr.x0 - 6 || Math.min(a[0], b[0]) > vr.x1 + 6 || Math.max(a[1], b[1]) < vr.y0 - 6 || Math.min(a[1], b[1]) > vr.y1 + 6) return;
       objs.push({ d: (a[0] + b[0]) / 2 + (a[1] + b[1]) / 2 + 1.5, f: () => {
@@ -934,10 +944,11 @@ const Scene = (() => {
         const ra = P(a, front * nx, front * ny, a[2] + 2.2), rb = P(b, front * nx, front * ny, b[2] + 2.2); line(ra.x, ra.y, rb.x, rb.y, '#e8e4dc', 1.4 * z);
         const qa = P(a, -front * nx, -front * ny, a[2] + 2.2), qb = P(b, -front * nx, -front * ny, b[2] + 2.2); line(qa.x, qa.y, qb.x, qb.y, '#cfc9be', 1.1 * z);
         if (w > 2 && z > 0.1) { const m0 = P(a, 0, 0, a[2]), m1 = P(b, 0, 0, b[2]); line(m0.x, m0.y, m1.x, m1.y, 'rgba(242,194,48,.85)', 1 * z); }
-        if (a[2] > 3) { const g = iso(a[0], a[1]), top = up(g, (a[2] - 3) * z); rrect(g.x - 2.4 * z, top.y, 4.8 * z, g.y - top.y, 1.2 * z, '#a8a39a'); ellipse(g.x, g.y, 5 * z, 2.2 * z, 'rgba(0,0,0,.12)'); }   // a pillar
+        if (pil && a[2] > 3) { const g = iso(a[0], a[1]), top = up(g, (a[2] - 3) * z); rrect(g.x - 2.4 * z, top.y, 4.8 * z, g.y - top.y, 1.2 * z, '#a8a39a'); ellipse(g.x, g.y, 5 * z, 2.2 * z, 'rgba(0,0,0,.12)'); }   // a pillar
       } });
     };
     for (let i = 0; i < deck.length - 1; i++) seg(deck, i, 3.2);
+    flyoverObjs(objs, vr);   // v0.27
     ramps.forEach(R => { for (let i = 0; i < R.length - 1; i++) seg(R, i, 1.6); });
     // traffic: a few cars going each way along the deck
     if (z > 0.12) {
@@ -949,6 +960,37 @@ const Scene = (() => {
         objs.push({ d: x + yy + 1.6, f: () => { ctx.save(); ctx.translate(0, -Hw.h * cam.z); drawCarDir(car, x, yy, dir > 0 ? '+x' : '-x', ts); ctx.restore(); } });
       }
     }
+  }
+  // v0.27: the flyover: a concrete deck on T-shaped pillars over the avenue, with parapets, lane lines and a shadow
+  function flyoverObjs(objs, vr) {
+    const z = cam.z;
+    (TL.flyovers || []).forEach(F => {
+      const S2 = smoothPts(F.pts, 1.2), w = 2.4, G = 7;   // G: how deep the concrete girder is
+      for (let i = 0; i < S2.length - 1; i++) {
+        const a = S2[i], b = S2[i + 1];
+        if (Math.max(a[0], b[0]) < vr.x0 - 6 || Math.min(a[0], b[0]) > vr.x1 + 6 || Math.max(a[1], b[1]) < vr.y0 - 6 || Math.min(a[1], b[1]) > vr.y1 + 6) continue;
+        objs.push({ d: (a[0] + b[0]) / 2 + (a[1] + b[1]) / 2 + 1.5, f: () => {
+          const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L * w / 2, ny = dx / L * w / 2;
+          const P = (p, sx, sy, h) => up(iso(p[0] + sx, p[1] + sy), h * z), fr = (nx + ny) > 0 ? 1 : -1;
+          if (a[2] > 1) poly([P(a, nx + 0.5, ny + 0.5, 0), P(b, nx + 0.5, ny + 0.5, 0), P(b, -nx + 0.5, -ny + 0.5, 0), P(a, -nx + 0.5, -ny + 0.5, 0)], `rgba(30,35,45,${Math.min(0.22, a[2] / 120)})`);   // its shadow
+          if (i % 4 === 0 && a[2] > G + 2) [-0.55, 0.55].forEach(k => {   // two columns under the deck, near its edges
+            const g = iso(a[0] + nx * k * 2 * fr, a[1] + ny * k * 2 * fr), top = up(g, (a[2] - G) * z);
+            ellipse(g.x, g.y, 8 * z, 3.4 * z, 'rgba(0,0,0,.18)');
+            rrect(g.x - 4.5 * z, top.y, 9 * z, g.y - top.y, 2 * z, k > 0 ? '#ddd7cc' : '#c9c3b7'); rrect(g.x + 1.2 * z, top.y, 3.3 * z, g.y - top.y, 1.5 * z, 'rgba(0,0,0,.13)');
+          });
+          const gd = Math.min(G, Math.max(1, a[2]));
+          poly([P(a, fr * nx, fr * ny, a[2]), P(b, fr * nx, fr * ny, b[2]), P(b, fr * nx, fr * ny, b[2] - gd), P(a, fr * nx, fr * ny, a[2] - gd)], '#ddd7cb');   // the girder
+          const e0 = P(a, fr * nx, fr * ny, a[2] - gd), e1 = P(b, fr * nx, fr * ny, b[2] - gd); line(e0.x, e0.y, e1.x, e1.y, '#8f897e', 1.4 * z);
+          const e2 = P(a, fr * nx, fr * ny, a[2] - 1.2), e3 = P(b, fr * nx, fr * ny, b[2] - 1.2); line(e2.x, e2.y, e3.x, e3.y, 'rgba(0,0,0,.12)', 1 * z);
+          poly([P(a, nx, ny, a[2]), P(b, nx, ny, b[2]), P(b, -nx, -ny, b[2]), P(a, -nx, -ny, a[2])], '#6c737b');   // the road on top
+          if (z > 0.12) {
+            const m0 = P(a, 0, 0, a[2]), m1 = P(b, 0, 0, b[2]); if (i % 2 === 0) line(m0.x, m0.y, m1.x, m1.y, 'rgba(255,255,255,.8)', 1.2 * z);
+            [1, -1].forEach(sg => { const p0 = P(a, sg * nx, sg * ny, a[2]), p1 = P(b, sg * nx, sg * ny, b[2]), q0 = P(a, sg * nx, sg * ny, a[2] + 2.6), q1 = P(b, sg * nx, sg * ny, b[2] + 2.6);
+              poly([p0, p1, q1, q0], sg === fr ? '#e8e3d9' : '#cfc9bd'); });   // parapets
+          }
+        } });
+      }
+    });
   }
   // A live workout in town (v0.16): mini-you laps the park, swims in the lake, trains at the gym, does yoga on the lawn.
   let liveU = 0;
@@ -1028,6 +1070,15 @@ const Scene = (() => {
     if (!boxVisible(C.x - 1, C.y - 1, C.x + C.w + 1, C.y + C.d + 1, vr)) return;
     flatRect(C.x, C.y, C.w, C.d, '#e8e0cf');
     if (cam.z > 0.14) for (let x = C.x + 0.5; x < C.x + C.w; x += 5) flatRect(x, C.y, 0.08, C.d, 'rgba(160,140,110,.12)');
+    { const q = [iso(C.x, C.y), iso(C.x + C.w, C.y), iso(C.x + C.w, C.y + C.d), iso(C.x, C.y + C.d)];   // v0.27: the streets through the square
+      ctx.save(); ctx.beginPath(); q.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.clip(); drawRoads(vr); ctx.restore(); }
+    const K = TL.pocket;
+    if (K) {   // v0.27: a pocket park between the one-way lanes
+      flatRect(K.x, K.y, K.w, K.d, PAL.lawn || '#a9d281');
+      flatRect(K.x + K.w / 2 - 0.5, K.y, 1, K.d, '#e6dccb'); flatRect(K.x, K.y + K.d / 2 - 0.5, K.w, 1, '#e6dccb');
+      [['tree', 0.6, 0.6], ['tree', K.w - 1.6, 0.6], ['tree', 0.6, K.d - 1.6], ['tree', K.w - 1.6, K.d - 1.6], ['bench', 2.6, K.d / 2 - 1.8], ['bench', K.w - 3.6, K.d / 2 + 0.8], ['flowers', K.w / 2 - 2.2, 1.6], ['flowers', K.w / 2 + 1.2, K.d - 2.6], ['lamp', K.w / 2 + 0.7, K.d / 2 + 0.7]]
+        .forEach(([k, x, y]) => objs.push({ d: K.x + K.y + x + y + 1, f: () => drawYardItem({ k }, K.x + x, K.y + y, ts) }));
+    }
     const { x: px, y: py } = TL.plaza;
     plazaGround(px, py);
     objs.push({ d: px + py + 10, f: () => { out.hall = drawTownHall(px, py, lv, ts); } });
@@ -1038,7 +1089,7 @@ const Scene = (() => {
     deco.forEach(([k, x, y]) => objs.push({ d: px + py + x + y + 1, f: () => drawYardItem({ k }, px + x, py + y, ts) }));
     TL.shops.forEach(([k, x, y]) => objs.push({ d: x + y + 5.5, f: () => { const r = drawShop(k, x, y, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
     // trees along the edges of the square (not on the plaza or in front of a shop)
-    const free = (x, y) => !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy]) => x > sx - 1.5 && x < sx + 7.5 && y > sy - 1.5 && y < sy + 7.5)
+    const free = (x, y) => !TL.roads.some(r => x > r[0] - 1 && x < r[2] + 1 && y > r[1] - 1 && y < r[3] + 1) && !(K && x > K.x - 1 && x < K.x + K.w + 1 && y > K.y - 1 && y < K.y + K.d + 1) && !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy]) => x > sx - 1.5 && x < sx + 7.5 && y > sy - 1.5 && y < sy + 7.5)
       && !(TL.parks || []).some(([, qx, qy, qw, qd]) => x > qx - 1.2 && x < qx + qw + 1.2 && y > qy - 1.2 && y < qy + qd + 1.2);
     for (let x = C.x + 1.5; x < C.x + C.w - 1; x += 6.5) [C.y + C.d - 2, C.y + 1].forEach(y => { if (free(x, y)) objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }); });
   }
@@ -1058,7 +1109,8 @@ const Scene = (() => {
       ['bench', P.x + 8, P.y + 16], ['lamp', P.x + 19, P.y + 13], ['lamp', P.x + 22, P.y + 16], ['flowers', P.x + 15, P.y + 4], ['flowers', P.x + 16, P.y + 4], ['picnic', P.x + 6, P.y + 20], ['picnic', P.x + 11, P.y + 22]];
     for (let k = 0; k < 16; k++) items.push([k % 3 ? 'tree' : 'pine', P.x + 1 + (k * 7.3) % (P.w - 2), P.y + (k < 8 ? 0.4 : P.d - 1.4)]);
     [[P.x + 3, P.y + 24], [P.x + 9, P.y + 26], [P.x + 15, P.y + 25], [P.x + 2, P.y + 17]].forEach(([x, y]) => items.push(['tree', x, y]));
-    items.filter(([, x, y]) => !onCarPark(x + 0.5, y + 0.5)).forEach(([k, x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k, rot: 0, placed: 0 }, x, y, ts) }));
+    const underFly = (x, y) => (TL.flyovers || []).some(F => x > F.x0 - 1 && x < F.x1 + 1 && Math.abs(y + 0.5 - F.y) < 2.2);   // v0.27: nothing growing under the flyover
+    items.filter(([, x, y]) => !onCarPark(x + 0.5, y + 0.5) && !underFly(x, y)).forEach(([k, x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k, rot: 0, placed: 0 }, x, y, ts) }));
   }
   const onCarPark = (x, y) => (TL.parks || []).some(([, qx, qy, qw, qd]) => x > qx - 0.8 && x < qx + qw + 0.8 && y > qy - 0.8 && y < qy + qd + 0.8);
   // The big lake, with a wooden dock and a little boat.
@@ -1419,7 +1471,7 @@ const Scene = (() => {
   function roadNet() {
     if (NET && NET.id === TL.id) return NET;
     const H = [], V = [], nodes = [], on = new Map();
-    TL.roads.forEach(([x0, y0, x1, y1, kind]) => { const sw = SIDEWALK[kind] || 0.6; if (x1 - x0 >= y1 - y0) H.push({ y: (y0 + y1) / 2, a: x0, b: x1, y0, y1, sw }); else V.push({ x: (x0 + x1) / 2, a: y0, b: y1, x0, x1, sw }); });
+    TL.roads.forEach(([x0, y0, x1, y1, kind, ow = 0]) => { const sw = SIDEWALK[kind] || 0.6; if (x1 - x0 >= y1 - y0) H.push({ y: (y0 + y1) / 2, a: x0, b: x1, y0, y1, sw, ow }); else V.push({ x: (x0 + x1) / 2, a: y0, b: y1, x0, x1, sw, ow }); });
     const at = (r, i) => { if (!on.has(r)) on.set(r, []); on.get(r).push(i); };
     H.forEach(h => V.forEach(v => {   // roads that cross or just touch (a street ending at an avenue)
       if (v.x1 < h.a - 0.6 || v.x0 > h.b + 0.6 || h.y1 < v.a - 0.6 || h.y0 > v.b + 0.6) return;
@@ -1456,6 +1508,27 @@ const Scene = (() => {
     });
     deckIds.sort((i, j) => nodes[i].x - nodes[j].x);
     for (let k = 1; k < deckIds.length; k++) link(deckIds[k - 1], deckIds[k]);
+    // v0.27: flyovers: a chain of nodes up, along and down; both feet join the road below like a crossing
+    const footOn = id => {
+      const fp = nodes[id], h = N0.H.find(r => Math.abs(r.y - fp.y) < 1.6 && fp.x >= r.a - 1.5 && fp.x <= r.b + 1.5);
+      if (!h) return;
+      fp.y = h.y;
+      const list = on.get(h) || [], right = list.filter(i => nodes[i].x > fp.x).sort((i, j) => nodes[i].x - nodes[j].x)[0], left = list.filter(i => nodes[i].x <= fp.x).sort((i, j) => nodes[j].x - nodes[i].x)[0];
+      if (right !== undefined) link(id, right);
+      if (left !== undefined) link(id, left);
+      list.push(id); on.set(h, list);
+    };
+    (TL.flyovers || []).forEach(F => {
+      const S2 = smoothPts(F.pts, 1.6), ids = S2.map((p, k) => add(p[0], p[1], k === 0 || k === S2.length - 1 ? 0 : Math.max(0.01, p[2]), p[2] > F.h - 0.5));
+      for (let k = 1; k < ids.length; k++) link(ids[k - 1], ids[k]);
+      footOn(ids[0]); footOn(ids[ids.length - 1]);
+    });
+    // v0.27: one-way streets: along them cars only go the way of the arrows
+    N0.on.forEach((ids0, r) => {
+      if (!r.ow) return;
+      const k = r.y !== undefined ? 'x' : 'y', ids = (on.get(r) || ids0).slice().sort((i, j) => nodes[i][k] - nodes[j][k]);
+      for (let q = 1; q < ids.length; q++) { const lo = ids[q - 1], hi = ids[q]; if (r.ow > 0) nodes[hi].e = nodes[hi].e.filter(v => v !== lo); else nodes[lo].e = nodes[lo].e.filter(v => v !== hi); }
+    });
     CARNET = { id: TL.id, H: N0.H, V: N0.V, nodes, on };
     return CARNET;
   }
@@ -1484,9 +1557,17 @@ const Scene = (() => {
     const N = car && TL.highway ? carNet() : roadNet(), A = nearestRoad(N, a), B = nearestRoad(N, b);
     if (!A || !B) return [b];
     const out = [A.pt];
-    if (A.r !== B.r) {
+    // v0.27: a long way along the avenue with the flyover: take it (up and over the crossings)
+    const lo = Math.min(A.pt[0], B.pt[0]), hi = Math.max(A.pt[0], B.pt[0]);
+    const viaFly = car && A.r === B.r && A.r.y !== undefined && (TL.flyovers || []).some(F => Math.abs(F.pts[0][1] - A.r.y) < 1.6 && F.pts[0][0] > lo && F.pts[F.pts.length - 1][0] < hi);
+    if (A.r !== B.r || viaFly) {
       const ns = N.nodes, dist = ns.map(() => 1e9), prev = ns.map(() => -1), done = ns.map(() => false), ends = new Set(N.on.get(B.r) || []);
-      (N.on.get(A.r) || []).forEach(i => { dist[i] = Math.hypot(ns[i].x - A.pt[0], ns[i].y - A.pt[1]); });
+      const along = (r, i, p, sgn) => (r.y !== undefined ? ns[i].x - p[0] : ns[i].y - p[1]) * r.ow * sgn >= -0.01;   // v0.27: one-way streets
+      let starts = (N.on.get(A.r) || []).filter(i => !car || !A.r.ow || along(A.r, i, A.pt, 1)), finish = (N.on.get(B.r) || []).filter(i => !car || !B.r.ow || along(B.r, i, B.pt, -1));
+      if (!starts.length) starts = N.on.get(A.r) || [];
+      if (!finish.length) finish = N.on.get(B.r) || [];
+      ends.clear(); finish.forEach(i => ends.add(i));
+      starts.forEach(i => { dist[i] = Math.hypot(ns[i].x - A.pt[0], ns[i].y - A.pt[1]); });
       let goal = -1, best = 1e9;
       for (;;) {
         let u = -1;

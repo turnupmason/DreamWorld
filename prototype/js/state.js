@@ -67,7 +67,7 @@ function migrate() {
   if (S.petRemind === undefined) S.petRemind = true;
   // v0.12: every community has its own town plan. A home in another community whose street isn't in the new plan
   // (or doesn't fit any more) moves to the first free land there big enough for it.
-  if (S.townPlanV !== 1) {
+  if (S.townPlanV !== 2) {   // v0.27: run again (other towns have fewer, wider homes now)
     S.lots.filter(l => townOfLot(l) !== HOME_TOWN).forEach(l => {
       const t = townOfLot(l), st = streetsOf(t)[l.st], clash = () => S.lots.some(o => o !== l && townOfLot(o) === t && o.st === l.st && o.p < l.p + l.n && l.p < o.p + o.n)
         || npcLots(t).some(o => o.st === l.st && o.p < l.p + l.n && l.p < o.p + o.n);
@@ -76,8 +76,21 @@ function migrate() {
       const run = computeRuns(t).filter(r => r.n >= Math.min(l.n, CORE_PARCELS)).sort((a, b) => b.n - a.n)[0];
       if (run) Object.assign(l, { st: run.st, p: run.p, n: Math.min(l.n, run.n) });
     });
-    RUNS.key = ''; S.townPlanV = 1;
+    RUNS.key = ''; S.townPlanV = 2;
   }
+  // v0.27: an invite-only town has fewer homes, so the homes in yours get wider (to HOME_PARCELS where there's room;
+  // yours only grows to the right so nothing of yours moves; a friend's home can also shift left)
+  if (S.roomyV !== 1) {
+    const t0 = myTown();
+    S.lots.filter(l => townOfLot(l) === t0).forEach(l => {
+      const st = streetsOf(t0)[l.st]; if (!st) return;
+      const taken = p => p < 0 || p >= st.n || S.lots.some(o => o !== l && townOfLot(o) === t0 && o.st === l.st && p >= o.p && p < o.p + o.n) || npcLots(t0).some(o => o.st === l.st && p >= o.p && p < o.p + o.n);
+      while (l.n < HOME_PARCELS && !taken(l.p + l.n)) l.n++;
+      if (l.id !== 'me') while (l.n < HOME_PARCELS && !taken(l.p - 1)) { l.p--; l.n++; }
+    });
+    RUNS.key = ''; S.roomyV = 1;
+  }
+  if (S.carParkV !== 27) { if (S.carAt && S.carAt.town === myTown()) S.carAt = null; S.carParkV = 27; }   // v0.27: the car parks in the town centre moved; a car parked out is back home
   if (S.layoutV !== 2) {   // v0.5: furniture must be reachable; re-arrange the simulated friends' rooms once
     S.friends.forEach(h => { for (let lv = 0; lv < floorsOf(h); lv++) relayoutRoom(h, lv); });
     S.layoutV = 2;
@@ -261,7 +274,8 @@ function freeRun() {
   runs.sort((a, b) => nextToMe(a) - nextToMe(b) || (SS[a.st].nb !== 'maple') - (SS[b.st].nb !== 'maple') || dist(a) - dist(b));
   const r = runs[0];
   if (!r) return null;
-  return nextToMe(r) ? { st: r.st, p: r.p + r.n - CORE_PARCELS, n: CORE_PARCELS } : r;
+  const n = Math.min(r.n, HOME_PARCELS);
+  return nextToMe(r) ? { st: r.st, p: r.p + r.n - n, n } : { ...r, n };
 }
 const nbOf = id => NEIGHBORHOODS[(streetsOf(townOf(id))[lotOf(id).st] || { nb: 'maple' }).nb];
 const round50 = v => Math.round(v / 50) * 50;
@@ -309,7 +323,7 @@ function ensureNPCs(t) {
     const nf = FIELD_LEVELS[fieldLv], pl = farm ? 3 : r() < 0.6 ? 1 + Math.floor(r() * 2) : 0;
     const beasts = ['chicken', 'duck', 'sheep', 'goat', 'pig', 'cow', 'alpaca'];
     const p = {
-      id: spec.id, name: NPC_NAMES[i % NPC_NAMES.length],
+      id: spec.id, name: spec.fam ? FAMILY[spec.fam] : NPC_NAMES[i % NPC_NAMES.length],
       look: { shirt: pick(COLORS), skin: pick(SKINS), hair: pick(HAIRS), hairCol: pick(HAIR_COLORS), mob: r() < 0.1 ? 'wheel' : 'walk' },
       house: spec.house, wall: pick(WALL_COLORS), roof: pick(ROOF_COLORS), floor: Math.floor(r() * FLOORS.length), roomWall: Math.floor(r() * ROOM_WALLS.length),
       fieldLv, crops: Array.from({ length: nf }, () => (r() < 0.85 ? pick(crops) : null)), ripe: Array.from({ length: nf }, (_, k) => k).filter(() => r() < 0.3),
@@ -324,7 +338,7 @@ function ensureNPCs(t) {
     if (r() < 0.4) p.animals.push(['dog', 2]);
     if (t !== HOME_TOWN) { p.house = Math.floor(r() * HOUSES.length); p.name = NPC_NAMES[(i + ti * 3) % NPC_NAMES.length]; }
     const h = homeFromPreset(p);
-    h.npc = true; h.town = t;
+    h.npc = true; h.town = t; if (spec.fam && t === HOME_TOWN) h.fam = spec.fam;   // v0.27: your family
     relayoutYard(h);
     // the extra land of a bigger lot: a garden with trees, a pool or a swing set
     for (let k = 0; k < (spec.n - CORE_PARCELS) * 3; k++) autoPlace(h, 'yard', pick(['tree', 'pine', 'flowers', 'hedge', 'fountain', 'pool', 'picnic', 'trampoline', 'windmill']));
@@ -1422,11 +1436,12 @@ function randomFriendEvent() {
   return addFeed({ kind: 'msg', from: f.id, msgKey: rand(MSG_KEYS) });
 }
 // Invite reward goes to both sides.
-function inviteJoin() {
-  const run = freeRun();
+function inviteJoin(at) {
+  const run = at || freeRun();
   const next = FRIEND_POOL.find(f => !S.friends.some(x => x.id === f.id));
-  if (!run || !next) return null;
-  S.lots.push({ id: next.id, st: run.st, p: run.p, n: CORE_PARCELS, paid: 0, ...(myTown() !== HOME_TOWN ? { town: myTown() } : {}) });   // friends move in next to you
+  if (!run || !next || run.n < CORE_PARCELS) return null;
+  S.lots.push({ id: next.id, st: run.st, p: run.p, n: Math.min(run.n, HOME_PARCELS), paid: 0, ...(myTown() !== HOME_TOWN ? { town: myTown() } : {}) });   // friends move in (v0.27: on a wider lot)
+  RUNS.key = '';
   S.friends.push(homeFromPreset(next));
   return addFeed({ kind: 'join', from: next.id, gift: { type: 'wood', n: 5 } });
 }
@@ -2182,6 +2197,7 @@ const stocksValue = () => STOCK_KEYS.reduce((t2, co) => t2 + holding(co).n * sto
 // contacts: your friends, the people you work with, and anyone in town you've talked to
 function contacts() {
   const out = S.friends.map(h => ({ id: h.id, kind: 'friend' }));
+  npcLots(HOME_TOWN).forEach(l => { const h = homeOf(l.id); if (h && h.fam) out.push({ id: l.id, kind: 'family' }); });   // v0.27
   if (S.job) workPeople(S.job.place).forEach(p => out.push({ id: p.id, kind: p.boss ? 'boss' : 'mate' }));
   Object.keys(S.rel || {}).filter(id => !id.startsWith('work_') && !out.some(o => o.id === id) && homeOf(id)).forEach(id => out.push({ id, kind: 'neighbour' }));
   return out;
@@ -2211,7 +2227,7 @@ function textPerson(id, i) {
 function dailyText() {
   if (S.textDay === today()) return null;
   S.textDay = today();
-  const cs = contacts().filter(c => c.kind === 'friend' || c.kind === 'boss');
+  const cs = contacts().filter(c => c.kind === 'friend' || c.kind === 'boss' || c.kind === 'family');
   if (!cs.length) return null;
   const c = cs[Math.floor(Math.random() * cs.length)], pool = c.kind === 'boss' ? BOSS_INBOX : INBOX;
   S.texts = S.texts || {}; (S.texts[c.id] = S.texts[c.id] || []).push({ inbox: Math.floor(Math.random() * pool.length), boss: c.kind === 'boss' ? 1 : 0, t: now() });
@@ -2225,3 +2241,6 @@ function meetInPark(id) {
   S.meet = { id, until: now() + HOUR };
   return 'ok';
 }
+
+// ---------- v0.27: an invite-only town ----------
+const homesIn = t => allLots(t).length;

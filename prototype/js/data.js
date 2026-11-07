@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.26.0';
+const VERSION = '0.27.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -131,29 +131,33 @@ const ROADS = [
   [-18, 30, 196, 33, 'avenue'],
   [-2, 50, 64, 52, 'street'], [-18, 66, 112, 68, 'dirt'],
   [64, -2, 67, 70, 'avenue'], [112, -2, 115, 36, 'avenue'],
+  // v0.27: through the town centre: Main Street (joins the streets on both sides) and two one-way lanes
+  // ([..., 'lane', 1] = one way towards +y, -1 = towards -y)
+  [67, 14, 112, 16, 'street'], [82, 16, 84, 30, 'lane', 1], [96, 16, 98, 30, 'lane', -1],
 ];
 // Places that aren't homes. The town hall plaza is 16 × 14 like a lot.
 const LANDMARKS = {
-  plaza:  { x: 82, y: 4 },
-  shops:  [['bakery', 69, 21], ['cafe', 76, 21], ['market', 99, 21], ['gym', 105, 21], ['library', 69, 4], ['post', 105, 4]],
+  plaza:  { x: 82, y: -1 },   // v0.27: moved up for Main Street
+  shops:  [['bakery', 69, 23.6], ['cafe', 75.3, 23.6], ['market', 98.6, 23.6], ['gym', 104.8, 23.6], ['library', 69, 8], ['post', 105, 8]],
   park:   { x: 68, y: 35, w: 44, d: 30 },
   lake:   { x: 146, y: 52, rx: 26, ry: 13 },
   fields: { x: -2, y: 70, w: 114, d: 18 },
 };
-// Other people living in town (not your friends). Their homes are generated from these.
+// v0.27: the town is invite-only: only you, the friends you invite and your family live here. Your family's homes
+// (generated from these; the friends are in S.friends). Fewer homes than before, and every one on a bigger lot.
 const NPC_LOTS = [
-  { id: 'n1', st: 'cherry', p: 4, n: 5, house: 4 }, { id: 'n2', st: 'wheat', p: 0, n: 6, house: 2 },
-  { id: 'n3', st: 'wheat', p: 9, n: 5, house: 1 }, { id: 'n4', st: 'meadow', p: 0, n: 8, house: 5 },
-  { id: 'n5', st: 'meadow', p: 12, n: 4, house: 3 }, { id: 'n6', st: 'lakeview', p: 0, n: 5, house: 7 },
-  { id: 'n7', st: 'lakeview', p: 5, n: 5, house: 6 }, { id: 'n8', st: 'shore', p: 0, n: 6, house: 8 },
-  { id: 'n9', st: 'shore', p: 8, n: 6, house: 4 },
+  { id: 'n2', st: 'wheat', p: 0, n: 8, house: 2, fam: 'parents' }, { id: 'n3', st: 'wheat', p: 8, n: 8, house: 1, fam: 'sister' },
+  { id: 'n4', st: 'meadow', p: 0, n: 8, house: 5, fam: 'grand' }, { id: 'n6', st: 'lakeview', p: 0, n: 7, house: 7, fam: 'uncle' },
+  { id: 'n8', st: 'shore', p: 0, n: 7, house: 8, fam: 'cousin' },
 ];
+const FAMILY = { parents: { zh: '爸妈', en: 'Mom & Dad' }, sister: { zh: '姐姐', en: 'Big Sis' }, grand: { zh: '爷爷奶奶', en: 'Grandma & Grandpa' }, uncle: { zh: '舅舅', en: 'Uncle Joe' }, cousin: { zh: '表哥', en: 'Cousin Jake' } };
+const HOME_PARCELS = 6;   // v0.27: a home's lot is at least this many parcels wide where there's room (it was 4)
 const NPC_NAMES = [
   { zh: '老张', en: 'Sam' }, { zh: '王奶奶', en: 'Grandma Rose' }, { zh: '阿杰', en: 'Jake' }, { zh: '陈叔', en: 'Uncle Ben' },
   { zh: '小美', en: 'Emma' }, { zh: '李医生', en: 'Dr. Lee' }, { zh: '周老师', en: 'Ms. Chow' }, { zh: '大熊', en: 'Big Al' }, { zh: '安娜', en: 'Anna' },
 ];
 // Where you and your friends start, and where friends who accept an invite move in.
-const START_LOTS = { me: ['maple', 6], li: ['maple', 0, 5], wang: ['cherry', 0], mia: ['cherry', 11] };
+const START_LOTS = { me: ['maple', 6, 6], li: ['maple', 0, 6], wang: ['cherry', 0, 6], mia: ['cherry', 10, 6] };
 // Buying land: each parcel next to your home costs more than the last. Moving to another street costs its land.
 const LAND = { parcel: 600, grow: 1.35, move: 500, refund: 0.5 };
 // Going somewhere in town (v0.12): tiles per second on foot, by bike, by car (sped up so trips take seconds).
@@ -787,7 +791,7 @@ const LAYOUTS = {
     streets: STREETS, roads: ROADS, npcLots: NPC_LOTS,
     plaza: LANDMARKS.plaza, shops: LANDMARKS.shops, park: LANDMARKS.park, lake: LANDMARKS.lake, fields: [LANDMARKS.fields],
     centre: { x: 66.5, y: -2, w: 46, d: 32 }, water: [[176, -18, 178.4, 52]],
-    places: [[89, 16.5], [90, 31.5], [128, 31.5], [72, 27], [102, 27], [40, 31.5], [150, 31.5]],
+    places: [[90, 15], [90, 31.5], [128, 31.5], [72, 15], [102, 15], [40, 31.5], [150, 31.5]], pocket: { x: 84.6, y: 16.6, w: 10.8, d: 7 },
     labels: [['area_maple', 30, 10], ['area_center', 89, 1], ['area_lake', 144, 9], ['area_park', 90, 44], ['area_farm', 30, 47], ['area_fields', 55, 79], ['area_water', 146, 50]],
   },
   canal: {   // a Dutch / English canal village: canals behind each row of houses, a windmill lake, tulip fields
@@ -918,21 +922,22 @@ function buildLayout(id, flip) {
   const B = LAYOUTS[id], fx = (x, w = 0) => (flip ? MIRROR_X - x - w : x);
   const streets = {};
   Object.entries(B.streets).forEach(([k, s]) => { streets[k] = { ...s, x: fx(s.x, s.n * PARCEL) }; });
-  const npcLots = B.npcLots.map((s, i) => {
-    const o = Array.isArray(s) ? { id: 'n' + (i + 1), st: s[0], p: s[1], n: s[2], house: i % 9 } : { ...s };
-    if (flip) o.p = B.streets[o.st].n - o.p - o.n;
-    return o;
-  });
+  let npcLots = B.npcLots.map((s, i) => (Array.isArray(s) ? { id: 'n' + (i + 1), st: s[0], p: s[1], n: s[2], house: i % 9 } : { ...s }));
+  if (B !== LAYOUTS.grid) {   // v0.27: every town is one circle of friends and family: half as many homes, wider lots
+    const keep = npcLots.filter((s, i) => i % 2 === 0);
+    npcLots = keep.map(o => { const nx = keep.filter(q => q.st === o.st && q.p > o.p).sort((a, b) => a.p - b.p)[0], lim = (nx ? nx.p : B.streets[o.st].n) - o.p; return { ...o, n: Math.max(o.n, Math.min(8, lim)) }; });
+  }
+  npcLots = npcLots.map(o => (flip ? { ...o, p: B.streets[o.st].n - o.p - o.n } : o));
   const rect = r => (flip ? [MIRROR_X - r[2], r[1], MIRROR_X - r[0], r[3], ...r.slice(4)] : r.slice());
   const box = (b, w = b.w || 0) => ({ ...b, x: fx(b.x, w) });
   const centre = box(B.centre), plaza = box(B.plaza, LOT_W), shops = B.shops.map(([k, x, y]) => [k, fx(x, 6), y]);
-  // v0.14: a clinic in the first free spot of the town centre
-  const busy = [[plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y]) => [x, y, x + 6, y + 5.5])];
+  const roads = B.roads.map(rect), lake = { ...B.lake, x: fx(B.lake.x) };
+  // v0.14: a clinic in the first free spot of the town centre (v0.27: off the roads through it)
+  const busy = [[plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y]) => [x, y, x + 6, y + 5.5]), ...roads.map(r => r.slice(0, 4))];
   fit: for (let yy = centre.y + 1; yy <= centre.y + centre.d - 6.5; yy += 0.5) for (let xx = centre.x + 1; xx <= centre.x + centre.w - 7; xx += 0.5) {
     if (busy.some(r => xx < r[2] + 1 && r[0] < xx + 7 && yy < r[3] + 1 && r[1] < yy + 6.5)) continue;
     shops.push(['clinic', xx, yy]); break fit;
   }
-  const roads = B.roads.map(rect), lake = { ...B.lake, x: fx(B.lake.x) };
   // v0.15: not only straight roads. An expressway on pillars runs past the edge of town (north, or south where the
   // sea is north) with ramps curving down to the avenue that reaches that edge (an interchange); country roads wind
   // out of town from the ends of the long roads; the park gets a winding jogging loop.
@@ -1026,7 +1031,7 @@ function buildLayout(id, flip) {
     if (best) { parks.push(best); busyRects.push([best[1], best[2], best[1] + best[3], best[2] + best[4]]); }
   };
   { const Pk = box(B.park), F0 = B.fields.length ? box(B.fields[0]) : null;
-    nearLot('centre', centre.x + centre.w / 2, centre.y + centre.d, [centre.x, centre.y, centre.w, centre.d, [[plaza.x - 1, plaza.y - 1, plaza.x + LOT_W + 1, plaza.y + LOT_D + 2], ...shops.map(([, x, y]) => [x - 0.5, y - 0.5, x + 6.5, y + 8])]]);
+    nearLot('centre', centre.x + centre.w / 2, centre.y + centre.d, [centre.x, centre.y, centre.w, centre.d, [[plaza.x - 1, plaza.y - 1, plaza.x + LOT_W + 1, plaza.y + LOT_D + 2], ...shops.map(([, x, y]) => [x - 0.5, y - 0.5, x + 6.5, y + 8]), ...roads.map(r => [r[0] - 0.5, r[1] - 0.5, r[2] + 0.5, r[3] + 0.5]), ...(B.pocket ? [(q => [q.x - 0.5, q.y - 0.5, q.x + q.w + 0.5, q.y + q.d + 0.5])(box(B.pocket))] : [])]]);
     nearLot('park', Pk.x + Pk.w / 2, Pk.y + Pk.d / 2, [Pk.x, Pk.y, Pk.w, Pk.d, []]);
     if (F0) nearLot('fields', F0.x + Math.min(F0.w / 2, 10), F0.y, [F0.x, F0.y, F0.w, F0.d, []]);
     nearLot('lake', lake.x, lake.y - lake.ry); }
@@ -1037,11 +1042,28 @@ function buildLayout(id, flip) {
     const rx = P.w / 2 - m, ry = P.d / 2 - m, px = Math.sign(c) * Math.pow(Math.abs(c), e) * rx, py = Math.sign(s2) * Math.pow(Math.abs(s2), e) * ry;
     loop.push([P.x + P.w / 2 + px + Math.sin(a * 5) * 0.25, P.y + P.d / 2 + py + Math.cos(a * 4) * 0.25]);
   }
+  // v0.27: a flyover (an elevated road on pillars) along the main avenue past the town centre: up a ramp, over the
+  // crossings and their lights, and down again. Cars going a long way across town take it.
+  const flyovers = [], labels = B.labels.map(([k, x, y]) => [k, fx(x), y]);
+  { const A = roads.filter(r => r[4] === 'avenue' && isH(r)).sort((a, b) => (b[2] - b[0]) - (a[2] - a[0]))[0];
+    if (A) {
+      const y = (A[1] + A[3]) / 2, cx = centre.x + centre.w / 2, RL = 15, FH = 40;
+      const crossAt = x => roads.some(q => q !== A && !isH(q) && q[0] - 1.5 <= x && q[2] + 1.5 >= x && q[1] <= A[3] + 0.6 && q[3] >= A[1] - 0.6);
+      const clear = (a, b) => { for (let x = a; x <= b; x += 0.5) if (crossAt(x)) return false; return true; };
+      let xa = Math.max(A[0] + 2, cx - centre.w / 2 - 22), xb = Math.min(A[2] - 2, cx + centre.w / 2 + 22);
+      while (xa > A[0] + 2 && !clear(xa, xa + RL)) xa -= 1;
+      while (xb < A[2] - 2 && !clear(xb - RL, xb)) xb += 1;
+      if (xb - xa > RL * 2 + 10 && clear(xa, xa + RL) && clear(xb - RL, xb)) {
+        // the deck runs just south of the avenue (its pillars on the verge), so from the camera it floats over the avenue
+        const yd = A[3] + 2.2;
+        flyovers.push({ pts: [[xa, y, 0], [xa + RL * 0.45, y + (yd - y) * 0.45, FH * 0.45], [xa + RL, yd, FH], [xb - RL, yd, FH], [xb - RL * 0.45, y + (yd - y) * 0.45, FH * 0.45], [xb, y, 0]], h: FH, y: yd, x0: xa, x1: xb });
+        labels.push(['area_flyover', (xa + xb) / 2 + 10, A[1] - 2]);
+      } } }
   return {
-    id: id + (flip ? '|f' : ''), streets, npcLots, roads, water: B.water.map(rect), highway, curves, parkLoop: loop, stores, parks,
-    centre, plaza, shops,
+    id: id + (flip ? '|f' : ''), streets, npcLots, roads, water: B.water.map(rect), highway, curves, parkLoop: loop, stores, parks, flyovers,
+    centre, plaza, shops, pocket: B.pocket ? box(B.pocket) : null,
     park: box(B.park), lake, fields: B.fields.map(f => box(f)),
-    places: B.places.map(([x, y]) => [fx(x), y]), labels: B.labels.map(([k, x, y]) => [k, fx(x), y]),
+    places: B.places.map(([x, y]) => [fx(x), y]), labels,
   };
 }
 // ---------- public places in town (v0.12) ----------

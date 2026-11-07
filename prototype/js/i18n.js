@@ -20,7 +20,7 @@ const STR = {
     // scene
     expand_field: '扩建菜地', build_pasture: '建牧场', build_orchard: '建果园', build_pond: '挖鱼塘',
     home_of: '{name}的家', empty_lot: '空地 · 邀请朋友', street_name: '梧桐街',
-    ctx_rank: '第 {n} 名 · 家产 🪙{v}', ctx_inside: '{house} · 室内', ctx_town: '{street} Lv{lv} · 全镇家产 🪙{v}',
+    ctx_rank: '第 {n} 名 · 家产 🪙{v}', ctx_inside: '{house} · 室内', ctx_town: '{street} Lv{lv} · 🏡{h} 户 · 家产 🪙{v}',
     ctx_edit_room: '设计室内：按住拖动家具，点一下换颜色', ctx_edit_yard: '设计院子：按住拖动东西和地块，点房子、车道来换',
     fab_enter: '进屋', fab_exit: '出门', fab_design: '设计', fab_barn: '仓库', fab_center: '回中间', fab_rank: '排行',
     fab_peek: '进屋看看', fab_gift: '互动', fab_letter: '写信', fab_home: '回家',
@@ -181,7 +181,7 @@ const STR = {
     hint_text: 'Tap anywhere and your townie walks there. Tap ripe crops, hens with eggs or fruiting trees and it walks over to pick them. Tap the house to go in; drag to look around, pinch to zoom.', hint_ok: 'Got it',
     expand_field: 'Expand field', build_pasture: 'Build pasture', build_orchard: 'Plant orchard', build_pond: 'Dig a pond',
     home_of: '{name}\'s home', empty_lot: 'Empty lot · invite a friend', street_name: 'Maple Street',
-    ctx_rank: 'No. {n} · worth 🪙{v}', ctx_inside: '{house} · inside', ctx_town: '{street} Lv{lv} · town worth 🪙{v}',
+    ctx_rank: 'No. {n} · worth 🪙{v}', ctx_inside: '{house} · inside', ctx_town: '{street} Lv{lv} · 🏡{h} homes · 🪙{v}',
     ctx_edit_room: 'Design inside: drag furniture, tap a piece to recolour', ctx_edit_yard: 'Design the yard: drag things and areas, tap the house or drive to change them',
     fab_enter: 'Go in', fab_exit: 'Go out', fab_design: 'Design', fab_barn: 'Barn', fab_center: 'Center', fab_rank: 'Ranks',
     fab_peek: 'Peek in', fab_gift: 'Say hi', fab_letter: 'Write', fab_home: 'Home',
@@ -504,7 +504,7 @@ Object.assign(STR.en, {
 Object.assign(STR.zh, {
   fab_world: '世界', world_title: '世界', world_sub: '全世界的玩家住在不同的社区。去别的社区逛逛，喜欢的话可以把家搬过去。',
   world_here: '你住这里', world_visit: '去看看', world_move: '搬到这里', world_my_town: '回我的小镇', world_all: '所有社区',
-  world_pop: '{n} 位居民', world_parcel: '一块地 🪙{n} 起', world_free: '{n} 块空地', world_friends: '{n} 个朋友住这里',
+  world_pop: '{n} 户人家（邀请制）', world_parcel: '一块地 🪙{n} 起', world_free: '{n} 块空地', world_friends: '{n} 个朋友住这里',
   world_pick_land: '点一块「出售」的空地，就能把整个家搬过来',
   world_note: '原型里别的社区的居民是模拟的；正式版里住的都是真实玩家（需要服务器）。',
   snack_moved_town: '搬到了{town}！🎉',
@@ -518,7 +518,7 @@ Object.assign(STR.zh, {
 Object.assign(STR.en, {
   fab_world: 'World', world_title: 'World', world_sub: 'Players all over the world live in different communities. Look around, and move your home if you like one.',
   world_here: 'You live here', world_visit: 'Look around', world_move: 'Move here', world_my_town: 'My town', world_all: 'All communities',
-  world_pop: '{n} residents', world_parcel: 'Land from 🪙{n}', world_free: '{n} empty lots', world_friends: '{n} friends live here',
+  world_pop: '{n} homes (invite only)', world_parcel: 'Land from 🪙{n}', world_free: '{n} empty lots', world_friends: '{n} friends live here',
   world_pick_land: 'Tap an empty lot “for sale” to move your whole home here',
   world_note: 'In the prototype the other communities’ residents are made up; in the real game they are real players (needs the server).',
   snack_moved_town: 'Moved to {town}! 🎉',
@@ -987,4 +987,14 @@ Object.assign(STR.en, {
   stock_mine: 'My shares', stock_have: '{n} shares', stock_note: 'Prices change every {m} minutes, up and down. {p}% fee to buy or sell. Don’t put in money you need.',
   stock_24h: '24 h', stock_own: 'I own', stock_value: 'Worth now', stock_buy: 'Buy', stock_sell: 'Sell', stock_max: 'max', stock_wallet: 'Wallet: 🪙{n}',
   news_up_1: '{name}: the new product is selling well', news_up_2: '{name}: profits beat expectations', news_up_3: '{name}: opening a new branch in town', news_down_1: '{name}: costs are going up', news_down_2: '{name}: a new competitor', news_down_3: '{name}: business is slow',
+});
+
+// ---------- v0.27: an invite-only town ----------
+Object.assign(STR.zh, {
+  family: '家人', area_flyover: '高架桥', invite_here: '邀请亲友住这里', invite_none: '现在没有可以邀请的人了（原型里朋友是模拟的）',
+  invite_note: '小镇是邀请制的：只有你邀请的好朋友和家人能住进来。原型里会模拟一位朋友接受邀请，住进这块地。',
+});
+Object.assign(STR.en, {
+  family: 'Family', area_flyover: 'Flyover', invite_here: 'Invite someone to live here', invite_none: 'Nobody left to invite for now (friends are simulated in the prototype)',
+  invite_note: 'Your town is invite-only: only the friends and family you invite can live here. In the prototype a friend accepts and moves onto this land.',
 });
