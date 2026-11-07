@@ -37,7 +37,8 @@ const Scene = (() => {
   const meIn = { x: 1, y: 1, path: [], face: 1, phase: 0, moving: false, jobs: [], cur: null, act: null, sneak: false, room: null };
 
   const origin = id => lotOrigin(id);
-  const cam0 = () => (mode === 'interior' ? roomCams[owner] : mode === 'home' ? homeCams[owner] || worldCam : worldCam);
+  const cam0 = () => (mode === 'interior' ? roomCams[owner] : mode === 'shop' ? shopCams[owner] : mode === 'home' ? homeCams[owner] || worldCam : worldCam);
+  const shopCams = {};
   const fine = () => cam.z >= 0.34;
 
   // ---------- camera ----------
@@ -55,6 +56,7 @@ const Scene = (() => {
     fly = { wx, wy, z };
   }
   function frameView(instant) {
+    if (mode === 'shop') { const P = shopPlan(owner); cam.z = clamp(W / (12 * 32), 0.6, 1.3); centerOn(P.RW * 0.55, P.RD - 5, 0.5); return; }   // close enough to see prices, near the door
     if (mode === 'interior') {
       const [rw, rd] = roomSize(homeOf(owner));
       // the room fills the screen from side to side (its far corners just off the edges), sitting a bit low
@@ -67,6 +69,7 @@ const Scene = (() => {
   // Inside, and every home (it's its own little island), keeps its own camera; the town has one.
   const homeCams = {};
   function useCam() {
+    if (mode === 'shop') { if (!shopCams[owner]) { shopCams[owner] = { x: 0, y: 0, z: 1 }; cam = shopCams[owner]; frameView(true); } cam = shopCams[owner]; return; }
     if (mode === 'interior') {
       if (!roomCams[owner]) { roomCams[owner] = { x: 0, y: 0, z: 1 }; cam = roomCams[owner]; frameView(true); }
       cam = roomCams[owner];
@@ -77,6 +80,10 @@ const Scene = (() => {
   }
   function stepCamera(dt) {
     if (mode === 'interior') return;
+    if (mode === 'shop') {   // keep yourself on screen while you walk round the store
+      if (meS.moving && !dragging) { const p = iso(meS.x, meS.y), tx = clamp(p.x, 60, W - 60), ty = clamp(p.y, 170, H - 90); if (tx !== p.x || ty !== p.y) { const k = 1 - Math.exp(-dt * 3); cam.x += (tx - p.x) * k; cam.y += (ty - p.y) * k; } }
+      return;
+    }
     // the first screens: drift slowly over the street
     if (trip && !trip.arrived && mode === 'town' && !dragging) {   // on the way somewhere: the view goes with you
       const c = unIso(W / 2, H / 2), k = 1 - Math.exp(-dt * 4);
@@ -113,6 +120,7 @@ const Scene = (() => {
   }
   // The camera stays over the town (not out over the woods), and can't zoom out past the whole town filling the screen.
   function clampCam() {
+    if (mode === 'shop') { const P = shopPlan(owner), c = unIso(W / 2, H / 2), x = clamp(c.x, 0, P.RW), y = clamp(c.y, 0, P.RD); if (x !== c.x || y !== c.y) centerOn(x, y); return; }
     if (mode === 'interior') {   // the room stays on screen
       const [rw, rd] = roomSize(homeOf(owner)), c = unIso(W / 2, H / 2), x = clamp(c.x, 0, rw), y = clamp(c.y, 0, rd);
       if (x !== c.x || y !== c.y) centerOn(x, y);
@@ -134,10 +142,10 @@ const Scene = (() => {
   // Inside: the smallest zoom still fills the screen from side to side.
   function minRoomZoom() { const [rw, rd] = roomSize(homeOf(owner)); return clamp(W * 0.95 / ((rw + rd) * 32), ZOOM.interior[0], 1.4); }
   function zoomAt(px, py, z) {
-    const [lo, hi] = ZOOM[mode === 'interior' ? 'interior' : 'world'];
+    const [lo, hi] = ZOOM[mode === 'interior' || mode === 'shop' ? 'interior' : 'world'];
     // pinching out past the whole town opens the world map
     if (mode === 'town' && z < cam.z && cam.z <= minWorldZoom() * 1.001 && z < minWorldZoom() * 0.96 && onWorldOut && performance.now() - worldOutAt > 1500) { worldOutAt = performance.now(); onWorldOut(); }
-    z = clamp(z, mode === 'interior' ? minRoomZoom() : mode === 'home' ? minHomeZoom() : Math.max(lo, minWorldZoom()), hi);
+    z = clamp(z, mode === 'interior' ? minRoomZoom() : mode === 'shop' ? (() => { const P = shopPlan(owner); return clamp(W * 0.8 / ((P.RW + P.RD) * 32), 0.3, 1); })() : mode === 'home' ? minHomeZoom() : Math.max(lo, minWorldZoom()), hi);
     const w = unIso(px, py);
     cam.z = z;
     cam.x = px - (w.x - w.y) * TW / 2 * z;
@@ -1613,7 +1621,7 @@ const Scene = (() => {
     if (!trip) return;
     if (trip.town !== VIEW_TOWN || mode !== 'town') { finishTripNow(true); return; }
     if (trip.arrived) return;
-    const base = (TRIP_SPEED[trip.how] || 3) * dt;
+    const base = (TRIP_SPEED[trip.how] || 3) * dt * (trip.how === 'walk' && isFed() ? 1 + MALL.fed.walk : 1);
     let left = 1;   // the share of this frame's travel still to go
     while (left > 0 && trip.path.length) {
       const [tx, ty, th = 0, fast = 0] = trip.path[0], dx = tx - trip.x, dy = ty - trip.y, d = Math.hypot(dx, dy);
@@ -1629,12 +1637,19 @@ const Scene = (() => {
     const z = cam.z, p = iso(trip.x, trip.y);
     if (trip.inCar) { ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir(trip.car, trip.x, trip.y, trip.dir, ts); ctx.restore(); return; }
     drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
+    carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
+  }
+  // v0.20: carrying things home in a cardboard box
+  function carryBox(p, z) {
+    if (!S.bag || !S.bag.hands || !S.bag.hands.length) return;
+    rrect(p.x - 6 * z, p.y - 25 * z, 12 * z, 9 * z, 1.2 * z, '#c99a6b', '#a07a50', 0.8 * z); line(p.x - 6 * z, p.y - 22 * z, p.x + 6 * z, p.y - 22 * z, '#e8d3a8', 1.6 * z);
   }
   // You, standing where you are out in town.
   function drawMeOut(x, y, ts) {
     const z = cam.z, p = iso(x, y);
     drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand' });
+    carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
   }
   // Your car where you parked it.
@@ -1643,6 +1658,137 @@ const Scene = (() => {
     if (!c || !car || c.town !== VIEW_TOWN || (trip && trip.inCar && !trip.arrived)) return;
     const [x, y] = c.pt;
     objs.push({ d: x + y, f: () => drawCarDir(car, x, y, c.dir, ts) });
+  }
+  // ---------- inside a store (v0.20): walk round it, the things for sale on show, the shopkeeper at the counter ----------
+  const SHOPS = {}, IMGS = {};
+  const meS = { x: 0, y: 0, path: [], face: 1, phase: 0, moving: false, then: null };
+  const SHOP_W = { market: 13, nursery: 17, ranch: 15, petshop: 13, furniture: 17, realty: 13, dealer: 17, mall: 17 };
+  const SHOP_FLOOR = { market: ['#efe9dc', '#e6dfcf'], nursery: ['#d9cdb3', '#cfc2a6'], ranch: ['#d8c39a', '#ccb68b'], petshop: ['#eef1f6', '#e3e7ee'], furniture: ['#e6d3b8', '#dcc7a8'],
+    realty: ['#efeae2', '#e5ded3'], dealer: ['#e9edf1', '#dfe4ea'], mall: ['#f2ede6', '#e8e1d8'] };
+  function shopPlan(k) {
+    const wares = storeWares(k);
+    if (SHOPS[k] && SHOPS[k].n === wares.length) return SHOPS[k];
+    const RW = SHOP_W[k] || 15, placed = [];
+    let x = 1, y = 1.3, rowD = 0;
+    wares.forEach(w => {
+      if (x + w.w > RW - 0.8) { x = 1; y += rowD + 1.5; rowD = 0; }
+      placed.push({ ...w, x, y });
+      x += w.w + 0.8; rowD = Math.max(rowD, w.d);
+    });
+    const RD = Math.ceil(y + rowD + 4.6), counter = { x: RW - 4.4, y: RD - 2.9, w: 3.2, d: 0.9 };
+    const plan = { k, n: wares.length, RW, RD, wares: placed, counter, clerk: [counter.x + 1.6, counter.y - 0.6], till: [counter.x + 1.6, counter.y + 1.55], door: [3, RD - 0.7] };
+    // where you can walk: half-tile cells, not on anything on show or the counter
+    const GS = 0.5, gw = Math.ceil(RW / GS), gd = Math.ceil(RD / GS), g = new Uint8Array(gw * gd).fill(1);
+    const block = (bx, by, bw, bd) => { for (let j = Math.floor((by - 0.2) / GS); j < (by + bd + 0.2) / GS; j++) for (let i = Math.floor((bx - 0.2) / GS); i < (bx + bw + 0.2) / GS; i++) if (i >= 0 && j >= 0 && i < gw && j < gd) g[j * gw + i] = 0; };
+    placed.forEach(w => block(w.x, w.y, w.w, w.d));
+    block(counter.x, counter.y - 1.1, counter.w, counter.d + 1.1);
+    for (let i = 0; i < gw; i++) { g[i] = 0; g[(gd - 1) * gw + i] = 1; }
+    for (let j = 0; j < gd; j++) { g[j * gw] = 0; g[j * gw + gw - 1] = 0; }
+    plan.nav = { g, gw, gd, GS };
+    SHOPS[k] = plan;
+    return plan;
+  }
+  // Walk to a point in the store (along the aisles), then do `then`.
+  function shopWalk(to, then) {
+    const P = shopPlan(owner), { g, gw, gd, GS } = P.nav, cell = (x, y) => [clamp(Math.floor(x / GS), 0, gw - 1), clamp(Math.floor(y / GS), 0, gd - 1)];
+    const free = (i, j) => i >= 0 && j >= 0 && i < gw && j < gd && g[j * gw + i];
+    let [ti, tj] = cell(to[0], to[1]);
+    if (!free(ti, tj)) {   // the nearest free cell to where you tapped
+      let best = null, bd = 1e9;
+      for (let j = 0; j < gd; j++) for (let i = 0; i < gw; i++) if (free(i, j)) { const d = Math.hypot(i - ti, j - tj); if (d < bd) { bd = d; best = [i, j]; } }
+      if (!best) return; [ti, tj] = best;
+    }
+    const [si, sj] = cell(meS.x, meS.y), prev = new Int32Array(gw * gd).fill(-1), seen = new Uint8Array(gw * gd), q = [sj * gw + si];
+    seen[sj * gw + si] = 1;
+    for (let h = 0; h < q.length; h++) {
+      const c = q[h], i = c % gw, j = (c - i) / gw;
+      if (i === ti && j === tj) break;
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([di, dj]) => { const ni = i + di, nj = j + dj, n = nj * gw + ni; if (free(ni, nj) && !seen[n]) { seen[n] = 1; prev[n] = c; q.push(n); } });
+    }
+    const path = [];
+    for (let c = tj * gw + ti; c >= 0 && c !== sj * gw + si; c = prev[c]) path.unshift([(c % gw + 0.5) * GS, (Math.floor(c / gw) + 0.5) * GS]);
+    if (!path.length && !(si === ti && sj === tj)) return;
+    // straighten: drop points that lie on a straight line
+    const out = [];
+    path.forEach((p2, i) => { const a = out[out.length - 1], b = path[i + 1]; if (a && b && ((a[0] === p2[0] && p2[0] === b[0]) || (a[1] === p2[1] && p2[1] === b[1]))) return; out.push(p2); });
+    meS.path = out; meS.then = then || null; meS.moving = true;
+  }
+  function stepShop(dt) {
+    if (!meS.path.length) { if (meS.moving) { meS.moving = false; const f = meS.then; meS.then = null; if (f) setTimeout(f, 120); } return; }
+    let go = 3.4 * dt;
+    while (go > 0 && meS.path.length) {
+      const [tx, ty] = meS.path[0], dx = tx - meS.x, dy = ty - meS.y, d = Math.hypot(dx, dy);
+      if (d > 0.01) faceTo(meS, dx, dy);
+      if (d <= go) { meS.x = tx; meS.y = ty; meS.path.shift(); go -= d; } else { meS.x += dx / d * go; meS.y += dy / d * go; go = 0; }
+    }
+    meS.phase += dt * 11;
+  }
+  // A picture (made by thumb) drawn on the canvas, once it has loaded.
+  function pic(kind, k, o, w, h, sx, sy, sw, sh) {
+    const url = thumb(kind, k, o, w, h), im = IMGS[url] || (IMGS[url] = Object.assign(new Image(), { src: url }));
+    if (im.complete && im.naturalWidth) ctx.drawImage(im, sx, sy, sw, sh);
+  }
+  const MANNEQUIN = { shirt: '#5aa2e0', pants: '#4a5a78', skin: '#efe9e1', hair: 'short', hairCol: '#efe9e1', mob: 'walk', shoeCol: '#3b3028', hatCol: '#e5484d' };
+  function drawWare(w, ts) {
+    const z = cam.z, { x, y } = w, c = iso(x + w.w / 2, y + w.d / 2);
+    const plinth = (col = '#ffffff') => box(x - 0.05, y - 0.05, w.w + 0.1, w.d + 0.1, 2, col, 0, { edge: 'rgba(0,0,0,.06)' });
+    if (w.kind === 'furn') { plinth('#f7f2ea'); ctx.save(); ctx.translate(0, -2 * z); drawFurn({ k: w.k, rot: 0, tint: FURN[w.k].tint ? TINTS[4] : null }, x, y, ts); ctx.restore(); }
+    else if (w.kind === 'yard') { flatRect(x - 0.05, y - 0.05, w.w + 0.1, w.d + 0.1, '#b6e092'); const D = YARD[w.k]; if (D.w > 3 || D.d > 3) { box(x + 0.2, y + 0.2, w.w - 0.4, 0.3, 30, '#c99a6b'); pic('yard', w.k, {}, 120, 96, c.x - 34 * z, c.y - 58 * z, 68 * z, 54 * z); } else drawYardItem({ k: w.k, rot: 0, placed: now() }, x, y, ts); }
+    else if (w.kind === 'tree') { ellipse(c.x, c.y, 16 * z, 8 * z, '#9a6a44'); const d = TREES[w.k]; drawFruitTree({ k: w.k, planted: now() - d.grow * MIN * 0.35, last: now() }, c.x, c.y, z * 0.8, ts, 1); }
+    else if (w.kind === 'animal') {
+      flatRect(x, y, w.w, w.d, '#cfe3a6');
+      [[x, y, x + w.w, y], [x, y, x, y + w.d], [x + w.w, y, x + w.w, y + w.d], [x, y + w.d, x + w.w, y + w.d]].forEach(([a, b, c2, d2]) => { const A = iso(a, b), B2 = iso(c2, d2); line(A.x, A.y - 7 * z, B2.x, B2.y - 7 * z, '#a8835c', 1.4 * z); [A, B2].forEach(P2 => line(P2.x, P2.y, P2.x, P2.y - 8 * z, '#8a6a4a', 1.4 * z)); });
+      drawAnimal(w.k, 0, c.x, c.y + 6 * z, z * 1.9, { face: 1, ts, seed: x });
+    }
+    else if (w.kind === 'pet') { flatRect(x, y, w.w, w.d, '#f4e6c8'); const B = PET_BREEDS[w.k]; drawAnimal(B.kind, 0, c.x, c.y + 5 * z, z * 1.7, { face: 1, ts, seed: x, breed: w.k }); }
+    else if (w.kind === 'petfood' || w.kind === 'seed') {
+      const b = box(x + 0.1, y + 0.2, w.w - 0.2, w.d - 0.4, 20, '#c99a6b', 0, { top: '#e6c79a' });
+      const e = w.kind === 'seed' ? CROPS[w.k].e : PET_FOOD[w.k].e;
+      [0.25, 0.5, 0.75].forEach((u, i) => { const p2 = wallPt(b.left, 0, u, 8 + (i % 2) * 6); emoji(e, p2.x, p2.y, 9 * z); });
+      const tp = iso(x + 0.5, y + 0.5); emoji(e, tp.x, tp.y - 26 * z, 12 * z);
+    }
+    else if (w.kind === 'car') { ellipse(c.x, c.y + 2 * z, 40 * z, 20 * z, '#d5dbe2'); drawCarDir({ k: w.k, color: CARS[w.k].look || CAR_COLORS[0] }, x + w.w / 2, y + w.d / 2, '+y', ts); }
+    else if (w.kind === 'house') { const b = box(x + 0.2, y + 0.6, w.w - 0.4, 0.4, 14, '#c99a6b', 0, { top: '#e6c79a' }); pic('house', +w.k, {}, 120, 96, c.x - 34 * z, c.y - 66 * z, 68 * z, 54 * z); }
+    else if (w.kind === 'land') { line(c.x, c.y, c.x, c.y - 26 * z, '#8a6a4a', 2 * z); rrect(c.x - 20 * z, c.y - 44 * z, 40 * z, 22 * z, 3 * z, '#fffaf0', '#c99a6b', 1.2 * z); emoji({ field: '🟫', pasture: '🐄', orchard: '🌳', pond: '🐟', garage: '🚗' }[w.k], c.x, c.y - 33 * z, 13 * z); }
+    else if (w.kind === 'clothes') { ellipse(c.x, c.y, 12 * z, 6 * z, '#d8cfc2'); const C2 = CLOTHES[w.k]; drawPerson(c.x, c.y, z * 0.95, { look: { ...MANNEQUIN, [C2.slot]: w.k }, face: 1, view: 'front', turn: [0.4, 1], energy: 'good', ts: 0, seed: 0, pose: 'stand' }); }
+    else if (w.kind === 'excl') {
+      box(x + 0.1, y + 0.1, w.w - 0.2, w.d - 0.2, 12, '#e9e2d4', 0, { top: '#f6f1e8' });
+      const [kind, k] = w.arg.split('|'), img = kind === 'yard' ? ['yard', k, {}] : kind === 'car' ? ['car', k, { color: exclDef(kind, k).color }] : kind === 'pet' ? ['pet', k, {}] : ['animal', k, { stage: 2 }];
+      pic(img[0], img[1], img[2], 120, 96, c.x - 22 * z, c.y - 52 * z, 44 * z, 35 * z);
+      const g0 = up(iso(x + 0.1, y + w.d - 0.1), 12 * z), g1 = up(iso(x + w.w - 0.1, y + w.d - 0.1), 12 * z);
+      poly([g0, g1, up(g1, 30 * z), up(g0, 30 * z)], 'rgba(200,230,250,.25)', 'rgba(255,255,255,.6)', 1);
+    }
+    else if (w.kind === 'act') {
+      if (w.k === 'claw') { box(x + 0.1, y + 0.1, 0.8, 0.8, 34, '#ec6aa8', 0, { top: '#f59ac6' }); const p2 = up(iso(x + 0.5, y + 0.9), 22 * z); emoji('🧸', p2.x, p2.y, 10 * z); }
+      else if (w.k === 'trophies') { line(c.x, c.y, c.x, c.y - 26 * z, '#8a6a4a', 2 * z); rrect(c.x - 18 * z, c.y - 46 * z, 36 * z, 24 * z, 3 * z, '#fff6dc', '#d9a520', 1.4 * z); emoji('🏆', c.x, c.y - 34 * z, 14 * z); }
+      else if (w.k === 'food') { const b = box(x, y + 0.2, w.w, 0.7, 16, '#f59e0b', 0, { top: '#fff3e0' }); ['🍔', '🍜', '🍕', '🧋'].forEach((e, i) => { const p2 = up(iso(x + 0.3 + i * 0.45, y + 0.5), 20 * z); emoji(e, p2.x, p2.y, 9 * z); }); }
+      else { const b = box(x, y, w.w, 0.4, 42, '#2d2540', 0, { top: '#3b3152' }); wallRect(b.left, 0, 0.15, 0.85, 0, 28, '#1b1530', '#f2c230', 1.6); const p2 = wallPt(b.left, 0, 0.5, 36); emoji('🎬', p2.x, p2.y, 11 * z); }
+    }
+    const f0 = iso(x + w.w / 2, y + w.d);
+    if (w.price && z > 0.5 && w.kind !== 'act') pill(`🪙${fmtNum(w.price)}`, f0.x, f0.y + 9 * z, 'rgba(255,253,248,.92)', '#6b4a1f', `800 ${Math.max(8, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(13, 15 * z));
+    return { x0: iso(x, y + w.d).x - 4 * z, x1: iso(x + w.w, y).x + 4 * z, y0: c.y - 60 * z, y1: iso(x + w.w, y + w.d).y + 8 * z };
+  }
+  function renderShop(ts, dt) {
+    const P = shopPlan(owner), S2 = STORES[owner], z = cam.z, WH = 80, { RW, RD } = P, fl = SHOP_FLOOR[owner] || SHOP_FLOOR.market;
+    stepShop(dt);
+    ctx.fillStyle = '#e9e1d4'; ctx.fillRect(0, 0, W, H);
+    for (let j = 0; j < RD; j++) for (let i = 0; i < RW; i++) tile(i, j, (i + j) % 2 ? fl[0] : fl[1]);
+    const A = iso(0, 0), B = iso(RW, 0), D = iso(0, RD), wall = S2.wall || '#f1f0ea', acc = S2.roof || '#c9893a';
+    poly([D, A, up(A, WH * z), up(D, WH * z)], shade(wall, -0.08)); poly([A, B, up(B, WH * z), up(A, WH * z)], wall);
+    wallRect([D, A], 0, 0, 1, WH - 8, WH, acc); wallRect([A, B], 0, 0, 1, WH - 8, WH, shade(acc, 0.1));
+    for (let k = 1; k <= 3; k++) wallRect([D, A], 0, k / 4 - 0.08, k / 4 + 0.08, 30, 62, '#bfe6f7', '#fffaf0', 1.4);   // windows
+    { const p2 = wallPt([A, B], 0, 0.5, 52); pill(`${S2.e} ${nm(S2)}`, p2.x, p2.y, '#fffdf8', '#3b3125', `800 ${Math.max(10, 15 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(18, 26 * z)); }
+    flatRect(P.door[0] - 1.2, RD - 0.9, 2.4, 0.9, shade(acc, 0.25));   // the door mat
+    const objs = [];
+    P.wares.forEach(w => objs.push({ d: w.x + w.y + (w.w + w.d) / 2, f: () => { const r = drawWare(w, ts); if (r) hits.push({ kind: 'ware', id: w.id, wk: w.kind, k: w.k, ...r }); } }));
+    const C = P.counter;
+    objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand' });
+      hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
+    objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#c99a6b', 0, { top: '#e6c79a' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji('💳', p2.x, p2.y, 9 * z); } });
+    objs.push({ d: meS.x + meS.y + 0.3, f: () => { const p2 = iso(meS.x, meS.y); drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand' }); carryBox(p2, z); } });
+    { const dp = iso(P.door[0], RD - 0.45); hits.push({ kind: 'shopDoor', x0: dp.x - 30 * z, x1: dp.x + 30 * z, y0: dp.y - 14 * z, y1: dp.y + 14 * z }); }
+    objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
+    const dp = iso(P.door[0], RD - 0.2); pill(`🚪 ${t('store_leave')}`, dp.x, dp.y + 12 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z));
   }
   // ---------- the country around town (v0.9): other villages, farms, woods and lakes, out to the horizon ----------
   // Made up in 22-tile squares from a fixed seed; drawn simply (they're always far away). Mountains stay to the north and west.
@@ -2162,6 +2308,7 @@ const Scene = (() => {
     hits = [];
     try {
       if (mode === 'interior') renderInterior(ts, dt);
+      else if (mode === 'shop') renderShop(ts, dt);
       else renderWorld(ts, dt);
     } catch (e) { console.error(e); }
     drawFloats(ts);
@@ -2181,6 +2328,17 @@ const Scene = (() => {
       if (pick) return onHit({ kind: 'item', id: pick.id });
       const w = unIso(sx, sy), [ox, oy] = edit.scope === 'yard' ? origin('me') : [0, 0];
       return onHit({ kind: 'deselect', lx: w.x - ox, ly: w.y - oy });   // where you tapped (v0.15: moving a farm area there)
+    }
+    if (mode === 'shop') {   // v0.20: inside a store you walk to what you tapped, then it opens
+      const h = [...hits].reverse().find(x => x.kind === 'clerk' && inside(x, sx, sy)) || [...hits].reverse().find(x => x.kind === 'ware' && inside(x, sx, sy))
+        || [...hits].reverse().find(x => x.kind === 'shopDoor' && inside(x, sx, sy));
+      const P = shopPlan(owner);
+      if (h && h.kind === 'clerk') return shopWalk(P.till, () => onHit(h));
+      if (h && h.kind === 'shopDoor') return shopWalk(P.door, () => onHit(h));
+      if (h) { const w2 = P.wares.find(x => x.id === h.id); return shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55], () => onHit(h)); }
+      const w0 = unIso(sx, sy);
+      if (w0.x > 0 && w0.y > 0 && w0.x < P.RW && w0.y < P.RD) shopWalk([w0.x, w0.y]);
+      return;
     }
     for (const pri of [3, 2, 1]) {
       const h = [...hits].reverse().find(x => x.pri === pri && inside(x, sx, sy));
@@ -2718,13 +2876,17 @@ const Scene = (() => {
       mode = m; owner = o; edit = null;
       if (m !== 'town' && trip) finishTripNow(true);   // v0.19: leaving the town view, you still get there
       cv.style.background = '';
-      if (m !== 'town' && m !== 'interior') moveToLot(o);
+      if (m === 'shop') { const P = shopPlan(o); meS.x = P.door[0]; meS.y = P.door[1] + 0.3; meS.path = []; meS.then = null; meS.moving = false; meS.face = 1; }
+      else if (m !== 'town' && m !== 'interior') moveToLot(o);
       useCam();
       if (m === 'interior') { meIn.room = null; if (!wasInterior) frameView(true); }
       else if (!wasInterior) frameView(false);
       follow = false;
     },
     view: () => ({ mode, owner }),
+    shopWare: id => { const P = mode === 'shop' && shopPlan(owner); return P ? P.wares.find(w => w.id === id) : null; },
+    shopGoWare(id, then) { if (mode !== 'shop') return; const P = shopPlan(owner), w = P.wares.find(x => x.id === id); if (w) shopWalk([w.x + w.w / 2, w.y + w.d + 0.55], then); },
+    shopGoTill(then) { if (mode === 'shop') shopWalk(shopPlan(owner).till, then); },
     tapAt: () => lastTap,
     recenter() { if (!W) return; useCam(); if (mode === 'interior') frameView(true); else if (mode === 'home' && S.live) follow = true; else frameView(false); },
     startEdit(scope) { edit = { scope, hold: null, sel: null }; cancel(me); },
@@ -2748,7 +2910,7 @@ const Scene = (() => {
     },
     floatHouse(text) { const [fx, fy, w, d] = HOUSES[S.me.house].fp; floatLocal('me', fx + w / 2, fy + d / 2, text); },
     thumb,
-    debug: () => ({ cam: { ...cam }, W, H, mode, owner, edit, ents: ents.size, me: { x: me.x, y: me.y, lot: me.lot, jobs: me.jobs.length, cur: !!me.cur, act: me.act && me.act.pose, pose: mePose() }, meIn: { x: meIn.x, y: meIn.y, pose: meIn.act && meIn.act.pose } }),
+    debug: () => ({ meS: { x: meS.x, y: meS.y, path: meS.path.length }, cam: { ...cam }, W, H, mode, owner, edit, ents: ents.size, me: { x: me.x, y: me.y, lot: me.lot, jobs: me.jobs.length, cur: !!me.cur, act: me.act && me.act.pose, pose: mePose() }, meIn: { x: meIn.x, y: meIn.y, pose: meIn.act && meIn.act.pose } }),
     look(z, wx, wy) { useCam(); cam.z = z; centerOn(wx, wy); fly = null; follow = false; },
     bench(n = 20) { const t0 = performance.now(); for (let i = 0; i < n; i++) render(t0 + i * 16); return +((performance.now() - t0) / n).toFixed(2); },
   };

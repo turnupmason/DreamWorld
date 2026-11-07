@@ -537,7 +537,9 @@ function rugFringe(x, y, w, d, rot, tint) {
 }
 function drawFurn(it, x, y, ts) {
   if (it.k === 'trophycase') return drawTrophyCase(it, x, y);
+  if (it.k === 'bigteddy') { ctx.save(); const c = iso(x + 1, y + 1); ctx.translate(c.x, c.y); ctx.scale(2.1, 2.1); ctx.translate(-c.x, -c.y); drawPlush('plushbear', x + 0.5, y + 0.5); ctx.restore(); return; }
   if (FURN[it.k] && FURN[it.k].plush) return drawPlush(it.k, x, y);
+  if (FURN[it.k] && FURN[it.k].poster) return drawPosterStand(FURN[it.k].poster, x, y);
   const k = it.k, rot = it.rot, tint = it.tint || '#8d99a6', [w, d] = furnSize(k, rot), z = cam.z;
   const B = (bx, by, bw, bd, h, col, base, o) => box(bx, by, bw, bd, h, col, base, o);
   switch (k) {
@@ -2016,4 +2018,14 @@ function drawGarage(x, y, n, cars, ts) {
   cars.forEach((car, i) => { if (car && i < n) { const L = (CAR_SPEC[car.k] || CAR_SPEC.mini).len || 2.4; drawCarDir(car, x + 0.2 + bay * (i + 0.5), y + d - L / 2 - 0.02, '+y', ts); } });
   ctx.restore();
   return { x0: D.x, x1: B.x, y0: up(A, H * z).y, y1: C.y };
+}
+
+// v0.20: a framed film poster on a little stand (from the cinema)
+function drawPosterStand(film, x, y) {
+  const z = cam.z, c = iso(x + 0.5, y + 0.5), bg = { dino: '#7cc56b', space: '#1d1d4a', love: '#ffb3cf', ocean: '#2a7fd4', hero: '#5a6b8a', pets: '#f2c94c' }[film] || '#888';
+  ellipse(c.x, c.y, 9 * z, 4 * z, 'rgba(0,0,0,.15)');
+  line(c.x - 5 * z, c.y, c.x - 3 * z, c.y - 22 * z, '#6b4428', 1.4 * z); line(c.x + 5 * z, c.y, c.x + 3 * z, c.y - 22 * z, '#6b4428', 1.4 * z);
+  rrect(c.x - 9 * z, c.y - 40 * z, 18 * z, 25 * z, 1.5 * z, '#fffaf0'); rrect(c.x - 7.5 * z, c.y - 38.5 * z, 15 * z, 22 * z, 1 * z, bg);
+  emoji((MALL.movies[film] || {}).e || '🎬', c.x, c.y - 29 * z, 11 * z);
+  rrect(c.x - 6 * z, c.y - 21 * z, 12 * z, 2 * z, 0.6 * z, 'rgba(255,255,255,.75)');
 }

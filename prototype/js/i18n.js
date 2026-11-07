@@ -842,3 +842,45 @@ Object.assign(STR.en, {
   garage_space: 'A garage that big won’t fit in your yard: move things around or buy the land next door', garage_full: 'No space: one car in the drive, one per garage space. Build or extend a garage at the estate agent',
   snack_land_garage: 'Your garage is built 🚗', area_garage: 'Garage',
 });
+
+// ---------- v0.20: shopping in a real store ----------
+Object.assign(STR.zh, {
+  shop_clerk: '店员', shop_tip: '看中什么就点它，放进购物车，再去找店员结账', basket_leave_q: '购物车里还有 {n} 件东西，放回去出店吗？',
+  basket_added: '{name} 放进购物车了（{n} 件）', basket_add: '放进购物车', basket_pay: '去结账 · {n} 件 · 🪙{v}', checkout_short: '结账', checkout_title: '结账', checkout_total: '一共',
+  paid_hands: '付好了，{n} 件东西拿在手上，回到家就放好', paid_trunk: '付好了，{n} 件东西放进后备箱，车开回家就搬进去', paid_deliver: '付好了，{n} 件东西约 {m} 分钟后送到家',
+  ware_no_poor: '钱不够', ware_no_noorchard: '还没有果园：先去房产中介建果园', ware_no_full: '家里放不下了（果园 / 牧场满了）', ware_no_nopasture: '还没有牧场：先去房产中介建牧场',
+  ware_no_petfull: '最多养 {n} 只宠物', ware_no_own: '已经有了', ware_no_locked: '要先拿到对应的奖杯', ware_sign: '签合同', ware_big: '大件：开车运或送货', ware_small: '小件：可以拿在手上',
+  car_delivered: '车行约 {m} 分钟后把车送到家', car_ordered: '{name} 买好了，约 {m} 分钟后送到你家车库',
+  clerk_hi: '欢迎来到{name}！看中什么就点它，放进购物车，再来找我结账。', clerk_pay: '这些都要吗？选一下怎么带回家。', clerk_sell: '卖东西',
+  take_how: '怎么带回家', take_hands: '拿在手上', take_trunk: '放进后备箱', take_deliver: '送货上门 🪙{n}（约 {m} 分钟）',
+  take_hands_ok: '回到家就放好', take_trunk_ok: '后备箱 {v}/{c}，车开回家就搬进去', take_deliver_ok: '不用自己搬，到了会通知你',
+  take_no_big: '有大件，拿不动', take_no_heavy: '太多了，拿不动', take_no_nocar: '你没开车来（车不在这家店的停车场）', take_no_carfull: '后备箱装不下',
+  unloaded: '把 {n} 件东西搬回家了', unloaded_back: '（{n} 件放不下，钱退给你了）', delivered: '送货到了：{n} 件东西已经放到家里',
+});
+Object.assign(STR.en, {
+  shop_clerk: 'Shopkeeper', shop_tip: 'Tap what you like to put it in your basket, then pay the shopkeeper', basket_leave_q: '{n} things are still in your basket. Put them back and leave?',
+  basket_added: '{name} is in your basket ({n})', basket_add: 'Into the basket', basket_pay: 'Pay · {n} things · 🪙{v}', checkout_short: 'Pay', checkout_title: 'Checkout', checkout_total: 'Total',
+  paid_hands: 'Paid: you’re carrying {n} things, they go in when you get home', paid_trunk: 'Paid: {n} things in the boot, unloaded when the car gets home', paid_deliver: 'Paid: {n} things arrive at your home in about {m} min',
+  ware_no_poor: 'Not enough coins', ware_no_noorchard: 'No orchard yet: build one at the estate agent', ware_no_full: 'No room at home (orchard / pasture full)', ware_no_nopasture: 'No pasture yet: build one at the estate agent',
+  ware_no_petfull: 'Up to {n} pets', ware_no_own: 'You have it already', ware_no_locked: 'Win its trophy first', ware_sign: 'Sign', ware_big: 'Big: by car or delivery', ware_small: 'Small: you can carry it',
+  car_delivered: 'The dealer brings it home in about {m} min', car_ordered: 'Bought the {name}: it’s delivered to your garage in about {m} min',
+  clerk_hi: 'Welcome to the {name}! Tap anything you like to put it in your basket, then come to me to pay.', clerk_pay: 'All of these? Choose how they get home.', clerk_sell: 'Sell things',
+  take_how: 'How do they get home?', take_hands: 'Carry them', take_trunk: 'In the boot', take_deliver: 'Delivery 🪙{n} (about {m} min)',
+  take_hands_ok: 'They go in when you get home', take_trunk_ok: 'Boot {v}/{c}: unloaded when the car gets home', take_deliver_ok: 'No carrying: you’ll be told when it arrives',
+  take_no_big: 'Something is too big to carry', take_no_heavy: 'Too much to carry', take_no_nocar: 'You didn’t drive here (your car isn’t in this car park)', take_no_carfull: 'It won’t fit in the boot',
+  unloaded: 'Brought {n} things home', unloaded_back: '({n} didn’t fit: refunded)', delivered: 'Delivery: {n} things are at your home',
+});
+Object.assign(STR.zh, { act_trophies: '奖杯专属' });
+Object.assign(STR.en, { act_trophies: 'Trophy shop' });
+
+// ---------- v0.20: what the mall's fun is for ----------
+Object.assign(STR.zh, {
+  movie_poster: '看完了！《{name}》的海报放进仓库了，可以摆在家里（家产会多一点）', cinema_use: '每看一部新电影，就得到它的海报，可以摆在家里，家产也会多一点。',
+  claw_use: '玩偶可以摆在家里，家产会多一点；6 个都抓到，再送你一只巨型泰迪熊。', claw_big: '6 个玩偶全收集齐了！送你一只巨型泰迪熊，在仓库里',
+  food_use: '吃饱了 {h} 小时：打工工资多 {p}%，走路快 {w}%。', food_full: '吃饱了 {h} 小时：打工多赚 {p}%', food_still: '现在还饱着，还有 {m}',
+});
+Object.assign(STR.en, {
+  movie_poster: 'That was fun! The {name} poster is in storage: put it up at home (it adds to your home’s worth)', cinema_use: 'Every new film you see gives you its poster for your home, which adds to your home’s worth.',
+  claw_use: 'Plush toys decorate your home and add to its worth. Win all six and you get a giant teddy too.', claw_big: 'All six plush toys! Here’s a giant teddy, it’s in storage',
+  food_use: 'Full for {h} hours: {p}% more pay at work, {w}% quicker on foot.', food_full: 'Full for {h} hours: {p}% more pay at work', food_still: 'Still full for {m}',
+});

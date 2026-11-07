@@ -690,3 +690,14 @@ body.dark .pill.jail { background: #1f2a40; color: #9dbbf0; }
 .plush-row { display: flex; justify-content: center; gap: 8px; margin: 12px 0 4px; font-size: 26px; }
 .plush-row span { filter: grayscale(1); opacity: .35; }
 .plush-row span.on { filter: none; opacity: 1; }
+
+/* v0.20: in a store */
+.act-grid.one { grid-template-columns: 1fr; }
+.act-tile.wide { display: grid; grid-template-columns: 34px 1fr; column-gap: 8px; align-items: center; padding: 10px 12px; }
+.act-tile.wide span { grid-row: span 2; font-size: 24px; }
+.act-tile.wide i { font-style: normal; font-size: 12px; opacity: .75; }
+.ware-pic { width: 96px !important; height: 80px !important; flex: none; }
+.ware-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.use-note { background: #fff3dc; border-radius: 12px; padding: 8px 10px; font-size: 13px; color: #7a5520; margin: 4px 0 8px; }
+.pill.fed { background: #fff1d6; color: #9a5b12; }
+body.dark .use-note { background: #3a2f1c; color: #f2c27a; }

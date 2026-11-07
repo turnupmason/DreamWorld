@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.19.0';
+const VERSION = '0.20.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -11,7 +11,13 @@ const STEAL_FINE = [10, 60];            // caught by a guard dog: pay the owner 
 // v0.18: the police. No guard dog? A neighbour may still see you (a fine, like the dog's). Caught taking a baby
 // animal, or caught 3 times in 7 days: the police come: a bigger fine and a short real-time stay in the holding cell
 // (you can pay bail to leave early). Real-life movement and sleep still count while you're in there.
-const STORE_FRONT = 3.2;   // v0.19: every store has a car park this deep in front, between the building and the road
+const STORE_FRONT = 3.2;
+// v0.20: shopping in a real store. You pick things up (into the basket), pay the shopkeeper, then take them home:
+// small things in your hands, bigger ones in your car if you drove here, or the store delivers (a fee, a while later).
+// Sizes are in "boxes": a 1×1 piece of furniture is 10, a seed packet 1.
+const HANDS_VOL = 12, BIG_VOL = 10;               // you can carry small things (10 or less each) up to 12 in all
+const DELIVERY = { fee: 0.08, min: 15, minutes: 15 };   // delivery: 8% of the bill (at least 🪙15), arrives in 15 min
+const SMALL_ANIMALS = ['chicken', 'duck', 'rabbit'];   // v0.19: every store has a car park this deep in front, between the building and the road
 const POLICE = { witness: 0.08, strikes: 3, strikeDays: 7, fineMult: 5, fineMin: 80, fineMax: 400, jailMin: 30, bail: 150 };
 const STEP_GOAL = 6000;                  // starting step goal; it then follows your own last 7 days (see stepGoal())
 const STORAGE_KEY = 'mirror-town-proto-v3';
@@ -219,9 +225,14 @@ const TINTS = ['#e5675f', '#f2a33a', '#f3d36b', '#6cbf73', '#5aa2e0', '#8b7fe0',
 // flat: rugs and mats can sit under other furniture. tint: fabric colour can be changed. use: what your townie does with it.
 const FURN = {
   // v0.18: plush toys from the mall's claw machine (not sold in the furniture store)
-  plushbear: { zh: '小熊玩偶', en: 'Teddy bear', w: 1, d: 1, price: 0, plush: true }, plushbunny: { zh: '兔子玩偶', en: 'Bunny plush', w: 1, d: 1, price: 0, plush: true },
-  plushcat: { zh: '小猫玩偶', en: 'Kitty plush', w: 1, d: 1, price: 0, plush: true }, plushdino: { zh: '恐龙玩偶', en: 'Dino plush', w: 1, d: 1, price: 0, plush: true },
-  plushduck: { zh: '小鸭玩偶', en: 'Duckling plush', w: 1, d: 1, price: 0, plush: true }, plushpanda: { zh: '熊猫玩偶', en: 'Panda plush', w: 1, d: 1, price: 0, plush: true },
+  plushbear: { zh: '小熊玩偶', en: 'Teddy bear', w: 1, d: 1, price: 0, plush: true, value: 40 }, plushbunny: { zh: '兔子玩偶', en: 'Bunny plush', w: 1, d: 1, price: 0, plush: true, value: 40 },
+  plushcat: { zh: '小猫玩偶', en: 'Kitty plush', w: 1, d: 1, price: 0, plush: true, value: 40 }, plushdino: { zh: '恐龙玩偶', en: 'Dino plush', w: 1, d: 1, price: 0, plush: true, value: 40 },
+  plushduck: { zh: '小鸭玩偶', en: 'Duckling plush', w: 1, d: 1, price: 0, plush: true, value: 40 }, plushpanda: { zh: '熊猫玩偶', en: 'Panda plush', w: 1, d: 1, price: 0, plush: true, value: 40 },
+  bigteddy: { zh: '巨型泰迪熊', en: 'Giant teddy', w: 2, d: 2, price: 0, plush: true, value: 300 },
+  // v0.20: film posters from the cinema (one per film you've seen), on a stand
+  posterdino: { zh: '《恐龙乐园》海报', en: 'Dino Park poster', w: 1, d: 1, price: 0, poster: 'dino', value: 60 }, posterspace: { zh: '《星际旅行》海报', en: 'Space Trip poster', w: 1, d: 1, price: 0, poster: 'space', value: 60 },
+  posterlove: { zh: '《怦然心动》海报', en: 'Heartbeat poster', w: 1, d: 1, price: 0, poster: 'love', value: 60 }, posterocean: { zh: '《深海奇遇》海报', en: 'Deep Blue poster', w: 1, d: 1, price: 0, poster: 'ocean', value: 60 },
+  posterhero: { zh: '《超级英雄》海报', en: 'Super Hero poster', w: 1, d: 1, price: 0, poster: 'hero', value: 60 }, posterpets: { zh: '《汪汪队长》海报', en: 'Captain Woof poster', w: 1, d: 1, price: 0, poster: 'pets', value: 60 },
   sleepbag:  { zh: '睡袋',       en: 'Sleeping bag',     w: 1, d: 2, price: 20,  tint: true, use: 'sleep' },
   bed:       { zh: '双人床',     en: 'Double bed',       w: 2, d: 2, price: 180, tint: true, use: 'sleep' },
   nightstand:{ zh: '床头柜',     en: 'Nightstand',       w: 1, d: 1, price: 45 },
@@ -659,6 +670,10 @@ const MALL = {
     boba:   { e: '🧋', zh: '珍珠奶茶', en: 'Bubble tea', price: 8 },  icecream: { e: '🍦', zh: '冰淇淋', en: 'Ice cream', price: 6 },
   },
   plush: { plushbear: '🧸', plushbunny: '🐰', plushcat: '🐱', plushdino: '🦖', plushduck: '🦆', plushpanda: '🐼' },
+  // v0.20: what they're for. A meal fills you up for a few hours: more pay at work and quicker on foot. Each film you
+  // see gives you its poster for your home (posters and plush toys add to what your home is worth). Win all six plush
+  // toys and the claw machine's giant teddy is yours too.
+  fed: { hours: 3, pay: 0.2, walk: 0.2 },
 };
 // ---------- stores (v0.17) ----------
 // Things are bought in the store that sells them (go there, go in, buy). The market sells seeds (and buys your

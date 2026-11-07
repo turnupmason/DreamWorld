@@ -1252,7 +1252,8 @@ function assetBreakdown(h) {
   for (let i = 1; i <= h.pastureLv; i++) b.land += costValue(PASTURE[i].cost);
   for (let i = 1; i <= h.orchardLv; i++) b.land += costValue(ORCHARD[i].cost);
   for (let i = 1; i <= h.pondLv; i++) b.land += costValue(POND[i].cost);
-  allRoomItems(h).forEach(it => { b.items += FURN[it.k].price; });
+  allRoomItems(h).forEach(it => { b.items += FURN[it.k].price || FURN[it.k].value || 0; });
+  for (let i = 1; i <= (h.garageLv || 0); i++) b.land += costValue(GARAGE[i].cost);   // v0.19
   Object.entries(h.extra || {}).forEach(([hi, n]) => {
     const hh = { house: +hi };
     for (let k = 1; k <= n; k++) b.house += costValue(floorCost(hh, HOUSES[+hi].floors[0] + k));
@@ -1681,7 +1682,7 @@ const hoursWorked = w => Math.max(0, (Math.min(now(), w.end) - w.start) / HOUR);
 function finishShift() {
   const w = S.work;
   if (!w || now() < w.end) return null;
-  const pay = Math.round(hoursWorked(w) * w.wage), before = jobRank();
+  const pay = Math.round(hoursWorked(w) * w.wage * fedMult(w)), before = jobRank();
   S.me.coins += pay; S.work = null;
   S.job.rel = Math.min(JOB_REL.max, S.job.rel + JOB_REL.finish);
   S.today.worked = true; S.stats.workPay = (S.stats.workPay || 0) + pay;
@@ -1692,7 +1693,7 @@ function finishShift() {
 function quitShift() {
   const w = S.work;
   if (!w) return null;
-  const pay = Math.round(hoursWorked(w) * w.wage);
+  const pay = Math.round(hoursWorked(w) * w.wage * fedMult(w));
   S.me.coins += pay; S.work = null;
   S.job.rel = Math.max(0, S.job.rel + JOB_REL.quit);
   S.stats.workPay = (S.stats.workPay || 0) + pay;
@@ -1783,8 +1784,10 @@ function watchMovie(k) {
   if (!MALL.movies[k]) return 'no';
   if (S.me.coins < MALL.movie) return 'poor';
   S.me.coins -= MALL.movie;
-  if (!S.mall.movies.includes(k)) S.mall.movies.push(k);
-  return 'ok';
+  if (S.mall.movies.includes(k)) return 'ok';
+  S.mall.movies.push(k);
+  const key = 'room:poster' + k; S.me.store[key] = (S.me.store[key] || 0) + 1;   // v0.20: its poster, for your home
+  return 'poster';
 }
 function clawTry() {
   if (S.me.coins < MALL.claw) return { r: 'poor' };
@@ -1794,6 +1797,7 @@ function clawTry() {
   const k = (fresh.length && Math.random() < 0.7 ? fresh : all)[Math.floor(Math.random() * (fresh.length && Math.random() < 0.7 ? fresh.length : all.length))] || all[0];
   const key = 'room:' + k; S.me.store[key] = (S.me.store[key] || 0) + 1;
   if (!S.mall.plush.includes(k)) S.mall.plush.push(k);
+  if (S.mall.plush.length >= Object.keys(MALL.plush).length && !S.mall.bigTeddy) { S.mall.bigTeddy = true; S.me.store['room:bigteddy'] = (S.me.store['room:bigteddy'] || 0) + 1; return { r: 'win', k, big: true }; }   // v0.20: the full set
   return { r: 'win', k };
 }
 function eatFood(k) {
@@ -1802,6 +1806,7 @@ function eatFood(k) {
   if (S.me.coins < f.price) return 'poor';
   S.me.coins -= f.price;
   if (!S.mall.foods.includes(k)) S.mall.foods.push(k);
+  S.fed = { k, until: now() + MALL.fed.hours * HOUR };   // v0.20: full for a few hours
   return 'ok';
 }
 
@@ -1823,3 +1828,123 @@ function buildGarage(h = S.me) {
   h.garageLv = lv; if (old) h.areaAt = { ...(h.areaAt || {}), garage: old };
   return 'space';
 }
+
+// ---------- shopping in a real store (v0.20) ----------
+// What each store has on show: [{ id, kind, k, act, arg, price, w, d }]. Grouped like the catalogue's sections.
+function storeWares(store) {
+  const out = [], add = (kind, k, act, arg, price, w = 1, d = 1) => out.push({ id: kind + ':' + k, kind, k, act, arg, price, w, d });
+  const grouped = (cat, list) => { const keys = (SHOP_SUBS[cat] || []).flatMap(s => s.keys); return [...keys.filter(k => list.includes(k)), ...list.filter(k => !keys.includes(k))]; };
+  const PET_FURN = ['petbowl', 'litterbox', 'petbed', 'cattree'];
+  if (store === 'market') Object.entries(CROPS).filter(([, c]) => !c.rare).forEach(([k, c]) => add('seed', k, 'buySeed', k, c.seed));
+  if (store === 'nursery') {
+    Object.entries(TREES).forEach(([k, d]) => add('tree', k, 'buyTree', k, d.price));
+    grouped('yard', Object.keys(YARD).filter(k => { const d = YARD[k]; return !d.souv && !d.excl && !d.award; })).forEach(k => { const d = YARD[k]; add('yard', k, 'buyItem', 'yard|' + k, d.price, Math.min(d.w, 3), Math.min(d.d, 3)); });
+  }
+  if (store === 'ranch') Object.entries(ANIMALS).filter(([, a]) => !a.pet && !a.excl).forEach(([k, a]) => add('animal', k, 'buyAnimal', k, a.price, 2, 2));
+  if (store === 'petshop') {
+    Object.entries(PET_BREEDS).filter(([, B]) => !B.excl).forEach(([k, B]) => add('pet', k, 'adopt', k, B.price, 1.4, 1.4));
+    Object.entries(PET_FOOD).forEach(([k, f]) => add('petfood', k, 'buyPetFood', k, f.price));
+    PET_FURN.forEach(k => add('furn', k, 'buyItem', 'room|' + k, FURN[k].price, FURN[k].w, FURN[k].d));
+  }
+  if (store === 'furniture') grouped('furn', Object.keys(FURN).filter(k => { const d = FURN[k]; return !d.souv && !d.excl && !d.award && !d.plush && !d.poster && !PET_FURN.includes(k); }))
+    .forEach(k => add('furn', k, 'buyItem', 'room|' + k, FURN[k].price, FURN[k].w, FURN[k].d));
+  if (store === 'dealer') Object.entries(CARS).filter(([, c]) => !c.excl).forEach(([k, c]) => add('car', k, 'buyCar', k, c.cost.coins, CARS[k].kind === 'two' ? 1.2 : 1.6, CARS[k].kind === 'two' ? 2 : 3));
+  if (store === 'realty') {
+    HOUSES.forEach((H, i) => add('house', String(i), 'buyHouse', String(i), H.cost.coins || 0, 2, 2));
+    ['field', 'pasture', 'orchard', 'pond', 'garage'].forEach(k => add('land', k, 'buyLand', k, 0, 2, 1));
+  }
+  if (store === 'mall') {
+    ['cinema', 'claw', 'food', 'trophies'].forEach(k => add('act', k, 'mallAct', k, 0, k === 'claw' || k === 'trophies' ? 1 : 2, 1));
+    Object.entries(CLOTHES).filter(([k, c]) => c.price && k !== 'nohat').forEach(([k, c]) => add('clothes', k, 'buyClothes', k, c.price));
+    // the trophy shop: what you've unlocked is on show (the board by the door says what the rest need)
+    EXCLUSIVES.filter(([kind, k]) => exclOK(exclDef(kind, k).excl)).forEach(([kind, k]) => { const d = exclDef(kind, k); add('excl', kind + '|' + k, 'buyExcl', kind + '|' + k, kind === 'car' ? d.cost.coins : d.price); });
+  }
+  return out;
+}
+// How much room a thing takes on the way home (see HANDS_VOL).
+function wareVol(e) {
+  if (e.kind === 'seed') return Math.ceil((e.n || 1) / 10);
+  if (e.kind === 'clothes' || e.kind === 'petfood') return e.kind === 'clothes' ? 1 : 2;
+  if (e.kind === 'pet') return 6;
+  if (e.kind === 'tree') return 8;
+  if (e.kind === 'animal') return SMALL_ANIMALS.includes(e.k) ? 6 : 30;
+  if (e.kind === 'furn' || e.kind === 'yard') { const d = e.kind === 'furn' ? FURN[e.k] : YARD[e.k]; return d.w * d.d * 10; }
+  if (e.kind === 'excl') { const [kind, k] = e.arg.split('|'); if (kind === 'yard') return YARD[k].w * YARD[k].d * 10; if (kind === 'animal') return 30; return 6; }
+  return 10;
+}
+// Things bought but not home yet: in your hands, in the boot of your car, or on the delivery van.
+function bagState() { S.bag = S.bag || { hands: [], trunk: [] }; S.deliveries = S.deliveries || []; return S.bag; }
+const allPending = () => { const b = bagState(); return [...b.hands, ...b.trunk, ...S.deliveries.flatMap(d => d.items)]; };
+// Can this go in the basket? (money for everything in it, and room at home for trees, animals, pets and cars)
+function wareCheck(w, basket, n = 1) {
+  const h = S.me, list = [...basket, ...allPending()], count = act => list.filter(e => e.act === act).length;
+  const total = basket.reduce((t, e) => t + e.price, 0) + w.price * (w.kind === 'seed' ? n : 1);
+  if (h.coins < total) return 'poor';
+  if (w.kind === 'tree') { if (!h.orchardLv) return 'noorchard'; if (h.trees.filter((t, i) => i < orchardSlots(h) && !t).length <= count('buyTree')) return 'full'; }
+  if (w.kind === 'animal') { if (!h.pastureLv) return 'nopasture'; if (pastureCount(h) + count('buyAnimal') >= pastureCap(h)) return 'full'; }
+  if (w.kind === 'pet' && myPets(h).length + count('adopt') >= PET_MAX) return 'petfull';
+  if (w.kind === 'clothes' && ((h.wardrobe || []).includes(w.k) || list.some(e => e.act === 'buyClothes' && e.k === w.k))) return 'own';
+  if (w.kind === 'excl') { const [kind, k] = w.arg.split('|'); if (!exclOK(exclDef(kind, k).excl, h)) return 'locked'; if (list.some(e => e.arg === w.arg)) return 'own'; }
+  return 'ok';
+}
+// The ways home for a basket: [{ how, ok, why }]
+function takeHomeWays(basket, store) {
+  const vol = basket.reduce((t, e) => t + e.vol, 0), big = basket.some(e => e.vol > BIG_VOL), b = bagState();
+  const handsUsed = b.hands.reduce((t, e) => t + e.vol, 0), car = S.me.cars[S.me.car], drove = !!(car && S.carAt && S.carAt.place === store);
+  const trunkUsed = b.trunk.reduce((t, e) => t + e.vol, 0), cap = car ? (CARS[car.k].cargo || 20) : 0;
+  return [
+    { how: 'hands', ok: !big && handsUsed + vol <= HANDS_VOL, why: big ? 'big' : 'heavy' },
+    { how: 'trunk', ok: drove && trunkUsed + vol <= cap, why: !drove ? 'nocar' : 'carfull', cap, vol: trunkUsed + vol },
+    { how: 'deliver', ok: true, fee: deliveryFee(basket) },
+  ];
+}
+const deliveryFee = basket => Math.max(DELIVERY.min, Math.round(basket.reduce((t, e) => t + e.price, 0) * DELIVERY.fee));
+// Pay at the counter: the money goes now, the things go into your hands / the boot / the van.
+function checkout(basket, how) {
+  const total = basket.reduce((t, e) => t + e.price, 0), fee = how === 'deliver' ? deliveryFee(basket) : 0, b = bagState();
+  if (S.me.coins < total + fee) return 'poor';
+  S.me.coins -= total + fee;
+  const items = basket.map(e => ({ ...e }));
+  if (how === 'hands') b.hands.push(...items);
+  else if (how === 'trunk') b.trunk.push(...items);
+  else S.deliveries.push({ at: now() + DELIVERY.minutes * MIN, items });
+  return 'ok';
+}
+// Something bought arrives home: it's set up the usual way (already paid for). If there's no room any more, the money comes back.
+function deliverItem(e) {
+  S.me.coins += e.price;
+  let r;
+  if (e.act === 'buySeed') r = buySeed(e.k, e.n || 1);
+  else if (e.act === 'buyTree') r = buyTree(e.k);
+  else if (e.act === 'buyAnimal') r = buyAnimal(e.k);
+  else if (e.act === 'adopt') r = adoptPet(e.k).r;
+  else if (e.act === 'buyPetFood') r = buyPetFood(e.k);
+  else if (e.act === 'buyItem') { const [scope, k] = e.arg.split('|'); r = buyItem(scope, k).r; }
+  else if (e.act === 'buyClothes') r = buyClothes(e.k);
+  else if (e.act === 'buyCar') r = buyCar(e.k);
+  else if (e.act === 'buyExcl') { const [kind, k] = e.arg.split('|'); r = kind === 'yard' ? buyItem('yard', k).r : kind === 'car' ? buyCar(k) : kind === 'pet' ? adoptPet(k).r : buyAnimal(k); }
+  return r === 'ok';
+}
+// Home again: what you carried (and the boot, if the car is home too) goes into the house. Returns how many things.
+function unloadAtHome() {
+  const b = bagState(), out = [];
+  if (!S.out && b.hands.length) { out.push(...b.hands); b.hands = []; }
+  if (!S.carAt && b.trunk.length) { out.push(...b.trunk); b.trunk = []; }
+  let ok = 0, back = 0;
+  out.forEach(e => { if (deliverItem(e)) ok++; else back++; });
+  return out.length ? { ok, back, items: out } : null;
+}
+// The delivery van: everything due by now.
+function dueDeliveries() {
+  bagState();
+  const due = S.deliveries.filter(d => d.at <= now());
+  if (!due.length) return null;
+  S.deliveries = S.deliveries.filter(d => d.at > now());
+  let ok = 0, back = 0;
+  due.flatMap(d => d.items).forEach(e => { if (deliverItem(e)) ok++; else back++; });
+  return { ok, back };
+}
+
+// v0.20: a good meal at the mall: more pay for a shift that started while you were full, and quicker on foot
+const isFed = () => !!(S && S.fed && S.fed.until > now());
+const fedMult = w => (S.fed && w && S.fed.until > w.start ? 1 + MALL.fed.pay : 1);

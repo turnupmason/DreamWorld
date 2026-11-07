@@ -12,21 +12,24 @@ function skeleton(pose, o) {
   const tired = o.energy === 'tired' || o.energy === 'exhausted';
   const breathe = Math.sin(ts / 700 + seed) * 0.3;
   const k = {
-    lift: 0, lean: 0, air: 0, top: -23.5, prop: null,
+    lift: 0, lean: 0, air: 0, top: -23.5 + breathe * 0.35, prop: null, sway: 0,
     legs: [{ h: [-1.6, -10], k: [-1.5, -5], f: [-1.6, 0] }, { h: [1.6, -10], k: [1.7, -5], f: [1.6, 0] }],
     arms: [{ s: [-0.6, -20.5], e: [-1.2, -16], h: [-1.4, -12] }, { s: [0.8, -20.5], e: [1.4, -16], h: [1.6, -12] }],
     head: [0.4, -30 + breathe + (o.energy === 'exhausted' ? 1.2 : 0)],
   };
   const sw = Math.sin(ph), cw = Math.cos(ph);
   switch (pose) {
-    case 'walk': {
-      const step = tired ? 3 : 4;
+    case 'walk': {   // v0.20: softer: knees lift on the swing, elbows bend on the way forward, a little lean
+      const step = tired ? 3 : 4.2, up0 = Math.max(0, -sw), up1 = Math.max(0, sw);
       k.lift = Math.abs(cw) * (o.energy === 'great' ? 1.8 : tired ? 0.6 : 1.1);
-      k.legs[0].f = [-1.6 - sw * step, -Math.max(0, -sw) * 1.5]; k.legs[0].k = [-1.6 - sw * step / 2 + 0.8, -5.2];
-      k.legs[1].f = [1.6 + sw * step, -Math.max(0, sw) * 1.5]; k.legs[1].k = [1.6 + sw * step / 2 + 0.8, -5.2];
-      k.arms[0].h = [-1.4 + sw * 3.5, -12]; k.arms[0].e = [-1 + sw * 1.8, -16];
-      k.arms[1].h = [1.6 - sw * 3.5, -12]; k.arms[1].e = [1.2 - sw * 1.8, -16];
-      if (o.energy === 'exhausted') k.lean = 1;
+      k.lean = tired ? 0.9 : 0.45;
+      k.legs[0].f = [-1.6 - sw * step, -up0 * 2.1]; k.legs[0].k = [-1.6 - sw * step / 2 + 0.8 + up0 * 1.1, -5.2 - up0 * 1.2];
+      k.legs[1].f = [1.6 + sw * step, -up1 * 2.1]; k.legs[1].k = [1.6 + sw * step / 2 + 0.8 + up1 * 1.1, -5.2 - up1 * 1.2];
+      k.arms[0].e = [-1 + sw * 1.7, -16.3]; k.arms[0].h = [-1.4 + sw * 3.8 + Math.max(0, sw) * 1.1, -12 - Math.max(0, sw) * 1.8];
+      k.arms[1].e = [1.2 - sw * 1.7, -16.3]; k.arms[1].h = [1.6 - sw * 3.8 + Math.max(0, -sw) * 1.1, -12 - Math.max(0, -sw) * 1.8];
+      k.head[1] += Math.abs(Math.sin(ph + 0.5)) * 0.35;   // the head settles a beat after each step
+      k.sway = -Math.sin(ph - 0.6);                        // hair, skirts and hoods swing a little behind
+      if (o.energy === 'exhausted') k.lean = 1.2;
       break;
     }
     case 'run': {
@@ -35,6 +38,7 @@ function skeleton(pose, o) {
       k.legs[1].f = [1.6 + sw * 6, -Math.max(0, sw) * 3]; k.legs[1].k = [1.6 + sw * 3 + 2, -6 - Math.max(0, sw) * 1.5];
       k.arms[0].e = [-2.5 + sw * 2.5, -16.5]; k.arms[0].h = [sw * 4, -14 - Math.max(0, sw) * 2];
       k.arms[1].e = [2.5 - sw * 2.5, -16.5]; k.arms[1].h = [4 - sw * 4, -14 - Math.max(0, -sw) * 2];
+      k.sway = -Math.sin(ph - 0.6) * 1.4;
       break;
     }
     case 'sneak': {
@@ -165,8 +169,8 @@ function drawPerson(sx, sy, s, o) {
     ctx.fillStyle = shirt; ctx.fill();
     ctx.save(); ctx.clip(); rrect(-6, top - 1, 3, 20, 1, shade(shirt, -0.12)); ctx.restore();
     const TOP = wearing(L, 'top'), BOT = wearing(L, 'bottom');
-    if (TOP === 'dress') skirtShape(shirt); else if (BOT === 'skirt') skirtShape(pants);
-    if (TOP === 'hoodie') ellipse(-4.2, top + 1.2, 3.6, 2.6, shade(shirt, -0.12));   // the hood at the back
+    if (TOP === 'dress') skirtShape(shirt, k.sway); else if (BOT === 'skirt') skirtShape(pants, k.sway);
+    if (TOP === 'hoodie') ellipse(-4.2 + k.sway * 0.4, top + 1.2 + lift * 0.25, 3.6, 2.6, shade(shirt, -0.12));   // the hood at the back, bobbing
     if (TOP === 'jacket') rrect(1.6, top + 0.5, 3.8, -top - 9.6, 1, shade(shirt, -0.18));
     if (TOP !== 'dress') rrect(-5.2, -11.6, 10.4, 2.6, 1, shade(pants, -0.08));   // belt
     if (!o.back && TOP !== 'dress') rrect(1.6, -11.5, 2.2, 2.3, 0.5, '#d9b44a');   // buckle
@@ -177,7 +181,9 @@ function drawPerson(sx, sy, s, o) {
     }
     ctx.restore();
     if (k.legFront) leg2(k.legs[1], pants, lift, lean, L);
+    HAIR_SWAY = k.sway || 0;
     unscaled(k.head[0] + lean, k.head[1] - lift, BD, () => { head(k.head[0] + lean, k.head[1] - lift, L, energy, ts, seed, o.back); hat(k.head[0] + lean, k.head[1] - lift, L, true); });
+    HAIR_SWAY = 0;
     limb2(B(k.arms[1].s), B(k.arms[1].e), B(k.arms[1].h), shirt, skin);
     drawProp(k, ts, B);
   });
@@ -217,7 +223,7 @@ function topDetails(L, shirt, back) {
   if (k === 'jacket' && !back) { pg([[-1.2, -23.4], [1.2, -23.4], [1.2, -10], [-1.2, -10]], L.inner || '#f4f4f0'); line(-1.3, -23.2, -1.3, -10, shade(shirt, -0.3), 0.6); line(1.3, -23.2, 1.3, -10, shade(shirt, -0.3), 0.6); pg([[-1.3, -23.4], [-3.6, -21], [-1.3, -18.4]], shade(shirt, 0.18)); pg([[1.3, -23.4], [3.6, -21], [1.3, -18.4]], shade(shirt, 0.18)); }
 }
 // A skirt (or the skirt of a dress) over the hips.
-function skirtShape(col) { pg([[-5.6, -11], [5.6, -11], [7.6, -4.2], [-7.6, -4.2]], col); line(-7.4, -4.4, 7.4, -4.4, shade(col, -0.2), 0.8); }
+function skirtShape(col, sw = 0) { const f = Math.abs(sw) * 0.5; pg([[-5.6, -11], [5.6, -11], [7.6 + f + sw * 1.1, -4.2], [-7.6 - f + sw * 1.1, -4.2]], col); line(-7.4 - f + sw * 1.1, -4.4, 7.4 + f + sw * 1.1, -4.4, shade(col, -0.2), 0.8); }
 // The bottom of the legs: what the legs are made of (trousers, shorts: skin below the knee, skirts: bare legs).
 function legCols(L, pants, skin) {
   const top = wearing(L, 'top'), b = wearing(L, 'bottom');
@@ -348,7 +354,7 @@ function drawPersonFront(sx, sy, s, o, pose) {
     ctx.fillStyle = shirt; ctx.fill();
     if (V[0] < 0.95) { ctx.save(); ctx.clip(); rrect(farSide > 0 ? 3.4 : -6.2, -24, 2.8, 15, 1, shade(shirt, -0.12)); ctx.restore(); }
     const TOP = wearing(L, 'top'), BOT = wearing(L, 'bottom');
-    if (TOP === 'dress') skirtShape(shirt); else if (BOT === 'skirt') skirtShape(pants);
+    if (TOP === 'dress') skirtShape(shirt, sw * 0.7); else if (BOT === 'skirt') skirtShape(pants, sw * 0.7);
     if (TOP !== 'dress') rrect(-5.4, -11.6, 10.8, 2.6, 1, shade(pants, -0.08));
     topDetails(L, shirt, back);
     if (back) line(0, -21.5, 0, -11.8, shade(shirt, -0.12), 0.8);
@@ -443,6 +449,7 @@ function backHead(cx, cy, L, r) {
   if (L.hair === 'curly') for (let k = 0; k <= 8; k++) { const a = Math.PI * 0.85 + k / 8 * Math.PI * 1.3; circle(cx + Math.cos(a) * (r + 0.4), cy + Math.sin(a) * (r + 0.4), 2.5, hc); }
   if (L.hair === 'short') ellipse(cx - 1, cy - r + 1.4, 4.4, 1.6, shade(hc, 0.12), null, 0, -0.15);
 }
+let HAIR_SWAY = 0;   // v0.20: set while drawing someone walking, so long hair swings
 function head(cx, cy, L, energy, ts, seed, back) {
   const r = 6.8, hc = L.hairCol;
   if (back) return backHead(cx, cy, L, r);
@@ -451,8 +458,8 @@ function head(cx, cy, L, energy, ts, seed, back) {
   ctx.fillStyle = hc;
   ctx.beginPath(); ctx.arc(cx, cy, r + 0.5, Math.PI * 1.02, Math.PI * 1.98); ctx.closePath(); ctx.fill();
   if (L.hair === 'short') ellipse(cx + 2.6, cy - 4.6, 4.2, 2.3, hc, null, 0, -0.2);
-  if (L.hair === 'long') { ellipse(cx + 2.4, cy - 4.4, 4.6, 2.6, hc, null, 0, -0.25); rrect(cx - 7.3, cy - 3, 3.4, 9, 1.6, hc); }
-  if (L.hair === 'bun') { circle(cx - 1.5, cy - r - 2.6, 3.3, hc); ellipse(cx + 2.2, cy - 4.6, 4.4, 2.2, hc, null, 0, -0.2); }
+  if (L.hair === 'long') { ellipse(cx + 2.4, cy - 4.4, 4.6, 2.6, hc, null, 0, -0.25); ctx.save(); ctx.translate(cx - 5.6, cy - 3); ctx.rotate(HAIR_SWAY * 0.12); rrect(-1.7, 0, 3.4, 9, 1.6, hc); ctx.restore(); }
+  if (L.hair === 'bun') { circle(cx - 1.5 - HAIR_SWAY * 0.3, cy - r - 2.6, 3.3, hc); ellipse(cx + 2.2, cy - 4.6, 4.4, 2.2, hc, null, 0, -0.2); }
   if (L.hair === 'curly') for (let k = 0; k <= 6; k++) { const a = Math.PI + k / 6 * Math.PI; circle(cx + Math.cos(a) * (r + 0.4), cy + Math.sin(a) * (r + 0.4) - 0.4, 2.5, hc); }
   const ink = '#2a2018';
   const blink = Math.sin(ts / 1700 + seed * 5) > 0.985;
