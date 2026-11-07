@@ -230,6 +230,19 @@ function carWheel(face, base, u, big) {
   tyre(p.x, p.y, AXIS_Y, 4.4 * z * k, '#c9ced4');
 }
 // Cars park on the driveway with the front towards the road (+y).
+// Seen from behind (driving away from you): tail lights instead of headlights. Set by drawCarDir.
+let CAR_REAR = false;
+const HL = () => (CAR_REAR ? '#e5484d' : '#fff6c8');
+// A car driving along a road in any of the 4 directions. Drawn along y (+y = towards you); along x it is the same
+// picture mirrored left-right on screen (in this view that swaps x and y); going away from you shows the back.
+function drawCarDir(c, px, py, dir, ts) {
+  const two = CARS[c.k] && CARS[c.k].kind === 'two', s = CAR_SPEC[c.k] || CAR_SPEC.mini, len = two ? 1.6 : (s.len || 2.4);
+  const p = iso(px, py);
+  ctx.save();
+  if (dir === '+x' || dir === '-x') { ctx.translate(p.x, 0); ctx.scale(-1, 1); ctx.translate(-p.x, 0); }
+  CAR_REAR = dir === '-x' || dir === '-y';
+  try { drawCar(c, px - 0.5, py - len / 2, ts); } finally { CAR_REAR = false; ctx.restore(); }
+}
 function drawCar(c, x, y, ts) {
   const z = cam.z, col = c.color, def = CARS[c.k] || {};
   if (def.kind === 'two') return drawTwoWheeler(c, x, y, ts);
@@ -241,7 +254,7 @@ function drawCar(c, x, y, ts) {
   ellipse(ctr.x, ctr.y + 2 * z, (s.wid + s.len) * 15 * z, (s.wid + s.len) * 7 * z, 'rgba(0,0,0,.2)');
   const b = box(cx, y, s.wid, s.len, s.body, col, base);
   wallRect(b.left, base, 0, 1, 0, 2, s.big ? '#3a3a3a' : '#d5d5d0');
-  wallRect(b.left, base, 0.06, 0.24, 4, 7, '#fff6c8'); wallRect(b.left, base, 0.76, 0.94, 4, 7, '#fff6c8');
+  wallRect(b.left, base, 0.06, 0.24, 4, 7, HL()); wallRect(b.left, base, 0.76, 0.94, 4, 7, HL());
   wallRect(b.left, base, 0.34, 0.66, 3, 6, shade(col, -0.45));
   wallRect(b.right, base, 0, 1, s.body * 0.45, s.body * 0.45 + 1, shade(col, 0.25));
   // doors: a seam, a handle, and a side mirror
@@ -268,7 +281,7 @@ function drawCar(c, x, y, ts) {
     wallLine(cb.right, top, 0.5, 0, 0.5, s.cabH, shade(col, -0.1), 1.6);
     const roofH = top + s.cabH;
     if (s.rack) [0.25, 0.75].forEach(u => { const a = up(iso(cx + 0.12, y + s.cab[0] + s.cab[1] * u), (roofH + 2) * z), q = up(iso(cx + s.wid - 0.12, y + s.cab[0] + s.cab[1] * u), (roofH + 2) * z); line(a.x, a.y, q.x, q.y, '#555', 1.2 * z); });
-    if (s.lights) box(cx + 0.15, y + s.cab[0] + s.cab[1] - 0.15, s.wid - 0.3, 0.1, 2, '#333', roofH, { left: '#fff6c8' });
+    if (s.lights) box(cx + 0.15, y + s.cab[0] + s.cab[1] - 0.15, s.wid - 0.3, 0.1, 2, '#333', roofH, { left: HL() });
   }
   if (s.spoiler) box(cx + 0.06, y + 0.02, s.wid - 0.12, 0.14, 1.4, shade(col, -0.25), top + 4);
   carWheel(b.right, 0, 0.2, s.big); carWheel(b.right, 0, 0.8, s.big);
@@ -299,7 +312,7 @@ function drawSleekCar(c, x, y, s, ts) {
     // low wedge: the nose dips almost to the ground, cabin far back and tiny, big rear wing
     const body = slope(x, y, w, L, 6, 2.6, 0.05, 0.75, { front: shade(col, -0.05), side: shade(col, -0.18), top: shade(col, 0.12) });
     wallRect([iso(x + w, y + L), iso(x + w, y)], 2.6, 0.55, 0.85, 1, 4.6, '#1d1d20');   // side air intake
-    flatRect(x + 0.18, y + L - 0.62, w - 0.36, 0.08, '#fff6c8', null, 4.4);            // slim headlights
+    flatRect(x + 0.18, y + L - 0.62, w - 0.36, 0.08, HL(), null, 4.4);            // slim headlights
     slope(x + 0.12, y + 0.45, w - 0.24, 0.85, 4.6, 8.6, 0.3, 0.42, { front: glass, side: glassHi, top: shade(col, -0.05) }, 0.1);
     [0.12, 0.85].forEach(u => box(x + 0.1 + u * (w - 0.28), y + 0.12, 0.06, 0.06, 6, '#222', 8.6));
     box(x + 0.02, y + 0.04, w - 0.04, 0.24, 1.6, shade(col, -0.3), 14.6);
@@ -308,7 +321,7 @@ function drawSleekCar(c, x, y, s, ts) {
     // long flat hood with a scoop, cabin set back, chrome bumper, twin racing stripes, fat rear tyres
     const b = box(x, y, w, L, 8, col, 3.5);
     wallRect(b.left, 3.5, 0, 1, 0, 2, '#e8edf2');
-    wallRect(b.left, 3.5, 0.08, 0.2, 4, 6.5, '#fff6c8'); wallRect(b.left, 3.5, 0.8, 0.92, 4, 6.5, '#fff6c8');
+    wallRect(b.left, 3.5, 0.08, 0.2, 4, 6.5, HL()); wallRect(b.left, 3.5, 0.8, 0.92, 4, 6.5, HL());
     wallRect(b.left, 3.5, 0.32, 0.68, 3, 6, shade(col, -0.5));
     flatRect(x + w * 0.36, y, w * 0.1, L, '#fffaf0', null, 11.5); flatRect(x + w * 0.54, y, w * 0.1, L, '#fffaf0', null, 11.5);
     slope(x + 0.08, y + 0.32, w - 0.16, 0.78, 7, 11.5, 0.12, 0.26, { front: glass, side: glassHi, top: col });
@@ -318,7 +331,7 @@ function drawSleekCar(c, x, y, s, ts) {
   } else {
     // rounded coupe: sloped nose and tail, glass bubble in the middle, little ducktail
     slope(x, y, w, L, 7, 3.2, 0.25, 0.4, { front: shade(col, -0.05), side: shade(col, -0.18), top: shade(col, 0.1) });
-    flatRect(x + 0.15, y + L - 0.5, 0.2, 0.08, '#fff6c8', null, 8); flatRect(x + w - 0.35, y + L - 0.5, 0.2, 0.08, '#fff6c8', null, 8);
+    flatRect(x + 0.15, y + L - 0.5, 0.2, 0.08, HL(), null, 8); flatRect(x + w - 0.35, y + L - 0.5, 0.2, 0.08, HL(), null, 8);
     slope(x + 0.1, y + 0.55, w - 0.2, 0.8, 5.5, 10.2, 0.25, 0.3, { front: glass, side: glassHi, top: shade(col, 0.05) }, 0.08);
     box(x + 0.08, y + 0.22, w - 0.16, 0.12, 1.4, shade(col, -0.25), 10.2);
     wheel(0.2, false, false); wheel(0.8, false, false);
@@ -335,7 +348,7 @@ function drawCamper(c, x, y) {
   wallRect(b.left, 3.5, 0.08, 0.92, 16, 27, '#8fc6e3', '#fff', 1);
   [0.18, 0.5].forEach(u => wallRect(b.right, 3.5, u, u + 0.18, 16, 24, NIGHT > 0.3 ? '#ffe39a' : '#aad6ee', '#fff', 1));
   wallRect(b.right, 3.5, 0.72, 0.84, 1, 24, shade('#f4f1ea', -0.12), '#ccc', 0.6);
-  wallRect(b.left, 3.5, 0.06, 0.2, 3, 6, '#fff6c8'); wallRect(b.left, 3.5, 0.8, 0.94, 3, 6, '#fff6c8');
+  wallRect(b.left, 3.5, 0.06, 0.2, 3, 6, HL()); wallRect(b.left, 3.5, 0.8, 0.94, 3, 6, HL());
   box(cx + 0.3, y + 0.5, 0.45, 0.5, 4, '#dedad2', 33.5);
   carWheel(b.right, 0, 0.18); carWheel(b.right, 0, 0.82);
   return { x0: iso(cx, y + len).x - 4, x1: iso(cx + wid, y).x + 4, y0: iso(cx, y).y - 40 * z, y1: iso(cx + wid, y + len).y + 4 };
@@ -1560,7 +1573,7 @@ function drawBushWild(x, y, v) {
 }
 // A lake as an ellipse in world space.
 function drawLake(cx, cy, rx, ry, ts) {
-  const z = cam.z, ring = (k, ox = 0) => { const pts = []; for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2; pts.push(iso(cx + Math.cos(a) * (rx + k), cy + Math.sin(a) * (ry + k) + ox)); } return pts; };
+  const z = cam.z, nR = Math.max(28, Math.round((rx + ry) * 0.9)), ring = (k, ox = 0) => { const pts = []; for (let i = 0; i < nR; i++) { const a = i / nR * Math.PI * 2; pts.push(iso(cx + Math.cos(a) * (rx + k), cy + Math.sin(a) * (ry + k) + ox)); } return pts; };
   poly(ring(0.35), '#d8cba6');
   poly(ring(0), '#4aa8d6');
   poly(ring(-0.4), '#5dbbe6');
@@ -1589,7 +1602,39 @@ function sparkle(x, y, ts, k = 0) {
   const ph = (ts / 900 + k * 0.37) % 1, a = Math.sin(ph * Math.PI);
   if (a > 0.05) star(x, y, 2.6 * cam.z * a, `rgba(255,248,210,${a})`);
 }
+// A sport's golden statue (v0.12): a golden mini-person in that sport's pose on a marble plinth with the sport's badge.
+const GOLD_LOOK = { shirt: '#f2c230', skin: '#e8b923', hair: 'short', hairCol: '#c9971a', mob: 'walk' };
+const STATUE_POSE = { walk: 'walk', run: 'run', cycle: 'run', swim: 'swim', hike: 'walk', mind: 'stand', strength: 'lift', cardio: 'run', team: 'wave', snow: 'run', outdoor: 'wave' };
+function drawSportStatue(it, x, y, ts) {
+  const z = cam.z, s = SPORT_BY_ID[YARD[it.k].sport], c = iso(x + 0.5, y + 0.5), pose = STATUE_POSE[s.group] || 'stand';
+  ellipse(c.x, c.y + 2 * z, 26 * z, 11 * z, 'rgba(0,0,0,.14)');
+  box(x + 0.12, y + 0.12, 0.76, 0.76, 2.5, '#d9d1c2');
+  const b = box(x + 0.18, y + 0.18, 0.64, 0.64, 12, '#ece6da', 2.5);
+  wallRect(b.left, 2.5, 0.16, 0.84, 2.5, 9, '#fbf6ea', '#c9b98f', 0.8);
+  const pl = wallPt(b.left, 2.5, 0.5, 5.8);
+  emoji(s.e, pl.x, pl.y, 6.5 * z);
+  const p = up(iso(x + 0.5, y + 0.5), 14.5 * z);
+  drawPerson(p.x, p.y, z * (pose === 'swim' ? 0.85 : 0.95), { look: GOLD_LOOK, face: 1, moving: pose === 'walk' || pose === 'run', phase: 1.3, energy: 'great', ts: 0, seed: 1, pose, noBike: true });
+  const g = (Math.sin(ts / 700 + x * 1.3) + 1) / 2;
+  circle(p.x + 5 * z, p.y - 30 * z, (0.8 + g * 1.4) * z, 'rgba(255,255,235,.95)');
+}
+// An award's medal sculpture (v0.12): a big medal on a stand, in the award's colour, with its badge.
+function drawAwardMedal(it, x, y, ts) {
+  const z = cam.z, A = AWARDS[YARD[it.k].award], c = iso(x + 0.5, y + 0.5);
+  ellipse(c.x, c.y + 2 * z, 24 * z, 10 * z, 'rgba(0,0,0,.14)');
+  box(x + 0.14, y + 0.26, 0.72, 0.48, 5, '#8a8f98');
+  const top = up(iso(x + 0.5, y + 0.5), 5 * z), m = { x: top.x, y: top.y - 30 * z };
+  line(top.x - 7 * z, top.y, top.x - 3 * z, m.y + 6 * z, '#6b7079', 2.2 * z); line(top.x + 7 * z, top.y, top.x + 3 * z, m.y + 6 * z, '#6b7079', 2.2 * z);
+  pg([[m.x - 8 * z, m.y - 26 * z], [m.x - 2 * z, m.y - 9 * z], [m.x + 2 * z, m.y - 9 * z], [m.x + 8 * z, m.y - 26 * z]], A.col);
+  pg([[m.x - 8 * z, m.y - 26 * z], [m.x - 4 * z, m.y - 26 * z], [m.x, m.y - 13 * z], [m.x - 2 * z, m.y - 9 * z]], shade(A.col, -0.2));
+  circle(m.x, m.y, 13 * z, shade('#f2c230', -0.25)); circle(m.x, m.y, 11.5 * z, '#f2c230'); circle(m.x, m.y, 9 * z, A.col);
+  emoji(A.e, m.x, m.y + 0.5 * z, 10 * z);
+  const g = (Math.sin(ts / 800 + x) + 1) / 2;
+  circle(m.x - 4 * z, m.y - 6 * z, (1.4 + g) * z, 'rgba(255,255,255,.7)');
+}
 function drawExcl(it, x, y, ts) {
+  if (it.k.startsWith('st_')) return drawSportStatue(it, x, y, ts);
+  if (it.k.startsWith('aw_')) return drawAwardMedal(it, x, y, ts);
   const k = it.k, z = cam.z, [w, d] = itemSize('yard', it), P = (u, v, h) => up(iso(x + u, y + v), h * z), c = iso(x + w / 2, y + d / 2);
   ellipse(c.x, c.y + 2 * z, (w + d) * 14 * z, (w + d) * 6 * z, 'rgba(0,0,0,.14)');
   switch (k) {

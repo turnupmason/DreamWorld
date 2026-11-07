@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.11.0';
+const VERSION = '0.12.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -79,6 +79,8 @@ const NPC_NAMES = [
 const START_LOTS = { me: ['maple', 6], li: ['maple', 0, 5], wang: ['cherry', 0], mia: ['cherry', 11] };
 // Buying land: each parcel next to your home costs more than the last. Moving to another street costs its land.
 const LAND = { parcel: 600, grow: 1.35, move: 500, refund: 0.5 };
+// Going somewhere in town (v0.12): tiles per second on foot, by bike, by car (sped up so trips take seconds).
+const TRIP_SPEED = { walk: 3, bike: 6, car: 10 };
 
 // ---------- crops ----------
 // grow: minutes to ripen. seed: price. yield: units per plot. sell: per unit. n: plants per plot. rare: only from real-life goals.
@@ -148,6 +150,7 @@ const GOODS = {
   alpacawool: { e: '🧶', zh: '羊驼毛', en: 'Alpaca wool',  sell: 48 },
   honey:      { e: '🍯', zh: '蜂蜜',   en: 'Honey',        sell: 20 },
   fish:       { e: '🐟', zh: '鲫鱼',   en: 'Fish',         sell: 12 },
+  bread:      { e: '🍞', zh: '面包',   en: 'Bread',        sell: 10 },   // baked at the bakery from 3 wheat (v0.12)
   shrimp:     { e: '🦐', zh: '河虾',   en: 'Shrimp',       sell: 18 },
   koi:        { e: '🐠', zh: '锦鲤',   en: 'Koi',          sell: 60 },
   apple:      { e: '🍎', zh: '苹果',   en: 'Apple',        sell: 6 },
@@ -572,6 +575,201 @@ const COMMUNITY_TZ = { wutong: 'America/Los_Angeles', palmbay: 'America/New_York
   hangzhou: 'Asia/Shanghai', sydney: 'Australia/Sydney', andes: 'America/Bogota', london: 'Europe/London', seoul: 'Asia/Seoul',
   rio: 'America/Sao_Paulo', capetown: 'Africa/Johannesburg' };
 Object.entries(COMMUNITY_TZ).forEach(([k, tz]) => { COMMUNITIES[k].tz = tz; });
+// ---------- town layouts (v0.12) ----------
+// Every country's town has its own plan. A layout has: streets (rows of parcels; each street's road is right in
+// front of it, at y + LOT_D), roads [x0, y0, x1, y1, kind], the town centre (paved; the town hall plaza is 16 × 14,
+// shops are 6 × 5.5), a park (about 44 × 30), a lake (an ellipse; a huge one past the edge of town is the sea),
+// farm fields, water (rivers and canals; roads over them are bridges), places people walk to, and area names.
+// Each layout can also be used mirrored (left ↔ right), so 8 layouts give 16 different towns.
+// Your first town (梧桐镇) keeps the original plan, `grid`.
+const st_ = (nb, zh, en, x, y, n) => ({ nb, zh, en, x, y, n });
+const LAYOUTS = {
+  grid: {   // an American suburb: blocks of streets, the town centre between two avenues, a lake fed by a river
+    streets: STREETS, roads: ROADS, npcLots: NPC_LOTS,
+    plaza: LANDMARKS.plaza, shops: LANDMARKS.shops, park: LANDMARKS.park, lake: LANDMARKS.lake, fields: [LANDMARKS.fields],
+    centre: { x: 66.5, y: -2, w: 46, d: 32 }, water: [[176, -18, 178.4, 52]],
+    places: [[89, 16.5], [90, 31.5], [128, 31.5], [72, 27], [102, 27], [40, 31.5], [150, 31.5]],
+    labels: [['area_maple', 30, 10], ['area_center', 89, 1], ['area_lake', 144, 9], ['area_park', 90, 44], ['area_farm', 30, 47], ['area_fields', 55, 79], ['area_water', 146, 50]],
+  },
+  canal: {   // a Dutch / English canal village: canals behind each row of houses, a windmill lake, tulip fields
+    streets: {
+      gracht: st_('maple', '运河街', 'Canal Street', 0, 0, 14), tulip: st_('maple', '郁金香巷', 'Tulip Lane', 0, 22, 14),
+      mill: st_('farm', '风车路', 'Mill Road', 0, 44, 14), dyke: st_('farm', '堤岸路', 'Dyke Road', 0, 66, 12),
+      harbour: st_('lake', '港湾街', 'Harbour Street', 124, 40, 13), quay: st_('lake', '码头路', 'Quay Road', 124, 62, 13),
+    },
+    roads: [[-2, 14, 57, 16, 'street'], [-2, 36, 57, 38, 'street'], [-2, 58, 57, 60, 'street'], [-2, 80, 57, 82, 'dirt'],
+      [57, -2, 60, 84, 'avenue'], [60, 32, 182, 35, 'avenue'], [120, 35, 123, 80, 'avenue'], [123, 54, 180, 56, 'street'], [123, 76, 180, 78, 'street'], [60, 69, 120, 71, 'dirt']],
+    npcLots: [['gracht', 0, 5], ['gracht', 9, 5], ['tulip', 0, 6], ['tulip', 10, 4], ['mill', 2, 6], ['dyke', 0, 5], ['harbour', 0, 5], ['harbour', 8, 5], ['quay', 4, 6]],
+    centre: { x: 62, y: -2, w: 57, d: 34 }, plaza: { x: 82, y: 4 },
+    shops: [['library', 64, 3], ['post', 111, 3], ['bakery', 64, 22], ['cafe', 71, 22], ['market', 104, 22], ['gym', 111, 22]],
+    park: { x: 66, y: 38, w: 44, d: 30 }, lake: { x: 151, y: 14, rx: 22, ry: 11 },
+    fields: [{ x: 62, y: 72, w: 58, d: 16 }, { x: 124, y: 80, w: 54, d: 10 }],
+    water: [[-18, 16.4, 57, 21.6], [-18, 38.4, 57, 43.6], [-18, 60.4, 57, 65.6]],
+    places: [[90, 33.5], [70, 33.5], [110, 33.5], [88, 70], [150, 33.5], [30, 37], [150, 55]],
+    labels: [['area_maple', 28, 8], ['area_center', 90, 1], ['area_canal', 30, 41], ['area_park', 88, 50], ['area_lake', 151, 8], ['area_fields', 90, 80], ['area_harbour', 150, 60]],
+  },
+  coast: {   // a beach town: the sea along the bottom, a boulevard by the beach, palm streets behind it
+    streets: {
+      ocean: st_('lake', '海景路', 'Ocean Drive', 0, 57, 11), palm: st_('maple', '棕榈街', 'Palm Street', 0, 35, 11),
+      sunset: st_('maple', '日落巷', 'Sunset Lane', 0, 13, 11), coral: st_('lake', '珊瑚路', 'Coral Road', 132, 57, 11),
+      reef: st_('maple', '礁石街', 'Reef Street', 132, 35, 11), harbor: st_('farm', '渔港路', 'Harbor Road', 132, 13, 11),
+    },
+    roads: [[-18, 71, 196, 74, 'avenue'], [-2, 49, 47, 51, 'street'], [-2, 27, 47, 29, 'street'], [130, 49, 182, 51, 'street'], [130, 27, 182, 29, 'street'],
+      [47, -2, 50, 74, 'avenue'], [127, -2, 130, 74, 'avenue'], [50, 28, 127, 31, 'avenue']],
+    npcLots: [['ocean', 0, 5], ['ocean', 7, 4], ['palm', 0, 6], ['palm', 7, 4], ['sunset', 2, 5], ['coral', 0, 6], ['coral', 7, 4], ['reef', 3, 5], ['harbor', 0, 6]],
+    centre: { x: 52, y: -2, w: 72, d: 30 }, plaza: { x: 80, y: 3 },
+    shops: [['library', 54, 3], ['post', 116, 3], ['bakery', 54, 20], ['cafe', 61, 20], ['market', 109, 20], ['gym', 116, 20]],
+    park: { x: 66, y: 35, w: 44, d: 30 }, lake: { x: 90, y: 250, rx: 400, ry: 170, sea: true },
+    fields: [{ x: -2, y: -3, w: 48, d: 14 }, { x: 131, y: -3, w: 48, d: 14 }], water: [],
+    places: [[88, 29.5], [60, 29.5], [116, 29.5], [88, 72.5], [30, 72.5], [150, 72.5], [88, 67]],
+    labels: [['area_maple', 22, 30], ['area_center', 88, 1], ['area_beach', 88, 80], ['area_park', 88, 45], ['area_farm', 20, 4], ['area_fields', 154, 4], ['area_harbour', 154, 30]],
+  },
+  river: {   // a river town: a wide river through the middle with two bridges, temples up top, rice fields below
+    streets: {
+      sakura: st_('maple', '樱花通', 'Blossom Row', 0, 0, 14), temple: st_('maple', '寺前街', 'Temple Street', 0, 18, 14),
+      willow: st_('lake', '柳岸路', 'Willow Bank', 0, 47, 14), paddy: st_('farm', '稻田路', 'Paddy Road', 0, 66, 12),
+      pine: st_('maple', '松风街', 'Pine Wind Street', 123, 0, 13), tea: st_('farm', '茶园路', 'Tea Garden Road', 123, 18, 13),
+    },
+    roads: [[-2, 14, 57, 16, 'street'], [-2, 32, 57, 34, 'street'], [-2, 61, 57, 63, 'street'], [-2, 80, 57, 82, 'dirt'],
+      [57, -2, 60, 84, 'avenue'], [118, -2, 121, 84, 'avenue'], [60, 31, 118, 34, 'avenue'], [121, 14, 180, 16, 'street'], [121, 32, 180, 34, 'street'], [60, 77, 118, 79, 'dirt']],
+    npcLots: [['sakura', 0, 5], ['sakura', 9, 5], ['temple', 2, 6], ['willow', 0, 5], ['willow', 8, 6], ['paddy', 0, 6], ['pine', 0, 5], ['pine', 8, 5], ['tea', 3, 6]],
+    centre: { x: 61, y: -2, w: 56, d: 33 }, plaza: { x: 81, y: 3 },
+    shops: [['library', 63, 3], ['post', 110, 3], ['bakery', 63, 21], ['cafe', 70, 21], ['market', 104, 21], ['gym', 110, 21]],
+    park: { x: 66, y: 46, w: 44, d: 30 }, lake: { x: 150, y: 62, rx: 22, ry: 12 },
+    fields: [{ x: 61, y: 80, w: 56, d: 10 }, { x: 123, y: 78, w: 55, d: 12 }],
+    water: [[-18, 36.6, 198, 43.4]],
+    places: [[89, 32.5], [64, 32.5], [114, 32.5], [88, 78], [150, 33], [30, 33], [119.5, 60]],
+    labels: [['area_maple', 28, 8], ['area_center', 89, 1], ['area_river', 30, 40], ['area_park', 88, 58], ['area_lake', 150, 50], ['area_fields', 90, 86], ['area_farm', 150, 24]],
+  },
+  valley: {   // a mountain valley: houses up the west side, a long fjord lake down the east side
+    streets: {
+      birch: st_('maple', '白桦街', 'Birch Street', 0, 0, 12), cedar: st_('maple', '雪松路', 'Cedar Road', 0, 20, 12),
+      aspen: st_('lake', '白杨路', 'Aspen Road', 0, 40, 12), ridge: st_('farm', '山脊路', 'Ridge Road', 0, 60, 10),
+      summit: st_('lake', '山顶路', 'Summit Road', 58, 66, 12),
+    },
+    roads: [[-2, 14, 49, 16, 'street'], [-2, 34, 49, 36, 'street'], [-2, 54, 49, 56, 'street'], [-2, 74, 49, 76, 'dirt'],
+      [49, -2, 52, 84, 'avenue'], [108, -2, 111, 84, 'avenue'], [52, 28, 108, 31, 'avenue'], [52, 80, 108, 82, 'street'], [111, 40, 124, 42, 'dirt']],
+    npcLots: [['birch', 0, 4], ['birch', 8, 4], ['cedar', 0, 6], ['cedar', 6, 6], ['aspen', 0, 5], ['aspen', 8, 4], ['ridge', 0, 6], ['summit', 0, 6], ['summit', 6, 6]],
+    centre: { x: 53, y: -2, w: 55, d: 30 }, plaza: { x: 72, y: 3 },
+    shops: [['library', 55, 3], ['post', 101, 3], ['bakery', 55, 20], ['cafe', 62, 20], ['market', 94, 20], ['gym', 101, 20]],
+    park: { x: 58, y: 33, w: 44, d: 30 }, lake: { x: 150, y: 42, rx: 24, ry: 36 },
+    fields: [{ x: -2, y: 79, w: 48, d: 11 }, { x: 113, y: 81, w: 65, d: 9 }], water: [[148.8, -18, 151.2, 7]],
+    places: [[80, 29.5], [56, 29.5], [105, 29.5], [80, 64], [123, 41], [24, 35], [80, 81]],
+    labels: [['area_maple', 24, 8], ['area_center', 80, 1], ['area_fjord', 150, 30], ['area_park', 80, 46], ['area_farm', 20, 64], ['area_fields', 140, 86]],
+  },
+  terrace: {   // a hillside town: streets step down the hill one after another, joined by short steep roads
+    streets: {
+      t1: st_('maple', '咖啡坡', 'Coffee Slope', 0, 0, 10), t2: st_('maple', '石阶街', 'Stone Steps', 16, 18, 10),
+      t3: st_('maple', '观景台路', 'Lookout Road', 32, 36, 10), t4: st_('lake', '花园坡', 'Garden Slope', 48, 54, 7),
+      t5: st_('farm', '梯田路', 'Terrace Road', 64, 72, 8), e1: st_('lake', '晨光街', 'Sunrise Street', 128, 34, 12), e2: st_('maple', '暮色街', 'Dusk Street', 128, 54, 12),
+    },
+    roads: [[-2, 14, 43, 16, 'street'], [11, 32, 60, 34, 'street'], [27, 50, 75, 52, 'street'], [43, 68, 79, 70, 'street'], [59, 86, 99, 88, 'dirt'],
+      [11, 14, 14, 34, 'street'], [27, 32, 30, 52, 'street'], [43, 50, 46, 70, 'street'], [59, 68, 62, 88, 'street'],
+      [57, 28, 182, 31, 'avenue'], [57, 28, 60, 34, 'street'], [122, -2, 125, 90, 'avenue'], [125, 48, 182, 50, 'street'], [125, 68, 182, 70, 'street']],
+    npcLots: [['t1', 0, 4], ['t1', 6, 4], ['t2', 0, 5], ['t2', 6, 4], ['t3', 2, 5], ['t4', 0, 4], ['t5', 0, 4], ['e1', 0, 6], ['e2', 5, 6]],
+    centre: { x: 70, y: -2, w: 50, d: 30 }, plaza: { x: 87, y: 3 },
+    shops: [['library', 72, 3], ['post', 113, 3], ['bakery', 72, 20], ['cafe', 79, 20], ['market', 106, 20], ['gym', 113, 20]],
+    park: { x: 78, y: 34, w: 42, d: 30 }, lake: { x: 150, y: 14, rx: 22, ry: 10 },
+    fields: [{ x: 100, y: 72, w: 20, d: 16 }, { x: 125, y: 74, w: 53, d: 14 }], water: [],
+    places: [[95, 29.5], [60, 29.5], [123.5, 40], [99, 67], [30, 33], [150, 29.5], [60, 69]],
+    labels: [['area_maple', 20, 8], ['area_center', 95, 1], ['area_terrace', 45, 45], ['area_park', 99, 44], ['area_lake', 150, 4], ['area_fields', 150, 80], ['area_farm', 80, 76]],
+  },
+  square: {   // an old town: the town square in the middle, streets all round it, a pond up top, the park below
+    streets: {
+      rue1: st_('maple', '钟楼街', 'Clock Street', 0, 4, 15), rue2: st_('maple', '面包街', 'Baker Street', 121, 4, 14),
+      rue3: st_('maple', '玫瑰街', 'Rose Street', 0, 23, 15), rue4: st_('lake', '喷泉街', 'Fountain Street', 0, 41, 15),
+      rue5: st_('maple', '石桥街', 'Stone Bridge Street', 121, 23, 14), rue6: st_('lake', '橄榄街', 'Olive Street', 121, 41, 14),
+      rue7: st_('farm', '葡萄园路', 'Vineyard Road', 0, 61, 14),
+    },
+    roads: [[-2, 18, 182, 21, 'avenue'], [-2, 55, 182, 58, 'avenue'], [60, -2, 63, 92, 'avenue'], [117, -2, 120, 92, 'avenue'],
+      [-2, 37, 60, 39, 'street'], [120, 37, 182, 39, 'street'], [-2, 75, 60, 77, 'dirt']],
+    npcLots: [['rue1', 0, 5], ['rue1', 10, 5], ['rue2', 0, 6], ['rue3', 3, 6], ['rue4', 0, 5], ['rue5', 0, 5], ['rue5', 9, 5], ['rue6', 4, 6], ['rue7', 0, 6]],
+    centre: { x: 64, y: 22, w: 52, d: 32 }, plaza: { x: 82, y: 28 },
+    shops: [['library', 66, 25], ['post', 108, 25], ['bakery', 66, 46], ['cafe', 73, 46], ['market', 101, 46], ['gym', 108, 46]],
+    park: { x: 68, y: 60, w: 44, d: 30 }, lake: { x: 90, y: 6, rx: 20, ry: 8 },
+    fields: [{ x: -2, y: 79, w: 62, d: 11 }, { x: 121, y: 60, w: 57, d: 28 }], water: [],
+    places: [[90, 56.5], [61.5, 30], [118.5, 30], [90, 19.5], [30, 19.5], [150, 56.5], [90, 61]],
+    labels: [['area_maple', 30, 8], ['area_center', 90, 24], ['area_lake', 90, 0], ['area_park', 90, 70], ['area_farm', 28, 64], ['area_fields', 150, 72]],
+  },
+  harbour: {   // a harbour town: the sea along the top behind the first streets, vineyards on the hills below
+    streets: {
+      cliff: st_('lake', '海崖路', 'Cliff Road', 0, 10, 13), wharf: st_('lake', '码头街', 'Wharf Street', 124, 10, 13),
+      hill1: st_('maple', '山坡街', 'Hillside Street', 0, 30, 13), hill2: st_('maple', '灯塔路', 'Lighthouse Road', 0, 50, 13),
+      vine: st_('farm', '葡萄藤路', 'Vine Road', 0, 70, 12), east2: st_('maple', '海风街', 'Sea Breeze Street', 124, 30, 13),
+    },
+    roads: [[-2, 24, 55, 26, 'street'], [-2, 44, 55, 46, 'street'], [-2, 64, 55, 66, 'street'], [-2, 84, 55, 86, 'dirt'],
+      [55, 8, 58, 88, 'avenue'], [120, 8, 123, 88, 'avenue'], [55, 38, 123, 41, 'avenue'], [121, 24, 182, 26, 'street'], [121, 44, 182, 46, 'street'], [58, 75, 120, 77, 'dirt']],
+    npcLots: [['cliff', 0, 5], ['cliff', 8, 5], ['wharf', 0, 6], ['wharf', 8, 5], ['hill1', 3, 6], ['hill2', 0, 5], ['hill2', 8, 5], ['vine', 0, 6], ['east2', 2, 6]],
+    centre: { x: 59, y: 9, w: 60, d: 29 }, plaza: { x: 81, y: 13 },
+    shops: [['library', 61, 12], ['post', 112, 12], ['bakery', 61, 30], ['cafe', 68, 30], ['market', 105, 30], ['gym', 112, 30]],
+    park: { x: 66, y: 43, w: 44, d: 30 }, lake: { x: 90, y: -150, rx: 400, ry: 154, sea: true },
+    fields: [{ x: 60, y: 79, w: 58, d: 11 }, { x: 124, y: 50, w: 54, d: 38 }], water: [],
+    places: [[89, 39.5], [56.5, 30], [121.5, 30], [88, 76], [30, 25], [150, 25], [89, 10]],
+    labels: [['area_beach', 90, 3], ['area_center', 89, 14], ['area_maple', 26, 40], ['area_park', 88, 56], ['area_farm', 26, 76], ['area_fields', 150, 70], ['area_harbour', 150, 18]],
+  },
+};
+// Which plan each community uses (and mirrored or not): no two communities are the same.
+const COMMUNITY_LAYOUT = { wutong: 'grid', vermont: 'grid|f', palmbay: 'coast', sydney: 'coast|f', holland: 'canal', london: 'canal|f',
+  kyoto: 'river', hangzhou: 'river|f', fjord: 'valley', banff: 'valley|f', andes: 'terrace', cactus: 'terrace|f',
+  provence: 'square', seoul: 'square|f', rio: 'harbour', capetown: 'harbour|f' };
+Object.entries(COMMUNITY_LAYOUT).forEach(([k, v]) => { const [l, f] = v.split('|'); COMMUNITIES[k].layout = l; COMMUNITIES[k].flip = !!f; });
+// A ready-to-use layout (mirrored if asked): every x becomes MX - x. NPC lots become { id, st, p, n, house }.
+const MIRROR_X = WORLD.x0 + WORLD.x1;
+function buildLayout(id, flip) {
+  const B = LAYOUTS[id], fx = (x, w = 0) => (flip ? MIRROR_X - x - w : x);
+  const streets = {};
+  Object.entries(B.streets).forEach(([k, s]) => { streets[k] = { ...s, x: fx(s.x, s.n * PARCEL) }; });
+  const npcLots = B.npcLots.map((s, i) => {
+    const o = Array.isArray(s) ? { id: 'n' + (i + 1), st: s[0], p: s[1], n: s[2], house: i % 9 } : { ...s };
+    if (flip) o.p = B.streets[o.st].n - o.p - o.n;
+    return o;
+  });
+  const rect = r => (flip ? [MIRROR_X - r[2], r[1], MIRROR_X - r[0], r[3], ...r.slice(4)] : r.slice());
+  const box = (b, w = b.w || 0) => ({ ...b, x: fx(b.x, w) });
+  return {
+    id: id + (flip ? '|f' : ''), streets, npcLots, roads: B.roads.map(rect), water: B.water.map(rect),
+    centre: box(B.centre), plaza: box(B.plaza, LOT_W), shops: B.shops.map(([k, x, y]) => [k, fx(x, 6), y]),
+    park: box(B.park), lake: { ...B.lake, x: fx(B.lake.x) }, fields: B.fields.map(f => box(f)),
+    places: B.places.map(([x, y]) => [fx(x), y]), labels: B.labels.map(([k, x, y]) => [k, fx(x), y]),
+  };
+}
+// ---------- public places in town (v0.12) ----------
+// Tap one in town, go there (walk / drive / straight there), then use it. Nothing here makes coins from nothing:
+// coins still only come from real life. Helping and fishing use one of the day's farm jobs.
+const PLACE_INFO = {
+  plaza:   { e: '🏛️', zh: '镇政府', en: 'Town hall' },
+  fields:  { e: '🌾', zh: '公共麦田', en: 'Town fields' },
+  park:    { e: '🌳', zh: '公园', en: 'Park' },
+  lake:    { e: '🏞️', zh: '湖边', en: 'Lakeside' },
+  beach:   { e: '🏖️', zh: '海滩', en: 'Beach' },
+  bakery:  { e: '🥐', zh: '面包店', en: 'Bakery' },
+  cafe:    { e: '☕', zh: '咖啡馆', en: 'Café' },
+  market:  { e: '🛒', zh: '超市', en: 'Market' },
+  gym:     { e: '🏋️', zh: '健身房', en: 'Gym' },
+  library: { e: '📚', zh: '图书馆', en: 'Library' },
+  post:    { e: '📮', zh: '邮局', en: 'Post office' },
+};
+const HARVEST_GOAL = 30;          // the town fields: helps from everyone in town today; full = harvest festival
+const HELP_HARVEST = { wheat: 2 }; // helping once a day (uses 1 farm job) gives you this; the festival gives 1 bread
+const BREAD = { wheat: 3 };        // the bakery bakes 1 bread from 3 of your wheat
+const LAKE_FISH = 1;               // fishing at the lake / beach: once a day, uses 1 farm job
+// The library's card of the day: half a minute of something good to know (from the product concept).
+const LIB_CARDS = [
+  { zh: '睡前一小时放下手机，更容易睡着。', en: 'Put your phone down an hour before bed and you fall asleep more easily.' },
+  { zh: '每天走六七千步，对身体就已经很有帮助。', en: 'Six or seven thousand steps a day already does your body a lot of good.' },
+  { zh: '坐了一个小时，就站起来走两分钟。', en: 'After an hour of sitting, get up and walk for two minutes.' },
+  { zh: '早上晒十分钟太阳，晚上更容易困。', en: 'Ten minutes of morning sun helps you feel sleepy at night.' },
+  { zh: '不用等口渴才喝水，桌上放一杯就好。', en: 'Don’t wait to be thirsty: keep a glass of water on your desk.' },
+  { zh: '快走也算运动：每周加起来 150 分钟就很好。', en: 'Brisk walking counts: 150 minutes a week is a great goal.' },
+  { zh: '每周两次力量训练，保护肌肉和骨头。', en: 'Strength training twice a week keeps muscles and bones strong.' },
+  { zh: '周末也尽量在同一个时间起床。', en: 'Try to get up at the same time on weekends too.' },
+  { zh: '吃慢一点：吃饱的感觉要二十分钟才到。', en: 'Eat slowly: feeling full takes about twenty minutes.' },
+  { zh: '和朋友一起运动，更容易坚持下去。', en: 'Exercising with a friend makes it easier to keep going.' },
+  { zh: '看屏幕二十分钟，就看远处二十秒。', en: 'Every twenty minutes on a screen, look far away for twenty seconds.' },
+  { zh: '慢慢吸气四秒、呼气六秒，重复五次，心会静下来。', en: 'Breathe in for four seconds and out for six, five times, to calm down.' },
+  { zh: '卧室凉一点、暗一点、安静一点，睡得更好。', en: 'A cool, dark, quiet bedroom helps you sleep better.' },
+  { zh: '午睡别超过半小时，晚上才睡得着。', en: 'Keep naps under half an hour so you still sleep at night.' },
+];
 // How many other people are drawn at once (v0.11). Thousands can be in a community and hundreds at a popular
 // home; we draw only a few and say "+N more".
 const SHOW_LIMITS = { town: 10, home: 4, room: 3 };
@@ -670,6 +868,24 @@ PET_BREEDS.collie = { kind: 'dog', zh: '冠军边牧', en: 'Champion collie', pr
 ANIMALS.rainbowalpaca = { ...ANIMALS.alpaca, e: '🦄', zh: '彩虹羊驼', en: 'Rainbow alpaca', baby: { zh: '彩虹小羊驼', en: 'Rainbow cria' }, price: 2600, sell: [400, 700, 1200], excl: 'steps20k:2' };
 // A trophy case appears in your home with your first trophy (not sold).
 FURN.trophycase = { zh: '奖杯柜', en: 'Trophy case', w: 1, d: 1, price: 0, award: true };
+// ---------- more exclusives (v0.12) ----------
+// Every sport's gold trophy unlocks that sport's own golden statue (one for each of the 80 Apple Watch sports).
+SPORTS.forEach(s => { YARD['st_' + s.id] = { zh: s.zh + '金像', en: 'Golden ' + s.en + ' statue', w: 1, d: 1, price: 900, excl: s.id + ':2', sport: s.id }; });
+// Apple Watch-style awards: one-time medals for special days and milestones (earned in real life only).
+// Each unlocks its own big medal sculpture for the yard.
+const AWARDS = {
+  move200:     { e: '🔥', col: '#ef4f6b', zh: '活动目标翻倍', en: 'Double Move', desc: { zh: '一天的活动卡路里达到目标的 2 倍', en: 'Burn twice your Move goal in one day' } },
+  move300:     { e: '🔥', col: '#f2683a', zh: '活动目标三倍', en: 'Triple Move', desc: { zh: '一天的活动卡路里达到目标的 3 倍', en: 'Burn three times your Move goal in one day' } },
+  move400:     { e: '🌋', col: '#c0392b', zh: '活动目标四倍', en: 'Quadruple Move', desc: { zh: '一天的活动卡路里达到目标的 4 倍', en: 'Burn four times your Move goal in one day' } },
+  perfectweek: { e: '📅', col: '#3dbb62', zh: '完美一周', en: 'Perfect Week', desc: { zh: '从周一到周日，每天都合上三个圆环', en: 'Close all three rings every day from Monday to Sunday' } },
+  newrecord:   { e: '🏆', col: '#e0aa2a', zh: '步数新纪录', en: 'New Step Record', desc: { zh: '一天的步数打破自己的纪录（至少 1 万步）', en: 'Beat your best day of steps (10,000 or more)' } },
+  steps1m:     { e: '👣', col: '#38a3e0', zh: '百万步', en: 'Million Steps', desc: { zh: '一共走满 100 万步', en: 'Walk 1,000,000 steps in total' } },
+  workouts100: { e: '💯', col: '#a46ef0', zh: '百次锻炼', en: '100 Workouts', desc: { zh: '一共完成 100 次锻炼', en: 'Finish 100 workouts in total' } },
+  monthly:     { e: '🗓️', col: '#ec6aa8', zh: '月度挑战', en: 'Monthly Challenge', desc: { zh: '一个月里有 20 天走满 1 万步', en: '20 days with 10,000 steps in one month' } },
+  weekend:     { e: '🎉', col: '#f59e0b', zh: '周末战士', en: 'Weekend Warrior', desc: { zh: '同一个周末的周六和周日都锻炼', en: 'Work out on both Saturday and Sunday of one weekend' } },
+};
+const AWARD_RULES = { move: { move200: 2, move300: 3, move400: 4 }, recordMin: 10000, steps: 1000000, workouts: 100, monthDays: 20, monthSteps: 10000 };
+Object.entries(AWARDS).forEach(([id, A]) => { YARD['aw_' + id] = { zh: A.zh + '奖章雕塑', en: A.en + ' medal sculpture', w: 1, d: 1, price: 1000, excl: 'aw:' + id, award: id }; });
 const EXCLUSIVES = [
   ...Object.keys(YARD).filter(k => YARD[k].excl).map(k => ['yard', k]),
   ...Object.keys(CARS).filter(k => CARS[k].excl).map(k => ['car', k]),

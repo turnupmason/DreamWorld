@@ -18,7 +18,8 @@ const Scene = (() => {
   let edit = null, hover = null;
   let rankCache = { t: 0, total: 0 };
   const WOODS = 14, WX0 = WORLD.x0 - WOODS, WY0 = WORLD.y0 - WOODS, WX1 = WORLD.x1 + WOODS, WY1 = WORLD.y1 + WOODS;
-  const LAKE = { x: LANDMARKS.lake.x, y: LANDMARKS.lake.y, rx: LANDMARKS.lake.rx, ry: LANDMARKS.lake.ry };
+  // The town plan on screen (v0.12: every community has its own; see LAYOUTS in data.js). Set every frame.
+  let TL = layoutOf(HOME_TOWN);
   const ZOOM = { world: [0.045, 2.4], interior: [0.5, 2.8] };
   const GH = LOT_D + 2;                      // a lot plus the road in front
   const gwOf = h => homeW(h) + 1;            // ... and the side path
@@ -48,7 +49,7 @@ const Scene = (() => {
   function townZoom() { return clamp(W / 2700, 0.1, 0.22); }
   function lotCenter(id) { const [ox, oy] = origin(id); return [ox + 5.5, oy + 9]; }
   // Looking at your own community: around your home. Another community: around its town centre.
-  function townCenter() { if (VIEW_TOWN !== townOf('me')) return [80, 30]; const [ox, oy] = origin('me'); return [ox + 24, oy + 22]; }
+  function townCenter() { if (VIEW_TOWN !== townOf('me')) { const C = layoutOf(VIEW_TOWN).centre; return [C.x + C.w / 2, C.y + C.d + 2]; } const [ox, oy] = origin('me'); return [ox + 24, oy + 22]; }
   function flyTo(wx, wy, z, instant) {
     if (instant || !worldReady) { cam.z = z; centerOn(wx, wy); fly = null; worldReady = true; return; }
     fly = { wx, wy, z };
@@ -77,6 +78,12 @@ const Scene = (() => {
   function stepCamera(dt) {
     if (mode === 'interior') return;
     // the first screens: drift slowly over the street
+    if (trip && !trip.arrived && mode === 'town' && !dragging) {   // on the way somewhere: the view goes with you
+      const c = unIso(W / 2, H / 2), k = 1 - Math.exp(-dt * 4);
+      if (cam.z < 0.42) cam.z += (0.5 - cam.z) * k;
+      centerOn(c.x + (trip.x - c.x) * k, c.y + (trip.y - c.y) * k);
+      return;
+    }
     if (attract && !dragging) {
       const t = performance.now() / 1000;
       const tx = 60 + Math.sin(t / 9) * 22, ty = 24 + Math.cos(t / 11) * 12;
@@ -358,7 +365,8 @@ const Scene = (() => {
       if (pool) { const [w, d] = itemSize('yard', pool); return { x: pool.x + w / 2, y: pool.y + d / 2, swim: 'pool' }; }
       if (mode !== 'town') return { x: TUB.x, y: TUB.y, swim: 'tub' };   // at home (an island): an inflatable pool
       const [ox, oy] = origin(h.id);
-      return { x: LAKE.x - ox, y: LAKE.y - oy, swim: 'lake' };
+      const [sx, sy] = swimSpot();
+      return { x: sx - ox, y: sy - oy, swim: 'lake' };
     }
     return { x: AREA.house.x + 4.5, y: PORCH.y + 0.6 };
   }
@@ -569,7 +577,7 @@ const Scene = (() => {
       } });
     }
     // car
-    if (h.car >= 0 && h.cars[h.car]) {
+    if (h.car >= 0 && h.cars[h.car] && !(h.id === 'me' && (parked || (trip && trip.how !== 'walk')))) {   // not while you're out in it
       const c = h.cars[h.car];
       objs.push({ d: ox + oy + 1 + 10.2, f: () => { const r = drawCar(c, ox + 0.5, oy + 9, ts); if (focus && r) hits.push({ kind: 'car', owner: h.id, ...r }); } });
     }
@@ -642,7 +650,7 @@ const Scene = (() => {
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
-    if (me.lot === h.id && !meInLake()) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
+    if (me.lot === h.id && !meInLake() && !(trip && mode === 'town')) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
   }
   function liveBadge(p, live, mine) {
     const z = cam.z, w = WORKOUTS[live.type];
@@ -685,21 +693,23 @@ const Scene = (() => {
     else for (let p = Math.ceil(lo) + 0.3; p < hi; p += 1) seg(p, p + 0.45, 0, 'rgba(255,255,255,.85)', 1.6);
   }
   const inRectXY = (x, y, x0, y0, x1, y1) => x >= x0 && x < x1 && y >= y0 && y < y1;
-  const inLake = (x, y) => ((x - LAKE.x) / (LAKE.rx + 1)) ** 2 + ((y - LAKE.y) / (LAKE.ry + 1)) ** 2 < 1;
+  const inLake = (x, y) => ((x - TL.lake.x) / (TL.lake.rx + 1)) ** 2 + ((y - TL.lake.y) / (TL.lake.ry + 1)) ** 2 < 1;
   // Something built is here (no wild trees): streets and their lots, roads, the town centre, the park, the lake, the fields.
   function occupied(x, y) {
-    for (const st of Object.values(STREETS)) if (inRectXY(x, y, st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1)) return true;
-    for (const r of ROADS) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
-    const P = LANDMARKS.park, F = LANDMARKS.fields;
-    if (inRectXY(x, y, RIVER.x - 1, WY0, RIVER.x + RIVER.w + 1, LAKE.y)) return true;
-    if (inRectXY(x, y, 66, -3, 113, 31) || inRectXY(x, y, P.x - 1, P.y - 1, P.x + P.w + 1, P.y + P.d + 1) || inRectXY(x, y, F.x - 1, F.y - 1, F.x + F.w + 1, F.y + F.d + 1)) return true;
-    return ((x - LAKE.x) / (LAKE.rx + 3)) ** 2 + ((y - LAKE.y) / (LAKE.ry + 3)) ** 2 < 1;
+    for (const st of Object.values(TL.streets)) if (inRectXY(x, y, st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1)) return true;
+    for (const r of TL.roads) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
+    for (const r of TL.water) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
+    const P = TL.park, C = TL.centre;
+    if (inRectXY(x, y, C.x - 0.5, C.y - 1, C.x + C.w + 0.5, C.y + C.d + 1) || inRectXY(x, y, P.x - 1, P.y - 1, P.x + P.w + 1, P.y + P.d + 1)) return true;
+    for (const F of TL.fields) if (inRectXY(x, y, F.x - 1, F.y - 1, F.x + F.w + 1, F.y + F.d + 1)) return true;
+    const m = TL.lake.sea ? 5.5 : 3;
+    return ((x - TL.lake.x) / (TL.lake.rx + m)) ** 2 + ((y - TL.lake.y) / (TL.lake.ry + m)) ** 2 < 1;
   }
   // Wild trees, rocks and bushes: thick woods around the town, a few trees on the open grass inside it. Computed once.
-  let SCENERY = null;
+  let SCENERY = null, SCENERY_ID = '';
   function scenery() {
-    if (SCENERY) return SCENERY;
-    SCENERY = [];
+    if (SCENERY && SCENERY_ID === TL.id) return SCENERY;
+    SCENERY = []; SCENERY_ID = TL.id;
     for (let j = WY0; j < WY1; j++) for (let i = WX0; i < WX1; i++) {
       if (occupied(i, j)) continue;
       const inside = inRectXY(i, j, WORLD.x0, WORLD.y0, WORLD.x1, WORLD.y1);
@@ -733,8 +743,10 @@ const Scene = (() => {
     return PEAKS;
   }
   function mountains(objs, vr) {
+    const K = TL.lake;
     peaks().forEach(m => {
       if (m.x < vr.x0 - 20 || m.x > vr.x1 + 20 || m.y < vr.y0 - 20 || m.y > vr.y1 + 20) return;
+      if (((m.x - K.x) / (K.rx + m.r + 4)) ** 2 + ((m.y - K.y) / (K.ry + m.r + 4)) ** 2 < 1) return;   // no mountains in the sea
       objs.push({ d: m.x + m.y - 30, f: () => {
         const z = cam.z, c = iso(m.x, m.y), hw = m.r * 34 * z, H = m.h * z, top = { x: c.x + hw * 0.08, y: c.y - H };
         poly([{ x: c.x - hw, y: c.y }, top, { x: c.x + hw * 0.08, y: c.y + hw * 0.12 }], '#8e9c86');
@@ -745,21 +757,56 @@ const Scene = (() => {
       } });
     });
   }
-  // A river from the mountains down into Mirror Lake (the avenue crosses it on a bridge).
-  const RIVER = { x: 176, w: 2.4 };
+  // Rivers and canals (water rectangles of the town plan): banks, water and a slow current along the long side.
   function river(vr) {
-    if (RIVER.x > vr.x1 + 2 || RIVER.x + RIVER.w < vr.x0 - 2) return;
-    flatRect(RIVER.x - 0.4, WY0, RIVER.w + 0.8, LAKE.y - WY0, '#c9b88f');
-    flatRect(RIVER.x, WY0, RIVER.w, LAKE.y - WY0, '#5aa7d6');
-    if (cam.z > 0.12) for (let y = Math.max(WY0, Math.floor(vr.y0)); y < Math.min(LAKE.y, vr.y1); y += 3) { const a = iso(RIVER.x + 0.6, y + (performance.now() / 900) % 3), b = iso(RIVER.x + 0.6, y + 0.8 + (performance.now() / 900) % 3); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.5)', 1.2 * cam.z); }
+    const now2 = performance.now();
+    TL.water.forEach(([x0, y0, x1, y1]) => {
+      if (!boxVisible(x0, y0, x1, y1, vr)) return;
+      const horiz = x1 - x0 > y1 - y0;
+      if (horiz) flatRect(x0, y0 - 0.4, x1 - x0, y1 - y0 + 0.8, '#c9b88f'); else flatRect(x0 - 0.4, y0, x1 - x0 + 0.8, y1 - y0, '#c9b88f');
+      flatRect(x0, y0, x1 - x0, y1 - y0, '#5aa7d6');
+      if (horiz) flatRect(x0, y0 + (y1 - y0) * 0.3, x1 - x0, (y1 - y0) * 0.4, 'rgba(255,255,255,.07)'); else flatRect(x0 + (x1 - x0) * 0.3, y0, (x1 - x0) * 0.4, y1 - y0, 'rgba(255,255,255,.07)');
+      if (cam.z <= 0.12) return;
+      const lo = Math.max(horiz ? x0 : y0, Math.floor(horiz ? vr.x0 : vr.y0)), hi = Math.min(horiz ? x1 : y1, horiz ? vr.x1 : vr.y1);
+      for (let u = Math.floor(lo / 3) * 3; u < hi - 1; u += 3) for (const f of [0.3, 0.7]) {
+        const v = u + ((now2 / 900 + f * 1.7) % 3), w = horiz ? y0 + (y1 - y0) * f : x0 + (x1 - x0) * f;
+        if (v < lo || v > hi - 0.8) continue;
+        const a = horiz ? iso(v, w) : iso(w, v), b = horiz ? iso(v + 0.8, w) : iso(w, v + 0.8);
+        line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.55)', 1.2 * cam.z);
+      }
+    });
+  }
+  // Where a road crosses water: a bridge (stone edges and a white railing on both sides).
+  function bridges(vr) {
+    const z = cam.z;
+    if (z < 0.08) return;
+    TL.roads.forEach(r => TL.water.forEach(w => {
+      const x0 = Math.max(r[0], w[0]), x1 = Math.min(r[2], w[2]), y0 = Math.max(r[1], w[1]), y1 = Math.min(r[3], w[3]);
+      if (x0 >= x1 || y0 >= y1 || !boxVisible(x0, y0, x1, y1, vr)) return;
+      const rail = (ax, ay, bx, by) => {
+        const A = iso(ax, ay), B = iso(bx, by);
+        line(A.x, A.y, B.x, B.y, '#9a8f80', 3 * z); line(A.x, A.y - 7 * z, B.x, B.y - 7 * z, '#f4efe6', 2 * z);
+        for (let k = 0; k <= 4; k++) { const P = lerp(A, B, k / 4); line(P.x, P.y, P.x, P.y - 7 * z, '#f4efe6', 1.4 * z); }
+      };
+      if (r[2] - r[0] < r[3] - r[1]) { rail(r[0], y0 - 0.4, r[0], y1 + 0.4); rail(r[2], y0 - 0.4, r[2], y1 + 0.4); }   // the road runs along y
+      else { rail(x0 - 0.4, r[1], x1 + 0.4, r[1]); rail(x0 - 0.4, r[3], x1 + 0.4, r[3]); }
+    }));
+  }
+  // Swimming in the town's water: the middle of a lake, or the shallows of the sea closest to the town centre.
+  function swimSpot() {
+    const K = TL.lake;
+    if (!K.sea) return [K.x, K.y];
+    const C = TL.centre, a = Math.atan2((C.y + C.d / 2 - K.y) / K.ry, (C.x + C.w / 2 - K.x) / K.rx);
+    return [K.x + Math.cos(a) * K.rx * 0.95, K.y + Math.sin(a) * K.ry * 0.95];
   }
   const boxVisible = (x0, y0, x1, y1, vr) => !(x1 < vr.x0 || x0 > vr.x1 || y1 < vr.y0 || y0 > vr.y1);
   // Town centre: paved square, the town hall plaza, shops along the avenue.
   function townCentre(objs, vr, ts, lv, out) {
-    if (!boxVisible(66, -3, 113, 31, vr)) return;
-    flatRect(66.5, -2, 46, 32, '#e8e0cf');
-    if (cam.z > 0.14) for (let k = 0; k < 9; k++) flatRect(67 + k * 5, -2, 0.08, 32, 'rgba(160,140,110,.12)');
-    const { x: px, y: py } = LANDMARKS.plaza;
+    const C = TL.centre;
+    if (!boxVisible(C.x - 1, C.y - 1, C.x + C.w + 1, C.y + C.d + 1, vr)) return;
+    flatRect(C.x, C.y, C.w, C.d, '#e8e0cf');
+    if (cam.z > 0.14) for (let x = C.x + 0.5; x < C.x + C.w; x += 5) flatRect(x, C.y, 0.08, C.d, 'rgba(160,140,110,.12)');
+    const { x: px, y: py } = TL.plaza;
     plazaGround(px, py);
     objs.push({ d: px + py + 10, f: () => { out.hall = drawTownHall(px, py, lv, ts); } });
     if (lv >= 2) objs.push({ d: px + py + 6 + 8 + 2, f: () => drawYardItem({ k: 'fountain' }, px + 6, py + 7, ts) });
@@ -767,12 +814,14 @@ const Scene = (() => {
     if (lv >= 3) deco.push(['flowers', 3, 7], ['flowers', 10, 7], ['lamp', 5, 10], ['lamp', 9, 10]);
     if (lv >= 5) deco.push(['flowers', 2, 10], ['flowers', 11, 10], ['tree', 6, 13], ['tree', 8, 13]);
     deco.forEach(([k, x, y]) => objs.push({ d: px + py + x + y + 1, f: () => drawYardItem({ k }, px + x, py + y, ts) }));
-    LANDMARKS.shops.forEach(([k, x, y]) => objs.push({ d: x + y + 5.5, f: () => { const r = drawShop(k, x, y, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
-    [[68, 28], [74, 28], [81, 28], [97, 28], [104, 28], [110, 28], [68, 12], [110, 12]].forEach(([x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }));
+    TL.shops.forEach(([k, x, y]) => objs.push({ d: x + y + 5.5, f: () => { const r = drawShop(k, x, y, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
+    // trees along the edges of the square (not on the plaza or in front of a shop)
+    const free = (x, y) => !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy]) => x > sx - 1.5 && x < sx + 7.5 && y > sy - 1.5 && y < sy + 7.5);
+    for (let x = C.x + 1.5; x < C.x + C.w - 1; x += 6.5) [C.y + C.d - 2, C.y + 1].forEach(y => { if (free(x, y)) objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }); });
   }
   // The park: lawns, crossing paths, a duck pond, a sports field, a playground, trees and benches.
   function park(objs, vr, ts) {
-    const P = LANDMARKS.park;
+    const P = TL.park;
     if (!boxVisible(P.x, P.y, P.x + P.w, P.y + P.d, vr)) return;
     flatRect(P.x, P.y, P.w, P.d, '#9bd176');
     flatRect(P.x, P.y + 14, P.w, 1.4, '#e6dccb'); flatRect(P.x + 20, P.y, 1.4, P.d, '#e6dccb');
@@ -790,27 +839,44 @@ const Scene = (() => {
   }
   // The big lake, with a wooden dock and a little boat.
   function lakeSide(objs, vr, ts) {
-    if (!boxVisible(LAKE.x - LAKE.rx - 2, LAKE.y - LAKE.ry - 2, LAKE.x + LAKE.rx + 2, LAKE.y + LAKE.ry + 2, vr)) return;
-    drawLake(LAKE.x, LAKE.y, LAKE.rx, LAKE.ry, ts);
-    const dx = LAKE.x - 6, dy = LAKE.y - LAKE.ry - 0.6;
+    const K = TL.lake;
+    if (!boxVisible(K.x - K.rx - 6, K.y - K.ry - 6, K.x + K.rx + 6, K.y + K.ry + 6, vr)) return;
+    if (K.sea) {   // the sea: a wide sandy beach, then the water, with little waves rolling in along the shore
+      const ring = k => { const pts = []; for (let i = 0; i < 160; i++) { const a = i / 160 * Math.PI * 2; pts.push(iso(K.x + Math.cos(a) * (K.rx + k), K.y + Math.sin(a) * (K.ry + k))); } return pts; };
+      poly(ring(4.6), '#efe0b4'); poly(ring(2.2), '#e6d3a0');
+    }
+    drawLake(K.x, K.y, K.rx, K.ry, ts);
+    const top = K.y > 46;   // the water lies below the town (its shore is its top edge) or above it
+    if (K.sea && cam.z > 0.1) for (let i = 0; i < 70; i++) {
+      const a = (top ? -1 : 1) * Math.PI / 2 + (i / 70 - 0.5) * 2.6, u = 0.985 - ((ts / 4200 + i * 0.37) % 1) * 0.05;
+      const p = iso(K.x + Math.cos(a) * K.rx * u, K.y + Math.sin(a) * K.ry * u);
+      ellipse(p.x, p.y, 11 * cam.z, 1.6 * cam.z, 'rgba(255,255,255,.5)');
+    }
+    // the dock is on the side of the water that faces the town
+    const dx = K.x - 6, dy = top ? K.y - K.ry - 0.6 : K.y + K.ry - 4.4;
     objs.push({ d: dx + dy + 3, f: () => { box(dx, dy, 1.4, 5, 2, '#a5774c', 0); for (let k = 0; k < 5; k++) flatRect(dx, dy + k + 0.95, 1.4, 0.05, 'rgba(60,40,20,.35)', null, 2); } });
-    const bob = Math.sin(ts / 900) * 1.2, bx = LAKE.x + 4, by = LAKE.y - 3;
+    const bob = Math.sin(ts / 900) * 1.2, bx = TL.lake.x + 4, by = top ? TL.lake.y - TL.lake.ry + (K.sea ? 5 : TL.lake.ry - 3) : TL.lake.y + TL.lake.ry - 5;
     objs.push({ d: bx + by, f: () => { const c = iso(bx, by), z = cam.z; ellipse(c.x, c.y + 2 * z, 22 * z, 7 * z, 'rgba(0,40,80,.15)'); pg([[c.x - 20 * z, c.y - 4 * z + bob * z], [c.x + 20 * z, c.y - 4 * z + bob * z], [c.x + 13 * z, c.y + 4 * z + bob * z], [c.x - 13 * z, c.y + 4 * z + bob * z]], '#c0453a'); line(c.x, c.y - 4 * z + bob * z, c.x, c.y - 30 * z + bob * z, '#8a5a36', 1.4 * z); pg([[c.x + 1 * z, c.y - 29 * z + bob * z], [c.x + 15 * z, c.y - 8 * z + bob * z], [c.x + 1 * z, c.y - 8 * z + bob * z]], '#fffaf0'); } });
   }
   // Farmland south of town: big striped crop fields, barns and a windmill.
   const FIELD_COLS = ['#e9c46a', '#8ab85a', '#c98a4b', '#b5d36b', '#f0d48a', '#7fae4f'];
   function farmland(objs, vr, ts) {
-    const F = LANDMARKS.fields;
-    if (!boxVisible(F.x, F.y, F.x + F.w, F.y + F.d, vr)) return;
-    flatRect(F.x, F.y, F.w, F.d, '#b9d88a');
-    for (let i = 0; i < 12; i++) for (let j = 0; j < 2; j++) {
-      const x = F.x + 0.5 + i * 9.5, y = F.y + 0.5 + j * 9, col = FIELD_COLS[(i * 3 + j * 5) % FIELD_COLS.length];
-      if (!boxVisible(x, y, x + 8.5, y + 8, vr)) continue;
-      flatRect(x, y, 8.5, 8, '#9a6a44');
-      if (cam.z > 0.08) for (let k = 0; k < 8; k++) flatRect(x + 0.3, y + 0.35 + k, 7.9, 0.55, col); else flatRect(x + 0.2, y + 0.2, 8.1, 7.6, col);
-    }
-    [[F.x + 30, F.y + 8.2], [F.x + 76, F.y + 8.2]].forEach(([x, y]) => objs.push({ d: x + y + 2, f: () => drawBarn(x, y) }));
-    [[F.x + 52, F.y + 8.4], [F.x + 98, F.y + 8.4]].forEach(([x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'windmill', placed: 0 }, x, y, ts) }));
+    TL.fields.forEach((F, fi) => {
+      if (!boxVisible(F.x, F.y, F.x + F.w, F.y + F.d, vr)) return;
+      flatRect(F.x, F.y, F.w, F.d, '#b9d88a');
+      const nx = Math.max(1, Math.floor((F.w - 0.5) / 9.5)), ny = Math.max(1, Math.floor((F.d - 0.5) / 9));
+      const cw = (F.w - 0.5) / nx - 1, cd = (F.d - 0.5) / ny - 1, cols = PAL.rows || FIELD_COLS;
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+        const x = F.x + 0.5 + i * (cw + 1), y = F.y + 0.5 + j * (cd + 1), col = cols[(i * 3 + j * 5 + fi) % cols.length];
+        if (!boxVisible(x, y, x + cw, y + cd, vr)) continue;
+        flatRect(x, y, cw, cd, '#9a6a44');
+        if (cam.z > 0.08) for (let k = 0; k < Math.floor(cd); k++) flatRect(x + 0.3, y + 0.35 + k, cw - 0.6, 0.55, col); else flatRect(x + 0.2, y + 0.2, cw - 0.4, cd - 0.4, col);
+      }
+      if (ny < 2 || F.w < 30) return;   // barns and windmills stand in the lane between the first two rows
+      const gy = F.y + 0.5 + cd;
+      [0.26, 0.67].forEach(u => { const x = F.x + F.w * u, y = gy - 0.3; objs.push({ d: x + y + 2, f: () => drawBarn(x, y) }); });
+      [0.46, 0.86].forEach(u => { const x = F.x + F.w * u, y = gy - 0.1; objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'windmill', placed: 0 }, x, y, ts) }); });
+    });
   }
 
   function renderWorld(ts, dt) {
@@ -820,20 +886,21 @@ const Scene = (() => {
     outskirts(vr, ts);
     flatRect(WX0, WY0, WX1 - WX0, WY1 - WY0, PAL.woods);
     flatRect(WORLD.x0, WORLD.y0, WORLD.x1 - WORLD.x0, WORLD.y1 - WORLD.y0, PAL.town);
-    Object.values(STREETS).forEach(st => { if (boxVisible(st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1, vr)) flatRect(st.x - 0.6, st.y - 0.6, st.n * PARCEL + 1.2, LOT_D + 0.6, themed ? shade(PAL.town, st.nb === 'lake' ? -0.04 : st.nb === 'farm' ? 0.04 : 0) : NEIGHBORHOODS[st.nb].grass); });
+    Object.values(TL.streets).forEach(st => { if (boxVisible(st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1, vr)) flatRect(st.x - 0.6, st.y - 0.6, st.n * PARCEL + 1.2, LOT_D + 0.6, themed ? shade(PAL.town, st.nb === 'lake' ? -0.04 : st.nb === 'farm' ? 0.04 : 0) : NEIGHBORHOODS[st.nb].grass); });
     const objs = [], tops = [], out = { hall: null, shops: mode === 'town' ? [] : null }, lv = townLevel(rankTotal());
     river(vr);
     mountains(objs, vr);
     lakeSide(objs, vr, ts);
     park(objs, vr, ts);
     farmland(objs, vr, ts);
-    ROADS.forEach(r => drawRoad(r, vr));
+    TL.roads.forEach(r => drawRoad(r, vr));
+    bridges(vr);
     townCentre(objs, vr, ts, lv, out);
     woods(objs, vr, ts);
     // land for sale: light grass with a dashed outline and a sign
     const runs = vacantRuns();
     runs.forEach(r => {
-      const st = STREETS[r.st], x = st.x + r.p * PARCEL, y = st.y, w = r.n * PARCEL;
+      const st = TL.streets[r.st], x = st.x + r.p * PARCEL, y = st.y, w = r.n * PARCEL;
       if (!boxVisible(x, y, x + w, y + LOT_D, vr)) return;
       flatRect(x, y, w, LOT_D, PAL.vacant);
       if (z > 0.12) { ctx.save(); ctx.setLineDash([8 * z, 6 * z]); flatRect(x + 0.3, y + 0.3, w - 0.6, LOT_D - 0.6, null, 'rgba(255,255,255,.85)', 0, 2 * z); ctx.restore(); }
@@ -861,6 +928,8 @@ const Scene = (() => {
     if (meInLake()) { const [ox, oy] = origin(me.lot); objs.push({ d: ox + oy + me.x + me.y, f: () => drawMe(ox, oy, ts, false) }); }
     // people who are online right now, out walking: to the square, the park, the lake, and home again
     if (z > 0.055) walkers(objs, dt, ts);
+    if (trip && mode === 'town') objs.push({ d: trip.x + trip.y + 0.6, f: () => drawTrip(ts) });
+    if (mode === 'town') parkedObjs(objs, ts);
     if (edit && edit.scope === 'yard') { const [ox, oy] = origin('me'); yardSpots(homeW(S.me)).forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)')); }
     weatherGround(ts);
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
@@ -874,10 +943,10 @@ const Scene = (() => {
       const rk = ranking();
       // label sizes follow the zoom, so zoomed far out the names don't cover the town
       const fs = Math.round(clamp(7 + z * 40, 9, 13)), small = Math.round(clamp(6 + z * 30, 8.5, 11));
-      if (z < 0.17) AREA_LABELS.forEach(([key, x, y]) => { const c = iso(x, y); pill(key === 'area_maple' && VIEW_TOWN !== HOME_TOWN ? nm(COMMUNITIES[VIEW_TOWN]) : t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs}px ${UI_FONT},${EMOJI_FONT}`, fs + 9); });
+      if (z < 0.17) TL.labels.forEach(([key, x, y]) => { const c = iso(x, y); pill(key === 'area_maple' && VIEW_TOWN !== HOME_TOWN ? nm(COMMUNITIES[VIEW_TOWN]) : t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs}px ${UI_FONT},${EMOJI_FONT}`, fs + 9); });
       // zoomed all the way out: the neighbouring villages, and a way on to the world map
       if (z < 0.1) {
-        [[WX1 + 40, (WY0 + WY1) / 2 - 20, 'out_east'], [(WX0 + WX1) / 2 + 30, WY1 + 40, 'out_south'], [WX0 - 34, WY1 + 34, 'out_west']].forEach(([x, y, key]) => { const c = iso(x, y); pill(t(key), c.x, c.y, 'rgba(255,255,255,.82)', '#5d5448', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8); });
+        [[WX1 + 40, (WY0 + WY1) / 2 - 20, 'out_east'], [(WX0 + WX1) / 2 + 30, WY1 + 40, 'out_south'], [WX0 - 34, WY1 + 34, 'out_west']].filter(([x, y]) => !inLake(x, y)).forEach(([x, y, key]) => { const c = iso(x, y); pill(t(key), c.x, c.y, 'rgba(255,255,255,.82)', '#5d5448', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8); });
         if (z <= minWorldZoom() * 1.02) hits.push({ kind: 'worldMap', pri: 2, ...pill(t('pinch_world'), W / 2, H - 70, 'rgba(59,49,37,.86)', '#fff', `800 13px ${UI_FONT},${EMOJI_FONT}`, 30) });
       }
       tops.forEach(tp => {
@@ -890,7 +959,7 @@ const Scene = (() => {
         const label = S.calm ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode: names only
         hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 9) });
       });
-      if (out.hall) { const { x: px, y: py } = LANDMARKS.plaza; hits.push({ kind: 'plaza', pri: 1, ...pill(VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) }); }
+      if (out.hall) { const { x: px, y: py } = TL.plaza; hits.push({ kind: 'plaza', pri: 1, ...pill(VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) }); }
       return;
     }
   }
@@ -1014,6 +1083,7 @@ const Scene = (() => {
       ctx.save(); ctx.setLineDash([8 * z, 6 * z]); flatRect(sx + 0.3, oy + 0.3, PARCEL - 0.8, LOT_D - 0.6, null, 'rgba(255,255,255,.85)', 0, 2 * z); ctx.restore();
     }
     lotGround(h, ox, oy, opt);
+    if (parked && parked.id === owner) { const px = ox + 0.5, py = oy + LOT_D + 0.7; objs.push({ d: px + py + 2.5, f: () => drawCar(parked.car, px, py, ts) }); }
     // close-up detail: tufts of grass, little flowers and clover across the lawn (not on paths, fields or buildings)
     if (z > 0.5) {
       const LW = homeW(h), FL = ['#f6d04d', '#ffffff', '#ef8fb0', '#b39ae0'];
@@ -1101,27 +1171,63 @@ const Scene = (() => {
       } });
     });
   }
-  // ---------- people out walking (v0.9) ----------
+  // ---------- people out walking (v0.9; any town plan since v0.12) ----------
   // A virtual world: residents who are online leave their gate and walk the streets to somewhere (the town square,
   // the park, the lake, a shop, a friend's gate), stay a while, and walk home. Simulated until the server exists;
-  // then these are real players. Roads: horizontal streets joined by two avenues (x 65.5 and x 113.5).
-  const HROADS = [{ y: 15, x0: -1, x1: 63, av: [65.5] }, { y: 15, x0: 116, x1: 171, av: [113.5] }, { y: 31.5, x0: -16, x1: 194, av: [65.5, 113.5] },
-    { y: 51, x0: -1, x1: 63, av: [65.5] }, { y: 67, x0: -16, x1: 111, av: [65.5] }];
-  const AV_Y = { 65.5: [-1, 69], 113.5: [-1, 35] };
-  const roadOf = (x, y) => HROADS.reduce((b, r) => (x >= r.x0 - 3 && x <= r.x1 + 3 && Math.abs(r.y - y) < Math.abs(b.y - y) ? r : b), HROADS[2]);
-  const gateOf = id => { const l = lotOf(id), [ox, oy] = origin(id); return [ox + 3.5, oy + LOT_D + (STREETS[l.st].y === 16 ? 1.5 : 1)]; };
-  const PLACES = [[89, 16.5], [90, 31.5], [128, 31.5], [72, 27], [102, 27], [40, 31.5], [150, 31.5]];
-  // A route along the roads from a to b: along a's road to an avenue (or the big avenue), across, along b's road.
-  function route(a, b) {
-    const ra = roadOf(a[0], a[1]), rb = roadOf(b[0], b[1]), pts = [[a[0], ra.y]];
-    if (ra !== rb) {
-      const av = ra.av.find(x => rb.av.includes(x));
-      if (av !== undefined) pts.push([av, ra.y], [av, rb.y]);
-      else { const mid = HROADS[2], a1 = ra.av[0], a2 = rb.av[0]; pts.push([a1, ra.y], [a1, mid.y], [a2, mid.y], [a2, rb.y]); }
-    }
-    pts.push([b[0], rb.y], b);
-    return pts;
+  // then these are real players. The roads of the town plan make a network: every road along x meets every road
+  // along y that it touches; people walk from crossing to crossing (never across lawns, fields or water).
+  let NET = null;
+  function roadNet() {
+    if (NET && NET.id === TL.id) return NET;
+    const H = [], V = [], nodes = [], on = new Map();
+    TL.roads.forEach(([x0, y0, x1, y1]) => { if (x1 - x0 >= y1 - y0) H.push({ y: (y0 + y1) / 2, a: x0, b: x1, y0, y1 }); else V.push({ x: (x0 + x1) / 2, a: y0, b: y1, x0, x1 }); });
+    const at = (r, i) => { if (!on.has(r)) on.set(r, []); on.get(r).push(i); };
+    H.forEach(h => V.forEach(v => {   // roads that cross or just touch (a street ending at an avenue)
+      if (v.x1 < h.a - 0.6 || v.x0 > h.b + 0.6 || h.y1 < v.a - 0.6 || h.y0 > v.b + 0.6) return;
+      const i = nodes.length; nodes.push({ x: v.x, y: h.y, e: [] }); at(h, i); at(v, i);
+    }));
+    on.forEach((ids, r) => {
+      const k = r.y !== undefined ? 'x' : 'y';
+      ids.sort((i, j) => nodes[i][k] - nodes[j][k]);
+      for (let q = 1; q < ids.length; q++) { nodes[ids[q - 1]].e.push(ids[q]); nodes[ids[q]].e.push(ids[q - 1]); }
+    });
+    NET = { id: TL.id, H, V, nodes, on };
+    return NET;
   }
+  // The closest point on any road.
+  function nearestRoad(N, p) {
+    let best = null, bd = 1e9;
+    N.H.forEach(r => { const x = clamp(p[0], r.a, r.b), d = Math.hypot(x - p[0], r.y - p[1]); if (d < bd) { bd = d; best = { r, pt: [x, r.y] }; } });
+    N.V.forEach(r => { const y = clamp(p[1], r.a, r.b), d = Math.hypot(r.x - p[0], y - p[1]); if (d < bd) { bd = d; best = { r, pt: [r.x, y] }; } });
+    return best;
+  }
+  // A route along the roads from a to b (shortest way through the crossings).
+  function route(a, b) {
+    const N = roadNet(), A = nearestRoad(N, a), B = nearestRoad(N, b);
+    if (!A || !B) return [b];
+    const out = [A.pt];
+    if (A.r !== B.r) {
+      const ns = N.nodes, dist = ns.map(() => 1e9), prev = ns.map(() => -1), done = ns.map(() => false), ends = new Set(N.on.get(B.r) || []);
+      (N.on.get(A.r) || []).forEach(i => { dist[i] = Math.hypot(ns[i].x - A.pt[0], ns[i].y - A.pt[1]); });
+      let goal = -1, best = 1e9;
+      for (;;) {
+        let u = -1;
+        for (let i = 0; i < ns.length; i++) if (!done[i] && dist[i] < 1e9 && (u < 0 || dist[i] < dist[u])) u = i;
+        if (u < 0) break;
+        done[u] = true;
+        if (ends.has(u)) { const tot = dist[u] + Math.hypot(ns[u].x - B.pt[0], ns[u].y - B.pt[1]); if (tot < best) { best = tot; goal = u; } }
+        ns[u].e.forEach(v => { const nd = dist[u] + Math.hypot(ns[v].x - ns[u].x, ns[v].y - ns[u].y); if (nd < dist[v]) { dist[v] = nd; prev[v] = u; } });
+      }
+      if (goal < 0) return [b];
+      const chain = [];
+      for (let u = goal; u >= 0; u = prev[u]) chain.unshift([ns[u].x, ns[u].y]);
+      out.push(...chain);
+    }
+    out.push(B.pt, b);
+    return out;
+  }
+  // A home's gate: on the road right in front of it.
+  const gateOf = id => { const [ox, oy] = origin(id), n = nearestRoad(roadNet(), [ox + 3.5, oy + LOT_D + 0.6]); return n ? n.pt : [ox + 3.5, oy + LOT_D + 1]; };
   let WALK = { town: null, list: [], next: 0 };
   const walkerOut = id => WALK.town === VIEW_TOWN && WALK.list.some(w => w.id === id);
   function walkers(objs, dt, ts) {
@@ -1133,7 +1239,7 @@ const Scene = (() => {
       const ids = allLots().map(l => l.id).filter(id => id !== 'me' && !WALK.list.some(w => w.id === id) && homeOf(id));
       if (ids.length) {
         const id = ids[Math.floor(Math.random() * ids.length)], g = gateOf(id);
-        const others = allLots().filter(l => l.id !== id && homeOf(l.id)), dest = Math.random() < 0.3 && others.length ? gateOf(others[Math.floor(Math.random() * others.length)].id) : PLACES[Math.floor(Math.random() * PLACES.length)];
+        const others = allLots().filter(l => l.id !== id && homeOf(l.id)), dest = Math.random() < 0.3 && others.length ? gateOf(others[Math.floor(Math.random() * others.length)].id) : TL.places[Math.floor(Math.random() * TL.places.length)];
         WALK.list.push({ id, h: homeOf(id), x: g[0], y: g[1] - 1.2, path: [[g[0], g[1]], ...route(g, dest)], home: g, phase: 0, face: 1, moving: true, stay: 0, back: false, alpha: 0 });
       }
     }
@@ -1157,6 +1263,55 @@ const Scene = (() => {
       } });
       return true;
     });
+  }
+  // ---------- going somewhere in town (v0.12): on foot, by bike or by car, along the roads ----------
+  // You set off from the gate of the home you're at. A car follows the roads to the road in front of where you're
+  // going and parks at the roadside (and at the end of their drive, seen from their home); on foot you walk right up.
+  let trip = null, parked = null;
+  const tripFrom = () => (me.lot && lotOf(me.lot) && townOf(me.lot) === VIEW_TOWN ? gateOf(me.lot) : gateOf('me'));
+  function tripPath(to, how) { const r = route(tripFrom(), to); return how === 'walk' ? r : r.slice(0, -1); }
+  const pathLen = pts => { let d = 0, [x, y] = tripFrom(); pts.forEach(([a, b]) => { d += Math.abs(a - x) + Math.abs(b - y); x = a; y = b; }); return d; };
+  function startTrip(to, how, car, done, dest) {
+    TL = layoutOf(VIEW_TOWN);
+    const [x, y] = tripFrom();
+    if (how !== 'walk') parked = null;   // the car leaves from where it was parked
+    trip = { town: VIEW_TOWN, how, car, x, y, path: tripPath(to, how), done, dest, face: 1, phase: 0, moving: true, dir: '+y', arrived: false };
+    cancel(me); fly = null;
+    return trip;
+  }
+  function stepTrip(dt) {
+    if (!trip) return;
+    if (trip.town !== VIEW_TOWN || mode !== 'town') { trip = null; return; }
+    if (trip.arrived) return;
+    let left = (TRIP_SPEED[trip.how] || 3) * dt;
+    while (left > 0 && trip.path.length) {
+      const [tx, ty] = trip.path[0], dx = tx - trip.x, dy = ty - trip.y, d = Math.hypot(dx, dy);
+      if (d > 0.01) { trip.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); faceTo(trip, dx, dy); }
+      if (d <= left) { trip.x = tx; trip.y = ty; trip.path.shift(); left -= d; } else { trip.x += dx / d * left; trip.y += dy / d * left; left = 0; }
+    }
+    trip.phase += dt * (trip.how === 'walk' ? 11 : 7);
+    if (!trip.path.length) {
+      trip.arrived = true; trip.moving = false; trip.view = null;
+      if (trip.how !== 'walk') {   // park at the side of the road and step out onto the pavement
+        const along = trip.dir === '+x' || trip.dir === '-x';
+        parked = { id: trip.dest || null, town: trip.town, car: trip.car, dir: trip.dir, at: along ? [trip.x, trip.y - 0.55] : [trip.x + 0.6, trip.y] };
+        if (along) trip.y -= 1.4; else trip.x += 1.5;
+      }
+      const f = trip.done; trip.done = null;
+      if (f) setTimeout(f, trip.how === 'walk' ? 200 : 500);
+    }
+  }
+  function drawTrip(ts) {
+    const z = cam.z, p = iso(trip.x, trip.y);
+    if (trip.how !== 'walk' && !trip.arrived) { drawCarDir(trip.car, trip.x, trip.y, trip.dir, ts); return; }
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.moving ? trip.view : null, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
+    if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
+  }
+  // Your car parked at the roadside where you drove to.
+  function parkedObjs(objs, ts) {
+    if (!parked || parked.town !== VIEW_TOWN || (trip && trip.how !== 'walk' && !trip.arrived)) return;
+    const [x, y] = parked.at;
+    objs.push({ d: x + y, f: () => drawCarDir(parked.car, x, y, parked.dir, ts) });
   }
   // ---------- the country around town (v0.9): other villages, farms, woods and lakes, out to the horizon ----------
   // Made up in 22-tile squares from a fixed seed; drawn simply (they're always far away). Mountains stay to the north and west.
@@ -1219,7 +1374,7 @@ const Scene = (() => {
     [2, '#f4e7cc', '#6b5f50'], [6, '#fbf3e4', '#c0453a'], [3, '#e3d3bb', '#3f6fb5'], [5, '#f2ece2', '#4f7f9a'], [0, '#f4e7cc', '#c0453a']]
     .map(([house, wall, roof], i) => ({ id: 'out' + i, house, wall, roof, extra: {}, ups: [], room: { wall: 0, floor: 0, items: [] }, yard: [], animals: [] }));
   // Big area names shown when zoomed out over the town.
-  const AREA_LABELS = [['area_maple', 30, 10], ['area_center', 89, 1], ['area_lake', 144, 9], ['area_park', 90, 44], ['area_farm', 30, 47], ['area_fields', 55, 79], ['area_water', 146, 50]];
+  // Big area names shown when zoomed out over the town: in the town plan (`labels`).
   // ---------- weather (real local weather, or the town's own) ----------
   // On the ground: snow cover, a wet tint for rain, cloud shadows drifting over town.
   function weatherGround(ts) {
@@ -1663,8 +1818,10 @@ const Scene = (() => {
     useCam();
     if (!worldReady && mode === 'town') frameView(true);
     try { updateMe(dt, ts); } catch (e) { console.error(e); }
+    try { stepTrip(dt); } catch (e) { console.error(e); trip = null; }
     stepCamera(dt);
     SCENE_TOWN = mode === 'town' ? VIEW_TOWN : townOf(owner);
+    TL = layoutOf(SCENE_TOWN);
     NIGHT = nightAmount(now(), SCENE_TOWN);
     GLOWS = [];
     ctx.clearRect(0, 0, W, H);
@@ -1708,16 +1865,21 @@ const Scene = (() => {
     const tx = Math.floor(w.x), ty = Math.floor(w.y);
     const lotHit = allLots().find(l => { const [ox0, oy0] = origin(l.id); return tx >= ox0 && tx < ox0 + l.n * PARCEL && ty >= oy0 && ty < oy0 + LOT_D; });
     let landHit = null;
-    for (const [st, s] of Object.entries(STREETS)) {
+    for (const [st, s] of Object.entries(TL.streets)) {
       if (ty < s.y || ty >= s.y + LOT_D || tx < s.x || tx >= s.x + s.n * PARCEL) continue;
       const p = Math.floor((tx - s.x) / PARCEL);
       if (!parcelOwner(st, p)) { const run = vacantRuns().find(r => r.st === st && p >= r.p && p < r.p + r.n); landHit = { kind: 'land', st, p, n: run ? run.n : 1, run: run && run.p }; }
     }
-    const { x: px, y: py } = LANDMARKS.plaza, inPlaza = tx >= px && tx < px + LOT_W && ty >= py && ty < py + LOT_D;
+    const { x: px, y: py } = TL.plaza, inPlaza = tx >= px && tx < px + LOT_W && ty >= py && ty < py + LOT_D;
     if (mode === 'town') {
       if (lotHit) return onHit({ kind: 'lot', owner: lotHit.id });
       if (landHit) return onHit(landHit);
-      if (inPlaza) onHit({ kind: 'plaza' });
+      if (inPlaza) return onHit({ kind: 'plaza' });
+      // the park, the town fields and the lake / sea are places too (v0.12)
+      const P = TL.park, K = TL.lake;
+      if (w.x >= P.x && w.x < P.x + P.w && w.y >= P.y && w.y < P.y + P.d) return onHit({ kind: 'place', key: 'park' });
+      if (TL.fields.some(F => w.x >= F.x && w.x < F.x + F.w && w.y >= F.y && w.y < F.y + F.d)) return onHit({ kind: 'place', key: 'fields' });
+      if (((w.x - K.x) / (K.rx + (K.sea ? 4 : 1))) ** 2 + ((w.y - K.y) / (K.ry + (K.sea ? 4 : 1))) ** 2 < 1) return onHit({ kind: 'place', key: 'lake' });
       return;
     }
     const [ox, oy] = origin(owner), lx = w.x - ox, ly = w.y - oy, h = homeOf(owner);
@@ -2059,12 +2221,34 @@ const Scene = (() => {
     // After moving your home to another street: stand at your new gate.
     moveHome() { cancel(me); me.lot = 'me'; me.x = DOOR_X; me.y = 12.5; me.face = 1; delete homeCams.me; },
     takeStairs,
+    // Going somewhere in town (v0.12). to: a world point (a gate or a place); how: walk / bike / car.
+    travel(to, how, car, done, dest, place) { if (mode !== 'town') return false; startTrip(to, how, car, done, dest); trip.place = place || null; return true; },
+    // Public places (v0.12): where each one is (where you walk to), and whether you're there now.
+    placePoint(key) {
+      TL = layoutOf(VIEW_TOWN);
+      const shop = TL.shops.find(([k]) => k === key), P = TL.park, F = TL.fields[0], K = TL.lake, C = TL.centre;
+      if (shop) return [shop[1] + 3, shop[2] + 6.3];
+      if (key === 'plaza') return [TL.plaza.x + LOT_W / 2, TL.plaza.y + LOT_D + 0.8];
+      if (key === 'park') return [P.x + 20.7, P.y + 14.7];
+      if (key === 'fields') return [F.x + Math.min(F.w / 2, 10), F.y - 0.6];
+      const a = Math.atan2((C.y + C.d / 2 - K.y) / K.ry, (C.x + C.w / 2 - K.x) / K.rx), m = K.sea ? 1 + 1.6 / K.ry : 1 + 1.2 / Math.min(K.rx, K.ry);
+      return [K.x + Math.cos(a) * K.rx * m, K.y + Math.sin(a) * K.ry * m];
+    },
+    here() { return trip && trip.arrived && trip.town === VIEW_TOWN ? trip.place : null; },
+    arriveAt(pt, place) { if (mode !== 'town') return; trip = { town: VIEW_TOWN, how: 'walk', x: pt[0], y: pt[1], path: [], arrived: true, moving: false, place, face: 1, phase: 0 }; flyTo(pt[0], pt[1], Math.max(cam.z, 0.5)); },
+    tripTime(to, how) { if (!S) return 0; TL = layoutOf(VIEW_TOWN); return Math.max(1, Math.round(pathLen(tripPath(to, how)) / (TRIP_SPEED[how] || 3))); },
+    tripNow() { return trip && !trip.arrived ? { how: trip.how } : null; },
+    endTrip() { trip = null; },
+    finishTrip() { if (!trip || trip.arrived) return; trip.path = trip.path.slice(-1); const [x, y] = trip.path[0]; trip.x = x; trip.y = y; },
+    gate: id => { TL = layoutOf(VIEW_TOWN); return gateOf(id); },
     onStairs: () => !!meIn.anim,
     setView(m, o = 'me') {
       if (m === mode && o === owner) return;
       const wasInterior = mode === 'interior';
       if ((m === 'home') !== (mode === 'home') && m !== 'interior' && !wasInterior) viewFade = performance.now();   // a soft flash between the town and a home
       mode = m; owner = o; edit = null;
+      if (m !== 'town') trip = null;
+      if (m === 'home' && o === 'me') parked = null;
       cv.style.background = '';
       if (m !== 'town' && m !== 'interior') moveToLot(o);
       useCam();

@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -134,6 +134,25 @@ P('## 专属（拿到奖杯才能买，' + D.EXCLUSIVES.length + ' 件）');
 P('');
 table(['专属', '类型', '价格'], D.EXCLUSIVES.map(([kind, k]) => { const d = kind === 'yard' ? D.YARD[k] : kind === 'car' ? D.CARS[k] : kind === 'pet' ? D.PET_BREEDS[k] : D.ANIMALS[k]; return [`${d.zh} (${d.en})`, { yard: '院子', car: '车', pet: '宠物', animal: '牲畜' }[kind], `🪙${kind === 'car' ? d.cost.coins : d.price}`]; }));
 
+P('## 小镇格局（v0.12）');
+P('');
+const LAYOUT_ZH = { grid: '美式街区', canal: '运河村', coast: '海边小镇', river: '河畔小镇', valley: '山谷峡湾', terrace: '山坡梯田', square: '老城广场', harbour: '海港' };
+table(['格局', '街道', '用这个格局的社区'], Object.entries(D.LAYOUTS).map(([id, L]) => [LAYOUT_ZH[id] + ' (' + id + ')', Object.values(L.streets).map(s => s.zh).join('、'),
+  Object.entries(D.COMMUNITY_LAYOUT).filter(([, v]) => v.split('|')[0] === id).map(([k, v]) => D.COMMUNITIES[k].zh + (v.endsWith('|f') ? '（镜像）' : '')).join('、')]));
+P('## 出门和公共设施（v0.12）');
+P('');
+table(['项目', '数值'], [
+  ['走路 / 自行车 / 开车', `每秒 ${D.TRIP_SPEED.walk} / ${D.TRIP_SPEED.bike} / ${D.TRIP_SPEED.car} 格（演示加速）`],
+  ['公共麦田', `每天帮忙一次，用 1 件农活，得 ${D.HELP_HARVEST.wheat} 束小麦；全镇凑满 ${D.HARVEST_GOAL} 次开丰收节，帮过忙的人得 1 个面包`],
+  ['面包店', `${D.BREAD.wheat} 束小麦烤 1 个面包`], ['湖边 / 海滩钓鱼', `每天一次，用 1 件农活，钓到 ${D.LAKE_FISH} 条`],
+  ['图书馆', `每天一张小知识卡，共 ${D.LIB_CARDS.length} 张轮流`], ['邮局', '每天给每个朋友寄一张明信片'],
+]);
+table(['地方', '英文'], Object.values(D.PLACE_INFO).map(p => [`${p.e} ${p.zh}`, p.en]));
+P('## Apple Watch 式奖章（v0.12，' + Object.keys(D.AWARDS).length + ' 个，每个解锁一座奖章雕塑）');
+P('');
+table(['奖章', '怎么得到'], Object.values(D.AWARDS).map(A => [`${A.e} ${A.zh}`, A.desc.zh]));
+P(`另外每种运动拿到金奖杯（${D.SPORTS.length} 种），解锁这项运动的金像。`);
+P('');
 P('## 在线、做客、显示上限（v0.11）');
 P('');
 table(['项目', '数值'], [

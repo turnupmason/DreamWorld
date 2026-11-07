@@ -218,8 +218,11 @@ function renderOverlay() {
         : `<button class="ctx-main link" data-act="ranking">🏆 ${t('ctx_rank', { n: rankOf('me'), v: fmtNum(assetValue(S.me)) })}</button>`;
       f = b('goIn', '🚪', t('fab_enter')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn')) + petBtn() + b('recenter', '🎯', t('fab_center'));
     }
+  } else if (!UI.visit && Scene.tripNow()) {   // on the way somewhere (v0.12)
+    const tr = Scene.tripNow();
+    c = `<div class="ctx-main">${{ walk: '🚶', bike: '🚲', car: '🚗' }[tr.how]} ${t('go_on_way', { to: esc(UI.tripTo || '') })}</div><button class="btn small" data-act="tripFast">⚡ ${t('go_now')}</button>`;
   } else if (UI.visit) {
-    const h = homeOf(UI.visit), fr = isFriend(h.id), street = STREETS[lotOf(h.id).st];
+    const h = homeOf(UI.visit), fr = isFriend(h.id), street = streetsOf(townOf(h.id))[lotOf(h.id).st];
     const tw = townOf(h.id), away = visitingNow(h.id), on = isOnline(h.id) && !away;
     const sub = (fr ? (S.calm ? '' : ` · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}`) : ` · ${nm(street)}`)
       + ` · <span class="${on ? 'online-dot' : 'off-dot'}"></span>${t(on ? 'st_home' : away ? 'st_out' : 'st_off')}` + (tw !== myTown() ? ` · ${isNightIn(tw) ? '🌙' : '☀️'} ${localClock(tw)}` : '');
@@ -377,13 +380,21 @@ function panelShop() {
   } else if (cat === 'excl') {
     // things only trophy winners may buy: locked until you've earned the trophy in real life
     note = t('excl_note');
-    body = EXCLUSIVES.map(([kind, k]) => {
+    const isSt = k => k.startsWith('st_'), isAw = k => k.startsWith('aw_');
+    const statues = EXCLUSIVES.filter(([, k]) => isSt(k)).sort((a, b) => exclOK(YARD[b[1]].excl) - exclOK(YARD[a[1]].excl));
+    const shown = UI.exclAll ? statues : statues.filter(([, k], i) => exclOK(YARD[k].excl) || i < 6);
+    const head = (txt, n) => `<div class="grid-head">${txt}${n ? ` <span class="muted">${n}</span>` : ''}</div>`;
+    const cards = list => list.map(([kind, k]) => {
       const d = exclDef(kind, k), ok = exclOK(d.excl), price = kind === 'car' ? d.cost.coins : d.price;
       const img = kind === 'yard' ? thumbImg('yard', k) : kind === 'car' ? thumbImg('car', k, { color: d.color }) : kind === 'pet' ? thumbImg('pet', k, {}) : thumbImg('animal', k, { stage: 2 });
       const owned = kind === 'car' ? h.cars.some(c => c.k === k) : kind === 'pet' ? myPets(h).some(a => a.breed === k) : false;
       const btn = !ok ? `<span class="tag lock">🔒 ${t('excl_locked')}</span>` : owned ? `<span class="tag ok">${t('owned')}</span>` : buyBtn('buyExcl', kind + '|' + k, `🪙${fmtNum(price)}`, h.coins >= price);
       return `<div class="item-card excl ${ok ? 'open' : 'shut'}">${img}<div class="item-name">${ok ? '🏆' : '🔒'} ${nm(d)}</div><div class="item-sub">${exclReqText(d.excl)}</div><div class="item-btns">${btn}</div></div>`;
     }).join('');
+    body = head(`🏆 ${t('excl_sec_trophy')}`) + cards(EXCLUSIVES.filter(([, k]) => !isSt(k) && !isAw(k)))
+      + head(`🏅 ${t('excl_sec_award')}`) + cards(EXCLUSIVES.filter(([, k]) => isAw(k)))
+      + head(`🗿 ${t('excl_sec_statue')}`, `${statues.filter(([, k]) => exclOK(YARD[k].excl)).length}/${statues.length}`) + cards(shown)
+      + (UI.exclAll ? '' : `<button class="btn block grid-head" data-act="exclAll">${t('excl_all_statues', { n: statues.length })}</button>`);
   } else if (cat === 'pets') {
     // adopt a dog or a cat by breed; food and treats; bowls, litter box, beds
     const n = myPets(h).length, pf = h.petFood || {};
@@ -590,7 +601,7 @@ function panelFeed() {
   const items = [...feed].reverse().map(it => {
     const f = homeOf(it.from);
     const btn = it.gift ? (it.claimed ? `<span class="muted">${t('claimed')}</span>` : `<button class="btn small primary" data-act="claim" data-arg="${it.id}">${t('claim')}</button>`)
-      : it.kind === 'stole' || it.kind === 'caught' ? `<button class="btn small" data-act="visit" data-arg="${it.from}">${t('visit_back')}</button>`
+      : it.kind === 'stole' || it.kind === 'caught' ? `<button class="btn small" data-act="goTo" data-arg="${it.from}">${t('visit_back')}</button>`
       : it.kind === 'letter' ? `<button class="btn small" data-act="mailOpen">${t('read')}</button>` : '';
     return `<div class="list-item">${f ? avatar(f.look, '', f.id === 'me' ? energyLevel() : friendEnergy(f)) : ''}<div class="grow"><div>${feedText(it)}</div><div class="muted">${ago(it.t)}</div></div>${btn}</div>`;
   }).join('');
@@ -603,7 +614,7 @@ function openSheet(type, arg) {
   if (type === 'trophyNew') { Sound.play('levelup'); setTimeout(() => Sound.play('coins'), 500); }
   UI.sheet = { type, arg };
   renderSheet();
-  const compact = ['friend', 'host', 'field', 'animal', 'car', 'tree'].includes(type);
+  const compact = ['friend', 'host', 'go', 'field', 'animal', 'car', 'tree'].includes(type);
   $('#sheet').className = 'sheet' + (compact ? ' compact' : '') + (type === 'pets' || type === 'trophies' ? ' tall' : '');
   $('#sheet').hidden = false;
   $('#backdrop').hidden = false;
@@ -713,6 +724,19 @@ const SHEETS = {
       ${others ? `<div class="card"><h3>🚗 ${t('car_switch')}</h3>${others}</div>` : ''}
       <button class="btn block" data-act="openShop" data-arg="cars">🛒 ${t('car_shop')}</button>` : ''}`;
   },
+  // Going to someone's home or a place in town (v0.12): on foot, by car (or bike) along the roads, or straight there.
+  go(a) {
+    const T = goTarget(a);
+    return `<h2>${T.e} ${esc(T.name)}</h2><p class="muted">${t('go_sub')}</p>${goTiles(T)}`;
+  },
+  // A public place in town (v0.12): what it's for; go there first, then use it.
+  place(key) {
+    const P = placeInfo(key), here = Scene.here() === key, mineTown = VIEW_TOWN === myTown();
+    const head = `<div class="place-head"><span class="big-emoji">${P.e}</span><div class="grow"><h2>${nm(P)}</h2><p class="muted">${t('pl_desc_' + (key === 'lake' && P === PLACE_INFO.beach ? 'beach' : key))}</p></div></div>`;
+    if (!mineTown) return head + `<p class="muted">${t('pl_other_town')}</p>`;
+    if (!here && key !== 'plaza') return head + `<div class="sec-title">${t('pl_go_first')}</div>${goTiles(goTarget({ place: key }))}`;
+    return head + placeBody(key);
+  },
   // The owner of the home you're visiting: are they online, and may you sit down / lie down here?
   host(id) {
     const h = homeOf(id), on = isOnline(id), away = visitingNow(id), ok = canUseAt(id), fr = isFriend(id), name = esc(homeName(h));
@@ -749,7 +773,7 @@ const SHEETS = {
       <div class="act-grid">
         ${act('like', id, '❤️', liked ? t('liked') : t('like'), t('like_home'), !liked)}
         ${act('compose', id, '✉️', t('write_letter'), t('letter_short'))}
-        ${here ? act('goIn', '', '🚪', t('fab_peek'), t('peek_short')) : act('visit', id, '🏡', t('visit'), t('visit_short'))}
+        ${here ? act('goIn', '', '🚪', t('fab_peek'), t('peek_short')) : act('goTo', id, '🏡', t('visit'), t('visit_short'))}
         ${act('giftScroll', '', '🎁', t('send_gift'), t('social_free_short'))}
       </div>
       <div class="sheet-sec"><div class="sec-title">💬 ${t('leave_msg')}</div>${MSG_KEYS.map(k => `<button class="chip" data-act="msg" data-arg="${id}|${k}">${t(k)}</button>`).join('')}</div>
@@ -764,7 +788,7 @@ const SHEETS = {
       const me = r.h.id === 'me';
       return `<div class="list-item ${me ? 'me-row' : ''}"><span class="rank">${['🥇', '🥈', '🥉'][i] || i + 1}</span>${avatar(r.h.look)}
         <div class="grow"><b>${esc(homeName(r.h))}</b><div class="muted">${nm(HOUSES[r.h.house])}${r.h.cars.length ? ' · ' + nm(CARS[r.h.cars[Math.max(0, r.h.car)].k]) : ''} · ${t('animals_n', { n: r.h.animals.length })}</div></div>
-        <div class="right"><b>🪙${fmtNum(r.v)}</b>${me ? '' : `<button class="btn small" data-act="visit" data-arg="${r.h.id}">${t('visit')}</button>`}</div></div>`;
+        <div class="right"><b>🪙${fmtNum(r.v)}</b>${me ? '' : `<button class="btn small" data-act="goTo" data-arg="${r.h.id}">${t('visit')}</button>`}</div></div>`;
     }).join('');
     const b = assetBreakdown(S.me), empty = !!freeRun() && FRIEND_POOL.some(f => !S.friends.some(x => x.id === f.id));
     const parts = ['cash', 'house', 'land', 'items', 'cars', 'animals', 'goods'].map(k => `<div class="asset-row"><span>${t('a_' + k)}</span><b>🪙${fmtNum(b[k])}</b></div>`).join('');
@@ -804,7 +828,7 @@ const SHEETS = {
   },
   // Empty land: next to your home → buy one more parcel; elsewhere → move your home there.
   land(a) {
-    const st = STREETS[a.st], nb = NEIGHBORHOODS[st.nb], l = lotOf('me'), other = VIEW_TOWN !== myTown(), cm = COMMUNITIES[VIEW_TOWN];
+    const st = streetsOf(VIEW_TOWN)[a.st], nb = NEIGHBORHOODS[st.nb], l = lotOf('me'), other = VIEW_TOWN !== myTown(), cm = COMMUNITIES[VIEW_TOWN];
     const next = !other && l.st === a.st && a.p === l.p + l.n;
     const shot = `<div class="land-pic"><span>🏷️</span><b>${other ? `${cm.flag} ${nm(cm)} · ` : ''}${nm(st)}</b><i>${nm(nb)}</i></div>`;
     if (next) {
@@ -1107,6 +1131,50 @@ const ACT = {
   recenter: () => Scene.recenter(),
   goHome() { if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; UI.wtown = null; setLevel(0); setTab('home'); },
   backTown() { if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); },
+  // Going somewhere (v0.12). Homes in your own community: choose how to go. Elsewhere in the world: straight there.
+  goTo(id) {
+    if (id === 'me') return ACT.goHome();
+    if (townOf(id) !== myTown() || UI.tab === 'world' && UI.wtown && UI.wtown !== myTown()) return ACT.visit(id);
+    closeSheet(); openSheet('go', { id });
+  },
+  travel(how) {
+    const arg = UI.sheet && UI.sheet.arg, a = typeof arg === 'string' ? { place: arg } : arg;
+    if (!a) return;
+    closeSheet();
+    const T = goTarget(a), arrive = () => { UI.tripTo = null; if (a.id) ACT.visit(a.id); else { openSheet('place', a.place); arrivedFx(a.place); } refresh(); };
+    if (how === 'now' && a.place) {   // straight there: you're standing at the place in town
+      if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
+      if (UI.tab !== 'town') UI.tab = 'town';
+      syncView(); Scene.arriveAt(T.pt, a.place);
+      return arrive();
+    }
+    if (how === 'now') return arrive();
+    if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
+    if (UI.tab !== 'town') UI.tab = 'town';
+    syncView();
+    const car = how === 'walk' ? null : S.me.cars[S.me.car], kind = !car ? 'walk' : CARS[car.k].kind === 'two' ? 'bike' : 'car';
+    UI.tripTo = T.short;
+    Scene.travel(T.pt, kind, car, arrive, a.id || null, a.place || null);
+    if (kind !== 'walk') Sound.play('select');
+  },
+  tripFast() { Scene.finishTrip(); },
+  placeGo: key => openSheet('place', key),
+  // Using a place (you're there)
+  placeDo(arg) {
+    const [key, act, x] = arg.split('|');
+    if (act === 'help') {
+      const r = helpHarvest();
+      if (r.r === 'nojobs') { closeSheet(); return openSheet('cap'); }
+      if (r.r === 'ok') { Sound.play('harvest'); snack(`🌾 ${t('pl_helped', { n: HELP_HARVEST.wheat })}`); if (r.fest) setTimeout(() => { Sound.play('levelup'); snack(`🎉 ${t('pl_fest_now')}`); }, 900); }
+    } else if (act === 'bake') { const r = bakeBread(); snack(r === 'ok' ? `🍞 ${t('pl_baked')}` : t('pl_need_wheat', { n: BREAD.wheat })); if (r === 'ok') Sound.play('collect'); }
+    else if (act === 'fish') { const r = lakeFish(); if (r.r === 'nojobs') { closeSheet(); return openSheet('cap'); } if (r.r === 'ok') { Sound.play('collect'); snack(`${GOODS[r.k].e} ${t('pl_caught', { name: nm(GOODS[r.k]) })}`); } }
+    else if (act === 'walk') { const n = parkWalk(); Sound.play(n ? 'woof' : 'select'); snack(n ? `🐕 ${t('pl_dog_walked', { n })}` : `🌳 ${t('pl_strolled')}`); }
+    else if (act === 'read') { if (readLib() === 'ok') { Sound.play('chime'); snack(`📚 ${t('pl_read_done')}`); } }
+    else if (act === 'card') { if (sendPostcard(x) === 'ok') { Sound.play('chime'); snack(`📮 ${t('pl_card_sent', { name: homeName(homeOf(x)), town: nm(COMMUNITIES[myTown()]) })}`); setTimeout(() => { addFeed({ kind: 'msg', from: x, msgKey: 'msg_postcard' }); refresh(); }, 6000); } }
+    else if (act === 'sell') { closeSheet(); return openSheet('barn'); }
+    else if (act === 'rank') { closeSheet(); return openSheet('ranking'); }
+    if (UI.sheet && UI.sheet.type === 'place') renderSheet();
+  },
   // House rules (v0.11): ask the owner; they think for a moment and (usually) say yes.
   askHost(id) {
     UI.hostAns = { id, a: 'wait' }; renderSheet();
@@ -1225,7 +1293,7 @@ const ACT = {
     if (r.r === 'poor') return snack(t('snack_poor'));
     if (r.r !== 'ok') return snack(t('land_taken'));
     closeSheet();
-    snack((myTown() !== was ? t('snack_moved_town', { town: nm(COMMUNITIES[myTown()]) }) : t('snack_moved_street', { street: nm(STREETS[st]) })) + (r.refund ? ` +🪙${fmtNum(r.refund)}` : ''));
+    snack((myTown() !== was ? t('snack_moved_town', { town: nm(COMMUNITIES[myTown()]) }) : t('snack_moved_street', { street: nm(streetsOf(myTown())[st]) })) + (r.refund ? ` +🪙${fmtNum(r.refund)}` : ''));
     if (myTown() !== was) Sound.play('chime');
     setLevel(0); UI.visit = null; UI.tab = 'home'; UI.inside = false; Scene.moveHome(); syncView(); Scene.recenter();
   },
@@ -1377,7 +1445,8 @@ function onSceneHit(h) {
     return;
   }
   if (k === 'worldMap') { ACT.world(); return refresh(); }
-  if (k === 'shop') { const L = SHOP_LOOK[h.k]; return tip(null, null, `${L.e} ${nm(L)}`, t('shop_soon')); }
+  if (k === 'shop') return openSheet('place', h.k);
+  if (k === 'place') return openSheet('place', h.key);
   if (k === 'land') return openSheet('land', { st: h.st, p: h.p, n: h.n, run: h.run });
   if (k === 'buyParcel') return openSheet('land', { st: lotOf('me').st, p: lotOf('me').p + lotOf('me').n, n: 1, next: true });
   if (k === 'furn') {
@@ -1388,9 +1457,9 @@ function onSceneHit(h) {
     else if (it && d.use) { tip('furn', h.k, nm(d), `🙏 ${t('ask_first')}`); UI.hostWant = h.k; return openSheet('host', vo); }   // house rules: ask first
     return tip('furn', h.k, nm(d), sub);
   }
-  if (k === 'lot') { ACT.visit(h.owner); return refresh(); }
+  if (k === 'lot') { ACT.goTo(h.owner); return refresh(); }
   if (k === 'emptyLot') return openSheet('invite');
-  if (k === 'plaza') return openSheet('ranking');
+  if (k === 'plaza') return openSheet('place', 'plaza');
   const ed = Scene.getEdit();
   if (!ed) return;
   if (k === 'place') {
@@ -1617,14 +1686,15 @@ const sportName = id => nm(SPORT_BY_ID[id]);
 function exclReqText(key) {
   const [a, b] = key.split(':');
   if (a === 'g') { const G = SPORT_GROUPS[b]; return t('excl_req_group', { e: G.e, group: nm(G), n: SPORT_TIERS[2] }); }
+  if (a === 'aw') { const A = AWARDS[b]; return t('excl_req_award', { e: A.e, name: nm(A), what: nm(A.desc) }); }
+  if (SPORT_BY_ID[a]) { const s = SPORT_BY_ID[a]; return t('excl_req_sport', { e: s.e, name: nm(s), n: SPORT_TIERS[2] }); }
   const T = STREAK_TROPHIES[a];
   return t('excl_req_tier', { e: T.e, name: nm(T), tier: nm(TROPHY_TIERS[+b]), what: nm(T.desc).replace('{n}', T.tiers[+b]) });
 }
 // The exclusive a trophy tier unlocks (if any).
 function exclFor(id, tier) {
   if (STREAK_TROPHIES[id]) return STREAK_TROPHIES[id].excl[tier];
-  const g = SPORT_GROUPS[SPORT_BY_ID[id].group];
-  return tier === 2 && g.excl ? g.excl : null;
+  return tier === 2 ? 'st_' + id : null;   // a sport's gold: its golden statue (and the group's exclusive)
 }
 const exclKind = k => (YARD[k] ? 'yard' : CARS[k] ? 'car' : PET_BREEDS[k] ? 'pet' : 'animal');
 function exclThumb(k, w = 96, h = 80) { const kind = exclKind(k), d = exclDef(kind, k); return kind === 'yard' ? thumbImg('yard', k, {}, w, h, 'thumb sm') : kind === 'car' ? thumbImg('car', k, { color: d.color }, w, h, 'thumb sm') : kind === 'pet' ? thumbImg('pet', k, {}, w, h, 'thumb sm') : thumbImg('animal', k, { stage: 2 }, w, h, 'thumb sm'); }
@@ -1639,8 +1709,10 @@ function trophyCard() {
   }).join('');
   const got = SPORTS.filter(s => trophyLevel(s.id) > 0);
   const chips = got.map(s => `<span class="tro-chip" style="--c:${TROPHY_TIERS[trophyLevel(s.id) - 1].col}">${s.e} ${nm(s)}</span>`).join('');
+  const aw = awardsOf(), awChips = aw.map(id => `<span class="tro-chip" style="--c:${AWARDS[id].col}">${AWARDS[id].e} ${nm(AWARDS[id])}</span>`).join('');
   return `<div class="card trophy-card"><div class="row between"><h3>🏆 ${t('tro_title')}</h3><button class="btn small" data-act="trophies" data-arg="me">${t('tro_all', { n, total })}</button></div>
-    ${rows}<div class="tro-sports">${chips || `<span class="muted">${t('tro_sport_hint', { n: SPORTS.length })}</span>`}</div></div>`;
+    ${rows}<div class="tro-sports">${chips || `<span class="muted">${t('tro_sport_hint', { n: SPORTS.length })}</span>`}</div>
+    <div class="sec-title gap-top">🏅 ${t('aw_title', { n: aw.length, total: Object.keys(AWARDS).length })}</div><div class="tro-sports">${awChips || `<span class="muted">${t('aw_hint')}</span>`}</div></div>`;
 }
 Object.assign(SHEETS, {
   // Anyone's trophies: yours, a friend's, or someone you're visiting anywhere in the world.
@@ -1665,11 +1737,22 @@ Object.assign(SHEETS, {
         <div class="muted">${t('tro_summary', { n, total: allTrophyIds().length * 3, x: exclN })}</div></div></div>
       ${mine ? '' : `<p class="muted">${t('tro_theirs_note')}</p>`}
       <div class="card">${streaks}</div>
+      <div class="sec-title">🏅 ${t('aw_title', { n: awardsOf(h).length, total: Object.keys(AWARDS).length })}</div>
+      <div class="tro-grid aw-grid">${Object.entries(AWARDS).filter(([id]) => mine || awardsOf(h).includes(id)).map(([id, A]) => { const got = awardsOf(h).includes(id);
+        return `<div class="tro-tile ${got ? 'got' : ''}" style="--c:${got ? A.col : 'transparent'}"><span>${A.e}</span><b>${nm(A)}</b><i>${got ? '✓' : '🔒'}</i></div>`; }).join('') || `<p class="muted">${t('tro_none')}</p>`}</div>
       <div class="sec-title">🏅 ${t('tro_sports', { n: SPORTS.length })}</div>${groups || `<p class="muted">${t('tro_none')}</p>`}
       ${mine ? `<p class="muted center">${t('tro_rule', { a: SPORT_TIERS[0], b: SPORT_TIERS[1], c: SPORT_TIERS[2] })}</p>` : ''}`;
   },
   // A new trophy: a big medal, and what it lets you buy.
   trophyNew(a) {
+    if (a.award) {
+      const A = AWARDS[a.award], ex = 'aw_' + a.award;
+      return `<div class="center tro-new"><div class="tro-medal" style="--c:${A.col}"><span>${A.e}</span></div>
+        <div class="souv-new">🏅 ${t('aw_new')}</div><h2>${nm(A)}</h2><p class="muted">${nm(A.desc)}</p>
+        <div class="card gap-top tro-unlock">${exclThumb(ex)}<div class="grow"><b>🔓 ${t('tro_unlock')}</b><div>${nm(YARD[ex])}</div><div class="muted">${t('tro_unlock_note')}</div></div></div>
+        <button class="btn primary block gap-top" data-act="openShop" data-arg="excl">🏆 ${t('tro_go_shop')}</button>
+        <button class="btn block gap-top" data-act="close">${t('souv_ok')}</button></div>`;
+    }
     const T = STREAK_TROPHIES[a.id], S2 = SPORT_BY_ID[a.id], tier = TROPHY_TIERS[a.tier], ex = exclFor(a.id, a.tier);
     const name = T ? nm(T) : nm(S2), what = T ? nm(T.desc).replace('{n}', T.tiers[a.tier]) : t('tro_sport_what', { n: SPORT_TIERS[a.tier], name: nm(S2) });
     return `<div class="center tro-new"><div class="tro-medal" style="--c:${tier.col}"><span>${T ? T.e : S2.e}</span></div>
@@ -1682,6 +1765,7 @@ Object.assign(SHEETS, {
 const GROUP_TYPE = { walk: 'walk', run: 'run', cycle: 'cycle', swim: 'swim', hike: 'walk', mind: 'yoga', strength: 'strength', cardio: 'hiit', team: 'hiit', snow: 'hiit', outdoor: 'walk' };
 Object.assign(ACT, {
   trophies(id) { openSheet('trophies', id || 'me'); },
+  exclAll() { UI.exclAll = true; },
   buyExcl(arg) {
     const [kind, k] = arg.split('|'), d = exclDef(kind, k);
     const r = kind === 'yard' ? buyItem('yard', k).r : kind === 'car' ? buyCar(k) : kind === 'pet' ? adoptPet(k).r : buyAnimal(k);
@@ -1867,6 +1951,63 @@ function panelWorld() {
     ${card}
     <div class="card"><h3>🗺️ ${t('world_all')}</h3>${list}</div>
     <p class="muted center">${t('world_note')}</p>`;
+}
+// Where a trip goes: a home's gate or a public place (its name for the card and the context bar).
+function goTarget(a) {
+  if (a.place) { const P = placeInfo(a.place); return { e: P.e, name: nm(P), short: nm(P), pt: Scene.placePoint(a.place) }; }
+  const h = homeOf(a.id);
+  return { e: '🏡', name: t('home_of', { name: homeName(h) }), short: t('home_of', { name: homeName(h) }), pt: Scene.gate(a.id) };
+}
+// Walk / drive (or ride) / straight there, with how long each takes.
+function goTiles(T) {
+  const car = S.me.cars[S.me.car], two = car && CARS[car.k].kind === 'two';
+  const tile = (how, ic, label, sub, on = true) => `<button class="act-tile" data-act="travel" data-arg="${how}" ${on ? '' : 'disabled'}><span>${ic}</span><b>${label}</b><i>${sub}</i></button>`;
+  const secs = how => t('go_secs', { n: Scene.tripTime(T.pt, how) });
+  return `<div class="act-grid three">
+    ${tile('walk', '🚶', t('go_walk'), secs('walk'))}
+    ${car ? tile('car', two ? '🚲' : '🚗', t(two ? 'go_ride' : 'go_drive'), secs(two ? 'bike' : 'car')) : tile('car', '🚗', t('go_drive'), t('go_no_car'), false)}
+    ${tile('now', '⚡', t('go_now'), t('go_now_sub'))}
+  </div>`;
+}
+// The lake is a beach in towns by the sea.
+const placeInfo = key => (key === 'lake' && layoutOf(VIEW_TOWN).lake.sea ? PLACE_INFO.beach : PLACE_INFO[key]);
+// A little sound when you get there.
+function arrivedFx(key) { Sound.play(key === 'park' ? 'woof' : key === 'lake' ? 'tick' : 'select'); }
+// What you can do at a place (you're there).
+function placeBody(key) {
+  const P = placeDay(), btn = (act, label, on = true, x = '') => `<button class="btn ${on ? 'primary' : ''} block" data-act="placeDo" data-arg="${key}|${act}|${x}" ${on ? '' : 'disabled'}>${label}</button>`;
+  if (key === 'fields') {
+    const n = harvestCount(), pct = Math.round(n / HARVEST_GOAL * 100);
+    return `<div class="card"><div class="row between"><b>🌾 ${t('pl_harvest_today')}</b><span>${n} / ${HARVEST_GOAL}</span></div><div class="bar"><i style="width:${pct}%"></i></div>
+      <p class="muted">${n >= HARVEST_GOAL ? `🎉 ${t('pl_fest')}` : t('pl_harvest_note')}</p></div>
+      ${btn('help', P.harvest ? `✅ ${t('pl_helped_today')}` : `🌾 ${t('pl_help', { n: HELP_HARVEST.wheat })}`, !P.harvest)}`;
+  }
+  if (key === 'park') {
+    const dogs = myPets(S.me).filter(a => a.k === 'dog').length;
+    return `<p>${t('pl_park_people', { n: Math.max(2, Math.round(onlineIn(VIEW_TOWN) * 0.04)) })}</p>${btn('walk', dogs ? `🐕 ${t('pl_walk_dog')}` : `🚶 ${t('pl_stroll')}`, !(dogs && P.park))}`;
+  }
+  if (key === 'lake') return btn('fish', P.fish ? `✅ ${t('pl_fished')}` : `🎣 ${t('pl_fish')}`, !P.fish) + `<p class="muted small">${t('pl_swim_note')}</p>`;
+  if (key === 'bakery') return `<p>${t('pl_bake_note', { n: BREAD.wheat, have: S.me.barn.wheat || 0, bread: S.me.barn.bread || 0 })}</p>${btn('bake', `🍞 ${t('pl_bake')}`, (S.me.barn.wheat || 0) >= BREAD.wheat)}`;
+  if (key === 'library') {
+    const c = libCard();
+    return `<div class="card lib-card"><div class="sec-title">📖 ${t('pl_card_today')}</div><p class="lib-text">${nm(c)}</p></div>
+      ${btn('read', P.lib ? `✅ ${t('pl_read')}` : `📖 ${t('pl_read_it')}`, !P.lib)}<p class="muted small center">${t('pl_read_n', { n: S.stats.libRead || 0 })}</p>`;
+  }
+  if (key === 'post') {
+    const fr = S.friends.filter(f => lotOf(f.id));
+    return `<p>${t('pl_post_note', { town: nm(COMMUNITIES[myTown()]) })}</p><div class="card">${fr.map(f => `<div class="list-item">${avatar(f.look)}<div class="grow"><b>${esc(homeName(f))}</b></div>
+      ${P.cards[f.id] ? `<span class="tag ok">${t('pl_sent')}</span>` : `<button class="btn small primary" data-act="placeDo" data-arg="post|card|${f.id}">📮 ${t('pl_send')}</button>`}</div>`).join('') || `<p class="muted">${t('pl_no_friends')}</p>`}</div>`;
+  }
+  if (key === 'cafe') {
+    const ids = allLots(VIEW_TOWN).map(l => l.id).filter(id => id !== 'me' && homeOf(id) && isOnline(id)).sort((a, b) => isFriend(b) - isFriend(a)).slice(0, 8);
+    return `<p>${t('pl_cafe_note')}</p><div class="card">${ids.map(id => { const h = homeOf(id), at = visitingNow(id);
+      return `<div class="list-item">${avatar(h.look)}<div class="grow"><b>${esc(homeName(h))}</b> ${isFriend(id) ? '💛' : ''}<div class="muted"><span class="online-dot"></span>${at ? t('host_away', { name: esc(homeName(homeOf(at))) }) : t('host_home')}</div></div>
+        <button class="btn small" data-act="goTo" data-arg="${at || id}">${t('visit')}</button></div>`; }).join('') || `<p class="muted">${t('pl_nobody')}</p>`}</div>`;
+  }
+  if (key === 'market') return `<p>${t('pl_market_note')}</p>${btn('sell', `🧺 ${t('pl_sell')}`)}`;
+  if (key === 'gym') return `<p>${t('pl_gym_note')}</p><p class="muted">${t('pl_gym_people', { n: Math.max(1, Math.round(onlineIn(VIEW_TOWN) * 0.02)) })}</p>`;
+  if (key === 'plaza') return `<p>${t('pl_plaza_note', { lv: townLevel() })}</p>${btn('rank', `🏆 ${t('fab_rank')}`)}`;
+  return '';
 }
 // How many people are online in a community right now (made up for the prototype; slowly changes through the day).
 // Most people are online in their evening and hardly anyone in the middle of their night (local time).

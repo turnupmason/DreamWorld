@@ -57,6 +57,19 @@ function migrate() {
   if (S.theme === undefined) S.theme = 'auto';
   if (S.trophyV !== 1) { S.friends.forEach(showOffExclusives); S.trophySeen = S.trophySeen || {}; S.trophyV = 1; }   // v0.10
   if (S.petRemind === undefined) S.petRemind = true;
+  // v0.12: every community has its own town plan. A home in another community whose street isn't in the new plan
+  // (or doesn't fit any more) moves to the first free land there big enough for it.
+  if (S.townPlanV !== 1) {
+    S.lots.filter(l => townOfLot(l) !== HOME_TOWN).forEach(l => {
+      const t = townOfLot(l), st = streetsOf(t)[l.st], clash = () => S.lots.some(o => o !== l && townOfLot(o) === t && o.st === l.st && o.p < l.p + l.n && l.p < o.p + o.n)
+        || npcLots(t).some(o => o.st === l.st && o.p < l.p + l.n && l.p < o.p + o.n);
+      if (st && l.p + l.n <= st.n && !clash()) return;
+      l.st = '__moving'; RUNS.key = '';
+      const run = computeRuns(t).filter(r => r.n >= Math.min(l.n, CORE_PARCELS)).sort((a, b) => b.n - a.n)[0];
+      if (run) Object.assign(l, { st: run.st, p: run.p, n: Math.min(l.n, run.n) });
+    });
+    RUNS.key = ''; S.townPlanV = 1;
+  }
   if (S.layoutV !== 2) {   // v0.5: furniture must be reachable; re-arrange the simulated friends' rooms once
     S.friends.forEach(h => { for (let lv = 0; lv < floorsOf(h); lv++) relayoutRoom(h, lv); });
     S.layoutV = 2;
@@ -163,6 +176,7 @@ function checkDay() {
   // trophy streaks: 10k / 20k steps and all three rings, day after day
   ['steps10k', 'steps20k'].forEach(id => { const ok = y.steps + y.pushes >= STREAK_TROPHIES[id].need; st['cur_' + id] = ok ? (st['cur_' + id] || 0) + 1 : 0; st['best_' + id] = Math.max(st['best_' + id] || 0, st['cur_' + id]); });
   st.cur_rings = y.paid.rings.all ? (st.cur_rings || 0) + 1 : 0; st.best_rings = Math.max(st.best_rings || 0, st.cur_rings);
+  closeDayAwards(y);
   st.days++;
   S.today = freshDay();
   S.friends.forEach(f => { f.goalToday = false; f.energy = 55 + Math.round(Math.random() * 40); });
@@ -188,7 +202,11 @@ let VIEW_TOWN = HOME_TOWN;
 const townOfLot = l => (l && l.town) || HOME_TOWN;
 const npcId = (t, id) => (t === HOME_TOWN ? id : t + ':' + id);
 const NPC_LOTS_BY = {};
-function npcLots(t) { return NPC_LOTS_BY[t] || (NPC_LOTS_BY[t] = NPC_LOTS.map(s => ({ ...s, id: npcId(t, s.id), town: t }))); }
+function npcLots(t) { return NPC_LOTS_BY[t] || (NPC_LOTS_BY[t] = layoutOf(t).npcLots.map(s => ({ ...s, id: npcId(t, s.id), town: t }))); }
+// Each community has its own town plan (v0.12, `LAYOUTS` in data.js); built once, mirrored if the community says so.
+const LAYOUT_BUILT = {};
+function layoutOf(t = VIEW_TOWN) { const c = COMMUNITIES[t] || COMMUNITIES[HOME_TOWN], key = (c.layout || 'grid') + (c.flip ? '|f' : ''); return LAYOUT_BUILT[key] || (LAYOUT_BUILT[key] = buildLayout(c.layout || 'grid', !!c.flip)); }
+const streetsOf = (t = VIEW_TOWN) => layoutOf(t).streets;
 function myTown() { return townOfLot(S && S.lots.find(l => l.id === 'me')); }
 function townOf(id) { const l = lotOf(id); return l ? townOfLot(l) : HOME_TOWN; }
 function setViewTown(t) { VIEW_TOWN = COMMUNITIES[t] ? t : HOME_TOWN; ensureNPCs(VIEW_TOWN); }
@@ -200,7 +218,7 @@ function lotOf(id) {
 }
 const slotOf = lotOf;
 // Where a home's lot starts in the world (world tiles), and how wide it is (16 + bought parcels × 4).
-function lotOrigin(id) { const l = lotOf(id); if (!l) return [0, 0]; const st = STREETS[l.st]; return [st.x + l.p * PARCEL, st.y]; }
+function lotOrigin(id) { const l = lotOf(id); if (!l) return [0, 0]; const st = streetsOf(townOfLot(l))[l.st]; return st ? [st.x + l.p * PARCEL, st.y] : [0, 0]; }
 function lotW(id) { const l = lotOf(id); return l ? l.n * PARCEL : LOT_W; }
 const homeW = h => lotW(h.id);
 function allLots(t = VIEW_TOWN) { return [...(S ? S.lots.filter(l => townOfLot(l) === t) : []), ...npcLots(t)]; }
@@ -214,7 +232,7 @@ function vacantRuns(t = VIEW_TOWN) {
 }
 function computeRuns(t) {
   const out = [];
-  Object.entries(STREETS).forEach(([st, s]) => {
+  Object.entries(streetsOf(t)).forEach(([st, s]) => {
     let p = 0;
     while (p < s.n) {
       if (parcelOwner(st, p, t)) { p++; continue; }
@@ -230,16 +248,16 @@ function computeRuns(t) {
 function freeRun() {
   const runs = vacantRuns(myTown()).filter(r => r.n >= CORE_PARCELS), mine = lotOf('me');
   const nextToMe = r => !!mine && r.st === mine.st && r.p === mine.p + mine.n;
-  const dist = r => Math.abs(STREETS[r.st].y - (mine ? STREETS[mine.st].y : 0));
-  runs.sort((a, b) => nextToMe(a) - nextToMe(b) || (STREETS[a.st].nb !== 'maple') - (STREETS[b.st].nb !== 'maple') || dist(a) - dist(b));
+  const SS = streetsOf(myTown()), dist = r => Math.abs(SS[r.st].y - (mine && SS[mine.st] ? SS[mine.st].y : 0));
+  runs.sort((a, b) => nextToMe(a) - nextToMe(b) || (SS[a.st].nb !== 'maple') - (SS[b.st].nb !== 'maple') || dist(a) - dist(b));
   const r = runs[0];
   if (!r) return null;
   return nextToMe(r) ? { st: r.st, p: r.p + r.n - CORE_PARCELS, n: CORE_PARCELS } : r;
 }
-const nbOf = id => NEIGHBORHOODS[STREETS[lotOf(id).st].nb];
+const nbOf = id => NEIGHBORHOODS[(streetsOf(townOf(id))[lotOf(id).st] || { nb: 'maple' }).nb];
 const round50 = v => Math.round(v / 50) * 50;
 // The next parcel to the right of your home: each one costs more than the last.
-function canExpand(id = 'me') { const l = lotOf(id), p = l.p + l.n; return p < STREETS[l.st].n && !parcelOwner(l.st, p, townOfLot(l)); }
+function canExpand(id = 'me') { const l = lotOf(id), p = l.p + l.n; return p < streetsOf(townOfLot(l))[l.st].n && !parcelOwner(l.st, p, townOfLot(l)); }
 // Land costs more in some communities than others (COMMUNITIES[].price).
 const townPrice = t => (COMMUNITIES[t] || COMMUNITIES[HOME_TOWN]).price;
 function parcelCost(id = 'me') { const l = lotOf(id); return { coins: round50(LAND.parcel * Math.pow(LAND.grow, l.n - CORE_PARCELS) * nbOf(id).price * townPrice(townOfLot(l))) }; }
@@ -254,10 +272,10 @@ function buyParcel() {
   return 'ok';
 }
 // Moving your whole home (house, farm, yard) to an empty spot on another street.
-function moveCost(st, t = VIEW_TOWN) { return { coins: round50(LAND.move * CORE_PARCELS * NEIGHBORHOODS[STREETS[st].nb].price * townPrice(t)) }; }
+function moveCost(st, t = VIEW_TOWN) { return { coins: round50(LAND.move * CORE_PARCELS * NEIGHBORHOODS[streetsOf(t)[st].nb].price * townPrice(t)) }; }
 // Moving your home to empty land, in this community or another one (t).
 function relocate(st, p, t = VIEW_TOWN) {
-  for (let k = 0; k < CORE_PARCELS; k++) if (p + k >= STREETS[st].n || parcelOwner(st, p + k, t)) return { r: 'taken' };
+  for (let k = 0; k < CORE_PARCELS; k++) if (p + k >= streetsOf(t)[st].n || parcelOwner(st, p + k, t)) return { r: 'taken' };
   const c = moveCost(st, t);
   if (!canAfford(c)) return { r: 'poor' };
   const l = lotOf('me'), refund = Math.round((l.paid || 0) * LAND.refund);
@@ -277,7 +295,7 @@ function ensureNPCs(t) {
   NPC_DONE[t] = true;
   const ti = Object.keys(COMMUNITIES).indexOf(t), off = t === HOME_TOWN ? 0 : 104729 * (ti + 1);
   NPCS.push(...npcLots(t).map((spec, i) => {
-    const r = seeded(9001 + i * 7919 + off), pick = a => a[Math.floor(r() * a.length)], farm = STREETS[spec.st].nb === 'farm';
+    const r = seeded(9001 + i * 7919 + off), pick = a => a[Math.floor(r() * a.length)], farm = streetsOf(t)[spec.st].nb === 'farm';
     const crops = Object.keys(CROPS).filter(k => !CROPS[k].rare), fieldLv = farm ? 3 : Math.floor(r() * 3);
     const nf = FIELD_LEVELS[fieldLv], pl = farm ? 3 : r() < 0.6 ? 1 + Math.floor(r() * 2) : 0;
     const beasts = ['chicken', 'duck', 'sheep', 'goat', 'pig', 'cow', 'alpaca'];
@@ -1058,7 +1076,8 @@ function simTrophyStats(h) {
   const streak = { steps10k: Math.floor(r() * (fit ? 40 : 12)), steps20k: Math.floor(r() * (fit ? 18 : 4)), rings: Math.floor(r() * (fit ? 60 : 10)) };
   const sports = {};
   for (let k = 0; k < 3 + Math.floor(r() * 6); k++) { const s = SPORTS[Math.floor(r() * SPORTS.length)]; sports[s.id] = Math.floor(r() * (fit ? 70 : 15)); }
-  return (SIM_TROPHY[h.id] = { streak, sports });
+  const awards = Object.keys(AWARDS).filter(() => r() < (fit ? 0.45 : 0.12));
+  return (SIM_TROPHY[h.id] = { streak, sports, awards });
 }
 function streakNow(id, h = S.me) {
   if (h !== S.me) return simTrophyStats(h).streak[id];
@@ -1080,6 +1099,7 @@ function exclOK(key, h = S.me) {
   if (!key) return true;
   const [a, b] = key.split(':');
   if (a === 'g') return SPORTS.some(s => s.group === b && trophyLevel(s.id, h) >= 3);
+  if (a === 'aw') return awardsOf(h).includes(b);
   return trophyLevel(a, h) > +b;
 }
 const exclDef = (kind, k) => (kind === 'yard' ? YARD[k] : kind === 'car' ? CARS[k] : kind === 'pet' ? PET_BREEDS[k] : ANIMALS[k]);
@@ -1094,6 +1114,7 @@ function placeTrophyCase(h) {
 function trophyNews() {
   S.trophySeen = S.trophySeen || {};
   const out = [];
+  checkAwards().forEach(id => { if (!S.trophySeen['aw:' + id]) { S.trophySeen['aw:' + id] = 1; out.push({ award: id }); } });
   allTrophyIds().forEach(id => {
     const lv = trophyLevel(id), seen = S.trophySeen[id] || 0;
     for (let t = seen; t < lv; t++) out.push({ id, tier: t });
@@ -1411,4 +1432,91 @@ function crowdPerson(host, k) {
   if (CROWD[key]) return CROWD[key];
   const r = seeded(idNum(key) * 7 + 3), pick = a => a[Math.floor(r() * a.length)];
   return (CROWD[key] = { id: 'crowd', name: pick(NPC_NAMES), look: { shirt: pick(COLORS), skin: pick(SKINS), hair: pick(HAIRS), hairCol: pick(HAIR_COLORS), mob: r() < 0.08 ? 'wheel' : 'walk' } });
+}
+
+// ---------- public places (v0.12) ----------
+function placeDay() { const d = S.today; d.place = d.place || { cards: {} }; return d.place; }
+// The town fields: today's helps from everyone (made up for the neighbours, growing through the local day) + yours.
+function harvestCount(t = myTown()) {
+  const P = placeDay(), hr = localHour(t), k = hash(idNum(t) * 0.031, Math.floor(now() / DAY));
+  const others = hr < 7 ? 0 : Math.floor(Math.min(1, (hr - 7) / 12) * HARVEST_GOAL * (0.55 + k * 0.4));
+  return Math.min(HARVEST_GOAL, others + (P.harvest ? 1 : 0));
+}
+function helpHarvest() {
+  const P = placeDay();
+  if (P.harvest) return { r: 'done' };
+  if (!useAction()) return { r: 'nojobs' };
+  P.harvest = true;
+  addBarn(S.me, 'wheat', HELP_HARVEST.wheat);
+  const fest = harvestCount() >= HARVEST_GOAL && !P.fest;
+  if (fest) { P.fest = true; addBarn(S.me, 'bread', 1); }
+  return { r: 'ok', fest };
+}
+function bakeBread() {
+  if ((S.me.barn.wheat || 0) < BREAD.wheat) return 'nowheat';
+  S.me.barn.wheat -= BREAD.wheat;
+  if (!S.me.barn.wheat) delete S.me.barn.wheat;
+  addBarn(S.me, 'bread', 1);
+  S.stats.baked = (S.stats.baked || 0) + 1;
+  return 'ok';
+}
+function lakeFish() {
+  const P = placeDay();
+  if (P.fish) return { r: 'done' };
+  if (!useAction()) return { r: 'nojobs' };
+  P.fish = true;
+  let r = Math.random(), k = FISH_KINDS[0][0];
+  for (const [kind, p] of FISH_KINDS) { if (r < p) { k = kind; break; } r -= p; }
+  addBarn(S.me, k, LAKE_FISH);
+  return { r: 'ok', k };
+}
+// A walk in the park: every dog gets its daily walk and some play.
+function parkWalk() {
+  const dogs = myPets(S.me).filter(a => a.k === 'dog');
+  dogs.forEach(a => { careFor(a.id, 'clean'); careFor(a.id, 'play'); });
+  placeDay().park = true;
+  return dogs.length;
+}
+function sendPostcard(id) {
+  const P = placeDay();
+  if (P.cards[id]) return 'done';
+  P.cards[id] = true;
+  S.stats.postcards = (S.stats.postcards || 0) + 1;
+  return 'ok';
+}
+const libCard = () => LIB_CARDS[Math.floor(now() / DAY) % LIB_CARDS.length];
+function readLib() {
+  const P = placeDay();
+  if (P.lib) return 'done';
+  P.lib = true;
+  S.stats.libRead = (S.stats.libRead || 0) + 1;
+  return 'ok';
+}
+
+// ---------- awards (v0.12): Apple Watch-style medals for special days and milestones ----------
+function awardsOf(h = S.me) { return h === S.me ? Object.keys(S.stats.awards || {}) : simTrophyStats(h).awards || []; }
+// Some awards are decided when a day ends (the whole day counts): totals, the month, the weekend, a perfect week.
+function closeDayAwards(y) {
+  const st = S.stats, steps = y.steps + y.pushes, d = new Date(y.date.replace(/-/g, '/')), mk = d.getFullYear() + '-' + (d.getMonth() + 1), dow = d.getDay();
+  st.totalSteps = (st.totalSteps || 0) + steps;
+  st.bestSteps = Math.max(st.bestSteps || 0, steps);
+  if (!st.month || st.month.key !== mk) st.month = { key: mk, days: 0 };
+  if (steps >= AWARD_RULES.monthSteps) st.month.days++;
+  const worked = (y.workouts || []).length > 0;
+  if (dow === 6 && worked) st.satWorkout = y.date;
+  st.awards = st.awards || {};
+  if (dow === 0 && worked && st.satWorkout && dayKey(d.getTime() - DAY) === st.satWorkout) st.awards.weekend = st.awards.weekend || y.date;
+  if (dow === 0 && st.cur_rings >= 7) st.awards.perfectweek = st.awards.perfectweek || y.date;
+  if (st.month.days >= AWARD_RULES.monthDays) st.awards.monthly = st.awards.monthly || y.date;
+}
+// Awards you can earn during the day. Returns all you have.
+function checkAwards() {
+  const st = S.stats, d = S.today, A = (st.awards = st.awards || {}), steps = d.steps + d.pushes, k = d.date;
+  Object.entries(AWARD_RULES.move).forEach(([id, x]) => { if (d.kcal >= RINGS.move * x) A[id] = A[id] || k; });
+  if (steps >= AWARD_RULES.recordMin && steps > (st.bestSteps || 0) && (st.days || 0) > 1) A.newrecord = A.newrecord || k;
+  if ((st.totalSteps || 0) + steps >= AWARD_RULES.steps) A.steps1m = A.steps1m || k;
+  if ((st.workouts || 0) >= AWARD_RULES.workouts) A.workouts100 = A.workouts100 || k;
+  const m = st.month && st.month.key === k.split('-').slice(0, 2).join('-') ? st.month.days : 0;
+  if (m + (steps >= AWARD_RULES.monthSteps ? 1 : 0) >= AWARD_RULES.monthDays) A.monthly = A.monthly || k;
+  return Object.keys(A);
 }

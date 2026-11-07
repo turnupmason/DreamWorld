@@ -618,6 +618,9 @@ Object.assign(STR.zh, {
   host_no: '{name}说：现在不太方便，下次吧。', host_cant_off: '{name}现在不在线，上线了再问吧。', host_cant_away: '{name}去别人家串门了，回家了再问吧。',
   host_yes_snack: '{name}答应了，这次做客可以随便坐 😊', host_wave: '打招呼', host_waved: '{name}也朝你挥了挥手',
   st_home: '在家', st_out: '出门了', st_off: '不在线', local_time: '当地 {t}',
+  go_sub: '沿着马路走过去；开车更快，车停在路边。', go_walk: '走过去', go_drive: '开车去', go_ride: '骑车去', go_now: '直接到', go_now_sub: '一下就到',
+  go_secs: '约 {n} 秒', go_no_car: '还没有车', go_on_way: '在去{to}的路上…',
+  area_canal: '运河', area_beach: '海滩', area_river: '河畔', area_fjord: '峡湾', area_harbour: '港口', area_terrace: '山坡梯田',
 });
 Object.assign(STR.en, {
   farm_pill: '🌱 Jobs {n}', more_here: '👥 {n} more here',
@@ -627,4 +630,57 @@ Object.assign(STR.en, {
   host_no: '{name}: Not right now, maybe next time.', host_cant_off: '{name} is offline. Ask when they’re back online.', host_cant_away: '{name} is out visiting. Ask when they’re back home.',
   host_yes_snack: '{name} said yes: sit anywhere this visit 😊', host_wave: 'Wave', host_waved: '{name} waved back',
   st_home: 'at home', st_out: 'out', st_off: 'offline', local_time: 'local time {t}',
+  go_sub: 'Along the roads. Driving is faster; the car parks at the roadside.', go_walk: 'Walk', go_drive: 'Drive', go_ride: 'Ride', go_now: 'Go now', go_now_sub: 'Right away',
+  go_secs: 'about {n} s', go_no_car: 'No car yet', go_on_way: 'On the way to {to}…',
+  area_canal: 'Canals', area_beach: 'Beach', area_river: 'Riverside', area_fjord: 'Fjord', area_harbour: 'Harbour', area_terrace: 'Hillside terraces',
+});
+
+// ---------- v0.12: public places ----------
+Object.assign(STR.zh, {
+  pl_go_first: '先过去，到了就能用：', pl_other_town: '这是别的社区的地方，搬过来就能用。',
+  pl_desc_plaza: '小镇的中心：排行、小镇等级都在这里。', pl_desc_fields: '全镇一起种的麦田。每天来帮忙收一次，全镇凑满就开丰收节。',
+  pl_desc_park: '散步、遛狗的好地方。狗狗在这里散一次步，今天的散步就够了。', pl_desc_lake: '每天可以钓一次鱼；游泳的时候迷你的你也会来这里游。',
+  pl_desc_beach: '每天可以钓一次鱼；游泳的时候迷你的你也会来海里游。', pl_desc_bakery: '把自己种的小麦拿来，烤成香喷喷的面包，可以卖也可以送朋友。',
+  pl_desc_cafe: '看看现在谁在线，去串个门。', pl_desc_market: '把仓库里的东西卖掉。', pl_desc_gym: '力量训练、拳击、高强度间歇的时候，迷你的你会来这里练。',
+  pl_desc_library: '每天一张小知识卡，半分钟读完。', pl_desc_post: '给朋友寄一张小镇的明信片，朋友会收到。',
+  pl_harvest_today: '今天全镇帮忙收麦子', pl_harvest_note: '大家一起帮忙，凑满就开丰收节，帮过忙的人都能拿到一个面包。', pl_fest: '丰收节！今天的麦子都收完了。',
+  pl_help: '帮忙收麦子（用 1 件农活，得 {n} 束小麦）', pl_helped_today: '今天已经帮过忙了', pl_helped: '帮忙收了麦子，得到 {n} 束小麦', pl_fest_now: '丰收节！送你一个面包 🍞',
+  pl_park_people: '公园里现在有 {n} 个人在散步。', pl_walk_dog: '遛狗', pl_stroll: '散散步', pl_dog_walked: '{n} 只狗狗散完步了，开心得直摇尾巴', pl_strolled: '在公园里散了散步',
+  pl_fish: '钓鱼（每天一次，用 1 件农活）', pl_fished: '今天已经钓过了', pl_caught: '钓到了 {name}！', pl_swim_note: '用 Apple Watch 记录游泳时，迷你的你会来这里游。',
+  pl_bake_note: '{n} 束小麦烤一个面包。仓库里有 {have} 束小麦、{bread} 个面包。', pl_bake: '烤面包', pl_baked: '面包烤好了，放进仓库', pl_need_wheat: '要 {n} 束小麦才能烤一个面包',
+  pl_card_today: '今天的小知识', pl_read_it: '读完了', pl_read: '今天的已经读过了', pl_read_done: '读完了，明天还有新的', pl_read_n: '一共读过 {n} 张',
+  pl_post_note: '寄一张{town}的明信片（每人每天一张）：', pl_send: '寄', pl_sent: '已寄出', pl_card_sent: '明信片寄给 {name} 了：来自{town}的问候', pl_no_friends: '还没有朋友，先去邀请一个吧。',
+  pl_cafe_note: '这些人现在在线：', pl_nobody: '现在没人在线。', pl_market_note: '仓库里的鸡蛋、牛奶、菜、鱼、面包都可以在这里卖。', pl_sell: '去卖东西',
+  pl_gym_note: '用 Apple Watch 记录力量训练、拳击、高强度间歇时，迷你的你会来这里练。', pl_gym_people: '现在有 {n} 个人在这里锻炼。',
+  pl_plaza_note: '小镇现在 {lv} 级。大家的家越漂亮，小镇等级越高。', msg_postcard: '谢谢你的明信片！好喜欢 💌',
+});
+Object.assign(STR.en, {
+  pl_go_first: 'Go there first; once you’re there you can use it:', pl_other_town: 'This place is in another community. Move here to use it.',
+  pl_desc_plaza: 'The heart of town: the ranking and the town level.', pl_desc_fields: 'Wheat the whole town grows together. Help with the harvest once a day; when the town fills it, it’s harvest festival.',
+  pl_desc_park: 'A place to stroll and walk the dog. One walk here and your dog’s walk is done for today.', pl_desc_lake: 'Fish here once a day. When you swim, mini-you swims here too.',
+  pl_desc_beach: 'Fish here once a day. When you swim, mini-you swims in the sea.', pl_desc_bakery: 'Bring wheat you grew and bake bread to sell or give to friends.',
+  pl_desc_cafe: 'See who’s online right now and drop by.', pl_desc_market: 'Sell what’s in your barn.', pl_desc_gym: 'During strength, boxing and HIIT workouts, mini-you trains here.',
+  pl_desc_library: 'A card of something good to know every day; half a minute to read.', pl_desc_post: 'Send a friend a postcard from your town.',
+  pl_harvest_today: 'Town harvest today', pl_harvest_note: 'Everyone helps; when it’s full it’s harvest festival and every helper gets a loaf of bread.', pl_fest: 'Harvest festival! Today’s wheat is all in.',
+  pl_help: 'Help with the harvest (1 farm job, {n} wheat)', pl_helped_today: 'You helped today', pl_helped: 'You helped bring in the wheat: {n} wheat for you', pl_fest_now: 'Harvest festival! Here’s a loaf of bread 🍞',
+  pl_park_people: '{n} people are out walking in the park.', pl_walk_dog: 'Walk the dog', pl_stroll: 'Take a stroll', pl_dog_walked: '{n} happy dog(s) walked, tails wagging', pl_strolled: 'A nice stroll in the park',
+  pl_fish: 'Go fishing (once a day, 1 farm job)', pl_fished: 'You fished today', pl_caught: 'You caught a {name}!', pl_swim_note: 'When Apple Watch records a swim, mini-you swims here.',
+  pl_bake_note: '{n} wheat make a loaf. Your barn has {have} wheat and {bread} bread.', pl_bake: 'Bake bread', pl_baked: 'Fresh bread, into the barn', pl_need_wheat: 'You need {n} wheat to bake a loaf',
+  pl_card_today: 'Today’s card', pl_read_it: 'I read it', pl_read: 'You read today’s card', pl_read_done: 'Done, there’s a new one tomorrow', pl_read_n: '{n} read so far',
+  pl_post_note: 'Send a postcard from {town} (one per friend a day):', pl_send: 'Send', pl_sent: 'Sent', pl_card_sent: 'Postcard sent to {name}: greetings from {town}', pl_no_friends: 'No friends yet. Invite one first.',
+  pl_cafe_note: 'Online right now:', pl_nobody: 'Nobody is online right now.', pl_market_note: 'Eggs, milk, vegetables, fish and bread from your barn sell here.', pl_sell: 'Sell things',
+  pl_gym_note: 'When Apple Watch records strength, boxing or HIIT, mini-you trains here.', pl_gym_people: '{n} people are working out here now.',
+  pl_plaza_note: 'The town is level {lv}. The nicer everyone’s homes, the higher it goes.', msg_postcard: 'Thank you for the postcard! Love it 💌',
+});
+
+// ---------- v0.12: awards and statues ----------
+Object.assign(STR.zh, {
+  aw_title: 'Apple Watch 奖章 {n}/{total}', aw_new: '新奖章！', aw_hint: '像 Apple Watch 一样：活动目标翻倍、完美一周、步数新纪录、百万步……都会得到奖章。',
+  excl_req_award: '{e} 拿到「{name}」奖章：{what}', excl_req_sport: '{e} {name}拿到金奖杯（{n} 次）',
+  excl_sec_trophy: '奖杯专属', excl_sec_award: '奖章雕塑', excl_sec_statue: '运动金像（每种运动的金奖杯）', excl_all_statues: '看全部 {n} 座运动金像',
+});
+Object.assign(STR.en, {
+  aw_title: 'Apple Watch awards {n}/{total}', aw_new: 'New award!', aw_hint: 'Like on Apple Watch: double your Move goal, a perfect week, a new step record, a million steps… each gives an award.',
+  excl_req_award: '{e} Earn the “{name}” award: {what}', excl_req_sport: '{e} Gold trophy in {name} ({n} workouts)',
+  excl_sec_trophy: 'Trophy exclusives', excl_sec_award: 'Award sculptures', excl_sec_statue: 'Golden sport statues (each sport’s gold)', excl_all_statues: 'See all {n} sport statues',
 });
