@@ -173,6 +173,7 @@ const Scene = (() => {
     const pr = pastureRect(h);
     if (pr) { block(pr.x + pr.w - 2, pr.y, 2, 2); block(pr.x + 1, pr.y + pr.d - 1, 1, 1); block(pr.x, pr.y, 1, 1); }   // barn, water trough, hay
     if (h.pondLv) { const P = areaOf(h, 'pond'); block(P.x, P.y, P.w, P.d); }
+    if (h.garageLv) { const G = areaOf(h, 'garage'); block(G.x, G.y, G.w, G.d); }
     h.trees.forEach((t, i) => { if (t && i < orchardSlots(h)) { const [sx, sy] = orchardSlot(h, i); block(sx, sy, 1, 1); } });
     h.fields.forEach((f, i) => { const [x, y] = fieldPos(i, h); block(x, y, 1, 1); });   // farmland is not for walking on
     h.yard.forEach(it => { const [w2, d2] = itemSize('yard', it); block(it.x, it.y, w2, d2); });
@@ -621,8 +622,13 @@ const Scene = (() => {
         }
       } });
     }
+    // v0.19: the garage, with the cars that aren't in the drive parked inside
+    if (h.garageLv) {
+      const G = areaOf(h, 'garage'), inside = h.cars.filter((c, i) => i !== h.car || (h.id === 'me' && false));
+      objs.push({ d: ox + oy + G.x + G.y + (G.w + G.d) / 2, f: () => { const r = drawGarage(ox + G.x, oy + G.y, garageCap(h), inside, ts); if (focus && r) hits.push({ kind: 'garage', owner: h.id, ...r }); } });
+    }
     // car
-    if (h.car >= 0 && h.cars[h.car] && !(h.id === 'me' && (parked || (trip && trip.how !== 'walk')))) {   // not while you're out in it
+    if (h.car >= 0 && h.cars[h.car] && !(h.id === 'me' && (S.carAt || (trip && trip.inCar && !trip.arrived)))) {   // not while it's parked out or you're driving it
       const c = h.cars[h.car];
       objs.push({ d: ox + oy + 1 + 10.2, f: () => { const r = drawCar(c, ox + 0.5, oy + 9, ts); if (focus && r) hits.push({ kind: 'car', owner: h.id, ...r }); } });
     }
@@ -696,7 +702,7 @@ const Scene = (() => {
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
-    if (me.lot === h.id && !meInLake() && !(trip && mode === 'town') && !S.work && !S.live && !jailed()) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
+    if (me.lot === h.id && !meInLake() && (mode === 'town' ? !(trip && !trip.arrived) && !S.out : h.id !== 'me' || !S.out) && !S.work && !S.live && !jailed()) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
   }
   function liveBadge(p, live, mine) {
     const z = cam.z, w = WORKOUTS[live.type];
@@ -726,7 +732,7 @@ const Scene = (() => {
   // Roads: street (2 wide, dashed centre line), avenue (3 wide, double yellow line), dirt (country road).
   // Roads (v0.13): a paved sidewalk along both sides (people walk there), the asphalt between, lane lines, and a
   // zebra crossing where a road meets another. Drawn in passes so crossings join up cleanly.
-  const SIDEWALK = { avenue: 0.5, street: 0.42, dirt: 0 };
+  const SIDEWALK = { avenue: 0.5, street: 0.42, lane: 0.36, dirt: 0 };
   function drawRoads(vr) {
     const z = cam.z, vis = r => !(r[2] < vr.x0 || r[0] > vr.x1 || r[3] < vr.y0 || r[1] > vr.y1), roads = TL.roads.filter(vis);
     const horiz = r => r[2] - r[0] >= r[3] - r[1];
@@ -771,6 +777,11 @@ const Scene = (() => {
       });
     });
   }
+  // v0.19: every store's car park and the car parks by the other places
+  function carParks(vr) {
+    (TL.stores || []).forEach(st => { const G = storeGeo(st), [x, y, w, d] = G.c; if (boxVisible(x, y, x + w, y + d, vr)) drawCarPark(G.c, G.along); });
+    (TL.parks || []).forEach(([, x, y, w, d, f]) => { if (boxVisible(x, y, x + w, y + d, vr)) drawCarPark([x, y, w, d], f === 'E' || f === 'W' ? 'y' : 'x', { sign: true }); });
+  }
   const inRectXY = (x, y, x0, y0, x1, y1) => x >= x0 && x < x1 && y >= y0 && y < y1;
   const inLake = (x, y) => ((x - TL.lake.x) / (TL.lake.rx + 1)) ** 2 + ((y - TL.lake.y) / (TL.lake.ry + 1)) ** 2 < 1;
   // Something built is here (no wild trees): streets and their lots, roads, the town centre, the park, the lake, the fields.
@@ -779,7 +790,7 @@ const Scene = (() => {
     for (const r of TL.roads) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
     for (const r of TL.water) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
     const P = TL.park, C = TL.centre;
-    if ((TL.stores || []).some(([, sx, sy, sw, sd]) => inRectXY(x, y, sx - 1, sy - 1, sx + sw + 1, sy + sd + 1))) return true;   // v0.17
+    if ([...(TL.stores || []), ...(TL.parks || [])].some(([, sx, sy, sw, sd]) => inRectXY(x, y, sx - 1, sy - 1, sx + sw + 1, sy + sd + 1))) return true;   // v0.17, v0.19 car parks
     if (inRectXY(x, y, C.x - 0.5, C.y - 1, C.x + C.w + 0.5, C.y + C.d + 1) || inRectXY(x, y, P.x - 1, P.y - 1, P.x + P.w + 1, P.y + P.d + 1)) return true;
     for (const F of TL.fields) if (inRectXY(x, y, F.x - 1, F.y - 1, F.x + F.w + 1, F.y + F.d + 1)) return true;
     const m = TL.lake.sea ? 5.5 : 3;
@@ -954,16 +965,19 @@ const Scene = (() => {
   }
   // The stores outside the town centre (v0.17).
   function storeObjs(objs, vr, ts) {
-    (TL.stores || []).forEach(([k, x, y, w, d]) => {
+    (TL.stores || []).forEach(st => {
+      const [k, x, y, w, d] = st;
       if (!boxVisible(x - 1, y - 1, x + w + 1, y + d + 1, vr)) return;
-      objs.push({ d: x + y + w / 2 + d / 2 + 2, f: () => { const r = drawStore(k, x, y, w, d, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } });
+      const [bx, by, bw, bd] = storeGeo(st).b;
+      objs.push({ d: bx + by + bw / 2 + bd / 2 + 1.5, f: () => { const r = drawStore(st, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } });
+      storeShow(st, objs, ts);
     });
   }
   // Where each public place is (where you walk to).
   function placePt(key) {
     const shop = TL.shops.find(([k]) => k === key), P = TL.park, F = TL.fields[0], K = TL.lake, C = TL.centre, st = (TL.stores || []).find(([k]) => k === key);
     if (shop) return [shop[1] + 3, shop[2] + 6.3];
-    if (st) return [st[1] + st[3] / 2, st[2] + st[4] + 0.5];
+    if (st) return storeGeo(st).door;
     if (key === 'plaza') return [TL.plaza.x + LOT_W / 2, TL.plaza.y + LOT_D + 0.8];
     if (key === 'park') return [P.x + 20.7, P.y + 14.7];
     if (key === 'fields') return [F.x + Math.min(F.w / 2, 10), F.y - 0.6];
@@ -1012,7 +1026,8 @@ const Scene = (() => {
     deco.forEach(([k, x, y]) => objs.push({ d: px + py + x + y + 1, f: () => drawYardItem({ k }, px + x, py + y, ts) }));
     TL.shops.forEach(([k, x, y]) => objs.push({ d: x + y + 5.5, f: () => { const r = drawShop(k, x, y, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
     // trees along the edges of the square (not on the plaza or in front of a shop)
-    const free = (x, y) => !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy]) => x > sx - 1.5 && x < sx + 7.5 && y > sy - 1.5 && y < sy + 7.5);
+    const free = (x, y) => !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy]) => x > sx - 1.5 && x < sx + 7.5 && y > sy - 1.5 && y < sy + 7.5)
+      && !(TL.parks || []).some(([, qx, qy, qw, qd]) => x > qx - 1.2 && x < qx + qw + 1.2 && y > qy - 1.2 && y < qy + qd + 1.2);
     for (let x = C.x + 1.5; x < C.x + C.w - 1; x += 6.5) [C.y + C.d - 2, C.y + 1].forEach(y => { if (free(x, y)) objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }); });
   }
   // The park: lawns, crossing paths, a duck pond, a sports field, a playground, trees and benches.
@@ -1031,8 +1046,9 @@ const Scene = (() => {
       ['bench', P.x + 8, P.y + 16], ['lamp', P.x + 19, P.y + 13], ['lamp', P.x + 22, P.y + 16], ['flowers', P.x + 15, P.y + 4], ['flowers', P.x + 16, P.y + 4], ['picnic', P.x + 6, P.y + 20], ['picnic', P.x + 11, P.y + 22]];
     for (let k = 0; k < 16; k++) items.push([k % 3 ? 'tree' : 'pine', P.x + 1 + (k * 7.3) % (P.w - 2), P.y + (k < 8 ? 0.4 : P.d - 1.4)]);
     [[P.x + 3, P.y + 24], [P.x + 9, P.y + 26], [P.x + 15, P.y + 25], [P.x + 2, P.y + 17]].forEach(([x, y]) => items.push(['tree', x, y]));
-    items.forEach(([k, x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k, rot: 0, placed: 0 }, x, y, ts) }));
+    items.filter(([, x, y]) => !onCarPark(x + 0.5, y + 0.5)).forEach(([k, x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k, rot: 0, placed: 0 }, x, y, ts) }));
   }
+  const onCarPark = (x, y) => (TL.parks || []).some(([, qx, qy, qw, qd]) => x > qx - 0.8 && x < qx + qw + 0.8 && y > qy - 0.8 && y < qy + qd + 0.8);
   // The big lake, with a wooden dock and a little boat.
   function lakeSide(objs, vr, ts) {
     const K = TL.lake;
@@ -1094,6 +1110,7 @@ const Scene = (() => {
     curvyRoads(vr);
     if (z > 0.06) highwayObjs(objs, vr, ts);
     townCentre(objs, vr, ts, lv, out);
+    carParks(vr);   // v0.19: on top of the paved square and the lawns
     woods(objs, vr, ts);
     // land for sale: light grass with a dashed outline and a sign
     const runs = vacantRuns();
@@ -1127,7 +1144,8 @@ const Scene = (() => {
     // people who are online right now, out walking: to the square, the park, the lake, and home again
     if (z > 0.055) walkers(objs, dt, ts);
     if (mode === 'town') liveTownObjs(objs, dt, ts);
-    if (trip && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
+    if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
+    else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = S.out.pt; objs.push({ d: mx + my + 0.6, f: () => drawMeOut(mx, my, ts) }); }
     const atPlace = S.work ? S.work.place : jailed() ? 'police' : null;
     if (atPlace && mode === 'town' && VIEW_TOWN === myTown() && placePt(atPlace)) {   // at work (v0.14) or held by the police (v0.18)
       const [wx, wy] = placePt(atPlace), jail = !S.work;
@@ -1289,7 +1307,7 @@ const Scene = (() => {
       ctx.save(); ctx.setLineDash([8 * z, 6 * z]); flatRect(sx + 0.3, oy + 0.3, PARCEL - 0.8, LOT_D - 0.6, null, 'rgba(255,255,255,.85)', 0, 2 * z); ctx.restore();
     }
     lotGround(h, ox, oy, opt);
-    if (parked && parked.id === owner) { const px = ox + 0.5, py = oy + LOT_D + 0.7; objs.push({ d: px + py + 2.5, f: () => drawCar(parked.car, px, py, ts) }); }
+    if (S.carAt && S.carAt.id === owner && owner !== 'me' && S.me.cars[S.me.car]) { const px = ox + 0.5, py = oy + 11.6; objs.push({ d: px + py + 2.5, f: () => drawCar(S.me.cars[S.me.car], px, py, ts) }); }
     // close-up detail: tufts of grass, little flowers and clover across the lawn (not on paths, fields or buildings)
     if (z > 0.5) {
       const LW = homeW(h), FL = ['#f6d04d', '#ffffff', '#ef8fb0', '#b39ae0'];
@@ -1509,34 +1527,91 @@ const Scene = (() => {
       return true;
     });
   }
-  // ---------- going somewhere in town (v0.12): on foot, by bike or by car, along the roads ----------
-  // You set off from the gate of the home you're at. A car follows the roads to the road in front of where you're
-  // going and parks at the roadside (and at the end of their drive, seen from their home); on foot you walk right up.
-  let trip = null, parked = null;
-  // Where you set off from (v0.16): where you are now in town (the last place you went to, or your workplace),
-  // otherwise the gate of the home you're at. By car: from where the car is parked, if it's in this town.
-  function tripFrom(how) {
-    if (how && how !== 'walk' && parked && parked.town === VIEW_TOWN) return parked.at;
+  // ---------- going somewhere in town (v0.12; v0.19: from where you are, and by car from where it's parked) ----------
+  // Where you are is kept in S.out (null = at home) and where your car is in S.carAt (null = in your drive). A trip is a
+  // few legs: walk to your car if it isn't with you, drive along the roads to the car park of where you're going and
+  // park in a bay, then walk to the door. Nobody jumps from place to place.
+  let trip = null;
+  const outHere = () => !!(S && S.out && S.out.town === VIEW_TOWN);
+  // Where you're standing in this town right now.
+  function mePos() {
     if (S.work && VIEW_TOWN === myTown() && placePt(S.work.place)) return placePt(S.work.place);
-    if (S.jail && VIEW_TOWN === myTown() && placePt('police') && !(trip && trip.arrived && trip.town === VIEW_TOWN && trip.t > S.jail.start)) return placePt('police');   // v0.18: out of the police station
-    if (trip && trip.arrived && trip.town === VIEW_TOWN) return [trip.x, trip.y];
-    return me.lot && lotOf(me.lot) && townOf(me.lot) === VIEW_TOWN ? gateOf(me.lot) : gateOf('me');
+    if (S.jail && VIEW_TOWN === myTown() && placePt('police')) return placePt('police');
+    if (outHere()) return S.out.pt;
+    return gateOf('me');
   }
-  function tripPath(to, how) { return how === 'walk' ? route(tripFrom(how), to) : route(tripFrom(how), to, false).slice(0, -1); }
-  // Travel time in "local street" units: expressway legs count less (v0.16).
-  const pathLen = (pts, how) => { let d = 0, [x, y] = tripFrom(how), hw = false; pts.forEach(([a, b, h = 0, f = 0]) => { const L = Math.hypot(a - x, b - y); d += L / (f && hw ? TRIP_SPEED.highway : h > 0 ? 1.5 : 1); hw = !!f; x = a; y = b; }); return d; };
-  function startTrip(to, how, car, done, dest) {
+  const atHomeNow = () => !outHere() && !S.work && !S.jail;
+  // Your car: in a car park somewhere (S.carAt) or in your drive.
+  const homeBay = () => { const [ox, oy] = origin('me'); return [ox + 1, oy + 10.2]; };
+  const carPos = () => (S.carAt && S.carAt.town === VIEW_TOWN ? S.carAt.pt : homeBay());
+  // Where a car parks: a bay in the store's car park, the car park by a place, a friend's drive, your own drive.
+  const PARK_OF = { plaza: 'centre', bakery: 'centre', cafe: 'centre', market: 'centre', gym: 'centre', library: 'centre', post: 'centre', clinic: 'centre', park: 'park', lake: 'lake', fields: 'fields' };
+  function lotBay(L) { const [, x, y, w, d, f] = L; return { pt: [x + w / 2, y + d / 2], dir: f === 'N' ? '+y' : f === 'E' ? '-x' : f === 'W' ? '+x' : '-y' }; }
+  function bayOf(dest, place, to) {
+    if (dest === 'me') return { pt: homeBay(), dir: '-y', home: true };
+    if (dest) { const [ox, oy] = origin(dest); return { pt: [ox + 1, oy + 12.8], dir: '-y' }; }
+    const st = place && (TL.stores || []).find(([k]) => k === place);
+    if (st) { const G = storeGeo(st); return { pt: G.bay, dir: G.dir }; }
+    const L = place && (TL.parks || []).find(([k]) => k === PARK_OF[place]);
+    if (L) return lotBay(L);
+    // anywhere else: the closest car park or store bay
+    const all = [...(TL.parks || []).map(lotBay), ...(TL.stores || []).map(st => { const G = storeGeo(st); return { pt: G.bay, dir: G.dir }; })];
+    return all.sort((A, B) => Math.hypot(A.pt[0] - to[0], A.pt[1] - to[1]) - Math.hypot(B.pt[0] - to[0], B.pt[1] - to[1]))[0] || { pt: to, dir: '+y' };
+  }
+  // The legs of a trip to `to` (walk / car / bike).
+  function planTrip(to, how, dest, place) {
     TL = layoutOf(VIEW_TOWN);
-    const [x, y] = tripFrom(how), path = tripPath(to, how);
-    if (how !== 'walk') parked = null;   // the car leaves from where it was parked
-    trip = { town: VIEW_TOWN, how, car, x, y, path, done, dest, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now() };
+    const from = mePos(), legs = [];
+    if (how === 'walk') return [{ how: 'walk', from, path: route(from, to) }];
+    const car0 = carPos(), bay = bayOf(dest, place, to);
+    if (!(atHomeNow() && !S.carAt) && Math.hypot(car0[0] - from[0], car0[1] - from[1]) > 0.8) legs.push({ how: 'walk', from, path: route(from, car0), toCar: true });
+    legs.push({ how, from: car0, path: route(car0, bay.pt, false), car: true, bay });
+    const far = Math.hypot(to[0] - bay.pt[0], to[1] - bay.pt[1]);
+    if (!bay.home && far > 0.6) legs.push({ how: 'walk', from: bay.pt, path: far < 7 ? [to] : route(bay.pt, to) });
+    return legs;
+  }
+  // Travel time in "local street" units: expressway legs count less (v0.16).
+  const legLen = L => { let d = 0, [x, y] = L.from, hw = false; L.path.forEach(([a, b, h = 0, f = 0]) => { const q = Math.hypot(a - x, b - y); d += q / (f && hw ? TRIP_SPEED.highway : h > 0 ? 1.5 : 1); hw = !!f; x = a; y = b; }); return d; };
+  const tripSecs = legs => legs.reduce((t, L) => t + legLen(L) / (TRIP_SPEED[L.how] || 3), 0);
+  function startTrip(to, how, car, done, dest, place) {
+    if (trip && !trip.arrived) finishTripNow(true);
+    const legs = planTrip(to, how, dest, place), L0 = legs[0], [x, y] = L0.from;
+    trip = { town: VIEW_TOWN, legs, li: 0, how: L0.how, inCar: !!L0.car, car, x, y, path: L0.path.slice(), done, dest, place, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now() };
+    if (L0.car) S.carAt = null;   // the car pulls out of where it was parked
+    S.trip = { to, how, dest: dest || null, place: place || null, town: VIEW_TOWN };   // if the app closes on the way, you still get there
+    if (S.out) S.out = { ...S.out, place: null };   // you've left where you were
     if (S.jail && S.jail.out) S.jail = null;
     cancel(me); fly = null;
     return trip;
   }
+  // One leg is done: park the car (after a car leg), start the next leg, or you're there.
+  function nextLeg(silent) {
+    const L = trip.legs[trip.li];
+    if (L && L.car) {
+      S.carAt = L.bay.home ? null : { town: trip.town, pt: L.bay.pt, dir: L.bay.dir, id: trip.dest || null, place: trip.place || null };
+      trip.inCar = false; trip.x = L.bay.pt[0]; trip.y = L.bay.pt[1];
+    }
+    trip.li++;
+    const N = trip.legs[trip.li];
+    if (N) { trip.how = N.how; trip.path = N.path.slice(); trip.inCar = !!N.car; if (N.car) S.carAt = null; return; }
+    trip.arrived = true; trip.moving = false; trip.view = null; S.trip = null;
+    S.out = trip.dest === 'me' ? null : { town: trip.town, pt: [trip.x, trip.y], place: trip.place || null, id: trip.dest || null };
+    const f = trip.done; trip.done = null;
+    if (f && !silent) setTimeout(f, 200);
+  }
+  // Skip the rest of the way (the ⏩ button, or when you leave the town view): everything ends up where it would.
+  function finishTripNow(silent) {
+    if (!trip) return;
+    let guard = 20;
+    while (trip && !trip.arrived && guard--) {
+      const end = trip.path[trip.path.length - 1];
+      if (end) { trip.x = end[0]; trip.y = end[1]; }
+      trip.path = []; trip.h = 0; nextLeg(silent);
+    }
+  }
   function stepTrip(dt) {
     if (!trip) return;
-    if (trip.town !== VIEW_TOWN || mode !== 'town') { trip = null; return; }
+    if (trip.town !== VIEW_TOWN || mode !== 'town') { finishTripNow(true); return; }
     if (trip.arrived) return;
     const base = (TRIP_SPEED[trip.how] || 3) * dt;
     let left = 1;   // the share of this frame's travel still to go
@@ -1547,29 +1622,27 @@ const Scene = (() => {
       if (d <= go) { trip.x = tx; trip.y = ty; trip.h = th; trip.hw = !!fast; trip.path.shift(); left -= d / sp; }
       else { const k = go / d; trip.x += dx * k; trip.y += dy * k; trip.h = (trip.h || 0) + (th - (trip.h || 0)) * k; left = 0; }
     }
-    trip.phase += dt * (trip.how === 'walk' ? 11 : 7);
-    if (!trip.path.length) {
-      trip.arrived = true; trip.moving = false; trip.view = null;
-      if (trip.how !== 'walk') {   // park at the side of the road and step out onto the pavement
-        const along = trip.dir === '+x' || trip.dir === '-x';
-        parked = { id: trip.dest || null, town: trip.town, car: trip.car, dir: trip.dir, at: along ? [trip.x, trip.y - 0.55] : [trip.x + 0.6, trip.y] };
-        if (along) trip.y -= 1.4; else trip.x += 1.5;
-      }
-      const f = trip.done; trip.done = null;
-      if (f) setTimeout(f, trip.how === 'walk' ? 200 : 500);
-    }
+    trip.phase += dt * (trip.inCar ? 7 : trip.how === 'bike' ? 9 : 11);
+    if (!trip.path.length) nextLeg(false);
   }
   function drawTrip(ts) {
     const z = cam.z, p = iso(trip.x, trip.y);
-    if (trip.how !== 'walk' && !trip.arrived) { ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir(trip.car, trip.x, trip.y, trip.dir, ts); ctx.restore(); return; }
+    if (trip.inCar) { ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir(trip.car, trip.x, trip.y, trip.dir, ts); ctx.restore(); return; }
     drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
   }
-  // Your car parked at the roadside where you drove to.
+  // You, standing where you are out in town.
+  function drawMeOut(x, y, ts) {
+    const z = cam.z, p = iso(x, y);
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand' });
+    if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
+  }
+  // Your car where you parked it.
   function parkedObjs(objs, ts) {
-    if (!parked || parked.town !== VIEW_TOWN || (trip && trip.how !== 'walk' && !trip.arrived)) return;
-    const [x, y] = parked.at;
-    objs.push({ d: x + y, f: () => drawCarDir(parked.car, x, y, parked.dir, ts) });
+    const c = S.carAt, car = S.me.cars[S.me.car];
+    if (!c || !car || c.town !== VIEW_TOWN || (trip && trip.inCar && !trip.arrived)) return;
+    const [x, y] = c.pt;
+    objs.push({ d: x + y, f: () => drawCarDir(car, x, y, c.dir, ts) });
   }
   // ---------- the country around town (v0.9): other villages, farms, woods and lakes, out to the horizon ----------
   // Made up in 22-tile squares from a fixed seed; drawn simply (they're always far away). Mountains stay to the north and west.
@@ -1906,6 +1979,7 @@ const Scene = (() => {
       const yOff = sitH ? 0 : lieH || meIn.seat || 0;
       drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: meIn.view, turn: meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
       if (pose === 'lie' && useIt) drawBedQuilt(useIt);
+      if (pose === 'sit' && useIt && sitH) drawSeatFront(useIt, useIt.x, useIt.y);   // v0.19: the near arm stays in front of you
       ctx.restore();
       if (S.live) liveBadge(p, S.live, true);
       if (!edit) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
@@ -2463,6 +2537,7 @@ const Scene = (() => {
       flatRect(0, 0, 2, 1, '#9fd07a');
       [['apple', 0.5], ['peach', 1.5]].forEach(([tk, x]) => { const c = iso(x, 0.5), d = TREES[tk]; drawFruitTree({ k: tk, planted: now() - d.grow * MIN * 2, last: now() - d.every * MIN * 1.5 }, c.x, c.y, z, 0, x); });
     },
+    garage(k, o, w, h) { const n = o.n || 1, sz = garageSize(GARAGE.findIndex(g => g && g.cap === n)); frameFoot(sz.w, sz.d, 30, w, h, 1.6); drawGarage(0, 0, n, [S.me.cars[0] || null], 0); },
     pond(k, o, w, h) { frameFoot(3, 2, 20, w, h, 1.6); flatRect(-0.2, -0.2, 3.4, 2.4, '#b8dd8c'); drawPond(0, 0, 3, 2, 4, 0); },
     // v0.18: the mall's cinema: a short film on the big screen, rows of seats, you in the middle with popcorn
     movie(k, o, w, h) {
@@ -2611,19 +2686,29 @@ const Scene = (() => {
     takeStairs,
     dropEnts() { ents.clear(); },
     // Going somewhere in town (v0.12). to: a world point (a gate or a place); how: walk / bike / car.
-    travel(to, how, car, done, dest, place) { if (mode !== 'town') return false; startTrip(to, how, car, done, dest); trip.place = place || null; return true; },
+    travel(to, how, car, done, dest, place) { if (mode !== 'town') return false; startTrip(to, how, car, done, dest, place); return true; },
     // Public places (v0.12): where each one is (where you walk to), and whether you're there now.
     placePoint(key) { TL = layoutOf(VIEW_TOWN); return placePt(key); },
-    here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : S && jailed() && VIEW_TOWN === myTown() ? 'police' : trip && trip.arrived && trip.town === VIEW_TOWN ? trip.place : null; },
+    here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : S && jailed() && VIEW_TOWN === myTown() ? 'police' : trip && !trip.arrived ? null : outHere() ? S.out.place : null; },
     resting() { return mode === 'interior' && owner === 'me' && !!meIn.useId && !!(homeOf('me').room.items.concat(...(homeOf('me').ups || []).map(u => u.items)).find(i => i.id === meIn.useId && FURN[i.k].use === 'sleep')); },
-    arriveAt(pt, place) { if (mode !== 'town') return; trip = { town: VIEW_TOWN, how: 'walk', x: pt[0], y: pt[1], path: [], arrived: true, moving: false, place, face: 1, phase: 0 }; flyTo(pt[0], pt[1], Math.max(cam.z, 0.5)); },
-    tripTime(to, how) { if (!S) return 0; TL = layoutOf(VIEW_TOWN); return Math.max(1, Math.round(pathLen(tripPath(to, how), how) / (TRIP_SPEED[how] || 3))); },
+    arriveAt(pt, place) { if (!S) return; S.out = { town: VIEW_TOWN, pt, place: place || null, id: null }; trip = null; if (mode === 'town') flyTo(pt[0], pt[1], Math.max(cam.z, 0.5)); },
+    tripTime(to, how, dest, place) { if (!S) return 0; return Math.max(1, Math.round(tripSecs(planTrip(to, how, dest, place)))); },
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
-    tripPlan(to, how) { TL = layoutOf(VIEW_TOWN); return tripPath(to, how); },   // for testing
-    tripNow() { return trip && !trip.arrived ? { how: trip.how } : null; },
+    tripPlan(to, how, dest, place) { return planTrip(to, how, dest, place); },   // for testing
+    tripNow() { return trip && !trip.arrived ? { how: trip.inCar ? trip.how : 'walk', toCar: !!(trip.legs[trip.li] || {}).toCar } : null; },
     endTrip() { trip = null; },
-    finishTrip() { if (!trip || trip.arrived) return; trip.path = trip.path.slice(-1); const [x, y] = trip.path[0]; trip.x = x; trip.y = y; },
+    finishTrip() { finishTripNow(false); },
+    // a trip that was still on the way when the app closed: you're there now (v0.19)
+    resumeTrip() {
+      const T = S && S.trip;
+      if (!T || trip) return;
+      const keep = VIEW_TOWN; VIEW_TOWN = T.town; TL = layoutOf(T.town);
+      const car = T.how === 'walk' ? null : S.me.cars[S.me.car];
+      if (T.how !== 'walk' && !car) T.how = 'walk';
+      try { startTrip(T.to, T.how, car, null, T.dest, T.place); finishTripNow(true); } finally { VIEW_TOWN = keep; TL = layoutOf(keep); trip = null; S.trip = null; }
+    },
+    homeBay: () => { TL = layoutOf(myTown()); return homeBay(); },
     gate: id => { TL = layoutOf(VIEW_TOWN); return gateOf(id); },
     onStairs: () => !!meIn.anim,
     setView(m, o = 'me') {
@@ -2631,8 +2716,7 @@ const Scene = (() => {
       const wasInterior = mode === 'interior';
       if ((m === 'home') !== (mode === 'home') && m !== 'interior' && !wasInterior) viewFade = performance.now();   // a soft flash between the town and a home
       mode = m; owner = o; edit = null;
-      if (m !== 'town') trip = null;
-      if (m === 'home' && o === 'me') parked = null;
+      if (m !== 'town' && trip) finishTripNow(true);   // v0.19: leaving the town view, you still get there
       cv.style.background = '';
       if (m !== 'town' && m !== 'interior') moveToLot(o);
       useCam();

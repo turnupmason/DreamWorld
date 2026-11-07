@@ -216,6 +216,9 @@ function renderOverlay() {
     if (UI.inside) {
       c = `<div class="ctx-main">🛋️ ${nm(HOUSES[S.me.house])}</div>${floorChips(S.me)}`;
       f = b('goOut', '🌳', t('fab_exit')) + b('design', '✏️', t('fab_design')) + b('wardrobe', '👗', t('fab_wardrobe')) + b('barn', '🧺', t('fab_barn')) + petBtn();
+    } else if (outInTown() && !S.live) {
+      c = `<div class="ctx-main">📍 ${t('away_at', { place: esc(outName()) })}</div><button class="btn small primary" data-act="goHome">🏡 ${t('go_home')}</button>`;
+      f = b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn')) + petBtn() + b('recenter', '🎯', t('fab_center'));
     } else {
       c = S.calm ? `<button class="ctx-main link" data-act="ranking">${t('ctx_town_calm', { street: t('street_name'), lv: townLevel() })}</button>`
         : `<button class="ctx-main link" data-act="ranking">🏆 ${t('ctx_rank', { n: rankOf('me'), v: fmtNum(assetValue(S.me)) })}</button>`;
@@ -223,7 +226,7 @@ function renderOverlay() {
     }
   } else if (!UI.visit && Scene.tripNow()) {   // on the way somewhere (v0.12)
     const tr = Scene.tripNow();
-    c = `<div class="ctx-main">${{ walk: '🚶', bike: '🚲', car: '🚗' }[tr.how]} ${t('go_on_way', { to: esc(UI.tripTo || '') })}</div><button class="btn small" data-act="tripFast">⚡ ${t('go_now')}</button>`;
+    c = `<div class="ctx-main">${tr.toCar ? `🚶 ${t('go_to_car')}` : `${{ walk: '🚶', bike: '🚲', car: '🚗' }[tr.how]} ${t('go_on_way', { to: esc(UI.tripTo || '') })}`}</div><button class="btn small" data-act="tripFast">⚡ ${t('go_now')}</button>`;
   } else if (UI.visit) {
     const h = homeOf(UI.visit), fr = isFriend(h.id), street = streetsOf(townOf(h.id))[lotOf(h.id).st];
     const tw = townOf(h.id), away = visitingNow(h.id), on = isOnline(h.id) && !away;
@@ -260,7 +263,7 @@ function renderOverlay() {
   }
 }
 function overlaySig() {
-  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang].join('|');
+  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang, JSON.stringify(Scene.tripNow()), S.out ? S.out.place || S.out.id || 1 : 0].join('|');
 }
 // 1F 2F 3F … chips inside a house, plus ＋ to build another storey in your own.
 function floorChips(h) {
@@ -296,8 +299,8 @@ function trayHTML(ed) {
     ${scope === 'yard' ? `<button class="chip ${UI.tray === 'areas' ? 'on' : ''}" data-act="trayTab" data-arg="areas">${t('tray_areas')}</button>` : ''}
     <span class="muted">${t('tray_hint')}</span></div>`;
   if (UI.tray === 'areas' && scope === 'yard') {   // v0.15: move the pasture, fields, orchard or pond
-    const E = { pasture: '🐄', fields: '🌱', orchard: '🌳', pond: '🐟' };
-    return tabs + `<div class="tray-areas">${MOVABLE.map(k => `<button class="btn small" data-act="areaPick" data-arg="${k}">${E[k]} ${t('area_' + k)}</button>`).join('')}</div><p class="muted small">${t('area_note')}</p>`;
+    const E = { pasture: '🐄', fields: '🌱', orchard: '🌳', pond: '🐟', garage: '🚗' };
+    return tabs + `<div class="tray-areas">${movables(S.me).map(k => `<button class="btn small" data-act="areaPick" data-arg="${k}">${E[k]} ${t('area_' + k)}</button>`).join('')}</div><p class="muted small">${t('area_note')}</p>`;
   }
   if (UI.tray === 'colors') {
     const sw = (list, cur, act) => list.map((c, i) => `<button class="swatch sm ${cur === i ? 'on' : ''}" style="background:${c.c1 || c}" data-act="${act}" data-arg="${i}"></button>`).join('');
@@ -333,6 +336,11 @@ const atStore = k => !!k && VIEW_TOWN === myTown() && (Scene.here() === k || UI.
 const RARE_KEY = { sleep: 'rare_sleep', rings: 'rare_rings', focus: 'rare_focus', steps: 'rare_steps' };
 function landCard(kind, img, icon) {
   const h = S.me, table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];
+  if (kind === 'garage') {   // v0.19
+    const lv = h.garageLv || 0, next = GARAGE[lv + 1];
+    return shopCard(img, `${icon} ${t('land_garage')}${lv ? ` · ${t('garage_cars', { n: GARAGE[lv].cap })}` : ''}`, next ? t(lv ? 'garage_up' : 'garage_new', { n: next.cap }) : t('garage_max'),
+      next ? buyBtn('buyLand', 'garage', costText(next.cost), canAfford(next.cost)) : `<span class="tag ok">${t('maxed')}</span>`);
+  }
   const [levels, key] = table, lv = h[key], next = levels[lv + 1], cost = next && (next.cost || next);
   let sub;
   if (kind === 'field') sub = next ? t('land_field_sub', { a: FIELD_LEVELS[lv], b: FIELD_LEVELS[lv + 1] }) : t('land_field_max', { n: FIELD_LEVELS[lv] });
@@ -441,7 +449,7 @@ function panelShop() {
         return shopCard(thumbImg('furn', k), nm(d), t('furn_sub', { w: d.w, d: d.d }), buyBtn('buyItem', 'room|' + k, `🪙${fmtNum(d.price)}`, h.coins >= d.price)); }).join('');
   } else if (cat === 'land') {
     body = landCard('field', thumbImg('field', 'f'), '🟫') + landCard('pasture', thumbImg('pasture', 'p'), '🐄')
-      + landCard('orchard', thumbImg('orchard', 'o'), '🌳') + landCard('pond', thumbImg('pond', 'p'), '🐟');
+      + landCard('orchard', thumbImg('orchard', 'o'), '🌳') + landCard('pond', thumbImg('pond', 'p'), '🐟') + landCard('garage', thumbImg('garage', S.me.garageLv || 0, { n: Math.min(5, (S.me.garageLv || 0) + 1) }), '🚗');
     note = t('note_land');
   } else if (cat === 'furn' || cat === 'yard') {
     const scope = cat === 'furn' ? 'room' : 'yard', list = cat === 'furn' ? FURN : YARD;
@@ -1053,9 +1061,20 @@ function result(code, onOk) {
   else if (code === 'full') snack(t('snack_full'));
   else if (code === 'own') snack(t('owned'));
   else if (code === 'max') snack(t('maxed'));
+  else if (code === 'space') snack(`🚗 ${t('garage_space')}`);
+  else if (code === 'garage') snack(`🚗 ${t('garage_full')}`);
 }
+// v0.19: you're out in your own town (somewhere other than home)
+const outInTown = () => !!(S.out && S.out.town === myTown());
+function awayCheck() {
+  if (!outInTown() || UI.visit || UI.tab !== 'home') return false;
+  snack(`📍 ${t('away_snack', { place: outName() })}`); openSheet('go', { id: 'me' });
+  return true;
+}
+const outName = () => (S.out.place ? nm(placeInfo(S.out.place)) : S.out.id ? t('home_of', { name: homeName(homeOf(S.out.id)) }) : t('away_street'));
 function walkDo(tg, o) {
   if (S.live) { snack(t('snack_live_busy')); return false; }
+  if (awayCheck()) return false;
   if (S.work) { snack(`💼 ${t('job_busy', { place: nm(placeInfo(S.work.place)) })}`); return false; }   // v0.14: at work
   if (jailed()) { jailSnack(); return false; }   // v0.18: held at the police station
   const ok = Scene.go(tg, { queue: true, fail: () => snack(t('snack_cant_reach')), ...o });
@@ -1134,7 +1153,7 @@ function stealResult(fid, r) {
     // v0.18: the police come: a bigger fine and a short stay in the holding cell
     Scene.floatMe(`🚔 -🪙${r.fine}`); Sound.play('oops');
     UI.visit = null; UI.visitInside = false; if (UI.tab !== 'town') UI.tab = 'town'; syncView();
-    const p = Scene.placePoint('police'); if (p) Scene.lookAt(p[0], p[1]);
+    const p = Scene.placePoint('police'); if (p) { Scene.arriveAt(p, 'police'); Scene.lookAt(p[0], p[1]); }
     openSheet('place', 'police');
   } else if (r.r === 'chased') snack(t('snack_chased', { name: fname(fid) }));
   else if (r.r === 'limit') snack(t('snack_steal_limit', { n: STEAL_CAP }));
@@ -1248,6 +1267,7 @@ const ACT = {
   watchLive() { UI.inside = false; setTab('home'); Scene.recenter(); },
   // home & visiting
   goIn() {
+    if (awayCheck()) return;
     if (S.live || !Scene.go({ kind: 'door' }, { done: goInside })) goInside();
   },
   goOut() {
@@ -1277,11 +1297,15 @@ const ACT = {
   },
   souvGo() { closeSheet(); UI.tab = 'home'; setLevel(0); UI.inside = true; syncView(); },
   recenter: () => Scene.recenter(),
-  goHome() { if (cargoUsed()) { unloadCargo(); snack(`📦 ${t('mk_unloaded')}`); } if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; UI.wtown = null; setLevel(0); setTab('home'); },
+  goHome() {
+    if (outInTown()) { closeSheet(); return openSheet('go', { id: 'me' }); }   // v0.19: you're out: go home the real way
+    if (cargoUsed()) { unloadCargo(); snack(`📦 ${t('mk_unloaded')}`); } if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; UI.wtown = null; setLevel(0); setTab('home');
+  },
   backTown() { if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); },
   // Going somewhere (v0.12). Homes in your own community: choose how to go. Elsewhere in the world: straight there.
   goTo(id) {
     if (id === 'me') return ACT.goHome();
+    if (UI.visit === id) return;
     if (townOf(id) !== myTown() || UI.tab === 'world' && UI.wtown && UI.wtown !== myTown()) return ACT.visit(id);
     closeSheet(); openSheet('go', { id });
   },
@@ -1293,23 +1317,24 @@ const ACT = {
       const r = quitShift(); snack(`💼 ${t('job_quit_done', { n: r.pay })}`);
     }
     closeSheet();
-    const T = goTarget(a), arrive = () => { UI.tripTo = null; if (a.id) ACT.visit(a.id); else if (a.place) { openSheet('place', a.place); arrivedFx(a.place); } refresh(); };
-    if (how === 'now' && a.place === 'market') loadCargo(S.me.cars[S.me.car] ? 'car' : 'walk');
-    if (how === 'now' && (a.place || a.spot)) {   // straight there: you're standing at the place in town
-      if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
-      if (UI.tab !== 'town') UI.tab = 'town';
-      syncView(); Scene.arriveAt(T.pt, a.place || null);
-      return arrive();
-    }
-    if (how === 'now') return arrive();
+    const T = goTarget(a), home = a.id === 'me';
+    const arrive = () => {
+      UI.tripTo = null;
+      if (home) { if (cargoUsed()) { unloadCargo(); snack(`📦 ${t('mk_unloaded')}`); } UI.visit = null; UI.visitInside = false; setLevel(0); setTab('home'); }
+      else if (a.id) ACT.visit(a.id);
+      else if (a.place) { openSheet('place', a.place); arrivedFx(a.place); }
+      refresh();
+    };
     if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
     if (UI.tab !== 'town') UI.tab = 'town';
     syncView();
-    const car = how === 'walk' ? null : S.me.cars[S.me.car], kind = !car ? 'walk' : CARS[car.k].kind === 'two' ? 'bike' : 'car';
+    // v0.19: "straight there" goes the same way (by car if you have one), it just skips the time on the road
+    const car = S.me.cars[S.me.car], useCar = !!car && (how === 'car' || how === 'now'), kind = !useCar ? 'walk' : CARS[car.k].kind === 'two' ? 'bike' : 'car';
     UI.tripTo = T.short;
-    if (a.place === 'market') { const n = loadCargo(car ? 'car' : 'walk'); snack(n ? `📦 ${t('mk_loaded', { n, cap: carryCap(car ? 'car' : 'walk') })}` : `📦 ${t('mk_nothing')}`); }
-    Scene.travel(T.pt, kind, car, arrive, a.id || null, a.place || null);
-    if (kind !== 'walk') Sound.play('select');
+    if (a.place === 'market') { const n = loadCargo(useCar ? 'car' : 'walk'); if (how !== 'now') snack(n ? `📦 ${t('mk_loaded', { n, cap: carryCap(useCar ? 'car' : 'walk') })}` : `📦 ${t('mk_nothing')}`); }
+    Scene.travel(T.pt, kind, useCar ? car : null, arrive, a.id || null, a.place || null);
+    if (how === 'now') Scene.finishTrip();
+    else if (kind !== 'walk') Sound.play('select');
   },
   tripFast() { Scene.finishTrip(); },
   enterStore(k) { closeSheet(); UI.inStore = k; UI.shop = STORES[k].cats[0]; UI.tab = 'shop'; syncView(); Sound.play('chime'); },
@@ -1376,6 +1401,7 @@ const ACT = {
   barn: () => openSheet('barn'),
   friendSheet: id => openSheet('friend', id),
   harvestAll() {
+    if (awayCheck()) return;
     const r = readyLists();
     const jobs = [...r.fields.map(harvestJob), ...r.animals.map(animalJob), ...r.trees.map(treeJob), ...r.hives.map(hiveJob)];
     const n = Scene.goMany(jobs);
@@ -1419,7 +1445,7 @@ const ACT = {
     snack(t(r.item ? (scope === 'room' ? 'snack_furn' : 'snack_yard') : 'snack_stored', { name: nm(itemDef(scope, k)) }));
   },
   buyCar(k) { result(buyCar(k), () => snack(t('snack_car', { name: nm(CARS[k]) }))); },
-  driveCar(i) { S.me.car = +i; snack(t('snack_drive', { name: nm(CARS[S.me.cars[+i].k]) })); },
+  driveCar(i) { if (S.carAt) return snack(`🚗 ${t('car_out_first')}`); S.me.car = +i; snack(t('snack_drive', { name: nm(CARS[S.me.cars[+i].k]) })); },
   carColor(c) { const car = S.me.cars[S.me.car]; if (car) car.color = c; },
   buyHouse(i) {
     result(buyHouse(+i), () => {
@@ -2155,15 +2181,16 @@ function panelWorld() {
 // Where a trip goes: a home's gate or a public place (its name for the card and the context bar).
 function goTarget(a) {
   if (a.spot) return { e: '📍', name: t('go_here'), short: t('go_here_short'), pt: a.spot };
-  if (a.place) { const P = placeInfo(a.place); return { e: P.e, name: nm(P), short: nm(P), pt: Scene.placePoint(a.place) }; }
+  if (a.place) { const P = placeInfo(a.place); return { e: P.e, name: nm(P), short: nm(P), pt: Scene.placePoint(a.place), place: a.place }; }
+  if (a.id === 'me') return { e: '🏡', name: t('go_home'), short: t('go_home_short'), pt: Scene.gate('me'), dest: 'me' };
   const h = homeOf(a.id);
-  return { e: '🏡', name: t('home_of', { name: homeName(h) }), short: t('home_of', { name: homeName(h) }), pt: Scene.gate(a.id) };
+  return { e: '🏡', name: t('home_of', { name: homeName(h) }), short: t('home_of', { name: homeName(h) }), pt: Scene.gate(a.id), dest: a.id };
 }
 // Walk / drive (or ride) / straight there, with how long each takes.
 function goTiles(T) {
   const car = S.me.cars[S.me.car], two = car && CARS[car.k].kind === 'two';
   const tile = (how, ic, label, sub, on = true) => `<button class="act-tile" data-act="travel" data-arg="${how}" ${on ? '' : 'disabled'}><span>${ic}</span><b>${label}</b><i>${sub}</i></button>`;
-  const secs = how => t('go_secs', { n: Scene.tripTime(T.pt, how) });
+  const secs = how => t('go_secs', { n: Scene.tripTime(T.pt, how, T.dest, T.place) });
   return `<div class="act-grid three">
     ${tile('walk', '🚶', t('go_walk'), secs('walk'))}
     ${car ? tile('car', two ? '🚲' : '🚗', t(two ? 'go_ride' : 'go_drive'), secs(two ? 'bike' : 'car')) : tile('car', '🚗', t('go_drive'), t('go_no_car'), false)}
@@ -2528,6 +2555,7 @@ document.addEventListener('input', e => {
 });
 
 Scene.init($('#town'), onSceneHit);
+if (S && !S.onboarding) try { Scene.resumeTrip(); } catch (e) { console.error(e); S.trip = null; }   // v0.19: a trip cut short by closing the app
 Scene.onWorldOut(() => { if (UI.tab === 'town') { ACT.world(); refresh(); } });   // pinching out past your town opens the world map
 // Sound can only start after the first touch (browser and iPhone rule).
 document.addEventListener('pointerdown', () => {

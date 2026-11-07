@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.18.0';
+const VERSION = '0.19.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -11,6 +11,7 @@ const STEAL_FINE = [10, 60];            // caught by a guard dog: pay the owner 
 // v0.18: the police. No guard dog? A neighbour may still see you (a fine, like the dog's). Caught taking a baby
 // animal, or caught 3 times in 7 days: the police come: a bigger fine and a short real-time stay in the holding cell
 // (you can pay bail to leave early). Real-life movement and sleep still count while you're in there.
+const STORE_FRONT = 3.2;   // v0.19: every store has a car park this deep in front, between the building and the road
 const POLICE = { witness: 0.08, strikes: 3, strikeDays: 7, fineMult: 5, fineMin: 80, fineMax: 400, jailMin: 30, bail: 150 };
 const STEP_GOAL = 6000;                  // starting step goal; it then follows your own last 7 days (see stepGoal())
 const STORAGE_KEY = 'mirror-town-proto-v3';
@@ -27,6 +28,12 @@ const AREA = {
   drive:   { x: 0, y: 7, w: 2, d: 7 },
   path:    { x: 3, y: 5, w: 1, d: 9 },
 };
+// v0.19: a garage in the yard for 1–5 cars (built at the estate agent). Your own car parks in the drive; the others
+// wait in the garage. You can own one car for the drive plus one for each garage space.
+const GARAGE = [null,
+  { cap: 1, cost: { coins: 900, wood: 20 } }, { cap: 2, cost: { coins: 2000, wood: 40 } }, { cap: 3, cost: { coins: 3600, wood: 60 } },
+  { cap: 4, cost: { coins: 5600, wood: 90 } }, { cap: 5, cost: { coins: 8000, wood: 120 } }];
+const garageSize = lv => ({ w: Math.ceil(0.4 + 1.8 * GARAGE[lv].cap), d: 3 });
 const DOOR_X = 3.5;
 const MAILBOX = [4, 13];                 // every home has a mailbox by the gate
 
@@ -847,6 +854,38 @@ function buildLayout(id, flip) {
     { w: 1.8, pts: [[wx + 0.5, wy], [wx - 8, wy + 1], [wx - 14, wy + 5], [wx - 22, wy + 3], [wx - 30, wy - 3], [wx - 42, wy - 2], [wx - 60, wy + 4]] },
     { w: 1.8, pts: [[ex - 0.5, ey], [ex + 7, ey - 1.5], [ex + 13, ey - 6], [ex + 21, ey - 5], [ex + 30, ey + 1], [ex + 44, ey + 2], [ex + 62, ey - 4]] },
   ];
+  // v0.19: little lanes (cars can use them too) join every dead end to the next road along, like the cross streets of
+  // an American neighbourhood, so the way next door is never a long loop round the block.
+  const lotRects = Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D]);
+  const solid = [...lotRects, ...B.water.map(rect), [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [box(B.park).x, B.park.y, box(B.park).x + B.park.w, B.park.y + B.park.d],
+    ...B.fields.map(f => { const q = box(f); return [q.x, q.y, q.x + q.w, q.y + q.d]; })];
+  const hits = (q, list) => list.some(r => q[0] < r[2] - 0.05 && r[0] < q[2] - 0.05 && q[1] < r[3] - 0.05 && r[1] < q[3] - 0.05);
+  const isH = r => r[2] - r[0] >= r[3] - r[1], lanes = [];
+  const lakeIn = (x, y) => ((x - lake.x) / (lake.rx + 1)) ** 2 + ((y - lake.y) / (lake.ry + 1)) ** 2 < 1;
+  roads.filter(r => r[4] !== 'dirt').forEach(r => {
+    const h = isH(r);
+    [h ? r[0] : r[1], h ? r[2] : r[3]].forEach((e, end) => {
+      const joined = roads.some(q => q !== r && isH(q) !== h && (h ? q[0] <= e + 0.6 && q[2] >= e - 0.6 && q[1] <= r[3] + 0.6 && q[3] >= r[1] - 0.6
+        : q[1] <= e + 0.6 && q[3] >= e - 0.6 && q[0] <= r[2] + 0.6 && q[2] >= r[0] - 0.6));
+      if (joined) return;
+      const a0 = end ? e - 2 : e, a1 = a0 + 2;   // the lane runs across the end of the road, 2 wide
+      [-1, 1].forEach(dir => {
+        let best = null;
+        roads.forEach(q => {
+          if (q === r || isH(q) !== h || q[4] === 'dirt' && false) return;
+          if (h ? q[0] > a0 || q[2] < a1 : q[1] > a0 || q[3] < a1) return;
+          const gap = h ? (dir < 0 ? r[1] - q[3] : q[1] - r[3]) : (dir < 0 ? r[0] - q[2] : q[0] - r[2]);
+          if (gap > 0.5 && gap <= 40 && (!best || gap < best.gap)) best = { q, gap };
+        });
+        if (!best) return;
+        const q = best.q, lane = h ? (dir < 0 ? [a0, q[3], a1, r[1]] : [a0, r[3], a1, q[1]]) : (dir < 0 ? [q[2], a0, r[0], a1] : [r[2], a0, q[0], a1]);
+        const mid = [(lane[0] + lane[2]) / 2, (lane[1] + lane[3]) / 2];
+        if (hits(lane, solid) || lakeIn(...mid) || lanes.some(l => hits(lane, [l]))) return;
+        lanes.push([...lane, 'lane']);
+      });
+    });
+  });
+  roads.push(...lanes);
   // v0.17: the stores, each beside a road (facing it) as close to the town centre as there's room
   const lakeAt = (x, y) => ((x - lake.x) / (lake.rx + (lake.sea ? 6 : 2))) ** 2 + ((y - lake.y) / (lake.ry + (lake.sea ? 6 : 2))) ** 2 < 1;
   const busyRects = [...Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D + 2]), ...roads.map(r => r.slice(0, 4)), ...B.water.map(rect),
@@ -858,21 +897,51 @@ function buildLayout(id, flip) {
     && ![[x, y], [x + w, y], [x, y + d], [x + w, y + d], [x + w / 2, y + d / 2]].some(([px, py]) => lakeAt(px, py));
   Object.entries(STORES).filter(([, s]) => s.w).sort((a, b) => b[1].w * b[1].d - a[1].w * a[1].d).forEach(([k, s]) => {
     let best = null, bd = 1e9;
-    const tryAt = (x, y, pen) => { if (!free(x, y, s.w, s.d)) return; const dd = Math.hypot(x + s.w / 2 - cx0, y + s.d / 2 - cy0) + pen; if (dd < bd) { bd = dd; best = [k, x, y, s.w, s.d]; } };
+    // v0.19: always on the near side of a road (the door and the car park face it, so you walk straight in), with a
+    // car park (STORE_FRONT deep) between the building and the road
+    // front: S = the door and car park face +y (a road below it), N = -y, E = +x, W = -x. S and E show the door.
+    const D2 = s.d + STORE_FRONT;
+    const tryAt = (x, y, w, d, front, pen) => { if (!free(x, y, w, d)) return; const dd = Math.hypot(x + w / 2 - cx0, y + d / 2 - cy0) + pen; if (dd < bd) { bd = dd; best = [k, x, y, w, d, front]; } };
     roads.forEach(r => {
-      if (r[2] - r[0] >= r[3] - r[1]) for (let x = r[0] + 0.5; x + s.w <= r[2] - 0.5; x += 1) { tryAt(x, r[1] - s.d - 0.3, 0); tryAt(x, r[3] + 0.3, 6); }   // above the road (facing it), or below
-      else for (let y = r[1] + 0.5; y + s.d <= r[3] - 0.5; y += 1) { tryAt(r[0] - s.w - 0.3, y, 3); tryAt(r[2] + 0.3, y, 3); }                                 // beside an avenue
+      if (r[2] - r[0] >= r[3] - r[1]) for (let x = r[0] + 0.5; x + s.w <= r[2] - 0.5; x += 1) { tryAt(x, r[1] - D2 - 0.3, s.w, D2, 'S', 0); tryAt(x, r[3] + 0.3, s.w, D2, 'N', 8); }
+      else for (let y = r[1] + 0.5; y + s.w <= r[3] - 0.5; y += 1) { tryAt(r[0] - D2 - 0.3, y, D2, s.w, 'E', 2); tryAt(r[2] + 0.3, y, D2, s.w, 'W', 8); }
     });
     if (best) { stores.push(best); busyRects.push([best[1], best[2], best[1] + best[3], best[2] + best[4]]); }
   });
-  const P = box(B.park), m = 1.5, loop = [];
+  // v0.19: a car park by every other place (the town centre's shops and hall, the park, the lake, the town fields)
+  const PARK_W = 6.6, PARK_D = 3.6, parks = [];
+  const nearLot = (key, px, py, inside) => {
+    let best = null, bd = 1e9;
+    const tryAt = (x, y, w, d, front) => { if (!free(x, y, w, d)) return; const dd = Math.hypot(x + w / 2 - px, y + d / 2 - py); if (dd < bd && dd < 30) { bd = dd; best = [key, x, y, w, d, front]; } };
+    roads.forEach(r => {
+      if (r[2] - r[0] >= r[3] - r[1]) for (let x = r[0] + 0.5; x + PARK_W <= r[2] - 0.5; x += 1) { tryAt(x, r[1] - PARK_D - 0.3, PARK_W, PARK_D, 'S'); tryAt(x, r[3] + 0.3, PARK_W, PARK_D, 'N'); }
+      else for (let y = r[1] + 0.5; y + PARK_W <= r[3] - 0.5; y += 1) { tryAt(r[0] - PARK_D - 0.3, y, PARK_D, PARK_W, 'E'); tryAt(r[2] + 0.3, y, PARK_D, PARK_W, 'W'); }
+    });
+    if (!best && inside) {   // no room outside: a car park just inside its own edge, beside the road closest to it
+      const [ix, iy, iw, id2] = inside, keep = inside[4] || [];
+      for (let y = iy + 0.6; y + PARK_D <= iy + id2 - 0.6; y += 0.5) for (let x = ix + 0.6; x + PARK_W <= ix + iw - 0.6; x += 0.5) {
+        if (keep.some(r => x < r[2] + 0.6 && r[0] < x + PARK_W + 0.6 && y < r[3] + 0.6 && r[1] < y + PARK_D + 0.6)) continue;
+        const road = roads.map(r => Math.hypot(Math.max(r[0] - (x + PARK_W), 0, x - r[2]), Math.max(r[1] - (y + PARK_D), 0, y - r[3]))).reduce((m, v) => Math.min(m, v), 1e9);
+        const dd = road * 3 + Math.hypot(x + PARK_W / 2 - px, y + PARK_D / 2 - py) * 0.2;
+        if (dd < bd) { bd = dd; best = [key, x, y, PARK_W, PARK_D, 'S']; }
+      }
+    }
+    if (best) { parks.push(best); busyRects.push([best[1], best[2], best[1] + best[3], best[2] + best[4]]); }
+  };
+  { const Pk = box(B.park), F0 = B.fields.length ? box(B.fields[0]) : null;
+    nearLot('centre', centre.x + centre.w / 2, centre.y + centre.d, [centre.x, centre.y, centre.w, centre.d, [[plaza.x - 1, plaza.y - 1, plaza.x + LOT_W + 1, plaza.y + LOT_D + 2], ...shops.map(([, x, y]) => [x - 0.5, y - 0.5, x + 6.5, y + 8])]]);
+    nearLot('park', Pk.x + Pk.w / 2, Pk.y + Pk.d / 2, [Pk.x, Pk.y, Pk.w, Pk.d, []]);
+    if (F0) nearLot('fields', F0.x + Math.min(F0.w / 2, 10), F0.y, [F0.x, F0.y, F0.w, F0.d, []]);
+    nearLot('lake', lake.x, lake.y - lake.ry); }
+  const P = box(B.park), loop = [];
+  const m = parks.some(([k, x, y, w, d]) => k === 'park' && x >= P.x - 0.01 && x + w <= P.x + P.w + 0.01 && y >= P.y - 0.01 && y + d <= P.y + P.d + 0.01) ? 1.5 + PARK_D + 0.6 : 1.5;   // v0.19: room for a car park inside
   for (let k = 0; k <= 48; k++) {   // a rounded loop inside the park's edge, gently wobbling
     const a = k / 48 * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a), e = 0.35;
     const rx = P.w / 2 - m, ry = P.d / 2 - m, px = Math.sign(c) * Math.pow(Math.abs(c), e) * rx, py = Math.sign(s2) * Math.pow(Math.abs(s2), e) * ry;
     loop.push([P.x + P.w / 2 + px + Math.sin(a * 5) * 0.25, P.y + P.d / 2 + py + Math.cos(a * 4) * 0.25]);
   }
   return {
-    id: id + (flip ? '|f' : ''), streets, npcLots, roads, water: B.water.map(rect), highway, curves, parkLoop: loop, stores,
+    id: id + (flip ? '|f' : ''), streets, npcLots, roads, water: B.water.map(rect), highway, curves, parkLoop: loop, stores, parks,
     centre, plaza, shops,
     park: box(B.park), lake, fields: B.fields.map(f => box(f)),
     places: B.places.map(([x, y]) => [fx(x), y]), labels: B.labels.map(([k, x, y]) => [k, fx(x), y]),

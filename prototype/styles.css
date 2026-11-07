@@ -628,7 +628,8 @@ body.dark .host-say.yes { background: #1f3a2a; color: #9fe0b4; }
 
 /* ================= v0.12: going places, public places ================= */
 .place-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
-.place-head .big-emoji { font-size: 44px; line-height: 1; }
+.place-head { gap: 14px; align-items: center; }
+.place-head .big-emoji { font-size: 34px; line-height: 1; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; border-radius: 16px; background: #fff1dc; overflow: hidden; }   /* v0.19: the picture keeps clear of the name */
 .place-head h2 { margin: 2px 0 4px; }
 .lib-card { background: linear-gradient(160deg, #fff8e6, #fdf0d2); }
 .lib-text { font-size: 17px; font-weight: 700; line-height: 1.5; margin: 6px 0 2px; }

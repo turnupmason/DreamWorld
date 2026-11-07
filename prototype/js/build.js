@@ -491,6 +491,14 @@ function drawTwoWheeler(c, x, y, ts) {
 // ---------- furniture ----------
 // rot 0: long side along x, back against the y-side wall. rot 1: turned to face the other way.
 function furnSize(k, rot) { const D = FURN[k]; return rot ? [D.d, D.w] : [D.w, D.d]; }
+// v0.19: the arm of a sofa / armchair nearest you, drawn again over someone sitting in it (so legs don't poke through it)
+function drawSeatFront(it, x, y) {
+  const k = it.k;
+  if (k !== 'sofa' && k !== 'armchair') return;
+  const tint = it.tint || '#8d99a6', [w, d] = furnSize(k, it.rot);
+  if (it.rot) soft(x + 0.28, y + d - 0.28, w - 0.32, 0.24, 9, tint, 4, { round: 0.48 });
+  else soft(x + w - 0.28, y + 0.28, 0.24, d - 0.32, 9, tint, 4, { round: 0.48 });
+}
 function frontFace(x, y, w, d, rot) { return rot ? [iso(x + w, y + d), iso(x + w, y)] : [iso(x, y + d), iso(x + w, y + d)]; }
 // A strip of depth t along the back of the footprint.
 function backStrip(x, y, w, d, rot, t) { return rot ? [x, y, t, d] : [x, y, w, t]; }
@@ -1862,67 +1870,104 @@ function drawTrophyCase(it, x, y) {
   });
 }
 
-// ---------- stores (v0.17) ----------
-// Each store has its own look: a car showroom with cars out front, a greenhouse, a red barn store with a pen, a pet
-// shop, a furniture store, an estate agent's office with a "for sale" board, and a big two-storey mall.
-function drawStore(k, x, y, w, d, ts) {
-  const S2 = STORES[k], z = cam.z, c = iso(x + w / 2, y + d / 2), glassCol = NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5';
+// ---------- stores (v0.17; v0.19: facing their road, with a car park in front) ----------
+// st = [k, x, y, w, d, front]: the whole plot. front S / N / E / W is the side the door and the car park face (the
+// road is just past the car park). S and E doors are on the faces you can see; N and W doors are round the back.
+function storeGeo(st) {
+  const [k, x, y, w, d, front = 'S'] = st, F = STORE_FRONT;
+  if (front === 'S') return { k, front, b: [x, y, w, d - F], c: [x, y + d - F, w, F], door: [x + w / 2, y + d - F + 0.4], bay: [x + w - 1.2, y + d - F / 2], dir: '-y', along: 'x' };
+  if (front === 'N') return { k, front, b: [x, y + F, w, d - F], c: [x, y, w, F], door: [x + w / 2, y + F - 0.4], bay: [x + w - 1.2, y + F / 2], dir: '+y', along: 'x' };
+  if (front === 'E') return { k, front, b: [x, y, w - F, d], c: [x + w - F, y, F, d], door: [x + w - F + 0.4, y + d / 2], bay: [x + w - F / 2, y + d - 1.2], dir: '-x', along: 'y' };
+  return { k, front, b: [x + F, y, w - F, d], c: [x, y, F, d], door: [x + F - 0.4, y + d / 2], bay: [x + F / 2, y + d - 1.2], dir: '+x', along: 'y' };
+}
+// Points along the middle of a store's car park for things on show (not the customer bay at the end).
+function storeSlots(G, n) {
+  const [cx, cy, cw, cd] = G.c, out = [];
+  for (let i = 0; i < n; i++) out.push(G.along === 'x' ? [cx + 1.1 + i * 1.9, cy + cd / 2] : [cx + cw / 2, cy + 1.1 + i * 1.9]);
+  return out.filter(([px, py]) => (G.along === 'x' ? px < cx + cw - 2.6 : py < cy + cd - 2.6));
+}
+// A car park: asphalt, a kerb and white bay lines across it (flat, drawn with the ground).
+function drawCarPark(rect, along, o = {}) {
+  const [x, y, w, d] = rect, z = cam.z;
+  flatRect(x, y, w, d, '#cfc9bd');
+  flatRect(x + 0.15, y + 0.15, w - 0.3, d - 0.3, '#7d848c');
+  if (z < 0.2) return;
+  const n = Math.floor(((along === 'x' ? w : d) - 0.3) / 1.6);
+  for (let i = 0; i <= n; i++) {
+    const u = 0.15 + i * 1.6;
+    if (along === 'x') { const A = iso(x + u, y + 0.35), B = iso(x + u, y + d * 0.72); line(A.x, A.y, B.x, B.y, 'rgba(255,255,255,.85)', 1.2 * z); }
+    else { const A = iso(x + 0.35, y + u), B = iso(x + w * 0.72, y + u); line(A.x, A.y, B.x, B.y, 'rgba(255,255,255,.85)', 1.2 * z); }
+  }
+  if (o.sign && z > 0.25) {   // a blue P sign at the corner
+    const p = iso(x + w - 0.3, y + d - 0.3); line(p.x, p.y, p.x, p.y - 18 * z, '#6b7280', 1.2 * z);
+    rrect(p.x - 5 * z, p.y - 26 * z, 10 * z, 10 * z, 2 * z, '#2f6fe0'); ctx.fillStyle = '#fff'; ctx.font = `800 ${7 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('P', p.x, p.y - 20.6 * z);
+  }
+}
+// The store building itself.
+function drawStore(st, ts) {
+  const G = storeGeo(st), k = G.k, S2 = STORES[k], z = cam.z, [x, y, w, d] = G.b, glassCol = NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5';
+  const c = iso(x + w / 2, y + d / 2), side = G.front === 'E' || G.front === 'W', showDoor = G.front === 'S' || G.front === 'E';
   ellipse(c.x, c.y + 6 * z, (w + d) * 9 * z, (w + d) * 4.5 * z, 'rgba(0,0,0,.07)');
-  const front = k === 'dealer' || k === 'nursery' || k === 'ranch' ? d * 0.42 : k === 'police' ? d * 0.34 : 0;   // a yard in front of some
-  const bd = d - front, wh = k === 'mall' ? 52 : k === 'ranch' ? 26 : k === 'nursery' ? 24 : 30;
-  if (front) flatRect(x, y + bd, w, front, k === 'dealer' || k === 'police' ? '#d4d0c8' : k === 'ranch' ? '#c8b083' : '#cfe3b6');
+  const wh = k === 'mall' ? 52 : k === 'ranch' ? 26 : k === 'nursery' ? 24 : 30;
+  const gable = (x0, y0, w0, d0, h0, rh, rc, ec) => (side ? gableY(x0, y0, w0, d0, h0, rh, rc, ec) : gableX(x0, y0, w0, d0, h0, rh, rc, ec));
   let b;
   if (k === 'nursery') {   // a greenhouse: glass walls, a glass ridge roof, plants inside
-    b = box(x + 0.3, y, w - 0.6, bd, wh, 'rgba(200,235,220,.55)', 0, { left: 'rgba(190,230,215,.65)', right: 'rgba(170,215,200,.65)', top: 'rgba(220,245,235,.7)', edge: '#8fb9a6' });
+    b = box(x + 0.2, y + 0.2, w - 0.4, d - 0.4, wh, 'rgba(200,235,220,.55)', 0, { left: 'rgba(190,230,215,.65)', right: 'rgba(170,215,200,.65)', top: 'rgba(220,245,235,.7)', edge: '#8fb9a6' });
     for (let i = 1; i < 6; i++) { wallLine(b.left, 0, i / 6, 0, i / 6, wh, 'rgba(255,255,255,.7)', 0.8); wallLine(b.right, 0, i / 6, 0, i / 6, wh, 'rgba(255,255,255,.7)', 0.8); }
-    gableX(x + 0.2, y - 0.1, w - 0.4, bd + 0.2, wh, 10, 'rgba(220,245,235,.8)', 'rgba(190,230,215,.8)');
-    for (let i = 0; i < 6; i++) { const p = iso(x + 1 + i * (w - 2) / 5, y + bd + front * 0.5); ellipse(p.x, p.y, 6 * z, 3 * z, '#9a6a44'); circle(p.x, p.y - 6 * z, 5 * z, PAL.leaf[i % 3]); }
-  } else if (k === 'ranch') {   // a red barn store with a white trim and a pen in front with a cow
-    b = box(x + 0.4, y, w - 0.8, bd, wh, S2.wall);
-    wallRect(b.left, 0, 0.35, 0.65, 0, 18, '#7a3a30', '#fff', 1.4);
-    wallLine(b.left, 0, 0.35, 0, 0.65, 18, '#fff', 1); wallLine(b.left, 0, 0.65, 0, 0.35, 18, '#fff', 1);
-    gableX(x + 0.3, y - 0.1, w - 0.6, bd + 0.2, wh, 14, S2.roof, shade(S2.roof, 0.15));
-    for (let i = 0; i <= 8; i++) { const p = iso(x + 0.4 + i * (w - 0.8) / 8, y + d - 0.1); line(p.x, p.y, p.x, p.y - 8 * z, '#f4efe6', 1.4 * z); }
-    { const a = up(iso(x + 0.4, y + d - 0.1), 6 * z), q = up(iso(x + w - 0.4, y + d - 0.1), 6 * z); line(a.x, a.y, q.x, q.y, '#f4efe6', 1.4 * z); }
-    const cp = iso(x + w * 0.35, y + bd + front * 0.5); drawAnimal('cow', 2, cp.x, cp.y, z * 0.9, { face: 1, ts, seed: 2 });
-    const sp = iso(x + w * 0.7, y + bd + front * 0.55); drawAnimal('sheep', 2, sp.x, sp.y, z * 0.9, { face: -1, ts, seed: 3 });
+    gable(x + 0.1, y + 0.1, w - 0.2, d - 0.2, wh, 10, 'rgba(220,245,235,.8)', 'rgba(190,230,215,.8)');
+    const F = G.front === 'E' ? b.right : b.left;
+    if (showDoor) doorFace(F, 0.5, 0.08, 18, '#6aa47e');
+  } else if (k === 'ranch') {   // a red barn store with a white trim
+    b = box(x + 0.3, y + 0.3, w - 0.6, d - 0.6, wh, S2.wall);
+    const F = G.front === 'E' || G.front === 'W' ? b.right : b.left;
+    wallRect(F, 0, 0.35, 0.65, 0, 18, '#7a3a30', '#fff', 1.4);
+    wallLine(F, 0, 0.35, 0, 0.65, 18, '#fff', 1); wallLine(F, 0, 0.65, 0, 0.35, 18, '#fff', 1);
+    gable(x + 0.2, y + 0.2, w - 0.4, d - 0.4, wh, 14, S2.roof, shade(S2.roof, 0.15));
   } else {
-    b = box(x, y, w, bd, wh, S2.wall);
+    b = box(x, y, w, d, wh, S2.wall);
     wallRect(b.left, 0, 0, 1, 0, 3, shade(S2.wall, -0.3)); wallRect(b.right, 0, 0, 1, 0, 3, shade(S2.wall, -0.25));
+    const F = side ? b.right : b.left, Sd = side ? b.left : b.right;
     if (k === 'dealer' || k === 'mall') {   // big shop windows across the front
-      wallRect(b.left, 0, 0.05, 0.95, 4, wh * 0.6, glassCol, '#e8edf2', 1.6);
-      for (let i = 1; i < 6; i++) wallLine(b.left, 0, 0.05 + i * 0.15, 4, 0.05 + i * 0.15, wh * 0.6, '#e8edf2', 1);
-      if (k === 'mall') { wallRect(b.left, 0, 0.05, 0.95, wh * 0.66, wh * 0.92, glassCol, '#e8edf2', 1.4); wallRect(b.right, 0, 0.1, 0.9, wh * 0.66, wh * 0.92, glassCol, '#e8edf2', 1.2); }
-      doorFace(b.left, 0.5, 0.08, 18, '#5b6470');
+      wallRect(F, 0, 0.05, 0.95, 4, wh * 0.6, glassCol, '#e8edf2', 1.6);
+      for (let i = 1; i < 6; i++) wallLine(F, 0, 0.05 + i * 0.15, 4, 0.05 + i * 0.15, wh * 0.6, '#e8edf2', 1);
+      if (k === 'mall') { wallRect(F, 0, 0.05, 0.95, wh * 0.66, wh * 0.92, glassCol, '#e8edf2', 1.4); wallRect(Sd, 0, 0.1, 0.9, wh * 0.66, wh * 0.92, glassCol, '#e8edf2', 1.2); }
+      if (showDoor) doorFace(F, 0.5, 0.08, 18, '#5b6470');
     } else {
-      wallRect(b.left, 0, 0.08, 0.6, 5, 21, glassCol, '#fffaf0', 1.4);
-      doorFace(b.left, 0.8, 0.07, 19, shade(S2.roof, -0.2));
-      for (let i = 0; i < 10; i++) wallRect(b.left, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : S2.roof);
+      wallRect(F, 0, 0.08, 0.6, 5, 21, glassCol, '#fffaf0', 1.4);
+      if (showDoor) doorFace(F, 0.8, 0.07, 19, shade(S2.roof, -0.2));
+      if (showDoor) for (let i = 0; i < 10; i++) wallRect(F, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : S2.roof);   // the awning over the door
     }
-    [0.3, 0.7].forEach(u => winFace(b.right, u, 0.08, 10, Math.min(24, wh - 6)));
-    box(x - 0.1, y - 0.1, w + 0.2, bd + 0.2, 3, shade(S2.wall, -0.12), wh);
-    if (k === 'mall') ['#e5484d', '#2f80ed', '#f2c230'].forEach((col, i) => { const p = up(iso(x + 1 + i * 1.6, y + bd + 0.3), 0); line(p.x, p.y, p.x, p.y - 40 * z, '#888', 1 * z); pg([[p.x, p.y - 40 * z], [p.x + 9 * z, p.y - 37 * z], [p.x, p.y - 33 * z]], col); });
-    if (k === 'realty') { const p = iso(x + w + 0.2, y + bd + 0.4); line(p.x, p.y, p.x, p.y - 16 * z, '#8a5a36', 1.6 * z); rrect(p.x - 8 * z, p.y - 20 * z, 16 * z, 8 * z, 1.5 * z, '#fffaf0', '#e5484d', 1 * z); }
-    if (k === 'petshop') { const p = iso(x + w * 0.85, y + bd + 0.6); drawAnimal('dog', 2, p.x, p.y, z * 0.8, { face: -1, ts, seed: 4, breed: 'shiba' }); }
-    if (k === 'furniture') { const p = wallPt(b.left, 0, 0.32, 6); rrect(p.x - 7 * z, p.y - 4 * z, 14 * z, 6 * z, 2 * z, '#e5734f'); }
+    [0.3, 0.7].forEach(u => winFace(Sd, u, 0.08, 10, Math.min(24, wh - 6)));
+    box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(S2.wall, -0.12), wh);
+    if (k === 'furniture') { const p = wallPt(F, 0, 0.32, 6); rrect(p.x - 7 * z, p.y - 4 * z, 14 * z, 6 * z, 2 * z, '#e5734f'); }
     if (k === 'police') {   // v0.18: a blue sign, a flag and lights on the roof
-      const p = wallPt(b.left, 0, 0.34, 15); rrect(p.x - 13 * z, p.y - 4 * z, 26 * z, 8 * z, 2 * z, '#2f5fb3');
+      const p = wallPt(F, 0, 0.34, 15); rrect(p.x - 13 * z, p.y - 4 * z, 26 * z, 8 * z, 2 * z, '#2f5fb3');
       if (z > 0.25) { ctx.fillStyle = '#fff'; ctx.font = `800 ${5.4 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(curLang() === 'zh' ? '警察' : 'POLICE', p.x, p.y + 0.3 * z); }
-      const on = Math.floor(ts / 500) % 2, r0 = up(iso(x + w * 0.35, y + bd * 0.5), (wh + 3) * z), r1 = up(iso(x + w * 0.5, y + bd * 0.5), (wh + 3) * z);
+      const on = Math.floor(ts / 500) % 2, r0 = up(iso(x + w * 0.35, y + d * 0.5), (wh + 3) * z), r1 = up(iso(x + w * 0.5, y + d * 0.5), (wh + 3) * z);
       circle(r0.x, r0.y, 2.4 * z, on ? '#ff4d4d' : '#8a2a2a'); circle(r1.x, r1.y, 2.4 * z, on ? '#3a5fa8' : '#5aa2ff');
-      const fp = iso(x + w + 0.3, y + bd + 0.3); line(fp.x, fp.y, fp.x, fp.y - 34 * z, '#888', 1 * z); rrect(fp.x, fp.y - 34 * z, 11 * z, 7 * z, 0.5 * z, '#2f5fb3');
     }
   }
-  if (k === 'police') {   // a police car parked out front, its lights flashing
-    drawCarDir({ k: 'sedan', color: '#f4f4f0' }, x + w * 0.35, y + bd + front * 0.5, '+x', ts);
-    const lp = up(iso(x + w * 0.35, y + bd + front * 0.5), 15 * z), on = Math.floor(ts / 300) % 2;
-    rrect(lp.x - 4 * z, lp.y - 1.2 * z, 4 * z, 2.4 * z, 0.6 * z, on ? '#ff4d4d' : '#9a2a2a'); rrect(lp.x, lp.y - 1.2 * z, 4 * z, 2.4 * z, 0.6 * z, on ? '#2f6fe0' : '#7ab0ff');
-  }
-  if (k === 'dealer') ['sedan', 'suv', 'sports'].forEach((ck, i) => drawCarDir({ k: ck, color: ['#2f80ed', '#f4f4f0', '#e5484d'][i] }, x + 1.8 + i * 3, y + bd + front * 0.5, '+x', ts));
-  if (NIGHT > 0.3) { const p = iso(x + w / 2, y + bd); glow(p.x, p.y - 10 * z, 60 * z, 0.9); }
-  const s = up(iso(x + w / 2, y + bd / 2), (wh + (k === 'ranch' || k === 'nursery' ? 18 : 6)) * z);
-  if (z > 0.1) pill(`${S2.e} ${nm(S2)}`, s.x, s.y, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
-  return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 24 * z, y1: iso(x + w, y + d).y };
+  if (NIGHT > 0.3) { const p = iso(x + w / 2, y + d); glow(p.x, p.y - 10 * z, 60 * z, 0.9); }
+  const s = up(iso(x + w / 2, y + d / 2), (wh + (k === 'ranch' || k === 'nursery' ? 18 : 6)) * z);
+  if (z > 0.1) pill(`${S2.e} ${nm(S2)}`, s.x, s.y - 6 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
+  return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 30 * z, y1: iso(x + w, y + d).y };
+}
+// Things on show in the car park (cars at the dealer, a police car, plants, a little pen, the pet shop dog, a sign),
+// each drawn with its own depth so people and cars pass in front of and behind them properly.
+function storeShow(st, objs, ts) {
+  const G = storeGeo(st), k = G.k, z = cam.z, sl = storeSlots(G, 6), dir = G.along === 'x' ? '+x' : '+y';
+  const put = (px, py, f) => objs.push({ d: px + py + 0.5, f: () => f(px, py) });
+  if (k === 'dealer') sl.slice(0, 3).forEach(([px, py], i) => put(px, py, () => drawCarDir({ k: ['sedan', 'suv', 'sports'][i], color: ['#2f80ed', '#f4f4f0', '#e5484d'][i] }, px, py, G.dir, ts)));
+  if (k === 'police' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => {
+    drawCarDir({ k: 'sedan', color: '#f4f4f0' }, px, py, G.dir, ts);
+    const lp = up(iso(px, py), 15 * z), on = Math.floor(ts / 300) % 2;
+    rrect(lp.x - 4 * z, lp.y - 1.2 * z, 4 * z, 2.4 * z, 0.6 * z, on ? '#ff4d4d' : '#9a2a2a'); rrect(lp.x, lp.y - 1.2 * z, 4 * z, 2.4 * z, 0.6 * z, on ? '#2f6fe0' : '#7ab0ff'); }); }
+  if (k === 'nursery') sl.forEach(([px, py], i) => put(px, py, () => { const p = iso(px, py); ellipse(p.x, p.y, 6 * z, 3 * z, '#9a6a44'); circle(p.x, p.y - 6 * z, 5 * z, PAL.leaf[i % 3]); circle(p.x - 2 * z, p.y - 9 * z, 3 * z, ['#ef6f6c', '#f3d36b', '#e88bb7'][i % 3]); }));
+  if (k === 'ranch' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); drawAnimal('cow', 2, p.x, p.y, z * 0.85, { face: 1, ts, seed: 2 }); });
+    if (sl[1]) { const [qx, qy] = sl[1]; put(qx, qy, () => { const p = iso(qx, qy); drawAnimal('sheep', 2, p.x, p.y, z * 0.85, { face: -1, ts, seed: 3 }); }); } }
+  if (k === 'petshop' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); drawAnimal('dog', 2, p.x, p.y, z * 0.8, { face: -1, ts, seed: 4, breed: 'shiba' }); }); }
+  if (k === 'mall') sl.slice(0, 3).forEach(([px, py], i) => put(px, py, () => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 40 * z, '#888', 1 * z); pg([[p.x, p.y - 40 * z], [p.x + 9 * z, p.y - 37 * z], [p.x, p.y - 33 * z]], ['#e5484d', '#2f80ed', '#f2c230'][i]); }));
+  if (k === 'realty' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 16 * z, '#8a5a36', 1.6 * z); rrect(p.x - 8 * z, p.y - 20 * z, 16 * z, 8 * z, 1.5 * z, '#fffaf0', '#e5484d', 1 * z); }); }
 }
 
 // v0.18: a plush toy sitting on the floor (won at the mall's claw machine)
@@ -1943,4 +1988,32 @@ function drawPlush(k, x, y) {
   circle(cx - 2.2 * z, hy - 0.4 * z, 0.9 * z, k === 'plushpanda' ? '#fff' : '#2d2d2d'); circle(cx + 2.2 * z, hy - 0.4 * z, 0.9 * z, k === 'plushpanda' ? '#fff' : '#2d2d2d');
   if (k === 'plushduck') ellipse(cx, hy + 2.2 * z, 2.6 * z, 1.3 * z, '#f59e0b'); else circle(cx, hy + 1.8 * z, 0.9 * z, '#5b3a2a');
   ellipse(cx, by - 5 * z, 4 * z, 3.6 * z, shade(col, 0.15));
+}
+
+// v0.19: a garage with a door per car space; the doors are up where a car is parked inside.
+function drawGarage(x, y, n, cars, ts) {
+  const z = cam.z, w = garageSize(n === 0 ? 1 : GARAGE.findIndex(g => g && g.cap === n)).w, d = 3, H = 32, wall = '#ece6db', bay = (w - 0.4) / n;
+  const A = iso(x, y), B = iso(x + w, y), C = iso(x + w, y + d), D = iso(x, y + d), c = iso(x + w / 2, y + d / 2);
+  ellipse(c.x, c.y + 4 * z, (w + d) * 9 * z, (w + d) * 4 * z, 'rgba(0,0,0,.08)');
+  flatRect(x, y + d - 0.05, w, 0.5, '#c9c3b6');   // the apron in front
+  poly([D, C, up(C, H * z), up(D, H * z)], '#3c3a37');   // inside, seen through the open doors
+  const face = [D, C], U = v => v / w, DH = 22;
+  wallRect(face, 0, 0, 1, DH, H, wall);   // above the doors
+  for (let i = 0; i <= n; i++) { const a = i === 0 ? 0 : 0.2 + bay * i - 0.12, b = i === n ? w : 0.2 + bay * i + 0.12; wallRect(face, 0, U(a), U(b), 0, DH, wall); }
+  for (let i = 0; i < n; i++) {
+    const a = U(0.2 + bay * i + 0.12), b = U(0.2 + bay * (i + 1) - 0.12);
+    if (!cars[i]) { wallRect(face, 0, a, b, 0, DH, '#d5dbe2'); for (let k = 1; k < 5; k++) wallLine(face, 0, a, k * DH / 5, b, k * DH / 5, '#b8c0c9', 0.8); }
+    else wallRect(face, 0, a, b, DH - 3, DH, '#d5dbe2');   // the rolled-up door
+  }
+  poly([C, B, up(B, H * z), up(C, H * z)], shade(wall, -0.08), 'rgba(0,0,0,.06)');
+  poly([up(A, H * z), up(B, H * z), up(C, H * z), up(D, H * z)], '#8a94a0', 'rgba(0,0,0,.08)');
+  wallRect(face, 0, 0, 1, H - 2, H, '#9aa3ad');
+  // the cars inside show through the open doors (drawn last, only inside the door openings)
+  ctx.save(); ctx.beginPath();
+  const P = (u, h) => up(lerp(D, C, u), h * z);
+  cars.forEach((car, i) => { if (!car || i >= n) return; const a = U(0.2 + bay * i + 0.12), b = U(0.2 + bay * (i + 1) - 0.12), q = [P(a, 0), P(b, 0), P(b, DH - 3), P(a, DH - 3)]; ctx.moveTo(q[0].x, q[0].y); q.slice(1).forEach(t => ctx.lineTo(t.x, t.y)); ctx.closePath(); });
+  ctx.clip();
+  cars.forEach((car, i) => { if (car && i < n) { const L = (CAR_SPEC[car.k] || CAR_SPEC.mini).len || 2.4; drawCarDir(car, x + 0.2 + bay * (i + 0.5), y + d - L / 2 - 0.02, '+y', ts); } });
+  ctx.restore();
+  return { x0: D.x, x1: B.x, y0: up(A, H * z).y, y1: C.y };
 }

@@ -618,7 +618,7 @@ Object.assign(STR.zh, {
   host_no: '{name}说：现在不太方便，下次吧。', host_cant_off: '{name}现在不在线，上线了再问吧。', host_cant_away: '{name}去别人家串门了，回家了再问吧。',
   host_yes_snack: '{name}答应了，这次做客可以随便坐 😊', host_wave: '打招呼', host_waved: '{name}也朝你挥了挥手',
   st_home: '在家', st_out: '出门了', st_off: '不在线', local_time: '当地 {t}',
-  go_sub: '沿着马路走过去；开车更快，车停在路边。', go_walk: '走过去', go_drive: '开车去', go_ride: '骑车去', go_now: '直接到', go_now_sub: '一下就到',
+  go_sub: '从你现在的地方出发，沿着马路走；开车更快：先去取车，停进停车场再走过去。', go_walk: '走过去', go_drive: '开车去', go_ride: '骑车去', go_now: '直接到', go_now_sub: '一下就到',
   go_secs: '约 {n} 秒', go_no_car: '还没有车', go_on_way: '在去{to}的路上…',
   area_canal: '运河', area_beach: '海滩', area_river: '河畔', area_fjord: '峡湾', area_harbour: '港口', area_terrace: '山坡梯田',
 });
@@ -630,7 +630,7 @@ Object.assign(STR.en, {
   host_no: '{name}: Not right now, maybe next time.', host_cant_off: '{name} is offline. Ask when they’re back online.', host_cant_away: '{name} is out visiting. Ask when they’re back home.',
   host_yes_snack: '{name} said yes: sit anywhere this visit 😊', host_wave: 'Wave', host_waved: '{name} waved back',
   st_home: 'at home', st_out: 'out', st_off: 'offline', local_time: 'local time {t}',
-  go_sub: 'Along the roads. Driving is faster; the car parks at the roadside.', go_walk: 'Walk', go_drive: 'Drive', go_ride: 'Ride', go_now: 'Go now', go_now_sub: 'Right away',
+  go_sub: 'From where you are, along the roads. Driving is faster: fetch your car, park in the car park, walk in.', go_walk: 'Walk', go_drive: 'Drive', go_ride: 'Ride', go_now: 'Go now', go_now_sub: 'Right away',
   go_secs: 'about {n} s', go_no_car: 'No car yet', go_on_way: 'On the way to {to}…',
   area_canal: 'Canals', area_beach: 'Beach', area_river: 'Riverside', area_fjord: 'Fjord', area_harbour: 'Harbour', area_terrace: 'Hillside terraces',
 });
@@ -821,4 +821,24 @@ Object.assign(STR.en, {
   act_cinema: 'Cinema', act_claw: 'Claw machine', act_food: 'Food court', cinema_note: '🪙{n} a ticket', seen_n: 'Seen {n}/{total}', movie_leave: 'Leave the cinema',
   claw_note: '🪙{n} a go, about a {p}% chance. Prizes go to storage: tap Design at home to place them.', claw_try: 'Try for 🪙{n}', claw_win: 'You won the {name}! It’s in storage', claw_miss: 'So close! Try again?',
   claw_got: '{n}/{total} plush toys collected', food_note: 'Tap a dish to eat', tried_n: 'Tried {n}/{total}', food_ate: 'The {name} was delicious! 😋',
+});
+
+// ---------- v0.19: going places for real ----------
+Object.assign(STR.zh, {
+  go_home: '回家', go_home_short: '家', go_to_car: '先去取车…', away_at: '你在{place}', away_street: '街上', away_snack: '你现在在{place}，要先回家',
+  car_out_first: '你的车还停在外面，先把它开回家再换车',
+});
+Object.assign(STR.en, {
+  go_home: 'Go home', go_home_short: 'home', go_to_car: 'Walking to your car…', away_at: 'You’re at the {place}', away_street: 'out in town', away_snack: 'You’re at the {place}: go home first',
+  car_out_first: 'Your car is parked out in town: drive it home before you switch cars',
+});
+Object.assign(STR.zh, {
+  land_garage: '车库', garage_cars: '{n} 个车位', garage_new: '在院子里盖一个 {n} 个车位的车库', garage_up: '扩建到 {n} 个车位', garage_max: '已经是最大的车库（5 个车位）',
+  garage_space: '院子里放不下这么大的车库：先挪一挪地块，或者买旁边的地', garage_full: '车位满了：车道停一辆，车库每个车位停一辆。去房产中介盖 / 扩车库',
+  snack_land_garage: '车库盖好了 🚗', area_garage: '车库',
+});
+Object.assign(STR.en, {
+  land_garage: 'Garage', garage_cars: '{n} spaces', garage_new: 'Build a garage for {n} car in your yard', garage_up: 'Make it {n} spaces', garage_max: 'The biggest garage (5 spaces)',
+  garage_space: 'A garage that big won’t fit in your yard: move things around or buy the land next door', garage_full: 'No space: one car in the drive, one per garage space. Build or extend a garage at the estate agent',
+  snack_land_garage: 'Your garage is built 🚗', area_garage: 'Garage',
 });

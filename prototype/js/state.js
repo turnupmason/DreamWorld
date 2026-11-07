@@ -489,7 +489,12 @@ function isRipe(f) { return !!f && cropProg(f) >= 1; }
 // Farm areas can be moved around the yard (v0.15): each home keeps where its pasture, fields, orchard and pond are
 // (h.areaAt[key] = [x, y], the top-left tile); without that, the usual spot in AREA.
 const MOVABLE = ['pasture', 'fields', 'orchard', 'pond'];
-function areaOf(h, k) { const A = AREA[k], at = h && h.areaAt && h.areaAt[k]; return at ? { x: at[0], y: at[1], w: A.w, d: A.d } : A; }
+const movables = h => (h && h.garageLv ? [...MOVABLE, 'garage'] : MOVABLE);   // v0.19: the garage moves too, once built
+function areaOf(h, k) {
+  if (k === 'garage') { const at = h && h.areaAt && h.areaAt.garage, sz = garageSize(Math.max(1, (h && h.garageLv) || 1)); return { x: at ? at[0] : 0, y: at ? at[1] : 0, ...sz }; }
+  const A = AREA[k], at = h && h.areaAt && h.areaAt[k]; return at ? { x: at[0], y: at[1], w: A.w, d: A.d } : A;
+}
+const garageCap = (h = S.me) => (h.garageLv ? GARAGE[h.garageLv].cap : 0);
 function fieldPos(i, h = S.me) { const A = areaOf(h, 'fields'); return [A.x + i % 4, A.y + Math.floor(i / 4)]; }
 function orchardSlot(h, i) { const A = areaOf(h, 'orchard'), o = AREA.orchard; return [ORCHARD_SLOTS[i][0] - o.x + A.x, ORCHARD_SLOTS[i][1] - o.y + A.y]; }
 
@@ -897,7 +902,7 @@ const PORCH = { x: AREA.house.x, y: AREA.house.y + AREA.house.d, w: AREA.house.w
 function yardReserved(x, y, w = LOT_W, h = S.me) {
   if (x < 0 || y < 0 || x >= w || y >= LOT_D) return true;
   if (x === MAILBOX[0] && y === MAILBOX[1]) return true;
-  return ['house', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || MOVABLE.some(k => inRect(areaOf(h, k), x, y)) || inRect(PORCH, x, y);
+  return ['house', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || movables(h).some(k => inRect(areaOf(h, k), x, y)) || inRect(PORCH, x, y);
 }
 function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
   const def = itemDef(scope, k);
@@ -1181,6 +1186,7 @@ function showOffExclusives(h) {
   EXCLUSIVES.filter(([kind, k]) => kind === 'yard' && exclOK(YARD[k].excl, h)).slice(-2).forEach(([, k]) => { if (!h.yard.some(i => i.k === k)) autoPlace(h, 'yard', k); });
 }
 function buyLand(kind, h = S.me) {
+  if (kind === 'garage') return buildGarage(h);   // v0.19
   const table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];
   const [levels, key] = table;
   if (h[key] >= levels.length - 1) return 'max';
@@ -1201,12 +1207,13 @@ function buyItem(scope, k, h = S.me) {
 }
 function buyCar(k, h = S.me) {
   if (h.cars.some(c => c.k === k)) return 'own';
+  if (h === S.me && h.cars.length >= 1 + garageCap(h)) return 'garage';   // v0.19: one in the drive, the rest in the garage
   if (CARS[k].excl && !exclOK(CARS[k].excl, h)) return 'locked';
   const c = CARS[k].cost;
   if (!canAfford(c, h)) return 'poor';
   pay(c, h);
   h.cars.push({ k, color: CARS[k].color || (h === S.me ? CARS[k].look || CAR_COLORS[0] : rand(CAR_COLORS)) });
-  h.car = h.cars.length - 1;
+  if (!(h === S.me && S.carAt)) h.car = h.cars.length - 1;   // while your car is parked out, the new one waits at home
   return 'ok';
 }
 // You can own several houses and pick which one to live in; furniture and yard come along.
@@ -1737,13 +1744,13 @@ const babyStealable = (h, a) => isFriend(h.id) && !ANIMALS[a.k].pet && animalSta
 // It has to fit inside your yard, not cover the house, the drive, the path, another area or anything in the yard,
 // and everything must still be reachable afterwards.
 function moveArea(k, x, y, h = S.me) {
-  if (!MOVABLE.includes(k)) return 'no';
-  const A = AREA[k], LW = homeW(h);
+  if (!movables(h).includes(k)) return 'no';
+  const A = areaOf(h, k), LW = homeW(h);
   if (x < 0 || y < 0 || x + A.w > LW || y + A.d > LOT_D) return 'space';
   const r = { x, y, w: A.w, d: A.d }, over = q => x < q.x + q.w && q.x < x + A.w && y < q.y + q.d && q.y < y + A.d;
   const [fx, fy, fw, fd] = HOUSES[h.house].fp;
   if ([{ x: fx, y: fy, w: fw, d: fd }, AREA.drive, AREA.path, PORCH, { x: MAILBOX[0], y: MAILBOX[1], w: 1, d: 1 }].some(over)) return 'space';
-  if (MOVABLE.filter(o => o !== k).some(o => over(areaOf(h, o)))) return 'space';
+  if (movables(h).filter(o => o !== k).some(o => over(areaOf(h, o)))) return 'space';
   if (h.yard.some(it => { const [w, d] = itemSize('yard', it); return over({ x: it.x, y: it.y, w, d }); })) return 'space';
   const old = h.areaAt ? { ...h.areaAt } : null;
   h.areaAt = { ...(h.areaAt || {}), [k]: [x, y] };
@@ -1796,4 +1803,23 @@ function eatFood(k) {
   S.me.coins -= f.price;
   if (!S.mall.foods.includes(k)) S.mall.foods.push(k);
   return 'ok';
+}
+
+// ---------- the garage (v0.19) ----------
+// Build it (or make it bigger) at the estate agent. It goes where it fits in your yard (a bigger one stays put if it
+// can grow where it is); if nothing fits, move things around or buy the land next door first.
+function buildGarage(h = S.me) {
+  const lv = h.garageLv || 0;
+  if (lv >= GARAGE.length - 1) return 'max';
+  const next = GARAGE[lv + 1];
+  if (!canAfford(next.cost, h)) return 'poor';
+  const old = h.areaAt && h.areaAt.garage ? h.areaAt.garage.slice() : null, sz = garageSize(lv + 1), LW = homeW(h);
+  h.garageLv = lv + 1;
+  const tries = [];
+  if (old) tries.push(old, [old[0] - (sz.w - garageSize(lv).w), old[1]]);
+  for (let y = LOT_D - sz.d; y >= 0; y--) for (let x = 0; x + sz.w <= LW; x++) tries.push([x, y]);
+  if (h.areaAt) delete h.areaAt.garage;
+  for (const [x, y] of tries) if (moveArea('garage', x, y, h) === 'ok') { pay(next.cost, h); return 'ok'; }
+  h.garageLv = lv; if (old) h.areaAt = { ...(h.areaAt || {}), garage: old };
+  return 'space';
 }
