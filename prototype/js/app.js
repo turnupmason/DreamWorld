@@ -156,6 +156,7 @@ function syncView() {
 }
 function setTab(tab) {
   if (Scene.getEdit()) Scene.stopEdit();
+  if (tab !== 'shop') UI.inStore = null;   // v0.17: you walk out of the store
   if (tab !== UI.tab && (tab === 'town' || tab === 'world')) { UI.visit = null; UI.visitInside = false; setLevel(0); }   // a visit belongs to the tab it started in
   if (tab === 'world' && UI.tab === 'world') { UI.wtown = null; UI.visit = null; }   // tapping World again: back to the map
   UI.tab = tab;
@@ -320,7 +321,15 @@ const SHOP_CATS = [['seeds', '🌱'], ['trees', '🌳'], ['animals', '🐣'], ['
 function shopCard(img, name, sub, btns, extra = '') {
   return `<div class="item-card">${img}<div class="item-name">${name}</div><div class="item-sub">${sub}</div>${extra}<div class="item-btns">${btns}</div></div>`;
 }
-const buyBtn = (act, arg, label, ok, cls = 'primary') => `<button class="btn small ${cls}" data-act="${act}" data-arg="${arg}" ${ok ? '' : 'disabled'}>${label}</button>`;
+// v0.17: buying happens in the store that sells it; elsewhere the shop is a catalogue (buttons greyed out)
+let SHOP_AWAY = false;
+const buyBtn = (act, arg, label, ok, cls = 'primary') => `<button class="btn small ${cls}" data-act="${act}" data-arg="${arg}" ${ok && !(SHOP_AWAY && storeForAct(act, arg)) ? '' : 'disabled'}>${label}</button>`;
+function storeForAct(act, arg = '') {
+  const m = { buySeed: 'market', buyTree: 'nursery', buyAnimal: 'ranch', adopt: 'petshop', buyPetFood: 'petshop', buyCar: 'dealer', buyHouse: 'realty', buyLand: 'realty', buyExcl: 'mall', buyParcel: 'realty', moveHouse: 'realty', buyRun: 'realty', moveHere: 'realty' };
+  if (act === 'buyItem') return String(arg).startsWith('room|') ? 'furniture' : 'nursery';
+  return m[act] || null;
+}
+const atStore = k => !!k && VIEW_TOWN === myTown() && (Scene.here() === k || UI.inStore === k);
 const RARE_KEY = { sleep: 'rare_sleep', rings: 'rare_rings', focus: 'rare_focus', steps: 'rare_steps' };
 function landCard(kind, img, icon) {
   const h = S.me, table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];
@@ -358,8 +367,11 @@ function subChips(cat, count) {
   }).join('')}</div>`;
 }
 function panelShop() {
-  const h = S.me, cat = UI.shop, sub = curSub(cat);
-  const chips = SHOP_CATS.map(([id, ic]) => `<button class="cat ${cat === id ? 'on' : ''}" data-act="shopCat" data-arg="${id}"><span>${ic}</span>${t('cat_' + id)}</button>`).join('');
+  if (UI.inStore && !STORES[UI.inStore].cats.includes(UI.shop)) UI.shop = STORES[UI.inStore].cats[0];
+  const h = S.me, cat = UI.shop, sub = curSub(cat), store = CAT_STORE[cat], inside = UI.inStore && atStore(UI.inStore);
+  SHOP_AWAY = !!store && store !== 'market' ? !atStore(store) : store === 'market' && cat === 'seeds' && !atStore('market');
+  const cats = inside ? SHOP_CATS.filter(([id]) => STORES[UI.inStore].cats.includes(id)) : SHOP_CATS;
+  const chips = cats.map(([id, ic]) => `<button class="cat ${cat === id ? 'on' : ''}" data-act="shopCat" data-arg="${id}"><span>${ic}</span>${t('cat_' + id)}</button>`).join('');
   const keep = k => !sub || sub.keys.includes(k);
   let body = '', note = '', subs = subChips(cat, s => s.keys.length || null);
   if (cat === 'seeds') {
@@ -465,9 +477,14 @@ function panelShop() {
         b.baby && pastureCount() < pastureCap() ? buyBtn('release', b.baby, t('baby_release'), true, '') : '');
     }).join('') : `<p class="muted center gap-top">${t('sell_empty')}</p>`;
   }
-  return `<div class="shop-head"><h1 class="panel-title">${t('shop_title')}</h1>
+  SHOP_AWAY = false;
+  const SD = STORES[inside ? UI.inStore : store];
+  const where = inside ? `<div class="store-in">${thumbImg('storein', UI.inStore, {}, 340, 150, 'store-pic')}<div class="row between"><b>${SD.e} ${t('store_inside', { name: nm(SD) })}</b><button class="btn small" data-act="leaveStore">🚪 ${t('store_leave')}</button></div></div>`
+    : SD && cat !== 'sell' ? `<div class="store-banner"><span>${SD.e} ${t(atStore(store) ? 'store_here' : 'store_sells', { name: nm(SD) })}</span>${atStore(store) ? '' : `<button class="btn small primary" data-act="placeGo" data-arg="${store}">🚶 ${t('store_go')}</button>`}</div>` : '';
+  return `<div class="shop-head"><h1 class="panel-title">${inside ? nm(SD) : t('shop_catalog')}</h1>
       <div class="row tight"><span class="pill">🪙 ${fmtNum(h.coins)}</span><span class="pill">🪵 ${h.wood}</span></div></div>
-    <p class="muted note">${t('shop_money_note')}</p>
+    ${where}
+    ${inside ? '' : `<p class="muted note">${t('shop_money_note')}</p>`}
     <div class="shop-cats">${chips}</div>
     ${subs}
     ${note ? `<div class="shop-note">${note}</div>` : ''}
@@ -741,7 +758,7 @@ const SHEETS = {
   // A public place in town (v0.12): what it's for; go there first, then use it.
   place(key) {
     const P = placeInfo(key), here = Scene.here() === key, mineTown = VIEW_TOWN === myTown();
-    const head = `<div class="place-head"><span class="big-emoji">${P.e}</span><div class="grow"><h2>${nm(P)}</h2><p class="muted">${t('pl_desc_' + (key === 'lake' && P === PLACE_INFO.beach ? 'beach' : key))}</p></div></div>`;
+    const head = `<div class="place-head"><span class="big-emoji">${P.e}</span><div class="grow"><h2>${nm(P)}</h2><p class="muted">${t(STORES[key] && key !== 'market' ? 'st_short_' + key : 'pl_desc_' + (key === 'lake' && P === PLACE_INFO.beach ? 'beach' : key))}</p></div></div>`;
     if (!mineTown) return head + `<p class="muted">${t('pl_other_town')}</p>`;
     if (!here && key === 'market') return head + marketBody(false) + `<div class="sec-title">${t('mk_go')}</div>${goTiles(goTarget({ place: key }))}<p class="muted small center">${t('mk_carry', { w: WALK_CARRY, c: carryCap('car') })}</p>`;
     if (!here && key !== 'plaza') return head + `<div class="sec-title">${t('pl_go_first')}</div>${goTiles(goTarget({ place: key }))}`;
@@ -1176,6 +1193,8 @@ const ACT = {
     if (kind !== 'walk') Sound.play('select');
   },
   tripFast() { Scene.finishTrip(); },
+  enterStore(k) { closeSheet(); UI.inStore = k; UI.shop = STORES[k].cats[0]; UI.tab = 'shop'; syncView(); Sound.play('chime'); },
+  leaveStore() { UI.inStore = null; UI.tab = 'town'; syncView(); },
   // v0.16: watch mini-you work out in town
   seeLive() { if (UI.tab !== 'town') { UI.visit = null; UI.tab = 'town'; syncView(); } const p = Scene.liveAt(); if (p) Scene.lookAt(p[0], p[1]); },
   // jobs and the clinic (v0.14)
@@ -2084,6 +2103,7 @@ function jobSection(key) {
   return `<div class="card job-card">${head}${rel}${body}</div>`;
 }
 function placeBody(key) {
+  if (STORES[key] && key !== 'market') return `<p>${t('st_desc_' + key)}</p><button class="btn primary block" data-act="enterStore" data-arg="${key}">🛍️ ${t('store_enter')}</button>`;
   const P = placeDay(), btn = (act, label, on = true, x = '') => `<button class="btn ${on ? 'primary' : ''} block" data-act="placeDo" data-arg="${key}|${act}|${x}" ${on ? '' : 'disabled'}>${label}</button>`;
   if (key === 'fields') {
     const n = harvestCount(), pct = Math.round(n / HARVEST_GOAL * 100);
@@ -2113,7 +2133,7 @@ function placeBody(key) {
       return `<div class="list-item">${avatar(h.look)}<div class="grow"><b>${esc(homeName(h))}</b> ${isFriend(id) ? '💛' : ''}<div class="muted"><span class="online-dot"></span>${at ? t('host_away', { name: esc(homeName(homeOf(at))) }) : t('host_home')}</div></div>
         <button class="btn small" data-act="goTo" data-arg="${at || id}">${t('visit')}</button></div>`; }).join('') || `<p class="muted">${t('pl_nobody')}</p>`}</div>`;
   }
-  if (key === 'market') return marketBody(true) + jobSection(key);
+  if (key === 'market') return `<button class="btn primary block" data-act="enterStore" data-arg="market">🛍️ ${t('store_enter_market')}</button>` + marketBody(true) + jobSection(key);
   if (key === 'clinic') {
     const s = S.sick, med = s && s.med;
     return `<p>${s ? t('sick_here', { why: t('sick_why_' + (s.why || 'cold')) }) : t('sick_well')}</p>
@@ -2358,6 +2378,8 @@ document.addEventListener('click', e => {
   if (!el || el.disabled) { if (e.target.closest('.item-card')) Sound.play('select'); return; }
   const fn = ACT[el.dataset.act];
   if (!fn) return;
+  const needStore = storeForAct(el.dataset.act, el.dataset.arg);
+  if (needStore && S && !S.onboarding && !atStore(needStore)) { snack(`${STORES[needStore].e} ${t('store_buy_there', { name: nm(STORES[needStore]) })}`); ACT.placeGo(needStore); refresh(); return; }
   // every button makes a sound: picking things (shop categories, tabs, cards) a bubbly blip, everything else a soft tick
   Sound.play(CLICK_SOUND[el.dataset.act] || 'tick');
   const ta = $('#draftText');

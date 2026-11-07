@@ -779,6 +779,7 @@ const Scene = (() => {
     for (const r of TL.roads) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
     for (const r of TL.water) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
     const P = TL.park, C = TL.centre;
+    if ((TL.stores || []).some(([, sx, sy, sw, sd]) => inRectXY(x, y, sx - 1, sy - 1, sx + sw + 1, sy + sd + 1))) return true;   // v0.17
     if (inRectXY(x, y, C.x - 0.5, C.y - 1, C.x + C.w + 0.5, C.y + C.d + 1) || inRectXY(x, y, P.x - 1, P.y - 1, P.x + P.w + 1, P.y + P.d + 1)) return true;
     for (const F of TL.fields) if (inRectXY(x, y, F.x - 1, F.y - 1, F.x + F.w + 1, F.y + F.d + 1)) return true;
     const m = TL.lake.sea ? 5.5 : 3;
@@ -951,10 +952,18 @@ const Scene = (() => {
       liveBadge(p, S.live, true);
     } });
   }
+  // The stores outside the town centre (v0.17).
+  function storeObjs(objs, vr, ts) {
+    (TL.stores || []).forEach(([k, x, y, w, d]) => {
+      if (!boxVisible(x - 1, y - 1, x + w + 1, y + d + 1, vr)) return;
+      objs.push({ d: x + y + w / 2 + d / 2 + 2, f: () => { const r = drawStore(k, x, y, w, d, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } });
+    });
+  }
   // Where each public place is (where you walk to).
   function placePt(key) {
-    const shop = TL.shops.find(([k]) => k === key), P = TL.park, F = TL.fields[0], K = TL.lake, C = TL.centre;
+    const shop = TL.shops.find(([k]) => k === key), P = TL.park, F = TL.fields[0], K = TL.lake, C = TL.centre, st = (TL.stores || []).find(([k]) => k === key);
     if (shop) return [shop[1] + 3, shop[2] + 6.3];
+    if (st) return [st[1] + st[3] / 2, st[2] + st[4] + 0.5];
     if (key === 'plaza') return [TL.plaza.x + LOT_W / 2, TL.plaza.y + LOT_D + 0.8];
     if (key === 'park') return [P.x + 20.7, P.y + 14.7];
     if (key === 'fields') return [F.x + Math.min(F.w / 2, 10), F.y - 0.6];
@@ -1001,6 +1010,7 @@ const Scene = (() => {
     if (lv >= 5) deco.push(['flowers', 2, 10], ['flowers', 11, 10], ['tree', 6, 13], ['tree', 8, 13]);
     deco.forEach(([k, x, y]) => objs.push({ d: px + py + x + y + 1, f: () => drawYardItem({ k }, px + x, py + y, ts) }));
     TL.shops.forEach(([k, x, y]) => objs.push({ d: x + y + 5.5, f: () => { const r = drawShop(k, x, y, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
+    storeObjs(objs, vr, ts);
     // trees along the edges of the square (not on the plaza or in front of a shop)
     const free = (x, y) => !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy]) => x > sx - 1.5 && x < sx + 7.5 && y > sy - 1.5 && y < sy + 7.5);
     for (let x = C.x + 1.5; x < C.x + C.w - 1; x += 6.5) [C.y + C.d - 2, C.y + 1].forEach(y => { if (free(x, y)) objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }); });
@@ -2443,6 +2453,29 @@ const Scene = (() => {
       [['apple', 0.5], ['peach', 1.5]].forEach(([tk, x]) => { const c = iso(x, 0.5), d = TREES[tk]; drawFruitTree({ k: tk, planted: now() - d.grow * MIN * 2, last: now() - d.every * MIN * 1.5 }, c.x, c.y, z, 0, x); });
     },
     pond(k, o, w, h) { frameFoot(3, 2, 20, w, h, 1.6); flatRect(-0.2, -0.2, 3.4, 2.4, '#b8dd8c'); drawPond(0, 0, 3, 2, 4, 0); },
+    // Inside a store (v0.17): a floor, two walls, shelves with the store's goods, a counter and the shopkeeper.
+    storein(k, o, w, h) {
+      const S2 = STORES[k] || STORES.market, z = frameFoot(6, 4, 40, w, h, 2.4), wall = S2.wall || '#f1f0ea';
+      const A = iso(0, 0), B = iso(6, 0), D = iso(0, 4);
+      for (let j = 0; j < 4; j++) for (let i = 0; i < 6; i++) tile(i, j, (i + j) % 2 ? '#e9e2d4' : '#ded5c4');
+      poly([D, A, up(A, 46 * z), up(D, 46 * z)], shade(wall, -0.08)); poly([A, B, up(B, 46 * z), up(A, 46 * z)], wall);
+      wallRect([A, B], 0, 0, 1, 40, 46, S2.roof || '#c9893a');
+      const goods = { market: ['🥕', '🌽', '🍅', '🌾', '🥬', '🍓'], nursery: ['🌳', '🌲', '🌸', '🪴', '⛲', '🌻'], ranch: ['🐔', '🐑', '🐷', '🐮', '🦆', '🐐'], petshop: ['🐶', '🐱', '🦴', '🐟', '🧶', '🥣'],
+        furniture: ['🛋️', '🛏️', '🪑', '💡', '🖼️', '🕰️'], realty: ['🏠', '🏡', '🏰', '🗺️', '🔑', '📄'], dealer: ['🚗', '🚙', '🏎️', '🛻', '🚐', '🏍️'], mall: ['👕', '👖', '👟', '🏆', '🎮', '🍿'] }[k] || ['🛍️'];
+      wallRect([A, B], 0, 0.62, 0.92, 16, 36, '#bfe6f7', '#fffaf0', 1.4);   // a window
+      flatRect(1.2, 1.6, 3.4, 1.6, shade(S2.roof || '#c9893a', 0.35));     // a rug
+      [[0.15, 0.15], [2.0, 0.15], [3.85, 0.15]].forEach(([sx, sy], i) => {   // shelves along the back wall, full of goods
+        const b = box(sx, sy, 1.75, 0.55, 32, '#b07a4a');
+        [8, 18, 28].forEach((hh, j) => { wallRect(b.left, 0, 0, 1, hh - 0.6, hh, '#8a5a36'); [0.25, 0.5, 0.75].forEach((u, q) => { const p = wallPt(b.left, 0, u, hh + 4.2); emoji(goods[(i * 3 + j + q) % goods.length], p.x, p.y, 10 * z); }); });
+      });
+      [[0.2, 1.4], [0.2, 2.6]].forEach(([sx, sy], i) => { const b = box(sx, sy, 0.55, 1, 22, '#c99a6b'); [0.3, 0.7].forEach((u, q) => { const p = wallPt(b.right, 0, u, 26); emoji(goods[(i * 2 + q + 3) % goods.length], p.x, p.y, 10 * z); }); });
+      if (k === 'dealer') { drawCar({ k: 'sports', color: '#e5484d' }, 2.1, 1.4, 0); drawCar({ k: 'sedan', color: '#2f80ed' }, 3.6, 1.6, 0); }
+      box(3.9, 3.0, 1.8, 0.6, 14, '#c99a6b', 0, { top: '#e6c79a' });   // the counter
+      { const c = iso(4.4, 3.3); emoji('💳', c.x, c.y - 16 * z, 9 * z); }
+      const p = iso(4.9, 2.8); drawPerson(p.x, p.y, z, { look: { shirt: S2.roof || '#2f80ed', skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk' }, face: -1, view: 'front', turn: [0.2, 1], energy: 'great', ts: 0, seed: 5, pose: 'stand' });
+      const me2 = iso(1.4, 3.4); drawPerson(me2.x, me2.y, z, { look: S.me.look, face: 1, view: 'back', turn: [0.7, -0.7], energy: 'good', ts: 0, seed: 3, pose: 'stand' });
+      { const pl = iso(5.6, 0.6); ellipse(pl.x, pl.y - 2 * z, 6 * z, 3 * z, '#9a6a44'); circle(pl.x, pl.y - 12 * z, 8 * z, '#5aa552'); circle(pl.x - 3 * z, pl.y - 16 * z, 5 * z, '#74c169'); }
+    },
   };
   function thumb(kind, k, o = {}, w = 120, h = 96) {
     const id = kind + ':' + k + ':' + JSON.stringify(o) + ':' + w + 'x' + h;

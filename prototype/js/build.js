@@ -1860,3 +1860,54 @@ function drawTrophyCase(it, x, y) {
     wallLine(f, 0, 0.2, 40, 0.35, 8, 'rgba(255,255,255,.45)', 1);
   });
 }
+
+// ---------- stores (v0.17) ----------
+// Each store has its own look: a car showroom with cars out front, a greenhouse, a red barn store with a pen, a pet
+// shop, a furniture store, an estate agent's office with a "for sale" board, and a big two-storey mall.
+function drawStore(k, x, y, w, d, ts) {
+  const S2 = STORES[k], z = cam.z, c = iso(x + w / 2, y + d / 2), glassCol = NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5';
+  ellipse(c.x, c.y + 6 * z, (w + d) * 9 * z, (w + d) * 4.5 * z, 'rgba(0,0,0,.07)');
+  const front = k === 'dealer' || k === 'nursery' || k === 'ranch' ? d * 0.42 : 0;   // a yard in front of some
+  const bd = d - front, wh = k === 'mall' ? 52 : k === 'ranch' ? 26 : k === 'nursery' ? 24 : 30;
+  if (front) flatRect(x, y + bd, w, front, k === 'dealer' ? '#d4d0c8' : k === 'ranch' ? '#c8b083' : '#cfe3b6');
+  let b;
+  if (k === 'nursery') {   // a greenhouse: glass walls, a glass ridge roof, plants inside
+    b = box(x + 0.3, y, w - 0.6, bd, wh, 'rgba(200,235,220,.55)', 0, { left: 'rgba(190,230,215,.65)', right: 'rgba(170,215,200,.65)', top: 'rgba(220,245,235,.7)', edge: '#8fb9a6' });
+    for (let i = 1; i < 6; i++) { wallLine(b.left, 0, i / 6, 0, i / 6, wh, 'rgba(255,255,255,.7)', 0.8); wallLine(b.right, 0, i / 6, 0, i / 6, wh, 'rgba(255,255,255,.7)', 0.8); }
+    gableX(x + 0.2, y - 0.1, w - 0.4, bd + 0.2, wh, 10, 'rgba(220,245,235,.8)', 'rgba(190,230,215,.8)');
+    for (let i = 0; i < 6; i++) { const p = iso(x + 1 + i * (w - 2) / 5, y + bd + front * 0.5); ellipse(p.x, p.y, 6 * z, 3 * z, '#9a6a44'); circle(p.x, p.y - 6 * z, 5 * z, PAL.leaf[i % 3]); }
+  } else if (k === 'ranch') {   // a red barn store with a white trim and a pen in front with a cow
+    b = box(x + 0.4, y, w - 0.8, bd, wh, S2.wall);
+    wallRect(b.left, 0, 0.35, 0.65, 0, 18, '#7a3a30', '#fff', 1.4);
+    wallLine(b.left, 0, 0.35, 0, 0.65, 18, '#fff', 1); wallLine(b.left, 0, 0.65, 0, 0.35, 18, '#fff', 1);
+    gableX(x + 0.3, y - 0.1, w - 0.6, bd + 0.2, wh, 14, S2.roof, shade(S2.roof, 0.15));
+    for (let i = 0; i <= 8; i++) { const p = iso(x + 0.4 + i * (w - 0.8) / 8, y + d - 0.1); line(p.x, p.y, p.x, p.y - 8 * z, '#f4efe6', 1.4 * z); }
+    { const a = up(iso(x + 0.4, y + d - 0.1), 6 * z), q = up(iso(x + w - 0.4, y + d - 0.1), 6 * z); line(a.x, a.y, q.x, q.y, '#f4efe6', 1.4 * z); }
+    const cp = iso(x + w * 0.35, y + bd + front * 0.5); drawAnimal('cow', 2, cp.x, cp.y, z * 0.9, { face: 1, ts, seed: 2 });
+    const sp = iso(x + w * 0.7, y + bd + front * 0.55); drawAnimal('sheep', 2, sp.x, sp.y, z * 0.9, { face: -1, ts, seed: 3 });
+  } else {
+    b = box(x, y, w, bd, wh, S2.wall);
+    wallRect(b.left, 0, 0, 1, 0, 3, shade(S2.wall, -0.3)); wallRect(b.right, 0, 0, 1, 0, 3, shade(S2.wall, -0.25));
+    if (k === 'dealer' || k === 'mall') {   // big shop windows across the front
+      wallRect(b.left, 0, 0.05, 0.95, 4, wh * 0.6, glassCol, '#e8edf2', 1.6);
+      for (let i = 1; i < 6; i++) wallLine(b.left, 0, 0.05 + i * 0.15, 4, 0.05 + i * 0.15, wh * 0.6, '#e8edf2', 1);
+      if (k === 'mall') { wallRect(b.left, 0, 0.05, 0.95, wh * 0.66, wh * 0.92, glassCol, '#e8edf2', 1.4); wallRect(b.right, 0, 0.1, 0.9, wh * 0.66, wh * 0.92, glassCol, '#e8edf2', 1.2); }
+      doorFace(b.left, 0.5, 0.08, 18, '#5b6470');
+    } else {
+      wallRect(b.left, 0, 0.08, 0.6, 5, 21, glassCol, '#fffaf0', 1.4);
+      doorFace(b.left, 0.8, 0.07, 19, shade(S2.roof, -0.2));
+      for (let i = 0; i < 10; i++) wallRect(b.left, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : S2.roof);
+    }
+    [0.3, 0.7].forEach(u => winFace(b.right, u, 0.08, 10, Math.min(24, wh - 6)));
+    box(x - 0.1, y - 0.1, w + 0.2, bd + 0.2, 3, shade(S2.wall, -0.12), wh);
+    if (k === 'mall') ['#e5484d', '#2f80ed', '#f2c230'].forEach((col, i) => { const p = up(iso(x + 1 + i * 1.6, y + bd + 0.3), 0); line(p.x, p.y, p.x, p.y - 40 * z, '#888', 1 * z); pg([[p.x, p.y - 40 * z], [p.x + 9 * z, p.y - 37 * z], [p.x, p.y - 33 * z]], col); });
+    if (k === 'realty') { const p = iso(x + w + 0.2, y + bd + 0.4); line(p.x, p.y, p.x, p.y - 16 * z, '#8a5a36', 1.6 * z); rrect(p.x - 8 * z, p.y - 20 * z, 16 * z, 8 * z, 1.5 * z, '#fffaf0', '#e5484d', 1 * z); }
+    if (k === 'petshop') { const p = iso(x + w * 0.85, y + bd + 0.6); drawAnimal('dog', 2, p.x, p.y, z * 0.8, { face: -1, ts, seed: 4, breed: 'shiba' }); }
+    if (k === 'furniture') { const p = wallPt(b.left, 0, 0.32, 6); rrect(p.x - 7 * z, p.y - 4 * z, 14 * z, 6 * z, 2 * z, '#e5734f'); }
+  }
+  if (k === 'dealer') ['sedan', 'suv', 'sports'].forEach((ck, i) => drawCarDir({ k: ck, color: ['#2f80ed', '#f4f4f0', '#e5484d'][i] }, x + 1.8 + i * 3, y + bd + front * 0.5, '+x', ts));
+  if (NIGHT > 0.3) { const p = iso(x + w / 2, y + bd); glow(p.x, p.y - 10 * z, 60 * z, 0.9); }
+  const s = up(iso(x + w / 2, y + bd / 2), (wh + (k === 'ranch' || k === 'nursery' ? 18 : 6)) * z);
+  if (z > 0.1) pill(`${S2.e} ${nm(S2)}`, s.x, s.y, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
+  return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 24 * z, y1: iso(x + w, y + d).y };
+}

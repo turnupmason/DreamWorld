@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.16.0';
+const VERSION = '0.17.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -581,6 +581,22 @@ const COMMUNITY_TZ = { wutong: 'America/Los_Angeles', palmbay: 'America/New_York
   hangzhou: 'Asia/Shanghai', sydney: 'Australia/Sydney', andes: 'America/Bogota', london: 'Europe/London', seoul: 'Asia/Seoul',
   rio: 'America/Sao_Paulo', capetown: 'Africa/Johannesburg' };
 Object.entries(COMMUNITY_TZ).forEach(([k, tz]) => { COMMUNITIES[k].tz = tz; });
+// ---------- stores (v0.17) ----------
+// Things are bought in the store that sells them (go there, go in, buy). The market sells seeds (and buys your
+// goods); the others are their own buildings in every town, placed beside a road near the town centre.
+const STORES = {
+  market:    { e: '🛒', zh: '超市', en: 'Market', cats: ['seeds', 'sell'] },
+  nursery:   { e: '🌳', zh: '花园苗圃', en: 'Garden centre', cats: ['trees', 'yard'], w: 9, d: 7, wall: '#eef6ea', roof: '#5aa552' },
+  ranch:     { e: '🐮', zh: '牲畜店', en: 'Livestock store', cats: ['animals'], w: 9, d: 7, wall: '#c0453a', roof: '#7a3a30' },
+  petshop:   { e: '🐾', zh: '宠物店', en: 'Pet shop', cats: ['pets'], w: 6, d: 5.5, wall: '#f9e7ef', roof: '#ec6aa8' },
+  furniture: { e: '🛋️', zh: '家具店', en: 'Furniture store', cats: ['furn'], w: 7, d: 6, wall: '#efe6d6', roof: '#8a5a36' },
+  realty:    { e: '🏠', zh: '房产中介', en: 'Real estate', cats: ['land', 'houses'], w: 6, d: 5.5, wall: '#eaf0f6', roof: '#2f6fb2' },
+  dealer:    { e: '🚗', zh: '车行', en: 'Car dealer', cats: ['cars'], w: 10, d: 7, wall: '#e8edf2', roof: '#5b6470' },
+  mall:      { e: '🏬', zh: '购物中心', en: 'Shopping mall', cats: ['excl'], w: 12, d: 9, wall: '#f4efe6', roof: '#c9893a' },
+};
+// Which store sells each shop category.
+const CAT_STORE = {};
+Object.entries(STORES).forEach(([k, s]) => s.cats.forEach(c => { CAT_STORE[c] = k; }));
 // ---------- town layouts (v0.12) ----------
 // Every country's town has its own plan. A layout has: streets (rows of parcels; each street's road is right in
 // front of it, at y + LOT_D), roads [x0, y0, x1, y1, kind], the town centre (paved; the town hall plaza is 16 × 14,
@@ -693,7 +709,7 @@ const LAYOUTS = {
     centre: { x: 64, y: 22, w: 52, d: 32 }, plaza: { x: 82, y: 28 },
     shops: [['library', 66, 25], ['post', 108, 25], ['bakery', 66, 46], ['cafe', 73, 46], ['market', 101, 46], ['gym', 108, 46]],
     park: { x: 68, y: 60, w: 44, d: 30 }, lake: { x: 90, y: 6, rx: 20, ry: 8 },
-    fields: [{ x: -2, y: 79, w: 62, d: 11 }, { x: 121, y: 60, w: 57, d: 28 }], water: [],
+    fields: [{ x: -2, y: 79, w: 62, d: 11 }, { x: 121, y: 76, w: 57, d: 12 }], water: [],   // v0.17: a shopping strip between the avenue and the fields
     places: [[90, 56.5], [61.5, 30], [118.5, 30], [90, 19.5], [30, 19.5], [150, 56.5], [90, 61]],
     labels: [['area_maple', 30, 8], ['area_center', 90, 24], ['area_lake', 90, 0], ['area_park', 90, 70], ['area_farm', 28, 64], ['area_fields', 150, 72]],
   },
@@ -758,6 +774,24 @@ function buildLayout(id, flip) {
     { w: 1.8, pts: [[wx + 0.5, wy], [wx - 8, wy + 1], [wx - 14, wy + 5], [wx - 22, wy + 3], [wx - 30, wy - 3], [wx - 42, wy - 2], [wx - 60, wy + 4]] },
     { w: 1.8, pts: [[ex - 0.5, ey], [ex + 7, ey - 1.5], [ex + 13, ey - 6], [ex + 21, ey - 5], [ex + 30, ey + 1], [ex + 44, ey + 2], [ex + 62, ey - 4]] },
   ];
+  // v0.17: the stores, each beside a road (facing it) as close to the town centre as there's room
+  const lakeAt = (x, y) => ((x - lake.x) / (lake.rx + (lake.sea ? 6 : 2))) ** 2 + ((y - lake.y) / (lake.ry + (lake.sea ? 6 : 2))) ** 2 < 1;
+  const busyRects = [...Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D + 2]), ...roads.map(r => r.slice(0, 4)), ...B.water.map(rect),
+    [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [box(B.park).x, B.park.y, box(B.park).x + B.park.w, B.park.y + B.park.d], ...B.fields.map(f => { const q = box(f); return [q.x, q.y, q.x + q.w, q.y + q.d]; }),
+    ...ramps.map(R => [Math.min(...R.map(p => p[0])) - 1, Math.min(...R.map(p => p[1])) - 1, Math.max(...R.map(p => p[0])) + 1, Math.max(...R.map(p => p[1])) + 1])];
+  const stores = [], cx0 = centre.x + centre.w / 2, cy0 = centre.y + centre.d / 2;
+  busyRects.push([-200, hy - 4, 400, hy + 4]);   // the expressway
+  const free = (x, y, w, d) => x >= WORLD.x0 - 12 && y >= WORLD.y0 - 8 && x + w <= WORLD.x1 + 12 && y + d <= WORLD.y1 + 8 && !busyRects.some(r => x < r[2] + 0.25 && r[0] < x + w + 0.25 && y < r[3] + 0.25 && r[1] < y + d + 0.25)
+    && ![[x, y], [x + w, y], [x, y + d], [x + w, y + d], [x + w / 2, y + d / 2]].some(([px, py]) => lakeAt(px, py));
+  Object.entries(STORES).filter(([, s]) => s.w).sort((a, b) => b[1].w * b[1].d - a[1].w * a[1].d).forEach(([k, s]) => {
+    let best = null, bd = 1e9;
+    const tryAt = (x, y, pen) => { if (!free(x, y, s.w, s.d)) return; const dd = Math.hypot(x + s.w / 2 - cx0, y + s.d / 2 - cy0) + pen; if (dd < bd) { bd = dd; best = [k, x, y, s.w, s.d]; } };
+    roads.forEach(r => {
+      if (r[2] - r[0] >= r[3] - r[1]) for (let x = r[0] + 0.5; x + s.w <= r[2] - 0.5; x += 1) { tryAt(x, r[1] - s.d - 0.3, 0); tryAt(x, r[3] + 0.3, 6); }   // above the road (facing it), or below
+      else for (let y = r[1] + 0.5; y + s.d <= r[3] - 0.5; y += 1) { tryAt(r[0] - s.w - 0.3, y, 3); tryAt(r[2] + 0.3, y, 3); }                                 // beside an avenue
+    });
+    if (best) { stores.push(best); busyRects.push([best[1], best[2], best[1] + best[3], best[2] + best[4]]); }
+  });
   const P = box(B.park), m = 1.5, loop = [];
   for (let k = 0; k <= 48; k++) {   // a rounded loop inside the park's edge, gently wobbling
     const a = k / 48 * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a), e = 0.35;
@@ -765,7 +799,7 @@ function buildLayout(id, flip) {
     loop.push([P.x + P.w / 2 + px + Math.sin(a * 5) * 0.25, P.y + P.d / 2 + py + Math.cos(a * 4) * 0.25]);
   }
   return {
-    id: id + (flip ? '|f' : ''), streets, npcLots, roads, water: B.water.map(rect), highway, curves, parkLoop: loop,
+    id: id + (flip ? '|f' : ''), streets, npcLots, roads, water: B.water.map(rect), highway, curves, parkLoop: loop, stores,
     centre, plaza, shops,
     park: box(B.park), lake, fields: B.fields.map(f => box(f)),
     places: B.places.map(([x, y]) => [fx(x), y]), labels: B.labels.map(([k, x, y]) => [k, fx(x), y]),
@@ -788,6 +822,7 @@ const PLACE_INFO = {
   post:    { e: '📮', zh: '邮局', en: 'Post office' },
   clinic:  { e: '🏥', zh: '诊所', en: 'Clinic' },
 };
+Object.entries(STORES).forEach(([k, s]) => { if (!PLACE_INFO[k]) PLACE_INFO[k] = { e: s.e, zh: s.zh, en: s.en }; });   // v0.17: stores are places too
 const HARVEST_GOAL = 30;          // the town fields: helps from everyone in town today; full = harvest festival
 const HELP_HARVEST = { wheat: 2 }; // helping once a day (uses 1 farm job) gives you this; the festival gives 1 bread
 const BREAD = { wheat: 3 };        // the bakery bakes 1 bread from 3 of your wheat

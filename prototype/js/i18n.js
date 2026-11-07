@@ -754,3 +754,25 @@ Object.assign(STR.en, {
 // ---------- v0.16 ----------
 Object.assign(STR.zh, { go_here: '去这里', go_here_short: '那里', live_at: '迷你的你正在{place}运动', live_see: '去看看' });
 Object.assign(STR.en, { go_here: 'Go here', go_here_short: 'there', live_at: 'Mini-you is working out at the {place}', live_see: 'Watch' });
+
+// ---------- v0.17: stores ----------
+Object.assign(STR.zh, {
+  shop_catalog: '商品目录', store_sells: '这些东西在{name}卖，要去店里才能买', store_here: '你就在{name}', store_go: '去店里', store_inside: '在{name}里', store_leave: '出店',
+  store_enter: '进店看看', store_enter_market: '进店买种子', store_buy_there: '要去{name}才能买',
+  st_short_nursery: '树苗、花草和院子里的东西。', st_short_ranch: '鸡鸭牛羊各种牲畜。', st_short_petshop: '小狗小猫、宠物粮和宠物用品。', st_short_furniture: '屋里用的家具。',
+  st_short_realty: '买房子、买地、扩建农场。', st_short_dealer: '自行车、汽车、卡车。', st_short_mall: '奖杯专属、以后还有衣服、电影院……',
+  st_desc_nursery: '这里卖果树、院子里的树、花、喷泉和各种装饰。进店就能买。', st_desc_ranch: '这里卖鸡、鸭、兔子、羊、猪、牛和羊驼的小崽子。进店就能买。',
+  st_desc_petshop: '这里能领养小狗小猫，也卖宠物粮、零食和宠物用品。', st_desc_furniture: '沙发、床、桌椅、灯、装饰……家里用的都在这里。',
+  st_desc_realty: '房产中介：买新房子、扩建菜地 / 牧场 / 果园 / 池塘、买旁边的地。', st_desc_dealer: '车行：自行车、摩托、轿车、SUV、跑车、卡车。车越大一次拉的货越多。',
+  st_desc_mall: '购物中心：拿到奖杯才能买的专属东西在这里。以后还会有服装店、电影院和更多好玩的。',
+});
+Object.assign(STR.en, {
+  shop_catalog: 'Catalogue', store_sells: 'Sold at the {name}: go to the store to buy', store_here: 'You’re at the {name}', store_go: 'Go there', store_inside: 'In the {name}', store_leave: 'Leave',
+  store_enter: 'Go inside', store_enter_market: 'Go in for seeds', store_buy_there: 'You can buy that at the {name}',
+  st_short_nursery: 'Saplings, flowers and things for the yard.', st_short_ranch: 'Chickens, ducks, sheep, cows and more.', st_short_petshop: 'Puppies, kittens, pet food and supplies.', st_short_furniture: 'Furniture for your home.',
+  st_short_realty: 'Houses, land and farm upgrades.', st_short_dealer: 'Bikes, cars and trucks.', st_short_mall: 'Trophy exclusives; clothes, a cinema and more to come.',
+  st_desc_nursery: 'Fruit trees, yard trees, flowers, fountains and all kinds of yard things. Go in to buy.', st_desc_ranch: 'Chicks, ducklings, bunnies, lambs, piglets, calves and crias. Go in to buy.',
+  st_desc_petshop: 'Adopt a puppy or a kitten, and buy pet food, treats and supplies.', st_desc_furniture: 'Sofas, beds, tables, lamps, decorations: everything for inside your home.',
+  st_desc_realty: 'Estate agent: new houses, bigger fields / pasture / orchard / pond, and the land next door.', st_desc_dealer: 'Car dealer: bikes, motorbikes, cars, SUVs, sports cars, trucks. Bigger vehicles carry more to the market.',
+  st_desc_mall: 'Shopping mall: the trophy-only exclusives are here. Clothes, a cinema and more are coming.',
+});

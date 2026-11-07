@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -134,6 +134,10 @@ P('## 专属（拿到奖杯才能买，' + D.EXCLUSIVES.length + ' 件）');
 P('');
 table(['专属', '类型', '价格'], D.EXCLUSIVES.map(([kind, k]) => { const d = kind === 'yard' ? D.YARD[k] : kind === 'car' ? D.CARS[k] : kind === 'pet' ? D.PET_BREEDS[k] : D.ANIMALS[k]; return [`${d.zh} (${d.en})`, { yard: '院子', car: '车', pet: '宠物', animal: '牲畜' }[kind], `🪙${kind === 'car' ? d.cost.coins : d.price}`]; }));
 
+P('## 商店（v0.17）');
+P('');
+const CAT_ZH = { seeds: '种子', sell: '卖东西', trees: '树苗', yard: '庭院', animals: '牲畜', pets: '宠物', furn: '家具', land: '土地', houses: '房子', cars: '载具', excl: '专属' };
+table(['店', '卖什么'], Object.values(D.STORES).map(s => [`${s.e} ${s.zh} (${s.en})`, s.cats.map(c => CAT_ZH[c] || c).join('、')]));
 P('## 市场、天气、打工、生病（v0.14）');
 P('');
 table(['项目', '数值'], [
