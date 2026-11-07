@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.22.0';
+const VERSION = '0.23.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -1184,3 +1184,30 @@ const EXCLUSIVES = [
   ...Object.keys(CARS).filter(k => CARS[k].excl).map(k => ['car', k]),
   ['pet', 'collie'], ['animal', 'rainbowalpaca'],
 ];
+
+// ---------- v0.23: prices (the reasoning and the sums are in docs/数值平衡.md) ----------
+// A regular player earns about 🪙500 and 🪵25 a day (real life about 250, a work shift about 100, the farm about
+// 150). Big things should take weeks to months, not days: a cabin in 2–3 days, a two-storey house in about three
+// weeks, a mansion in about four months, the castle in about eight; the first car in about a week, a supercar in
+// about four months. Farming (seeds, saplings, animals) keeps its own balance and isn't changed.
+const PRICE_X = { house: 5, houseWood: 2.5, car: 3, furn: 2.5, yard: 2.5, excl: 3, farmLand: 2, farmWood: 1.5, parcel: 2.5, garage: 1.5, clothes: 2.5, pet: 2, petfood: 1.5 };
+const nicePrice = n => (!n ? n : n < 100 ? Math.max(5, Math.round(n / 5) * 5) : (() => { const q = Math.pow(10, Math.floor(Math.log10(n)) - 1); return Math.round(n / q) * q; })());
+(function rebalance() {
+  const X = PRICE_X, mul = (c, k, kw) => { if (!c) return c; if (c.coins) c.coins = nicePrice(c.coins * k); if (c.wood) c.wood = nicePrice(c.wood * (kw || 1)); return c; };
+  HOUSES.forEach(H => mul(H.cost, X.house, X.houseWood));
+  Object.values(CARS).forEach(c => mul(c.cost, X.car));
+  Object.values(FURN).forEach(d => { if (d.price) d.price = nicePrice(d.price * (d.excl || d.award ? X.excl : X.furn)); });
+  Object.values(YARD).forEach(d => { if (d.price) d.price = nicePrice(d.price * (d.excl || d.award ? X.excl : X.yard)); });
+  for (let i = 1; i < FIELD_COST.length; i++) mul(FIELD_COST[i], X.farmLand, X.farmWood);
+  [PASTURE, ORCHARD, POND].forEach(L => L.forEach(l => l && mul(l.cost, X.farmLand, X.farmWood)));
+  GARAGE.forEach(g => g && mul(g.cost, X.garage, X.garage));
+  Object.values(CLOTHES).forEach(c => { if (c.price) c.price = nicePrice(c.price * X.clothes); });
+  Object.values(PET_BREEDS).forEach(B => { if (B.price) B.price = nicePrice(B.price * (B.excl ? X.excl : X.pet)); });
+  Object.values(PET_FOOD).forEach(f => { f.price = nicePrice(f.price * X.petfood); });
+  LAND.parcel = nicePrice(LAND.parcel * X.parcel); LAND.move = nicePrice(LAND.move * X.parcel);
+  FLOOR_BUILD.coinsPerTile = 100; FLOOR_BUILD.woodPerTile = 1.6;
+  MALL.movie = 45; MALL.claw = 20; Object.entries({ burger: 35, noodles: 30, pizza: 40, sushi: 55, boba: 18, icecream: 15 }).forEach(([k, v]) => { MALL.foods[k].price = v; });
+  Object.keys(MALL.plush).forEach(k => { FURN[k].value = 60; });
+  DELIVERY.min = 30; SCHOOL.fee = 200; POLICE.bail = 400; POLICE.fineMin = 150; POLICE.fineMax = 800;
+  TOWN_LEVELS.forEach((v, i) => { TOWN_LEVELS[i] = v * 4; });
+})();

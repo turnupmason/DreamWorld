@@ -902,3 +902,15 @@ Object.assign(STR.en, {
   school_certs: 'Certificates', school_next: 'Next certificate', school_pay_now: 'Pay is {p}% higher now', school_take: 'Take a class 🪙{n}', school_done: 'Today’s class is done: come back tomorrow',
   school_max: 'You have every certificate', school_class: 'Class done ({n}/{m})', school_cert: 'Certificate {n}! Pay is {p}% higher in all',
 });
+
+// ---------- v0.23: the mall's two floors and cinema ----------
+Object.assign(STR.zh, {
+  shop_clothes: '服装店', mall_1f: '购物中心 1F', mall_2f: '购物中心 2F', mall_up: '上二楼', mall_down: '下一楼', act_arcade: '游戏厅',
+  cinema_tickets: '售票处', cinema_out: '出影厅', film_soon: '电影马上开始', film_none: '在二楼售票处买票', film_go: '买好《{name}》的票了，进影厅找座位', film_done: '《{name}》看完了',
+  food_had: '吃过', food_new: '还没吃过', food_buy: '点一份 🪙{n}',
+});
+Object.assign(STR.en, {
+  shop_clothes: 'Clothing store', mall_1f: 'Mall · Ground floor', mall_2f: 'Mall · First floor', mall_up: 'Upstairs', mall_down: 'Downstairs', act_arcade: 'Arcade',
+  cinema_tickets: 'Tickets', cinema_out: 'Exit', film_soon: 'The film starts soon', film_none: 'Buy a ticket at the booth upstairs', film_go: 'Ticket for {name}: find your seat', film_done: 'You watched {name}',
+  food_had: 'Had it', food_new: 'Not tried yet', food_buy: 'Order 🪙{n}',
+});

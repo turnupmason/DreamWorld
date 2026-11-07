@@ -13,7 +13,7 @@
 3. `docs/决策记录.md`：做过的决定和原因。
 4. `docs/核心设计.md`：为什么玩、卖点、终局、不运动的人、怎么避免压力。
 5. `docs/游戏设计.md`：正式版玩法。
-6. `docs/数值表.md`：全部内容和数值（由 `prototype/js/data.js` 生成）。
+6. `docs/数值表.md`：全部内容和数值（由 `prototype/js/data.js` 生成）；`docs/数值平衡.md`：收入、支出和物价是怎么定的。
 7. `docs/技术方案.md`：App 技术方案（Swift 壳 + 网页画面）。
 8. `ios/README.md`：iPhone App 在 Mac 上怎么跑、JS 桥。
 9. 要改游戏代码时读 `docs/原型代码说明.md`。

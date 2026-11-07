@@ -148,7 +148,7 @@ const sceneTab = () => UI.tab === 'home' || UI.tab === 'town' || (UI.tab === 'wo
 function syncView() {
   setViewTown(UI.tab === 'world' && UI.wtown ? UI.wtown : myTown());
   if (UI.tab === 'home') Scene.setView(UI.inside ? 'interior' : 'home', 'me');
-  else if (sceneTab()) { if (UI.tab === 'town' && UI.inStore) Scene.setView('shop', UI.inStore); else Scene.setView(UI.visit ? (UI.visitInside ? 'interior' : 'home') : 'town', UI.visit || 'me'); }
+  else if (sceneTab()) { if (UI.tab === 'town' && UI.inStore) Scene.setView('shop', UI.inStore === 'mall' ? UI.mallFloor || 'mall' : UI.inStore); else Scene.setView(UI.visit ? (UI.visitInside ? 'interior' : 'home') : 'town', UI.visit || 'me'); }
   Scene.setVisible(sceneTab());
   // each place has its own tune
   const inside = (UI.tab === 'home' && UI.inside) || (UI.visit && UI.visitInside);
@@ -267,7 +267,7 @@ function renderOverlay() {
   }
 }
 function overlaySig() {
-  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang, JSON.stringify(Scene.tripNow()), S.out ? S.out.place || S.out.id || 1 : 0].join('|');
+  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang, JSON.stringify(Scene.tripNow()), S.out ? S.out.place || S.out.id || 1 : 0, UI.inStore, UI.mallFloor].join('|');
 }
 // 1F 2F 3F … chips inside a house, plus ＋ to build another storey in your own.
 function floorChips(h) {
@@ -712,7 +712,7 @@ function openSheet(type, arg) {
   if (type === 'trophyNew') { Sound.play('levelup'); setTimeout(() => Sound.play('coins'), 500); }
   UI.sheet = { type, arg };
   renderSheet();
-  const compact = ['friend', 'host', 'go', 'field', 'animal', 'car', 'tree', 'ware'].includes(type);
+  const compact = ['friend', 'host', 'go', 'field', 'animal', 'car', 'tree', 'ware', 'food', 'claw', 'cinema'].includes(type);
   $('#sheet').className = 'sheet' + (compact ? ' compact' : '') + (type === 'pets' || type === 'trophies' ? ' tall' : '');
   $('#sheet').hidden = false;
   $('#backdrop').hidden = false;
@@ -788,8 +788,9 @@ const SHEETS = {
       <div class="plush-row">${Object.entries(MALL.plush).map(([k, e]) => `<span class="${got.includes(k) ? 'on' : ''}" title="${nm(FURN[k])}">${e}</span>`).join('')}</div>
       <p class="muted small">${t('claw_got', { n: got.length, total: Object.keys(MALL.plush).length })}</p>`;
   },
-  food() {
+  food(only) {
     const tried = S.mall.foods;
+    if (only && MALL.foods[only]) { const f = MALL.foods[only]; return `<div class="row"><span class="big-emoji xl">${f.e}</span><div class="grow"><h2>${nm(f)}</h2><p class="muted">🪙${f.price} · ${tried.includes(only) ? '✓ ' + t('food_had') : t('food_new')}</p></div></div><p class="use-note">😋 ${t('food_use', { h: MALL.fed.hours, p: Math.round(MALL.fed.pay * 100), w: Math.round(MALL.fed.walk * 100) })}</p><button class="btn primary block" data-act="eatFood" data-arg="${only}" ${S.me.coins >= f.price ? '' : 'disabled'}>😋 ${t('food_buy', { n: f.price })}</button>`; }
     return `<h2>🍔 ${t('act_food')}</h2><p class="muted">${t('food_note')} · ${t('tried_n', { n: tried.length, total: Object.keys(MALL.foods).length })}</p><p class="use-note">😋 ${t('food_use', { h: MALL.fed.hours, p: Math.round(MALL.fed.pay * 100), w: Math.round(MALL.fed.walk * 100) })}${isFed() ? ` · ${t('food_still', { m: fmtDur(S.fed.until - now()) })}` : ''}</p>
       <div class="wd-grid">${Object.entries(MALL.foods).map(([k, f]) => `<button class="wd-card ${tried.includes(k) ? 'on' : ''}" data-act="eatFood" data-arg="${k}">
         <span class="big-emoji">${f.e}</span><span>${nm(f)}</span><span class="muted small">🪙${f.price}</span></button>`).join('')}</div>`;
@@ -1338,14 +1339,14 @@ const ACT = {
     const r = watchMovie(k);
     if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
     if (r !== 'ok' && r !== 'poster') return;
-    Sound.play('chime'); save(); UI.movieT0 = performance.now(); openSheet('movie', k); playMovie();
-    if (r === 'poster') setTimeout(() => snack(`🎞️ ${t('movie_poster', { name: nm(MALL.movies[k]) })}`), 9000);
+    Sound.play('chime'); save(); UI.posterNew = r === 'poster' ? k : null;
+    Scene.setFilm(k); ACT.mallFloor('cinema'); snack(`🎟️ ${t('film_go', { name: nm(MALL.movies[k]) })}`);
   },
   clawTry() {
     if (UI.clawBusy) return;
     const r = clawTry();
     if (r.r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
-    UI.clawBusy = true; Sound.play('tick'); save();
+    UI.clawBusy = true; Sound.play('tick'); save(); Scene.clawGo();
     setTimeout(() => {
       UI.clawBusy = false;
       if (r.r === 'win') { Sound.play('levelup'); snack(`${MALL.plush[r.k]} ${t('claw_win', { name: nm(FURN[r.k]) })}`); if (r.big) setTimeout(() => { Sound.play('levelup'); snack(`🧸 ${t('claw_big')}`); }, 2600); }
@@ -1359,6 +1360,7 @@ const ACT = {
     if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
     if (r !== 'ok') return;
     Sound.play('collect'); snack(`${MALL.foods[k].e} ${t('food_ate', { name: nm(MALL.foods[k]) })} ${t('food_full', { h: MALL.fed.hours, p: Math.round(MALL.fed.pay * 100) })}`); save();
+    closeSheet(); Scene.shopEat(MALL.foods[k].e);   // v0.23: sit down at a table and eat
   },
   payBail() {
     const r = payBail();
@@ -1461,15 +1463,17 @@ const ACT = {
   enterStore(k, wareId) {
     if (!STORES[k] || !STORES[k].cats.length) return;
     if (!atStore(k)) return ACT.placeGo(k);
-    closeSheet(); UI.inStore = k; UI.lastStore = k; UI.basket = UI.basket && UI.basket.store === k ? UI.basket : { store: k, items: [] };
+    closeSheet(); UI.inStore = k; UI.lastStore = k; if (k === 'mall') UI.mallFloor = 'mall'; UI.basket = UI.basket && UI.basket.store === k ? UI.basket : { store: k, items: [] };
     UI.visit = null; UI.tab = 'town'; syncView(); Sound.play('chime');
     if (wareId) setTimeout(() => Scene.shopGoWare(wareId, () => { openSheet('ware', wareId); refresh(); }), 250);
     else if (!S.shopTip) { S.shopTip = 1; setTimeout(() => snack(`🛒 ${t('shop_tip')}`), 400); }
   },
   leaveStore() {
     if (UI.basket && UI.basket.items.length && !confirm(t('basket_leave_q', { n: UI.basket.items.length }))) return;
-    closeSheet(); UI.inStore = null; UI.lastStore = null; UI.basket = null; UI.tab = 'town'; syncView();
+    closeSheet(); UI.inStore = null; UI.lastStore = null; UI.mallFloor = null; UI.basket = null; Scene.setFilm(null); UI.tab = 'town'; syncView();
   },
+  // v0.23: up and down the mall, into the cinema
+  mallFloor(f) { closeSheet(); UI.mallFloor = f; syncView(); Sound.play('select'); },
   addWare(arg) {
     const [id, n0] = arg.split('#'), w = Scene.shopWare(id), n = +n0 || 1;
     if (!w || !UI.basket) return;
@@ -1836,7 +1840,16 @@ function onSceneHit(h) {
     else snack(`👋 ${homeName(homeOf(h.owner))} · ${t('stranger')}`);
     return;
   }
-  if (k === 'ware') { openSheet('ware', h.id); return refresh(); }   // v0.20: in a store
+  if (k === 'ware') {   // v0.20: in a store (v0.23: the mall's escalators, stalls, games and cinema)
+    if (h.wk === 'escalator') { ACT.mallFloor(h.k); return refresh(); }
+    if (h.wk === 'stall') { openSheet('food', h.k); return refresh(); }
+    if (h.wk === 'claw') { openSheet('claw'); return refresh(); }
+    if (h.wk === 'ticket') { openSheet('cinema'); return refresh(); }
+    if (h.wk === 'cinemaDoor') { if (Scene.film()) ACT.mallFloor('cinema'); else openSheet('cinema'); return refresh(); }
+    if (h.wk === 'cinemaExit') { Scene.setFilm(null); ACT.mallFloor('mall2'); return refresh(); }
+    openSheet('ware', h.id); return refresh();
+  }
+  if (k === 'filmEnd') { const f = MALL.movies[h.k]; Sound.play('chime'); if (UI.posterNew === h.k) snack(`🎞️ ${t('movie_poster', { name: nm(f) })}`); else snack(`🎬 ${t('film_done', { name: nm(f) })}`); UI.posterNew = null; return refresh(); }
   if (k === 'clerk') { openSheet('checkout'); return refresh(); }
   if (k === 'shopDoor') { ACT.leaveStore(); return refresh(); }
   if (k === 'worldMap') { ACT.world(); return refresh(); }
