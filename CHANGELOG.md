@@ -2,6 +2,11 @@
 
 每个版本在 GitHub 上都有同名标签（tag），可以随时切回去看。
 
+## v0.4.1 · 2026-11-06
+
+- 网页版自动发布到 GitHub Pages：每次推送到 master，几分钟后 https://turnupmason.github.io/DreamWorld/ 就是最新版，手机浏览器直接能玩（新增 `.github/workflows/pages.yml`）。第一次要 Mason 在 GitHub 设置里把 Pages 的来源选成「GitHub Actions」。
+- iPhone Safari 里「添加到主屏幕」后，像 App 一样全屏打开，带镜像小镇图标（`prototype/icon.png`，和 App 图标同一张）。
+
 ## v0.4.0 · 2026-11-06
 
 回答 Mason 的问题（需求 #12）：开屏全是文字、新用户看不懂、运动多的朋友让人有压力、游戏的终极目标和卖点、多层楼。

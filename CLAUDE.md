@@ -64,3 +64,5 @@ python -m http.server 5173 --directory prototype
 ```
 
 然后打开 http://localhost:5173 。
+
+线上试玩（每次推送到 master 后自动更新）：https://turnupmason.github.io/DreamWorld/ （发布脚本 `.github/workflows/pages.yml`）。
