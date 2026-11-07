@@ -59,7 +59,8 @@ function pendingTitle(p) {
   return t('p_rest');
 }
 const thumbImg = (kind, k, o, w = 120, h = 96, cls = 'thumb') => `<img class="${cls}" alt="" src="${Scene.thumb(kind, k, o, w, h)}">`;
-const avatar = (look, cls = '') => `<span class="ava ${cls}" style="background-image:url(${Scene.thumb('person', 'a', { look }, 90, 90)})"></span>`;
+// Round head-and-shoulders portrait, drawn at the screen's pixel density so it stays sharp.
+const avatar = (look, cls = '', energy = 'good') => `<span class="ava ${cls}" style="background-image:url(${Scene.thumb('face', 'a', { look, energy }, 96, 96)})"></span>`;
 // In calm mode friends' fitness posts are hidden everywhere (feed, badges, counts).
 const feedVisible = it => !(S.calm && it.kind === 'goal');
 const unreadCount = () => S.feed.filter(i => feedVisible(i) && (!i.read || (i.gift && !i.claimed))).length;
@@ -89,6 +90,19 @@ function notify(item) {
   el.style.pointerEvents = 'auto';
   $('#toasts').prepend(el);
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, 4200);
+}
+// A little label above the thing you tapped: picture, name and what it does.
+let tipTimer = null;
+function tip(kind, k, name, sub) {
+  const el = $('#tip'), p = Scene.tapAt();
+  el.innerHTML = `${thumbImg(kind, k, {}, 52, 44, 'thumb')}<div><b>${esc(name)}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
+  el.hidden = false;
+  const w = el.offsetWidth, vw = el.parentElement.clientWidth;
+  el.style.left = clamp(p.x - w / 2, 8, vw - w - 8) + 'px';
+  el.style.top = Math.max(8, p.y - el.offsetHeight - 26) + 'px';
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => { el.hidden = true; }, 2200);
 }
 let snackTimer = null;
 function snack(text) {
@@ -121,7 +135,7 @@ function renderHUD() {
   $('#hud').innerHTML = `
     <div class="statusbar"><span id="clock">${fmtClock(now())}</span><span>▂▄▆ 🔋</span></div>
     <div class="row between">
-      <button class="row me plain" data-act="energyInfo">${avatar(S.me.look)}<div><div class="me-name">${esc(S.me.name)}</div>
+      <button class="row me plain" data-act="energyInfo">${avatar(S.me.look, 'hud e-' + e, e)}<div><div class="me-name">${esc(S.me.name)}</div>
         <div class="energy">${ENERGY_EMOJI[e]} ${energyName(e)} · ${t('sleep_short', { n: S.sleep ? S.sleep.score : '–' })}</div></div></button>
       <div class="row tight">${mail ? `<button class="pill mail" data-act="mailGo">✉️ ${mail}</button>` : ''}
         <div class="cap ${actionsLeft() === 0 ? 'done' : ''}" title="${t('cap_title')}">🔨 ${S.today.actions}/${ACTION_CAP}</div></div>
@@ -259,12 +273,37 @@ function landCard(kind, img, icon) {
   return shopCard(img, `${icon} ${t('land_' + kind)}${lv ? ` Lv${lv}` : ''}`, sub,
     next ? buyBtn('buyLand', kind, costText(cost), canAfford(cost)) : `<span class="tag ok">${t('maxed')}</span>`);
 }
+// Second-level categories: the chosen one (default: the first; selling defaults to everything).
+const FISHES = ['fish', 'shrimp', 'koi'];
+function sellKind(k) {
+  if (k.startsWith('baby_')) return 'babies';
+  if (CROPS[k]) return 'crops';
+  if (FISHES.includes(k)) return 'fish';
+  return Object.values(TREES).some(tr => tr.fruit === k) ? 'fruits' : 'goods';
+}
+function curSub(cat) {
+  const subs = SHOP_SUBS[cat];
+  if (!subs) return null;
+  UI.sub = UI.sub || {};
+  const id = UI.sub[cat] || (cat === 'sell' ? 'all' : subs[0].id);
+  return id === 'all' ? null : subs.find(s => s.id === id) || null;
+}
+function subChips(cat, count) {
+  const subs = SHOP_SUBS[cat];
+  if (!subs) return '';
+  const cur = curSub(cat), n = s => count(s);
+  return `<div class="sub-cats"><button class="sub ${cur ? '' : 'on'}" data-act="shopSub" data-arg="all">${t('sub_all')}</button>${subs.map(s => {
+    const c = n(s);
+    return `<button class="sub ${cur && cur.id === s.id ? 'on' : ''}" data-act="shopSub" data-arg="${s.id}">${s.e} ${nm(s)}${c != null ? `<i>${c}</i>` : ''}</button>`;
+  }).join('')}</div>`;
+}
 function panelShop() {
-  const h = S.me, cat = UI.shop;
+  const h = S.me, cat = UI.shop, sub = curSub(cat);
   const chips = SHOP_CATS.map(([id, ic]) => `<button class="cat ${cat === id ? 'on' : ''}" data-act="shopCat" data-arg="${id}"><span>${ic}</span>${t('cat_' + id)}</button>`).join('');
-  let body = '', note = '';
+  const keep = k => !sub || sub.keys.includes(k);
+  let body = '', note = '', subs = subChips(cat, s => s.keys.length || null);
   if (cat === 'seeds') {
-    body = Object.entries(CROPS).map(([k, c]) => shopCard(thumbImg('crop', k), `${c.e} ${nm(c)}`,
+    body = Object.entries(CROPS).filter(([k]) => keep(k)).map(([k, c]) => shopCard(thumbImg('crop', k), `${c.e} ${nm(c)}`,
       t('seed_sub', { d: fmtDur(c.grow * MIN), n: c.yield, p: c.sell }) + (h.seeds[k] ? ` · ${t('have_n', { n: h.seeds[k] })}` : ''),
       c.rare ? `<span class="tag">${t(RARE_KEY[c.rare])}</span>`
         : buyBtn('buySeed', k + '|1', `${t('buy_n', { n: 1 })} 🪙${c.seed}`, h.coins >= c.seed) + buyBtn('buySeed', k + '|5', `×5 🪙${c.seed * 5}`, h.coins >= c.seed * 5, ''))).join('');
@@ -277,7 +316,7 @@ function panelShop() {
       buyBtn('buyTree', k, `${t('buy_sapling')} 🪙${d.price}`, h.coins >= d.price && free > 0))).join('');
   } else if (cat === 'animals') {
     note = h.pastureLv ? t('pasture_cap', { n: pastureCount(), cap: pastureCap() }) : `${t('no_pasture')} <button class="btn small" data-act="shopCat" data-arg="land">${t('go_land')}</button>`;
-    body = Object.entries(ANIMALS).map(([k, a]) => {
+    body = Object.entries(ANIMALS).filter(([k]) => keep(k)).map(([k, a]) => {
       let sub;
       if (a.pet) sub = t(a.guard ? 'dog_sub' : 'cat_sub');
       else if (!a.prod) sub = t('animal_sub_rabbit', { d: fmtDur(a.every * MIN) });
@@ -296,16 +335,17 @@ function panelShop() {
   } else if (cat === 'furn' || cat === 'yard') {
     const scope = cat === 'furn' ? 'room' : 'yard', list = cat === 'furn' ? FURN : YARD;
     const owned = k => (scope === 'room' ? allRoomItems(h) : h.yard).filter(i => i.k === k).length + (h.store[scope + ':' + k] || 0);
-    body = Object.entries(list).filter(([, d]) => !d.souv).map(([k, d]) => {
+    body = Object.entries(list).filter(([k, d]) => !d.souv && keep(k)).map(([k, d]) => {
       const n = owned(k);
       const use = d.use ? ` · ${t('use_' + d.use)}` : d.prod ? ` · ${t('makes', { e: GOODS[d.prod].e, d: fmtDur(d.every * MIN) })}` : '';
       return shopCard(thumbImg(cat, k), nm(d), t('furn_sub', { w: d.w, d: d.d }) + use + (n ? ` · ${t('owned_n', { n })}` : ''),
         buyBtn('buyItem', scope + '|' + k, `🪙${fmtNum(d.price)}`, h.coins >= d.price));
     }).join('');
     note = t(cat === 'furn' ? 'note_furn' : 'note_yard');
-    if (cat === 'furn') note = souvCard() + note;
+    if (cat === 'furn') subs = subChips('furn', s => (s.id === 'souv' ? `${S.souv.length}/${SOUVENIRS.length}` : s.keys.length));
+    if (sub && sub.id === 'souv') { note = ''; body = ''; subs += souvCard(); }
   } else if (cat === 'cars') {
-    body = Object.entries(CARS).map(([k, c]) => {
+    body = Object.entries(CARS).filter(([k]) => keep(k)).map(([k, c]) => {
       const i = h.cars.findIndex(x => x.k === k), color = i >= 0 ? h.cars[i].color : CAR_COLORS[0];
       let btn;
       if (i < 0) btn = buyBtn('buyCar', k, costText(c.cost), canAfford(c.cost));
@@ -316,6 +356,7 @@ function panelShop() {
     note = t('note_cars');
   } else if (cat === 'houses') {
     body = HOUSES.map((H, i) => {
+      if (!keep(H.id)) return '';
       let btn;
       if (i === h.house) btn = `<span class="tag ok">${t('house_current')}</span>`;
       else if (h.houses.includes(i)) btn = buyBtn('moveHouse', i, t('house_move'), true, '');
@@ -326,8 +367,9 @@ function panelShop() {
     }).join('');
     note = floorCard() + t('note_houses');
   } else {
-    const keys = Object.keys(h.barn);
-    note = keys.length ? `<button class="btn small primary" data-act="sellAll">${t('sell_all', { n: fmtNum(barnValue()) })}</button>` : '';
+    const all = Object.keys(h.barn), keys = all.filter(k => !sub || sellKind(k) === sub.id);
+    subs = subChips('sell', s => all.filter(k => sellKind(k) === s.id).length || null);
+    note = all.length ? `<button class="btn small primary" data-act="sellAll">${t('sell_all', { n: fmtNum(barnValue()) })}</button>` : '';
     body = keys.length ? keys.map(k => {
       const b = barnInfo(k), n = h.barn[k];
       const img = CROPS[k] ? thumbImg('crop', k) : GOODS[k] ? thumbImg('good', k) : thumbImg('animal', b.baby, { stage: 0 });
@@ -340,8 +382,9 @@ function panelShop() {
       <div class="row tight"><span class="pill">🪙 ${fmtNum(h.coins)}</span><span class="pill">🪵 ${h.wood}</span></div></div>
     <p class="muted note">${t('shop_money_note')}</p>
     <div class="shop-cats">${chips}</div>
+    ${subs}
     ${note ? `<div class="shop-note">${note}</div>` : ''}
-    <div class="item-grid">${body}</div>`;
+    ${body ? `<div class="item-grid">${body}</div>` : ''}`;
 }
 
 // Build another storey on the house you live in.
@@ -475,7 +518,7 @@ function panelFeed() {
     const btn = it.gift ? (it.claimed ? `<span class="muted">${t('claimed')}</span>` : `<button class="btn small primary" data-act="claim" data-arg="${it.id}">${t('claim')}</button>`)
       : it.kind === 'stole' || it.kind === 'caught' ? `<button class="btn small" data-act="visit" data-arg="${it.from}">${t('visit_back')}</button>`
       : it.kind === 'letter' ? `<button class="btn small" data-act="mailOpen">${t('read')}</button>` : '';
-    return `<div class="list-item">${f ? avatar(f.look) : ''}<div class="grow"><div>${feedText(it)}</div><div class="muted">${ago(it.t)}</div></div>${btn}</div>`;
+    return `<div class="list-item">${f ? avatar(f.look, '', f.id === 'me' ? energyLevel() : friendEnergy(f)) : ''}<div class="grow"><div>${feedText(it)}</div><div class="muted">${ago(it.t)}</div></div>${btn}</div>`;
   }).join('');
   return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<div class="row between note"><p class="muted">${t('feed_note')}</p>${calm}</div><div class="card">${items}</div>`;
 }
@@ -597,17 +640,23 @@ const SHEETS = {
     const f = friendById(id), liked = S.today.liked[id];
     const status = S.calm ? `😌 ${t('f_calm')}` : seesGoal(f) ? (f.goalToday ? `✅ ${t('f_goal_done')}` : `⏳ ${t('f_goal_not_yet')}`) : `🔒 ${t('f_private')}`;
     const live = seesLive(f) ? `<p>${WORKOUTS[f.live.type].e} ${t('f_live', { name: nm(WORKOUTS[f.live.type]) })}</p>` : '';
-    const gifts = giftOptions();
-    return `<div class="row">${avatar(f.look, 'xl')}<div><h2>${t('home_of', { name: esc(homeName(f)) })}</h2>
-        <div class="muted">${nm(HOUSES[f.house])} · ❤️ ${f.likes}${S.calm ? '' : ` · 🏆 ${rankOf(f.id)}`}${f.shareMood && !S.calm ? ` · ${ENERGY_EMOJI[friendEnergy(f)]}` : ''}</div></div></div>
-      <div class="card gap-top"><div>${status}</div>${live}<p class="muted">${t('goal_privacy_hint')}</p></div>
-      <div class="card"><div class="row between"><h3>❤️ ${t('like_home')}</h3>
-        <button class="btn small ${liked ? '' : 'primary'}" data-act="like" data-arg="${id}" ${liked ? 'disabled' : ''}>${liked ? t('liked') : t('like')}</button></div></div>
-      <div class="card"><div class="row between"><h3>✉️ ${t('write_letter')}</h3><button class="btn small primary" data-act="compose" data-arg="${id}">${t('write')}</button></div><p class="muted">${t('letter_hint')}</p></div>
-      <div class="card"><h3>💬 ${t('leave_msg')}</h3>${MSG_KEYS.map(k => `<button class="chip" data-act="msg" data-arg="${id}|${k}">${t(k)}</button>`).join('')}</div>
-      <div class="card"><h3>🎁 ${t('send_gift')}</h3>
-        ${gifts.length ? gifts.map((g, i) => `<button class="chip" data-act="gift" data-arg="${id}|${i}">${giftText(g)}</button>`).join('') : `<p class="muted">${t('no_gifts')}</p>`}
-        <p class="muted">${t('social_free')}</p></div>`;
+    const gifts = giftOptions(), here = UI.visit === id;
+    const tags = [`🏠 ${nm(HOUSES[f.house])}`, `❤️ ${f.likes}`, ...(S.calm ? [] : [`🏆 ${t('rank_n', { n: rankOf(f.id) })}`])];
+    const act = (a, arg, ic, label, sub, on = true) => `<button class="act-tile" data-act="${a}" data-arg="${arg}" ${on ? '' : 'disabled'}><span>${ic}</span><b>${label}</b>${sub ? `<i>${sub}</i>` : ''}</button>`;
+    return `<div class="profile">${avatar(f.look, 'xxl', friendEnergy(f))}<div class="grow">
+        <div class="profile-name">${esc(homeName(f))}</div>
+        <div class="profile-tags">${tags.map(x => `<span>${x}</span>`).join('')}</div></div></div>
+      <div class="status-line"><div>${status}</div>${live}</div>
+      <div class="act-grid">
+        ${act('like', id, '❤️', liked ? t('liked') : t('like'), t('like_home'), !liked)}
+        ${act('compose', id, '✉️', t('write_letter'), t('letter_short'))}
+        ${here ? act('goIn', '', '🚪', t('fab_peek'), t('peek_short')) : act('visit', id, '🏡', t('visit'), t('visit_short'))}
+        ${act('giftScroll', '', '🎁', t('send_gift'), t('social_free_short'))}
+      </div>
+      <div class="sheet-sec"><div class="sec-title">💬 ${t('leave_msg')}</div>${MSG_KEYS.map(k => `<button class="chip" data-act="msg" data-arg="${id}|${k}">${t(k)}</button>`).join('')}</div>
+      <div class="sheet-sec" id="giftSec"><div class="sec-title">🎁 ${t('send_gift')}</div>
+        ${gifts.length ? gifts.map((g, i) => `<button class="chip" data-act="gift" data-arg="${id}|${i}">${giftText(g)}</button>`).join('') : `<p class="muted">${t('no_gifts')}</p>`}</div>
+      <p class="muted center small">🔒 ${t('goal_privacy_hint')}</p>`;
   },
   ranking() {
     const rk = ranking(), total = townTotal(), lv = townLevel(total), next = TOWN_LEVELS[lv];
@@ -889,11 +938,15 @@ const ACT = {
     if (LEVEL > 0 || !Scene.go({ kind: 'exit' }, { done: goOutside })) goOutside();
   },
   // Storeys: your townie walks to the stairs first (in your own home), then you're on the other floor.
+  // Changing storeys: your townie walks to the stairs and climbs (or goes down) one storey at a time.
   floor(i) {
     i = +i;
-    if (i === LEVEL) return;
-    const mine = UI.tab === 'home';
-    if (!mine || S.live || !Scene.go({ kind: 'stairs' }, { done: () => switchFloor(i) })) switchFloor(i);
+    const hm = homeOf(Scene.view().owner), lv = Math.min(LEVEL, floorsOf(hm) - 1);
+    if (i === lv || Scene.onStairs()) return;
+    if (S.live) return switchFloor(i);
+    const dir = i > lv ? 1 : -1;
+    const ok = Scene.takeStairs(dir, () => { setLevel(lv + dir); refresh(); }, () => { if (LEVEL !== i) ACT.floor(i); });
+    if (!ok) switchFloor(i);
   },
   buildFloor() { openSheet('floor'); },
   buildFloorNow() {
@@ -945,6 +998,7 @@ const ACT = {
   // shop
   openShop(cat) { closeSheet(); UI.shop = cat; setTab('shop'); },
   shopCat(c) { UI.shop = c; $('#panel').scrollTop = 0; },
+  shopSub(s) { UI.sub = UI.sub || {}; UI.sub[UI.shop] = s; },
   buySeed(arg) { const [k, n] = arg.split('|'); result(buySeed(k, +n), () => snack(t('snack_seed', { e: CROPS[k].e, n }))); },
   buyTree(k) { result(buyTree(k), () => snack(t('snack_tree', { name: nm(TREES[k]) }))); },
   buyAnimal(k) { result(buyAnimal(k), () => snack(t('snack_animal', { name: nm(ANIMALS[k].baby) }))); },
@@ -1002,6 +1056,7 @@ const ACT = {
     maybeReply(id, 'gift');
   },
   invite: () => openSheet('invite'),
+  giftScroll() { const el = $('#giftSec'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
   copyInvite() {
     const link = $('.invite-link').textContent;
     (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(() => snack(t('snack_copied')), () => snack(link));
@@ -1087,7 +1142,7 @@ function onSceneHit(h) {
   if (k === 'ground') { if (S.live) return snack(t('snack_live_busy')); Scene.go({ kind: 'ground', x: h.x, y: h.y }); tutDone('walk'); return refreshSoon(); }
   if (k === 'stairs') {
     const hm = homeOf(Scene.view().owner), top = floorsOf(hm) - 1, lv = Math.min(LEVEL, top);
-    ACT.floor(lv < top ? lv + 1 : lv - 1);
+    ACT.floor(clamp(lv + (h.dir || 1), 0, top));
     return refresh();
   }
   if (k === 'floor') { Scene.go({ kind: 'floor', x: h.x, y: h.y }); return; }
@@ -1123,7 +1178,7 @@ function onSceneHit(h) {
   if (k === 'yard') {
     const it = homeOf(h.owner).yard.find(x => x.id === h.id);
     if (mine && it && yardReady(it)) { const j = hiveJob(h.id); return walkDo(j.tg, j.o); }
-    return snack(it ? `${nm(YARD[it.k])} · ${t('makes', { e: GOODS[YARD[it.k].prod].e, d: fmtDur(YARD[it.k].every * MIN) })}` : '');
+    return it ? tip('yard', it.k, nm(YARD[it.k]), t('makes', { e: GOODS[YARD[it.k].prod].e, d: fmtDur(YARD[it.k].every * MIN) })) : null;
   }
   if (k === 'pond') return mine ? goFish() : snack(t('snack_not_your_pond'));
   if (k === 'mailbox') {
@@ -1140,9 +1195,10 @@ function onSceneHit(h) {
     return;
   }
   if (k === 'furn') {
-    const it = shownRoom(homeOf(Scene.view().owner)).items.find(x => x.id === h.id);
-    if (it && FURN[it.k].use && Scene.view().owner === 'me') { Scene.go({ kind: 'furn', id: it.id }); return snack(`${nm(FURN[it.k])} · ${t('use_' + FURN[it.k].use)}`); }
-    return snack(nm(FURN[h.k]));
+    const it = shownRoom(homeOf(Scene.view().owner)).items.find(x => x.id === h.id), d = FURN[h.k];
+    const sub = d.souv ? `✨ ${t('souv_title')}` : d.use ? t('use_' + d.use) : '';
+    if (it && d.use && Scene.view().owner === 'me') Scene.go({ kind: 'furn', id: it.id });
+    return tip('furn', h.k, nm(d), sub);
   }
   if (k === 'lot') { ACT.visit(h.owner); return refresh(); }
   if (k === 'emptyLot') return openSheet('invite');
@@ -1152,7 +1208,7 @@ function onSceneHit(h) {
   if (k === 'place') {
     const hd = ed.hold;
     const ok = hd.id ? moveItem(ed.scope, hd.id, h.x, h.y, hd.rot) : placeFromStore(ed.scope, hd.k, h.x, h.y, hd.rot, hd.tint);
-    if (ok) { Scene.hold(null); snack(t('snack_placed')); } else snack(t('snack_noroom'));
+    if (ok) { Scene.hold(null); snack(t('snack_placed')); } else snack(t(PLACE_WHY === 'block' ? 'snack_blocks_way' : 'snack_noroom'));
   } else if (k === 'item') Scene.select(h.id);
   else if (k === 'deselect') Scene.select(null);
   refresh();

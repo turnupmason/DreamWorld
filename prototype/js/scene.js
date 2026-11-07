@@ -153,14 +153,18 @@ const Scene = (() => {
       const [w, d] = itemSize('room', it);
       block(it.x, it.y, w, d);
     });
-    if (hasStairs(h)) { const s = stairsRect(h); block(s.x, s.y, s.w, s.d); }
+    stairsRects(h, viewLv(h)).forEach(s => block(s.x, s.y, s.w, s.d));
     return { g, gw: rw, gh: rd, wall: () => false };
   }
   // The storey being shown inside (the same LEVEL for your home and a friend's).
   const viewLv = h => Math.min(LEVEL, floorsOf(h) - 1);
   const viewRoom = h => roomAt(h, viewLv(h));
-  // Where you stand to take the stairs (in front of their foot).
-  function stairsSpot(h) { const s = stairsRect(h); return [s.x + 0.45, s.y + s.d + 0.4, -1]; }
+  // Where you stand to take the stairs: in front of the foot of the flight up, or in front of the opening down.
+  function stairsSpot(h, kind) {
+    const s = stairsRects(h, viewLv(h)).find(r => r.kind === kind) || stairsRects(h, viewLv(h))[0];
+    if (!s) return [0.6, roomSize(h)[1] * 0.9, 1];
+    return s.kind === 'up' ? [s.x + 0.5, s.y + s.d + 0.45, 1, true] : [s.x + 1.5, s.y + s.d + 0.45, -1, true];
+  }
   function bfsFrom(N, sx, sy) {
     const { g, gw, gh, wall } = N, prev = new Int32Array(gw * gh).fill(-1), start = sy * gw + sx;
     prev[start] = start;
@@ -222,7 +226,9 @@ const Scene = (() => {
     if (!a.path.length) { a.moving = false; return; }
     const [tx, ty] = a.path[0], dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy), st = speed * dt;
     if (dist <= st) { a.x = tx; a.y = ty; a.path.shift(); } else { a.x += dx / dist * st; a.y += dy / dist * st; }
+    // turn towards where we're going: left/right on screen, and our back to the camera when walking up the screen
     if (Math.abs(dx - dy) > 0.02) a.face = dx - dy > 0 ? 1 : -1;
+    if (Math.abs(dx + dy) > 0.02) a.back = dx + dy < 0;
     a.phase += dt * (4 + speed * 3.5);
     a.moving = true;
   }
@@ -255,6 +261,7 @@ const Scene = (() => {
     if (!j) return;
     if (j.valid && !j.valid()) { a.cur = null; return; }
     if (a.spot && a.spot[2]) a.face = a.spot[2];
+    a.back = !!(a.spot && a.spot[3]);
     if (j.start) j.start(a);
     if (j.dur > 0) a.act = { job: j, pose: j.pose, until: ts + j.dur };
     else { a.cur = null; if (j.done) j.done(); }
@@ -371,6 +378,19 @@ const Scene = (() => {
       const c = iso(ox + x + 0.5, oy + y + 0.5);
       for (const dx of [-3, 0, 3]) line(c.x + dx * z, c.y, c.x + dx * 1.4 * z, c.y - 5 * z, '#86bf5f', 1 * z);
     }
+    // soft contact shadows so built things sit on the grass instead of floating
+    if (f) h.yard.forEach(it => {
+      if (NO_SHADOW.has(it.k)) return;
+      const [w, d] = itemSize('yard', it);
+      flatRect(ox + it.x + 0.06, oy + it.y + 0.1, w - 0.02, d - 0.02, 'rgba(40,60,20,.16)');
+    });
+  }
+  const NO_SHADOW = new Set(['flowers', 'hedge', 'tree', 'pine', 'arch', 'pool', 'fountain', 'campfire']);
+  // Furniture shadow on the floor: a little bigger than the footprint and pushed towards the front (light from the back window).
+  function furnShadow(it) {
+    const [w, d] = itemSize('room', it);
+    flatRect(it.x + 0.03, it.y + 0.06, w + 0.02, d + 0.04, 'rgba(70,40,15,.15)');
+    flatRect(it.x + 0.08, it.y + 0.1, w - 0.1, d - 0.1, 'rgba(70,40,15,.1)');
   }
   function fenceObjs(h, ox, oy, objs) {
     const pr = pastureRect(h), f = fine();
@@ -509,7 +529,7 @@ const Scene = (() => {
       if (!live) { if (e.y >= LOT_D && !e.path.length) e.path = planPath(e, lotNav(h), 3.5, 12.5, 2) || []; wander(e, dt, speedOf(h), en => randomWalk(en, lotNav(h))); }
       objs.push({ d: ox + oy + e.x + e.y, f: () => {
         const p = iso(ox + e.x, oy + e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && !e.wave, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() });
         if (live && f) liveBadge(p, h.live, false);
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
@@ -531,7 +551,7 @@ const Scene = (() => {
   }
   function drawMe(ox, oy, ts, focus) {
     const z = cam.z, p = iso(ox + me.x, oy + me.y), pose = mePose();
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() });
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() });
     if (S.live) liveBadge(p, S.live, true);
     if (focus) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
     if (mode === 'home' && !S.live && (me.jobs.length || me.cur)) {   // little marker on where you're heading
@@ -676,29 +696,80 @@ const Scene = (() => {
     drawGlows();
   }
 
-  // ---------- inside ----------
-  // Staircase in the back-right corner: steps going up, or on the top storey the opening with a railing.
-  function drawStairs(h, lv, goesUp, ts) {
-    const s = stairsRect(h), z = cam.z, wood = '#b07a4a', n = 7, stepH = 84 / n;
-    if (goesUp) {
-      for (let k = 0; k < n; k++) {
-        const bx = s.x + k * s.w / n;
-        box(bx, s.y, s.w / n + 0.01, s.d, (k + 1) * stepH, k % 2 ? shade(wood, 0.06) : wood, 0, { edge: 'rgba(0,0,0,.12)' });
-      }
-      // railing along the open side
-      const a = up(iso(s.x + 0.05, s.y + s.d), 26 * z), b = up(iso(s.x + s.w, s.y + s.d), (84 + 22) * z);
-      for (let k = 0; k <= 3; k++) { const p = lerp(up(iso(s.x + 0.05, s.y + s.d), stepH * z), up(iso(s.x + s.w, s.y + s.d), 84 * z), k / 3); line(p.x, p.y, p.x, p.y - 22 * z, '#7a4f2e', 1.4 * z); }
-      line(a.x, a.y, b.x, b.y, '#7a4f2e', 2.2 * z);
-    } else {
-      flatRect(s.x, s.y, s.w, s.d, '#4a3a2e');
-      for (let k = 1; k < 4; k++) flatRect(s.x + k * s.w / 4 - 0.02, s.y + 0.05, 0.04, s.d - 0.1, 'rgba(255,255,255,.18)');
-      const rail = (ax, ay, bx, by) => { const p = up(iso(ax, ay), 18 * z), q = up(iso(bx, by), 18 * z); line(p.x, p.y, q.x, q.y, '#7a4f2e', 2 * z); };
-      [[s.x, s.y + s.d], [s.x + s.w * 0.5, s.y + s.d], [s.x + s.w, s.y + s.d]].forEach(([px, py]) => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 18 * z, '#7a4f2e', 1.4 * z); });
-      rail(s.x, s.y + s.d, s.x + s.w, s.y + s.d); rail(s.x, s.y, s.x, s.y + s.d);
-    }
+  // ---------- inside: stairs ----------
+  // The flight up: 7 steps rising towards the right wall, with a railing on the open side.
+  const STAIR_H = 84, STAIR_DOWN = 62;
+  function drawFlight(s, lv, ts) {
+    const z = cam.z, wood = '#b07a4a', n = 7, stepH = STAIR_H / n;
+    for (let k = 0; k < n; k++) box(s.x + k * s.w / n, s.y, s.w / n + 0.01, s.d, (k + 1) * stepH, k % 2 ? shade(wood, 0.06) : wood, 0, { edge: 'rgba(0,0,0,.12)' });
     const c = iso(s.x + s.w / 2, s.y + s.d / 2);
-    if (!edit) hits.push({ kind: 'stairs', pri: 1, x0: c.x - 40 * z, x1: c.x + 40 * z, y0: c.y - (goesUp ? 90 : 30) * z, y1: c.y + 16 * z });
-    pill(goesUp ? `⬆ ${lv + 2}F` : `⬇ ${lv}F`, c.x, c.y - (goesUp ? 92 : 24) * z, 'rgba(255,253,248,.92)', '#7a4f2e', `bold ${Math.max(10, 11 * z)}px ${UI_FONT}`, Math.max(16, 18 * z));
+    if (!edit) hits.push({ kind: 'stairs', dir: 1, pri: 1, x0: c.x - 40 * z, x1: c.x + 40 * z, y0: c.y - 90 * z, y1: c.y + 16 * z });
+  }
+  function drawFlightRail(s, lv) {
+    const z = cam.z, stepH = STAIR_H / 7;
+    const a = up(iso(s.x + 0.05, s.y + s.d), 26 * z), b = up(iso(s.x + s.w, s.y + s.d), (STAIR_H + 22) * z);
+    for (let k = 0; k <= 3; k++) { const p = lerp(up(iso(s.x + 0.05, s.y + s.d), stepH * z), up(iso(s.x + s.w, s.y + s.d), STAIR_H * z), k / 3); line(p.x, p.y, p.x, p.y - 22 * z, '#7a4f2e', 1.4 * z); }
+    line(a.x, a.y, b.x, b.y, '#7a4f2e', 2.2 * z);
+    const c = iso(s.x + s.w / 2, s.y + s.d / 2);
+    pill(`⬆ ${lv + 2}F`, c.x, c.y - 96 * z, 'rgba(255,253,248,.95)', '#7a4f2e', `bold ${Math.max(10, 11 * z)}px ${UI_FONT}`, Math.max(16, 18 * z));
+  }
+  // The opening down: a hole in the floor with steps going down to the left (flat, drawn under everything).
+  function drawOpening(s) {
+    const z = cam.z;
+    flatRect(s.x, s.y, s.w, s.d, '#3c2f25');
+    for (let k = 0; k < 6; k++) flatRect(s.x + 0.12 + k * (s.w - 0.24) / 6, s.y + 0.08, (s.w - 0.24) / 6 - 0.04, s.d - 0.16, shade('#6b4f39', -k * 0.08));
+    const c = iso(s.x + s.w / 2, s.y + s.d / 2);
+    if (!edit) hits.push({ kind: 'stairs', dir: -1, pri: 1, x0: c.x - 40 * z, x1: c.x + 40 * z, y0: c.y - 30 * z, y1: c.y + 16 * z });
+  }
+  function drawOpeningRail(s, lv) {
+    const z = cam.z, rail = (ax, ay, bx, by) => { const p = up(iso(ax, ay), 18 * z), q = up(iso(bx, by), 18 * z); line(p.x, p.y, q.x, q.y, '#7a4f2e', 2 * z); };
+    [[s.x, s.y + s.d], [s.x + s.w * 0.5, s.y + s.d], [s.x, s.y]].forEach(([px, py]) => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 18 * z, '#7a4f2e', 1.4 * z); });
+    rail(s.x, s.y + s.d, s.x + s.w * 0.5, s.y + s.d); rail(s.x, s.y, s.x, s.y + s.d);
+    const c = iso(s.x + s.w / 2, s.y + s.d / 2);
+    pill(`⬇ ${lv}F`, c.x, c.y - 26 * z, 'rgba(255,253,248,.95)', '#7a4f2e', `bold ${Math.max(10, 11 * z)}px ${UI_FONT}`, Math.max(16, 18 * z));
+  }
+  // Taking the stairs: walk to them, climb (or go down into the opening), the floor changes, then you arrive
+  // on the other storey (coming down the flight, or rising out of the opening). onSwitch changes LEVEL.
+  let floorFade = 0;
+  function takeStairs(dir, onSwitch, onArrive) {
+    if (mode !== 'interior') return false;
+    const h = homeOf(owner), r = stairsRects(h, viewLv(h)).find(s => s.kind === (dir > 0 ? 'up' : 'down'));
+    if (!r) return false;
+    cancel(meIn); meIn.anim = null;
+    const spot = stairsSpot(h, r.kind);
+    const climb = () => {
+      meIn.anim = dir > 0
+        ? { pts: [[r.x + 0.3, 0.55, 0], [r.x + 1.85, 0.55, STAIR_H]], fade: 'out', speed: 1.5 }
+        : { pts: [[r.x + 1.7, 0.55, 0], [r.x + 0.3, 0.55, -STAIR_DOWN]], clip: r, fade: 'out', speed: 1.5 };
+      meIn.anim.done = () => { onSwitch(); arriveStairs(dir, onArrive); };
+    };
+    meIn.jobs.push({ key: 'stairs', spot: () => spot, dur: 0, reach: 1.6, done: climb, fail: climb });
+    return true;
+  }
+  function arriveStairs(dir, onArrive) {
+    const h = homeOf(owner), lv = viewLv(h), rs = stairsRects(h, lv);
+    meIn.lv = lv; meIn.room = owner; meIn.seat = 0; meIn.useId = null; cancel(meIn);
+    floorFade = performance.now();
+    const r = rs.find(s => s.kind === (dir > 0 ? 'down' : 'up'));
+    if (!r) { [meIn.x, meIn.y, meIn.face] = stairsSpot(h); if (onArrive) onArrive(); return; }
+    if (dir > 0) { meIn.x = r.x + 0.3; meIn.y = 0.55; meIn.lift = -STAIR_DOWN; meIn.anim = { pts: [[r.x + 1.7, 0.55, 0], [r.x + 1.5, r.y + r.d + 0.45, 0]], clip: r, fade: 'in', speed: 1.5 }; }
+    else { meIn.x = r.x + 1.85; meIn.y = 0.55; meIn.lift = STAIR_H; meIn.anim = { pts: [[r.x + 0.3, 0.55, 0], [r.x + 0.5, r.y + r.d + 0.45, 0]], fade: 'in', speed: 1.5 }; }
+    meIn.anim.done = onArrive;
+  }
+  // Moves along the stairs animation; the height changes evenly with the distance walked.
+  function stepAnim(a, dt) {
+    const an = a.anim;
+    const [tx, ty, tl] = an.pts[0], dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy), st = an.speed * dt;
+    a.lift = a.lift || 0;
+    if (dist <= st) { a.x = tx; a.y = ty; a.lift = tl; an.pts.shift(); }
+    else { const k = st / dist; a.x += dx * k; a.y += dy * k; a.lift += (tl - a.lift) * k; }
+    if (Math.abs(dx - dy) > 0.02) a.face = dx - dy > 0 ? 1 : -1;
+    if (Math.abs(dx + dy) > 0.02) a.back = dx + dy < 0;
+    a.phase += dt * 11; a.moving = true;
+    an.t = (an.t || 0) + dt;
+    if (an.fade === 'in') a.alpha = Math.min(1, an.t / 0.35);
+    else a.alpha = an.pts.length === 1 ? Math.min(1, Math.hypot(an.pts[0][0] - a.x, an.pts[0][1] - a.y) / 0.6) : 1;
+    if (!an.pts.length) { a.anim = null; a.moving = false; a.lift = 0; a.alpha = 1; if (an.done) an.done(); }
   }
   function renderInterior(ts, dt) {
     const h = homeOf(owner), [rw, rd] = roomSize(h), z = cam.z, WH = 92, lv = viewLv(h), room = roomAt(h, lv), top = floorsOf(h) - 1;
@@ -747,8 +818,11 @@ const Scene = (() => {
     }
     if (lv > 0 || top > 0) pill(`${lv + 1}F`, iso(0.4, 0.4).x, iso(0.4, 0.4).y - (WH - 10) * z, 'rgba(59,49,37,.78)', '#fff', `bold ${Math.max(10, 12 * z)}px ${UI_FONT}`, Math.max(16, 20 * z));
     if (edit && edit.scope === 'room') for (let j = 0; j < rd; j++) for (let i = 0; i < rw; i++) tile(i, j, null, 'rgba(255,255,255,.45)');
-    const objs = [];
-    if (hasStairs(h)) { const s = stairsRect(h); objs.push({ d: s.x + s.y + (s.w + s.d) / 2 - 0.2, f: () => drawStairs(h, lv, lv < top, ts) }); }
+    const objs = [], stairs = stairsRects(h, lv), upR = stairs.find(s => s.kind === 'up');
+    stairs.forEach(s => {
+      if (s.kind === 'down') { drawOpening(s); objs.push({ d: s.x + s.y + 1.6, f: () => drawOpeningRail(s, lv) }); }
+      else { objs.push({ d: s.x + s.y + 1.3, f: () => drawFlight(s, lv, ts) }); objs.push({ d: s.x + s.y + 1.45, f: () => drawFlightRail(s, lv) }); }
+    });
     room.items.forEach(it => {
       if (edit && edit.hold && edit.hold.id === it.id) return;
       const [w, dd] = itemSize('room', it), flat = FURN[it.k].flat;
@@ -764,21 +838,34 @@ const Scene = (() => {
       wander(e, dt, speedOf(h) * 0.7, en => randomWalk(en, roomNav(h), 4, 99));
       objs.push({ d: e.x + e.y, f: () => {
         const p = iso(e.x, e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: 1, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && e.moving, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: 1, wave: e.wave > performance.now() });
         if (!edit) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
-    if (meIn.room !== owner) { cancel(meIn); meIn.room = owner; meIn.lv = lv; meIn.x = 0.6; meIn.y = rd * 0.9; meIn.face = 1; }
-    if (meIn.lv !== lv) { cancel(meIn); meIn.lv = lv; meIn.seat = 0; meIn.useId = null; [meIn.x, meIn.y, meIn.face] = stairsSpot(h); }
-    objs.push({ d: meIn.x + meIn.y + (meIn.seat ? 0.7 : 0), f: () => {
+    if (meIn.room !== owner) { cancel(meIn); meIn.anim = null; meIn.room = owner; meIn.lv = lv; meIn.x = 0.6; meIn.y = rd * 0.9; meIn.face = 1; }
+    if (meIn.lv !== lv) { cancel(meIn); meIn.anim = null; meIn.lv = lv; meIn.seat = 0; meIn.useId = null; [meIn.x, meIn.y, meIn.face] = stairsSpot(h); }
+    // on the stairs: after the steps but before their railing (inside the opening: before its railing)
+    const onStairs = meIn.anim && meIn.y < 1, clipR = onStairs && meIn.anim.clip;
+    const meD = clipR ? clipR.x + clipR.y + 1.4 : onStairs && upR ? upR.x + upR.y + 1.38 : meIn.x + meIn.y + (meIn.seat ? 0.7 : 0);
+    objs.push({ d: meD, f: () => {
       const p = iso(meIn.x, meIn.y), pose = meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
-      const it = meIn.useId && room.items.find(x => x.id === meIn.useId);
-      drawPerson(p.x, p.y - (meIn.seat || 0) * z, z, { look: S.me.look, face: meIn.face, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint });
+      const it = meIn.useId && room.items.find(x => x.id === meIn.useId), lift = meIn.lift || 0;
+      ctx.save();
+      if (meIn.alpha < 1) ctx.globalAlpha = Math.max(0, meIn.alpha);
+      if (meIn.anim && meIn.anim.clip && lift < 0) {   // going down into the opening: hide what's below the floor
+        const r = meIn.anim.clip, a = iso(r.x - 0.2, r.y + r.d), b = iso(r.x + r.w, r.y + r.d);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(b.x, b.y - 400); ctx.lineTo(a.x, a.y - 400); ctx.closePath(); ctx.clip();
+      }
+      drawPerson(p.x, p.y - ((meIn.seat || 0) + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint });
+      ctx.restore();
       if (S.live) liveBadge(p, S.live, true);
       if (!edit) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
     } });
+    room.items.forEach(it => { if (!FURN[it.k].flat && !(edit && edit.hold && edit.hold.id === it.id)) furnShadow(it); });
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
     drawGlows();
+    const fa = 1 - (performance.now() - floorFade) / 450;   // a soft flash when you arrive on another storey
+    if (fa > 0) { ctx.fillStyle = `rgba(255,248,235,${fa * 0.55})`; ctx.fillRect(0, 0, W, H); }
     if (edit && edit.scope === 'room') editOverlay(ts);
   }
 
@@ -846,7 +933,7 @@ const Scene = (() => {
       return;
     }
     runActor(me, () => lotNav(h), dt, ts, speedOf(S.me));
-    if (mode === 'interior') runActor(meIn, () => roomNav(homeOf(owner)), dt, ts, speedOf(S.me) * 0.8);
+    if (mode === 'interior') { if (meIn.anim) stepAnim(meIn, dt); else runActor(meIn, () => roomNav(homeOf(owner)), dt, ts, speedOf(S.me) * 0.8); }
   }
   function meInLake() { return me.livePose === 'swim' && !!S.live && inLake(...lakeWorld()); }
   function lakeWorld() { const [ox, oy] = origin(me.lot); return [ox + me.x, oy + me.y]; }
@@ -886,7 +973,9 @@ const Scene = (() => {
 
   // ---------- input ----------
   const inside = (h, sx, sy) => sx >= h.x0 && sx <= h.x1 && sy >= h.y0 && sy <= h.y1;
+  let lastTap = { x: 0, y: 0 };
   function tap(sx, sy) {
+    lastTap = { x: sx, y: sy };
     useCam();
     if (edit) {
       if (edit.hold) { hover = { x: sx, y: sy }; const o = holdOrigin(sx, sy); return onHit({ kind: 'place', x: o.x, y: o.y }); }
@@ -1002,7 +1091,7 @@ const Scene = (() => {
   }
   function go(tg, o = {}) {
     if (S.live) return false;
-    if (tg.kind === 'furn' || tg.kind === 'floor' || tg.kind === 'exit' || tg.kind === 'stairs') return goInside(tg, o);
+    if (tg.kind === 'furn' || tg.kind === 'floor' || tg.kind === 'exit') return goInside(tg, o);
     const spot = spotFor(tg);
     if (!spot) return false;
     const key = tg.kind + ':' + (tg.i ?? tg.id ?? '');
@@ -1023,7 +1112,6 @@ const Scene = (() => {
     let spot, pose = o.pose, dur = o.dur || 0, start = null;
     if (tg.kind === 'floor') spot = () => [tg.x, tg.y, 0];
     else if (tg.kind === 'exit') spot = () => [0.5, roomSize(h)[1] * 0.9, -1];
-    else if (tg.kind === 'stairs') { const sp = stairsSpot(h); spot = () => sp; }
     else {
       const it = viewRoom(h).items.find(x => x.id === tg.id);
       if (!it) return false;
@@ -1140,6 +1228,14 @@ const Scene = (() => {
         drawPerson(b.x, b.y, z * 1.1, { look: { shirt: '#ec6aa8', skin: SKINS[0], hair: 'long', hairCol: '#2b1d14', mob: 'walk' }, face: -1, energy: 'good', ts, seed: 2, wave: true });
       }
     },
+    // Round avatar: head and shoulders, big enough to stay sharp in the HUD and lists.
+    face(k, o, w, h) {
+      cam = { x: 0, y: 0, z: 1 };
+      const s = h / 22, g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#fff6e8'); g.addColorStop(1, '#ffe2c2');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      drawPerson(w / 2 - 0.4 * s, h * 0.52 + 30 * s, s, { look: o.look, face: 1, energy: o.energy || 'good', ts: 0, seed: 0 });
+    },
     person(k, o, w, h) {
       cam = { x: 0, y: 0, z: 1 };
       drawPerson(w / 2, h * 0.9, h * 0.78 / 46, { look: o.look, face: 1, energy: o.energy || 'good', ts: o.ts || 0, seed: 0, moving: !!o.moving, phase: o.phase || 0, pose: o.pose });
@@ -1167,7 +1263,7 @@ const Scene = (() => {
   function thumb(kind, k, o = {}, w = 120, h = 96) {
     const id = kind + ':' + k + ':' + JSON.stringify(o) + ':' + w + 'x' + h;
     if (thumbCache.has(id) && !o.live) return thumbCache.get(id);
-    const c = o.canvas || document.createElement('canvas'), dpr = 2;
+    const c = o.canvas || document.createElement('canvas'), dpr = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
     c.width = w * dpr; c.height = h * dpr;
     const saved = [ctx, cam, GLOWS, NIGHT];
     ctx = c.getContext('2d'); ctx.scale(dpr, dpr); GLOWS = []; NIGHT = 0;
@@ -1217,7 +1313,9 @@ const Scene = (() => {
       if (!p || p.x < 0 || p.y < 0 || p.x > W || p.y > H) return null;
       return { x: p.x, y: p.y, r: Math.max(20, r) };
     },
-    levelChanged() { meIn.lv = -1; },
+    levelChanged() { meIn.lv = -1; meIn.anim = null; floorFade = performance.now(); },
+    takeStairs,
+    onStairs: () => !!meIn.anim,
     setView(m, o = 'me') {
       if (m === mode && o === owner) return;
       const wasInterior = mode === 'interior';
@@ -1230,6 +1328,7 @@ const Scene = (() => {
       follow = !!S.live && m === 'home' && o === me.lot;
     },
     view: () => ({ mode, owner }),
+    tapAt: () => lastTap,
     recenter() { if (!W) return; useCam(); if (mode === 'interior') frameView(true); else if (mode === 'home' && S.live) follow = true; else frameView(false); },
     startEdit(scope) { edit = { scope, hold: null, sel: null }; cancel(me); },
     stopEdit() { edit = null; },

@@ -5,7 +5,8 @@
 // ---------- townies ----------
 // A pose is a skeleton. Hips, torso, arms and head are in the body frame, which moves up and down by `lift`
 // (crouching is a negative lift). Knees and feet are in the ground frame, so feet stay planted.
-// `air` lifts the whole person (jumping). o: { look, face: 1|-1, moving, phase, pose, energy, ts, seed, wave }
+// `air` lifts the whole person (jumping). o: { look, face: 1|-1, back, moving, phase, pose, energy, ts, seed, wave }
+// face: which way the townie looks on screen (1 = right). back: walking away from the camera, so we see the back of the head.
 function skeleton(pose, o) {
   const ts = o.ts || 0, seed = o.seed || 0, ph = o.phase || 0;
   const tired = o.energy === 'tired' || o.energy === 'exhausted';
@@ -148,10 +149,11 @@ function drawPerson(sx, sy, s, o) {
     ctx.beginPath(); ctx.moveTo(-5.2, -9); ctx.lineTo(-5.2, top + 4); ctx.quadraticCurveTo(-5.2, top, -1, top); ctx.lineTo(1, top); ctx.quadraticCurveTo(5.2, top, 5.2, top + 4); ctx.lineTo(5.2, -9); ctx.closePath();
     ctx.fillStyle = shirt; ctx.fill();
     rrect(-5.2, -11.5, 10.4, 2.6, 1, shade(pants, -0.05));
-    line(-2.2, top + 0.3, 2.6, top + 0.3, shade(shirt, 0.35), 1.1);
+    if (o.back) line(-0.6, top + 2, -0.6, -10, shade(shirt, -0.12), 0.8);   // back seam instead of the collar
+    else line(-2.2, top + 0.3, 2.6, top + 0.3, shade(shirt, 0.35), 1.1);
     ctx.restore();
     if (k.legFront) leg2(k.legs[1], pants, lift, lean);
-    head(k.head[0] + lean, k.head[1] - lift, L, energy, ts, seed, pose);
+    head(k.head[0] + lean, k.head[1] - lift, L, energy, ts, seed, o.back);
     limb2(B(k.arms[1].s), B(k.arms[1].e), B(k.arms[1].h), shirt, skin);
     drawProp(k, ts, B);
   });
@@ -184,8 +186,22 @@ function drawProp(k, ts, B) {
 }
 
 // Mood shows on the face only: eyes, mouth, dark circles. Body shape never changes.
-function head(cx, cy, L, energy, ts, seed) {
+// back: seen from behind (walking away): hair, an ear and the nape, no face.
+function backHead(cx, cy, L, r) {
+  const hc = L.hairCol;
+  circle(cx, cy, r, L.skin);
+  ctx.fillStyle = hc;
+  ctx.beginPath(); ctx.arc(cx, cy, r + 0.5, Math.PI * 0.82, Math.PI * 2.18); ctx.closePath(); ctx.fill();
+  ellipse(cx - 0.8, cy + 2.2, r * 0.82, r * 0.62, hc);
+  ellipse(cx + r - 0.6, cy + 0.8, 1.3, 1.9, shade(L.skin, -0.06));            // ear
+  if (L.hair === 'long') rrect(cx - 6.6, cy - 1, 12.2, 11, 4.5, hc);
+  if (L.hair === 'bun') { circle(cx - 0.6, cy - r - 2, 3.4, hc); circle(cx - 0.6, cy - r - 2, 1.2, shade(hc, 0.15)); }
+  if (L.hair === 'curly') for (let k = 0; k <= 8; k++) { const a = Math.PI * 0.85 + k / 8 * Math.PI * 1.3; circle(cx + Math.cos(a) * (r + 0.4), cy + Math.sin(a) * (r + 0.4), 2.5, hc); }
+  if (L.hair === 'short') ellipse(cx - 1, cy - r + 1.4, 4.4, 1.6, shade(hc, 0.12), null, 0, -0.15);
+}
+function head(cx, cy, L, energy, ts, seed, back) {
   const r = 6.8, hc = L.hairCol;
+  if (back) return backHead(cx, cy, L, r);
   circle(cx, cy, r, L.skin);
   ellipse(cx - 5.6, cy + 0.5, 1.4, 2, shade(L.skin, -0.08));
   ctx.fillStyle = hc;
@@ -245,7 +261,7 @@ function drawWheelPerson(sx, sy, s, o, pose) {
     line(-1, -11.5, 6.5, -11.5, L.pants || '#4a5a78', 4);
     line(6.5, -11.5, 7.8, -3.5, L.pants || '#4a5a78', 3.4);
     ellipse(8.8, -2.6, 2.4, 1.4, '#3b3028');
-    head(0.4, -32.5, L, energy, ts, seed);
+    head(0.4, -32.5, L, energy, ts, seed, o.back);
     ctx.restore();
     circle(-0.5, -8, 8, null, '#3b3f46', 2);
     for (let k = 0; k < 4; k++) { const a = (moving ? roll : 0) + k * Math.PI / 4; line(-0.5 - Math.cos(a) * 7, -8 - Math.sin(a) * 7, -0.5 + Math.cos(a) * 7, -8 + Math.sin(a) * 7, '#8a919c', 0.6); }

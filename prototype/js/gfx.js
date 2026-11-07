@@ -7,7 +7,7 @@ let cam = { x: 0, y: 0, z: 1 };
 let NIGHT = 0;     // 0 = day, 1 = night: windows and lamps light up
 let GLOWS = [];    // light sources collected while drawing, painted over the night tint
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-const UI_FONT = '-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif';
+const UI_FONT = 'ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif';
 
 // ---------- math ----------
 const iso = (x, y) => ({ x: (x - y) * TW / 2 * cam.z + cam.x, y: (x + y) * TH / 2 * cam.z + cam.y });

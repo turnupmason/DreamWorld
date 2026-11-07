@@ -382,6 +382,16 @@ Object.assign(STR.en, {
 });
 
 // Letters friends write (prototype only; real letters come from real friends).
+// ---------- v0.5 ----------
+Object.assign(STR.zh, {
+  sub_all: '全部', rank_n: '第 {n} 名', letter_short: '寄到 TA 家的邮箱', peek_short: '看看屋里', visit_short: '去 TA 家看看', social_free_short: '送点小东西',
+  snack_blocks_way: '这样放会挡住路，小人走不过去',
+});
+Object.assign(STR.en, {
+  sub_all: 'All', rank_n: 'No. {n}', letter_short: 'Lands in their mailbox', peek_short: 'Look inside', visit_short: 'Go to their home', social_free_short: 'Send something small',
+  snack_blocks_way: 'That would block the way; your townie could not get through',
+});
+
 const LETTER_TPL = {
   zh: {
     friend: ['今天在湖边散步，看到一群小鸭子。你那边天气好吗？', '你家的菜长得真好，教教我怎么种！', '周末一起去湖边散步吗？', '我昨晚睡得特别好，今天精神满满！',

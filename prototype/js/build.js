@@ -208,6 +208,11 @@ const CAR_SPEC = {
   jeep:        { len: 1.8, wid: 0.95, body: 12,  cab: [0.25, 1.15], cabH: 10, lift: 3, lights: true, big: true },
   sports:      { len: 1.9, wid: 0.92, body: 6.5, cab: [0.55, 0.72], cabH: 6, spoiler: true },
   pickup:      { len: 2.0, wid: 0.95, body: 11,  cab: [1.0, 0.66],  cabH: 9, bed: true },
+  luxury:      { len: 2.3, wid: 0.92, body: 8.5, cab: [0.6, 1.05],  cabH: 7.5, chrome: true },
+  muscle:      { len: 2.0, wid: 0.95, body: 7.5, cab: [0.7, 0.62],  cabH: 6, stripes: true, spoiler: true },
+  supercar:    { len: 2.0, wid: 1.0,  body: 5.5, cab: [0.62, 0.66], cabH: 5, spoiler: true, low: true },
+  minivan:     { len: 2.1, wid: 0.95, body: 10,  cab: [0.25, 1.6],  cabH: 12 },
+  boxtruck:    { len: 2.4, wid: 1.0,  body: 7,   cab: [1.6, 0.72],  cabH: 12, cargo: [0.05, 1.5, 24] },
 };
 function carWheel(face, base, u, big) {
   const p = wallPt(face, base, u, 0), z = cam.z, k = big ? 1.35 : 1;
@@ -230,7 +235,14 @@ function drawCar(c, x, y, ts) {
   wallRect(b.right, base, 0, 1, s.body * 0.45, s.body * 0.45 + 1, shade(col, 0.25));
   if (s.big) wallRect(b.right, base, 0, 1, 0, 3, '#3a3a3a');
   if (s.bed) flatRect(cx + 0.08, y + 0.08, s.wid - 0.16, 0.86, shade(col, -0.4), null, base + s.body);
+  if (s.stripes) { wallRect(b.right, base, 0, 1, s.body * 0.3, s.body * 0.55, '#fff'); flatRect(cx + s.wid * 0.38, y, s.wid * 0.24, s.len, '#fff', null, base + s.body); }
+  if (s.chrome) wallRect(b.right, base, 0, 1, 1, 2.2, '#e8edf2');
   const top = base + s.body;
+  if (s.cargo) {   // box truck: a tall cargo box behind the cab
+    const cb = box(cx + 0.02, y + s.cargo[0], s.wid - 0.04, s.cargo[1], s.cargo[2], '#f4f1ea', top);
+    wallRect(cb.right, top, 0.1, 0.9, 6, 16, col);
+    wallRect(cb.left, top, 0.1, 0.9, 3, s.cargo[2] - 3, '#e6e1d6', '#cfc8bb', 0.8);
+  }
   if (s.open) {
     // windshield, then two seats in the open cabin
     box(cx + 0.08, y + s.cab[0] + s.cab[1] - 0.06, s.wid - 0.16, 0.05, 6, '#bfe1f2', top, { left: 'rgba(150,200,230,.6)', right: 'rgba(170,215,240,.6)', top: '#ddd' });
@@ -1023,6 +1035,78 @@ function drawFurn2(it, x, y, w, d, rot, tint, ts) {
       box(x + 0.12, y + 0.35, 0.45, 0.45, 3, carpet, 24);
       box(x + 0.35, y + 0.2, 0.5, 0.5, 3, carpet, 44);
       const p = P(0.6, 0.45, 47); ellipse(p.x, p.y, 5 * z, 2 * z, shade(carpet, -0.15));
+      break;
+    }
+    case 'singlebed': case 'bunkbed': {
+      const head = rot ? [x + 0.04, y + 0.06, 0.12, d - 0.12] : [x + 0.06, y + 0.04, w - 0.12, 0.12];
+      const pillow = rot ? [x + 0.2, y + 0.2, 0.5, w - 0.4] : [x + 0.2, y + 0.2, w - 0.4, 0.5];
+      const quilt = rot ? [x + 0.72, y + 0.1, w - 0.82, d - 0.2] : [x + 0.1, y + 0.72, w - 0.2, d - 0.82];
+      const deck = (base) => {
+        box(x + 0.08, y + 0.08, w - 0.16, d - 0.16, 7, WOOD, base);
+        box(x + 0.12, y + 0.12, w - 0.24, d - 0.24, 3, '#fbfbf7', base + 7);
+        box(pillow[0], pillow[1], pillow[2], pillow[3], 2.5, '#fff', base + 10);
+        box(quilt[0], quilt[1], quilt[2], quilt[3], 4, tint, base + 7);
+      };
+      if (it.k === 'bunkbed') {
+        [[0.06, 0.06], [w - 0.16, 0.06], [0.06, d - 0.16], [w - 0.16, d - 0.16]].forEach(([u, v]) => box(x + u, y + v, 0.1, 0.1, 50, DARKWOOD));
+        deck(4); deck(30);
+        const s = rot ? frontFace(x, y, w, d, rot) : frontFace(x, y, w, d, rot);
+        for (let k = 0; k < 4; k++) wallLine(s, 0, 0.78, 10 + k * 7, 0.96, 10 + k * 7, DARKWOOD, 1);
+        wallLine(s, 0, 0.78, 4, 0.78, 38, DARKWOOD, 1.1); wallLine(s, 0, 0.96, 4, 0.96, 38, DARKWOOD, 1.1);
+      } else {
+        box(head[0], head[1], head[2], head[3], 24, DARKWOOD);
+        deck(2);
+      }
+      break;
+    }
+    case 'tablelamp': case 'sidetable': {
+      legs(x + 0.24, y + 0.24, 0.52, 0.52, 12, DARKWOOD, 0.02);
+      box(x + 0.22, y + 0.22, 0.56, 0.56, 2.5, WOOD, 12);
+      if (it.k === 'tablelamp') {
+        const p = P(0.5, 0.5, 14.5);
+        line(p.x, p.y, p.x, p.y - 8 * z, '#8a8f96', 1.1 * z);
+        pg([[p.x - 5 * z, p.y - 7 * z], [p.x + 5 * z, p.y - 7 * z], [p.x + 3.2 * z, p.y - 14 * z], [p.x - 3.2 * z, p.y - 14 * z]], NIGHT > 0.3 ? '#ffe7a6' : '#fff1cf', '#e2cf9e', 0.6 * z);
+        GLOWS.push({ x: p.x, y: p.y - 10 * z, r: 34 * z, a: 0.25 + NIGHT * 0.5 });
+      } else {
+        const p = P(0.42, 0.5, 14.5);
+        rrect(p.x - 5 * z, p.y - 2.5 * z, 8 * z, 2.4 * z, 0.6 * z, '#4f8ef7'); rrect(p.x - 4.5 * z, p.y - 4.6 * z, 7 * z, 2.2 * z, 0.6 * z, '#ef6f6c');
+        const q = P(0.7, 0.45, 14.5); rrect(q.x - 1.8 * z, q.y - 4 * z, 3.6 * z, 4 * z, 1 * z, '#fffaf0');
+      }
+      break;
+    }
+    case 'arclamp': {
+      box(x + 0.15, y + 0.6, 0.26, 0.26, 3, '#3a3f46');
+      const a = P(0.28, 0.73, 3), top = P(0.4, 0.55, 46), tip = P(0.72, 0.32, 34);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(a.x - 2 * z, top.y - 6 * z, tip.x, tip.y - 4 * z);
+      ctx.strokeStyle = '#3a3f46'; ctx.lineWidth = 1.6 * z; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(tip.x, tip.y, 5 * z, Math.PI, 0); ctx.closePath(); ctx.fillStyle = '#e8b94a'; ctx.fill();
+      ellipse(tip.x, tip.y, 5 * z, 1.4 * z, NIGHT > 0.3 ? '#fff3c4' : '#fff8e0');
+      GLOWS.push({ x: tip.x, y: tip.y + 12 * z, r: 50 * z, a: 0.3 + NIGHT * 0.6 });
+      break;
+    }
+    case 'roundrug': {
+      const ring = (r, col, h) => { const pts = []; for (let k = 0; k < 28; k++) { const a = k / 28 * Math.PI * 2; pts.push(up(iso(x + w / 2 + Math.cos(a) * r, y + d / 2 + Math.sin(a) * r), h * z)); } poly(pts, col); };
+      ring(Math.min(w, d) / 2 - 0.06, tint, 0.4); ring(Math.min(w, d) / 2 - 0.3, shade(tint, 0.3), 0.5); ring(Math.min(w, d) / 2 - 0.55, tint, 0.6); ring(0.18, shade(tint, -0.2), 0.7);
+      break;
+    }
+    case 'bigrug': {
+      flatRect(x + 0.08, y + 0.08, w - 0.16, d - 0.16, tint, null, 0.4);
+      flatRect(x + 0.2, y + 0.2, w - 0.4, d - 0.4, null, shade(tint, 0.5), 0.5, 1.6 * z);
+      const n = rot ? d : w;
+      for (let k = 1; k < n * 2; k++) {
+        const u = k / (n * 2);
+        if (rot) flatRect(x + 0.3, y + 0.2 + (d - 0.4) * u - 0.04, w - 0.6, 0.08, shade(tint, k % 2 ? 0.2 : -0.12), null, 0.5);
+        else flatRect(x + 0.2 + (w - 0.4) * u - 0.04, y + 0.3, 0.08, d - 0.6, shade(tint, k % 2 ? 0.2 : -0.12), null, 0.5);
+      }
+      break;
+    }
+    case 'roundtable': {
+      box(x + 0.44, y + 0.44, 0.12, 0.12, 16, DARKWOOD);
+      box(x + 0.32, y + 0.32, 0.36, 0.36, 1.5, DARKWOOD);
+      const pts = []; for (let k = 0; k < 24; k++) { const a = k / 24 * Math.PI * 2; pts.push(up(iso(x + 0.5 + Math.cos(a) * 0.42, y + 0.5 + Math.sin(a) * 0.42), 18 * z)); }
+      const edge = pts.map(p => ({ x: p.x, y: p.y + 2.2 * z }));
+      poly(edge, shade(WOOD, -0.2)); poly(pts, WOOD);
+      const v = P(0.5, 0.5, 18); rrect(v.x - 2 * z, v.y - 7 * z, 4 * z, 7 * z, 1.5 * z, '#5aa2e0'); circle(v.x - 1.5 * z, v.y - 9 * z, 2.2 * z, '#ef6f6c'); circle(v.x + 1.8 * z, v.y - 9.5 * z, 2 * z, '#f3d36b');
       break;
     }
     case 'shoerack': {

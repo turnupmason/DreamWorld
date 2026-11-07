@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.4.1';
+const VERSION = '0.5.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -192,6 +192,14 @@ const FURN = {
   aquarium:  { zh: '鱼缸',       en: 'Aquarium',         w: 2, d: 1, price: 400 },
   fireplace: { zh: '壁炉',       en: 'Fireplace',        w: 2, d: 1, price: 600 },
   piano:     { zh: '钢琴',       en: 'Piano',            w: 2, d: 1, price: 900 },
+  singlebed: { zh: '单人床',     en: 'Single bed',       w: 1, d: 2, price: 120, tint: true, use: 'sit' },
+  bunkbed:   { zh: '双层床',     en: 'Bunk bed',         w: 1, d: 2, price: 260, tint: true, use: 'sit' },
+  tablelamp: { zh: '台灯小几',   en: 'Table lamp',       w: 1, d: 1, price: 55 },
+  arclamp:   { zh: '弧形落地灯', en: 'Arc floor lamp',   w: 1, d: 1, price: 110 },
+  roundrug:  { zh: '圆地毯',     en: 'Round rug',        w: 2, d: 2, price: 75,  tint: true, flat: true },
+  bigrug:    { zh: '大地毯',     en: 'Large rug',        w: 3, d: 2, price: 130, tint: true, flat: true },
+  roundtable:{ zh: '圆桌',       en: 'Round table',      w: 1, d: 1, price: 85 },
+  sidetable: { zh: '边几',       en: 'Side table',       w: 1, d: 1, price: 45 },
   // souvenirs: can't be bought, only earned in real life (see SOUVENIRS)
   shoerack:  { zh: '跑鞋架',     en: 'Sneaker rack',     w: 1, d: 1, price: 0, souv: true },
   moonlamp:  { zh: '月亮夜灯',   en: 'Moon lamp',        w: 1, d: 1, price: 0, souv: true },
@@ -256,8 +264,69 @@ const CARS = {
   sports:      { zh: '跑车',       en: 'Sports car',    cost: { coins: 9000 } },
   tractor:     { zh: '拖拉机',     en: 'Tractor',       cost: { coins: 3000 } },
   camper:      { zh: '房车',       en: 'Camper van',    cost: { coins: 15000 } },
+  luxury:      { zh: '豪华轿车',   en: 'Luxury sedan',  cost: { coins: 7500 } },
+  muscle:      { zh: '肌肉车',     en: 'Muscle car',    cost: { coins: 6500 } },
+  supercar:    { zh: '超级跑车',   en: 'Supercar',      cost: { coins: 20000 } },
+  minivan:     { zh: '面包车',     en: 'Minivan',       cost: { coins: 2800 } },
+  boxtruck:    { zh: '厢式卡车',   en: 'Box truck',     cost: { coins: 6000 } },
 };
 const CAR_COLORS = ['#e5484d', '#f59e0b', '#f2d24b', '#34b27b', '#2f80ed', '#a46ef0', '#f4f4f0', '#2d2d2d'];
+
+// ---------- shop: second-level categories ----------
+// Every big category is split again so the list never gets too long. keys: what goes in it ('*' = everything left).
+const SHOP_SUBS = {
+  seeds: [
+    { id: 'grain', e: '🌾', zh: '粮食', en: 'Grains', keys: ['wheat', 'corn', 'potato', 'sweetpotato'] },
+    { id: 'veg', e: '🥕', zh: '蔬菜', en: 'Veggies', keys: ['carrot', 'onion', 'garlic', 'cabbage', 'broccoli', 'tomato', 'cucumber', 'eggplant', 'chili', 'pepper', 'pumpkin'] },
+    { id: 'fruit', e: '🍓', zh: '水果', en: 'Fruit', keys: ['strawberry', 'blueberry', 'watermelon', 'grape', 'melon'] },
+    { id: 'flower', e: '🌷', zh: '花', en: 'Flowers', keys: ['tulip', 'rose', 'sunflower'] },
+  ],
+  animals: [
+    { id: 'poultry', e: '🐔', zh: '家禽', en: 'Poultry', keys: ['chicken', 'duck'] },
+    { id: 'farm', e: '🐮', zh: '家畜', en: 'Livestock', keys: ['rabbit', 'sheep', 'goat', 'pig', 'cow', 'alpaca'] },
+    { id: 'pets', e: '🐕', zh: '宠物', en: 'Pets', keys: ['dog', 'cat'] },
+  ],
+  furn: [
+    { id: 'bed', e: '🛏️', zh: '床', en: 'Beds', keys: ['sleepbag', 'singlebed', 'bed', 'bunkbed', 'nightstand', 'wardrobe'] },
+    { id: 'seat', e: '🛋️', zh: '沙发椅子', en: 'Seating', keys: ['sofa', 'armchair', 'beanbag', 'rocker', 'chair'] },
+    { id: 'table', e: '🪑', zh: '桌子', en: 'Tables', keys: ['coffeetable', 'table', 'roundtable', 'sidetable', 'desk'] },
+    { id: 'lamp', e: '💡', zh: '灯', en: 'Lamps', keys: ['lamp', 'arclamp', 'tablelamp'] },
+    { id: 'rug', e: '🟫', zh: '地毯', en: 'Rugs', keys: ['rug', 'roundrug', 'bigrug'] },
+    { id: 'kitchen', e: '🍳', zh: '厨房浴室', en: 'Kitchen & bath', keys: ['fridge', 'stove', 'kitchen', 'washer', 'bathtub'] },
+    { id: 'fit', e: '🏋️', zh: '健身', en: 'Fitness', keys: ['treadmill', 'spinbike', 'dumbbells', 'boxing', 'yogamat'] },
+    { id: 'fun', e: '🎸', zh: '娱乐爱好', en: 'Hobbies', keys: ['tv', 'guitar', 'drums', 'record', 'easel', 'piano', 'aquarium'] },
+    { id: 'decor', e: '🪴', zh: '装饰', en: 'Decor', keys: ['plant', 'monstera', 'shelf', 'grandclock', 'fireplace', 'cattree'] },
+    { id: 'souv', e: '✨', zh: '纪念品', en: 'Souvenirs', keys: [] },
+  ],
+  yard: [
+    { id: 'plants', e: '🌳', zh: '花草树木', en: 'Plants', keys: ['flowers', 'hedge', 'tree', 'pine', 'arch'] },
+    { id: 'leisure', e: '🪑', zh: '休闲', en: 'Leisure', keys: ['bench', 'swing', 'hammock', 'picnic', 'campfire', 'bbq'] },
+    { id: 'kids', e: '🛝', zh: '儿童', en: 'Play', keys: ['slide', 'trampoline'] },
+    { id: 'farmy', e: '🌾', zh: '农场', en: 'Farm', keys: ['scarecrow', 'beehive', 'well', 'windmill', 'doghouse'] },
+    { id: 'water', e: '⛲', zh: '水景', en: 'Water', keys: ['birdbath', 'fountain', 'pool'] },
+    { id: 'deco', e: '💡', zh: '灯和摆件', en: 'Lights & decor', keys: ['lamp', 'gnome'] },
+  ],
+  cars: [
+    { id: 'two', e: '🚲', zh: '两轮', en: 'Two wheels', keys: ['bike', 'scooter', 'vespa', 'motorcycle', 'sportbike'] },
+    { id: 'car', e: '🚗', zh: '轿车', en: 'Cars', keys: ['mini', 'sedan', 'luxury', 'convertible'] },
+    { id: 'suv', e: '🚙', zh: 'SUV 越野', en: 'SUV', keys: ['suv', 'jeep'] },
+    { id: 'sport', e: '🏎️', zh: '跑车', en: 'Sports', keys: ['sports', 'muscle', 'supercar'] },
+    { id: 'truck', e: '🚚', zh: '卡车', en: 'Trucks', keys: ['pickup', 'boxtruck', 'tractor'] },
+    { id: 'van', e: '🚐', zh: '面包车房车', en: 'Vans', keys: ['minivan', 'camper'] },
+  ],
+  houses: [
+    { id: 'small', e: '⛺', zh: '小屋', en: 'Small', keys: ['tent', 'cabin', 'cottage'] },
+    { id: 'family', e: '🏠', zh: '家庭', en: 'Family', keys: ['twostory', 'modern', 'villa'] },
+    { id: 'grand', e: '🏰', zh: '豪华', en: 'Grand', keys: ['chinese', 'mansion', 'castle'] },
+  ],
+  sell: [
+    { id: 'crops', e: '🥕', zh: '作物', en: 'Crops', keys: [] },
+    { id: 'goods', e: '🥚', zh: '畜产品', en: 'Animal goods', keys: [] },
+    { id: 'fruits', e: '🍎', zh: '水果', en: 'Fruit', keys: [] },
+    { id: 'fish', e: '🐟', zh: '鱼虾', en: 'Fish', keys: [] },
+    { id: 'babies', e: '🐣', zh: '幼崽', en: 'Babies', keys: [] },
+  ],
+};
 
 // ---------- real life: screen time ----------
 const APPS = [

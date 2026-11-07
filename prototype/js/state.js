@@ -42,6 +42,10 @@ function migrate() {
     if (h.shareLive === undefined) h.shareLive = !!h.shareGoal;
     if (h.shareMood === undefined) h.shareMood = h.id !== 'me' && !!h.shareGoal;
   });
+  if (S.layoutV !== 2) {   // v0.5: furniture must be reachable; re-arrange the simulated friends' rooms once
+    S.friends.forEach(h => { for (let lv = 0; lv < floorsOf(h); lv++) relayoutRoom(h, lv); });
+    S.layoutV = 2;
+  }
 }
 function save() { if (S) localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); }
 
@@ -102,7 +106,7 @@ function newGame(o) {
     v: 3, lang: o.lang, apps: o.apps, limitMin: o.limitMin, timeOffset: 0,
     created: Date.now(), seenHint: false, welcomed: false, pending: [], feed: [],
     mail: { inbox: [], sent: [] }, sleep: null, vitals: { resp: 14.5, rhr: 61, hrv: 48 }, live: null, native: false,
-    onboarding: !!o.preview, tut: 0, calm: false, souv: [], stepGoal: STEP_GOAL, hist: [],
+    onboarding: !!o.preview, tut: 0, calm: false, souv: [], stepGoal: STEP_GOAL, hist: [], layoutV: 2,
     stats: { days: 1, goalDays: 0, sleepStreak: 0, ringsAll: 0, focus120: 0, mindful: 0, workouts: 0 },
   };
   S.today = freshDay();
@@ -545,9 +549,43 @@ function ensureUps(h) {
 function roomAt(h, lv) { if (!lv) return h.room; ensureUps(h); return h.ups[lv - 1] || h.room; }
 const lvOf = (h, lv) => Math.min(lv === undefined ? (h === S.me ? LEVEL : 0) : lv, floorsOf(h) - 1);
 function curRoom(h, lv) { return roomAt(h, lvOf(h, lv)); }
-// The staircase sits in the back-right corner of every storey once there is more than one.
-function stairsRect(h) { const [rw] = roomSize(h); return { x: rw - 2, y: 0, w: 2, d: 1 }; }
+// Stairs along the back wall, in the right corner: on a storey with one above, the flight going up ('up', rising
+// towards the right wall); on a storey with one below, the opening where you go down ('down'), just left of it.
+function stairsRects(h, lv) {
+  const n = floorsOf(h);
+  if (n < 2) return [];
+  lv = Math.min(lv === undefined ? lvOf(h) : lv, n - 1);
+  const [rw] = roomSize(h), out = [];
+  if (lv < n - 1) out.push({ kind: 'up', x: rw - 2, y: 0, w: 2, d: 1 });
+  if (lv > 0) out.push({ kind: 'down', x: rw - 4, y: 0, w: 2, d: 1 });
+  return out;
+}
 const hasStairs = h => floorsOf(h) > 1;
+const overlaps = (r, x, y, w, d) => x < r.x + r.w && x + w > r.x && y < r.y + r.d && y + d > r.y;
+// Your townie must be able to reach everything: from the front door (ground floor) or the top of the stairs
+// (upstairs), every piece of furniture needs a free tile next to it, and the stairs need a free tile in front.
+function roomReachable(h, lv, items) {
+  const [rw, rd] = roomSize(h), g = new Uint8Array(rw * rd).fill(1);
+  const block = (x, y, w, d) => { for (let j = y; j < y + d; j++) for (let i = x; i < x + w; i++) if (i >= 0 && j >= 0 && i < rw && j < rd) g[j * rw + i] = 0; };
+  const solid = items.filter(it => !FURN[it.k].flat), st = stairsRects(h, lv);
+  solid.forEach(it => { const [w, d] = itemSize('room', it); block(it.x, it.y, w, d); });
+  st.forEach(r => block(r.x, r.y, r.w, r.d));
+  const down = st.find(r => r.kind === 'down'), entry = down ? [down.x + 1, down.y + down.d] : [0, rd - 1];
+  const seen = new Uint8Array(rw * rd), q = [];
+  const push = (x, y) => { if (x >= 0 && y >= 0 && x < rw && y < rd && g[y * rw + x] && !seen[y * rw + x]) { seen[y * rw + x] = 1; q.push([x, y]); } };
+  push(entry[0], entry[1]);
+  if (!q.length) return false;
+  for (let k = 0; k < q.length; k++) { const [x, y] = q[k]; push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1); }
+  const ok = (x, y) => x >= 0 && y >= 0 && x < rw && y < rd && seen[y * rw + x];
+  const nextTo = (x, y, w, d) => {
+    for (let i = x; i < x + w; i++) if (ok(i, y - 1) || ok(i, y + d)) return true;
+    for (let j = y; j < y + d; j++) if (ok(x - 1, j) || ok(x + w, j)) return true;
+    return false;
+  };
+  return solid.every(it => { const [w, d] = itemSize('room', it); return nextTo(it.x, it.y, w, d); })
+    && st.every(r => ok(r.x, r.y + r.d) || ok(r.x + 1, r.y + r.d));
+}
+let PLACE_WHY = '';   // why the last canPlace said no: 'space' or 'block' (would block the way)
 function floorCost(h, n = floorsOf(h) + 1) {
   const [rw, rd] = roomSize(h), H = HOUSES[h.house], k = Math.pow(FLOOR_BUILD.grow, n - H.floors[0] - 1);
   return { coins: Math.round(rw * rd * FLOOR_BUILD.coinsPerTile * k / 50) * 50, wood: Math.round(rw * rd * FLOOR_BUILD.woodPerTile * k) };
@@ -596,27 +634,37 @@ function yardReserved(x, y) {
 function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
   const def = itemDef(scope, k);
   const [w, d] = rot ? [def.d, def.w] : [def.w, def.d];
+  PLACE_WHY = 'space';
   if (scope === 'room') {
     const [rw, rd] = roomSize(h);
     if (x < 0 || y < 0 || x + w > rw || y + d > rd) return false;
-    if (hasStairs(h)) { const s = stairsRect(h); if (x < s.x + s.w && x + w > s.x && y < s.y + s.d && y + d > s.y) return false; }
+    if (stairsRects(h, lv).some(r => overlaps(r, x, y, w, d))) return false;
   } else {
     for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) if (yardReserved(x + i, y + j)) return false;
   }
-  for (const it of list || scopeItems(h, scope, lv)) {
-    if (it.id === ignoreId) continue;
+  const others = (list || scopeItems(h, scope, lv)).filter(it => it.id !== ignoreId);
+  for (const it of others) {
     if (scope === 'room' && !!itemDef(scope, it.k).flat !== !!def.flat) continue; // rugs can sit under furniture
     const [iw, id] = itemSize(scope, it);
     if (x < it.x + iw && x + w > it.x && y < it.y + id && y + d > it.y) return false;
   }
+  if (scope === 'room' && !def.flat && !roomReachable(h, lvOf(h, lv), [...others, { k, x, y, rot }])) { PLACE_WHY = 'block'; return false; }
   return true;
+}
+// Lays a room out again from scratch (used for simulated friends whose old layouts blocked the way).
+function relayoutRoom(h, lv) {
+  const r = roomAt(h, lv), items = r.items.slice().sort((a, b) => (FURN[b.k].w * FURN[b.k].d) - (FURN[a.k].w * FURN[a.k].d));
+  r.items = [];
+  items.forEach(it => autoPlace(h, 'room', it.k, it.tint, lv));
 }
 // Preferred spots: inside, along the back walls first; outside, the front yard near the path first.
 function roomSpots(h, flat) {
   const [rw, rd] = roomSize(h), out = [];
   for (let y = 0; y < rd; y++) for (let x = 0; x < rw; x++) out.push([x, y]);
   if (flat) return out.sort((a, b) => Math.hypot(a[0] - rw / 2 + 1, a[1] - rd / 2 + 1) - Math.hypot(b[0] - rw / 2 + 1, b[1] - rd / 2 + 1));
-  return out.sort((a, b) => Math.min(a[0], a[1]) - Math.min(b[0], b[1]) || (a[0] + a[1]) - (b[0] + b[1]));
+  // furniture goes along the walls first (all four sides), keeping the middle of the room free to walk
+  const edge = ([x, y]) => Math.min(x, y, rw - 1 - x, rd - 1 - y);
+  return out.sort((a, b) => edge(a) - edge(b) || (a[0] + a[1]) - (b[0] + b[1]));
 }
 let YARD_SPOTS = null;
 function yardSpots() {
