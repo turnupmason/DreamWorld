@@ -147,12 +147,14 @@ function drawPerson(sx, sy, s, o) {
   ellipse(sx, sy, (8 - air * 0.5) * s, (3.4 - air * 0.2) * s, 'rgba(0,0,0,.18)');
   const pants = L.pants || '#4a5a78', shirt = L.shirt, skin = L.skin, lean = k.lean, lift = k.lift;
   const B = p => [p[0] + lean, p[1] - lift];
+  const BD = bodyOf(L);
   local(sx, sy, s, o.face || 1, () => {
     if (k.prop === 'mat') pg([[-9, 0.5], [9, 0.5], [7, 2.5], [-11, 2.5]], o.matCol || '#8b7fe0');
     ctx.translate(0, -air);
+    ctx.scale(BD.w, BD.h);   // v0.18: the body's build
     limb2(B(k.arms[0].s), B(k.arms[0].e), B(k.arms[0].h), shade(shirt, -0.2), skin);
-    leg2(k.legs[0], shade(pants, -0.18), lift, lean);
-    if (!k.legFront) leg2(k.legs[1], pants, lift, lean);
+    leg2(k.legs[0], shade(pants, -0.18), lift, lean, L);
+    if (!k.legFront) leg2(k.legs[1], pants, lift, lean, L);
     ctx.save(); ctx.translate(lean, -lift);
     const top = k.top;
     if (L.hair === 'long') rrect(-7.4, top - 13, 12, 17, 5, L.hairCol);
@@ -162,20 +164,74 @@ function drawPerson(sx, sy, s, o) {
     ctx.quadraticCurveTo(5.6, top, 5.5, top + 4.4); ctx.lineTo(5.2, -8.6); ctx.quadraticCurveTo(0, -7.6, -5, -8.6); ctx.closePath();
     ctx.fillStyle = shirt; ctx.fill();
     ctx.save(); ctx.clip(); rrect(-6, top - 1, 3, 20, 1, shade(shirt, -0.12)); ctx.restore();
-    rrect(-5.2, -11.6, 10.4, 2.6, 1, shade(pants, -0.08));   // belt
-    if (!o.back) rrect(1.6, -11.5, 2.2, 2.3, 0.5, '#d9b44a');   // buckle
+    const TOP = wearing(L, 'top'), BOT = wearing(L, 'bottom');
+    if (TOP === 'dress') skirtShape(shirt); else if (BOT === 'skirt') skirtShape(pants);
+    if (TOP === 'hoodie') ellipse(-4.2, top + 1.2, 3.6, 2.6, shade(shirt, -0.12));   // the hood at the back
+    if (TOP === 'jacket') rrect(1.6, top + 0.5, 3.8, -top - 9.6, 1, shade(shirt, -0.18));
+    if (TOP !== 'dress') rrect(-5.2, -11.6, 10.4, 2.6, 1, shade(pants, -0.08));   // belt
+    if (!o.back && TOP !== 'dress') rrect(1.6, -11.5, 2.2, 2.3, 0.5, '#d9b44a');   // buckle
     if (o.back) line(-0.6, top + 2, -0.6, -10, shade(shirt, -0.12), 0.8);   // back seam instead of the collar
     else {
       ctx.beginPath(); ctx.moveTo(-1.6, top + 0.2); ctx.lineTo(1.4, top + 2.4); ctx.lineTo(3.8, top + 0.2); ctx.strokeStyle = shade(shirt, 0.35); ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.stroke();   // collar
       rrect(1.4, top + 4.2, 2.6, 2.4, 0.6, shade(shirt, -0.08));   // pocket
     }
     ctx.restore();
-    if (k.legFront) leg2(k.legs[1], pants, lift, lean);
-    head(k.head[0] + lean, k.head[1] - lift, L, energy, ts, seed, o.back);
+    if (k.legFront) leg2(k.legs[1], pants, lift, lean, L);
+    unscaled(k.head[0] + lean, k.head[1] - lift, BD, () => { head(k.head[0] + lean, k.head[1] - lift, L, energy, ts, seed, o.back); hat(k.head[0] + lean, k.head[1] - lift, L, true); });
     limb2(B(k.arms[1].s), B(k.arms[1].e), B(k.arms[1].h), shirt, skin);
     drawProp(k, ts, B);
   });
   sleepyZ(sx, sy, s, energy, ts, seed, 40 + air);
+}
+// ---------- bodies and clothes (v0.18) ----------
+const bodyOf = L => BODY_TYPES[(L && L.body) || 'regular'] || BODY_TYPES.regular;
+const wearing = (L, slot) => (L && L[slot]) || { top: 'tshirt', bottom: 'jeans', shoes: 'sneakers', hat: 'nohat' }[slot];
+// The head keeps its size on a wider / taller body.
+function unscaled(cx, cy, B, fn) { ctx.save(); ctx.translate(cx, cy); ctx.scale(1 / B.w, 1 / B.h); ctx.translate(-cx, -cy); fn(); ctx.restore(); }
+// A hat on a head at (cx, cy) (radius 6.8). side: drawn in the side view (the brim points forwards, +x).
+function hat(cx, cy, L, side, turn = 0) {
+  const k = wearing(L, 'hat'), col = L.hatCol || '#e5484d';
+  if (k === 'nohat') return;
+  if (k === 'cap') {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy - 0.6, 7.3, Math.PI * 1.04, Math.PI * 1.96); ctx.closePath(); ctx.fill();
+    if (side) ellipse(cx + 6.4, cy - 3.9, 4.6, 1.3, shade(col, -0.15)); else ellipse(cx + turn * 3, cy - 3.6, 6.5, 1.8, shade(col, -0.15));
+    circle(cx, cy - 7.6, 0.9, shade(col, 0.2));
+  } else if (k === 'beanie') {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy - 0.4, 7.6, Math.PI, Math.PI * 2); ctx.closePath(); ctx.fill();
+    rrect(cx - 7.6, cy - 2.4, 15.2, 2.8, 1.2, shade(col, -0.18));
+    for (let i = -3; i <= 3; i++) line(cx + i * 2, cy - 2.2, cx + i * 2, cy + 0.2, shade(col, -0.3), 0.5);
+    circle(cx, cy - 8.6, 2.2, '#fffaf0');
+  } else if (k === 'sunhat') {
+    ellipse(cx, cy - 3.2, 12, 3.6, shade(col, -0.08));
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy - 3.2, 6.6, Math.PI, Math.PI * 2); ctx.closePath(); ctx.fill();
+    rrect(cx - 6.6, cy - 4.8, 13.2, 1.6, 0.8, '#fffaf0');
+  }
+}
+// What a top looks like on the torso (drawn in the torso's own frame, front-on).
+function topDetails(L, shirt, back) {
+  const k = wearing(L, 'top');
+  if (k === 'hoodie' && !back) { line(-1.4, -22.6, -1.8, -18, '#fffaf0', 0.6); line(1.4, -22.6, 1.8, -18, '#fffaf0', 0.6); rrect(-3.6, -15.2, 7.2, 3.6, 1.4, shade(shirt, -0.1)); }
+  if (k === 'hoodie' && back) { ellipse(0, -21.6, 4.6, 2.6, shade(shirt, -0.12)); }
+  if (k === 'polo' && !back) { pg([[-2.8, -23.6], [0, -21], [-1, -24.2]], shade(shirt, 0.25)); pg([[2.8, -23.6], [0, -21], [1, -24.2]], shade(shirt, 0.25)); circle(0, -19.6, 0.45, '#fffaf0'); circle(0, -17.8, 0.45, '#fffaf0'); }
+  if (k === 'sweater') { for (let i = -5; i <= 5; i += 1.2) line(i, -11.8, i, -10.2, shade(shirt, -0.2), 0.5); if (!back) { ctx.beginPath(); ctx.arc(0, -23.4, 2.6, 0, Math.PI); ctx.strokeStyle = shade(shirt, -0.2); ctx.lineWidth = 0.9; ctx.stroke(); } }
+  if (k === 'jacket' && !back) { pg([[-1.2, -23.4], [1.2, -23.4], [1.2, -10], [-1.2, -10]], L.inner || '#f4f4f0'); line(-1.3, -23.2, -1.3, -10, shade(shirt, -0.3), 0.6); line(1.3, -23.2, 1.3, -10, shade(shirt, -0.3), 0.6); pg([[-1.3, -23.4], [-3.6, -21], [-1.3, -18.4]], shade(shirt, 0.18)); pg([[1.3, -23.4], [3.6, -21], [1.3, -18.4]], shade(shirt, 0.18)); }
+}
+// A skirt (or the skirt of a dress) over the hips.
+function skirtShape(col) { pg([[-5.6, -11], [5.6, -11], [7.6, -4.2], [-7.6, -4.2]], col); line(-7.4, -4.4, 7.4, -4.4, shade(col, -0.2), 0.8); }
+// The bottom of the legs: what the legs are made of (trousers, shorts: skin below the knee, skirts: bare legs).
+function legCols(L, pants, skin) {
+  const top = wearing(L, 'top'), b = wearing(L, 'bottom');
+  if (top === 'dress' || b === 'skirt') return { thigh: skin, calf: skin, hem: skin };
+  if (b === 'shorts') return { thigh: pants, calf: skin, hem: shade(pants, -0.18) };
+  return { thigh: pants, calf: pants, hem: null };
+}
+// Shoes in the side view (toe forwards).
+function shoeStyled(x, y, L) {
+  const k = wearing(L, 'shoes'), col = L.shoeCol || '#3b3028';
+  if (k === 'sandals') { ellipse(x + 1.2, y - 0.9, 2.8, 1, L.skin); rrect(x - 1.9, y - 0.4, 6, 0.8, 0.4, '#8a5a36'); line(x - 0.4, y - 1.6, x + 2.2, y - 0.6, '#8a5a36', 0.6); return; }
+  if (k === 'boots') { rrect(x - 1.8, y - 5.2, 4, 4.6, 1, col); }
+  if (k === 'hightops') { rrect(x - 1.9, y - 4, 3.6, 3.4, 1, col); line(x - 1.7, y - 3.6, x + 1.5, y - 3.6, '#f4efe6', 0.6); }
+  shoe(x, y, col);
 }
 // A limb segment: a capsule that is w0 wide at a and w1 wide at b (thigh, calf, upper arm, forearm).
 function seg(a, b, w0, w1, col) {
@@ -198,12 +254,14 @@ function shoe(x, y, col = '#3b3028') {
   line(x + 0.4, y - 2.4, x + 1.6, y - 2.1, 'rgba(255,255,255,.75)', 0.45);
 }
 // Legs: thigh and calf in the trousers, a darker hem, and a sneaker.
-function leg2(l, col, lift, lean) {
+function leg2(l, col, lift, lean, L) {
   const hip = [l.h[0] + lean * 0.5, l.h[1] - lift], knee = l.k, ankle = [l.f[0] + 0.2, l.f[1] - 1.8];
-  seg(hip, knee, 4.7, 3.9, col);
-  seg(knee, ankle, 3.9, 3.1, col);
-  seg(mixPt(knee, ankle, 0.82), ankle, 3.4, 3.3, shade(col, -0.18));
-  shoe(l.f[0], l.f[1]);
+  const C = L ? legCols(L, col, L.skin) : { thigh: col, calf: col, hem: null };
+  seg(hip, knee, 4.7, 3.9, C.thigh);
+  seg(knee, ankle, 3.9, 3.1, C.calf);
+  if (C.hem) seg(knee, mixPt(knee, ankle, 0.12), 4.1, 4, C.hem);
+  else if (C.calf !== (L && L.skin)) seg(mixPt(knee, ankle, 0.82), ankle, 3.4, 3.3, shade(col, -0.18));
+  if (L) shoeStyled(l.f[0], l.f[1], L); else shoe(l.f[0], l.f[1]);
 }
 // Arms: a short sleeve over the shoulder, bare arm below, a hand with a thumb.
 function limb2(sh, el, ha, sleeve, skin) {
@@ -249,22 +307,27 @@ function drawPersonFront(sx, sy, s, o, pose) {
   const pants = L.pants || '#4a5a78', shirt = L.shirt, skin = L.skin, stride = run ? 6 : 4.2, liftH = run ? 3 : 1.8;
   const G = (side, w, fwd) => [side * w * V[0] + fwd * F[0], side * w * V[1] + fwd * F[1]];   // a point on the ground
   ellipse(sx, sy, 8 * s, 3.4 * s, 'rgba(0,0,0,.18)');
+  const BD = bodyOf(L), LC = legCols(L, pants, skin);
   local(sx, sy, s, 1, () => {
     ctx.translate(0, -bounce);
+    ctx.scale(BD.w, BD.h);   // v0.18: the body's build
     // which side is further from the camera (drawn first)
     const farSide = V[1] < 0 ? 1 : -1, sides = [farSide, -farSide];
     const leg = side => {
       const u = side > 0 ? sw : -sw, f = G(side, 2.2, u * stride), lift = Math.max(0, u) * liftH;
       const hip = [side * 2.1 * V[0], -10 + side * 2.1 * V[1]], foot = [f[0], f[1] - lift + bounce], knee = mixPt(hip, foot, 0.5);
       knee[1] -= 0.6 + lift * 0.6; knee[0] += F[0] * 1.2;
-      const col = side === farSide ? shade(pants, -0.12) : pants;
-      seg(hip, knee, 4.6, 3.8, col); seg(knee, [foot[0], foot[1] - 1.4], 3.8, 3.1, col); seg([foot[0], foot[1] - 2.4], [foot[0], foot[1] - 1.4], 3.4, 3.3, shade(col, -0.18));
-      // a sneaker, pointing the way you walk
-      const tx = F[0] * 2.2, ty = F[1] * 2.2;
+      const dk = c => (side === farSide ? shade(c, -0.12) : c), ank = [foot[0], foot[1] - 1.4];
+      seg(hip, knee, 4.6, 3.8, dk(LC.thigh)); seg(knee, ank, 3.8, 3.1, dk(LC.calf));
+      if (LC.hem) seg(knee, mixPt(knee, ank, 0.14), 4, 3.9, dk(LC.hem));
+      else if (LC.calf !== skin) seg([foot[0], foot[1] - 2.4], ank, 3.4, 3.3, shade(dk(LC.calf), -0.18));
+      // a shoe, pointing the way you walk (sneakers, high-tops, boots or sandals)
+      const tx = F[0] * 2.2, ty = F[1] * 2.2, SH = wearing(L, 'shoes'), sc = L.shoeCol || '#3b3028';
+      if (SH === 'boots' || SH === 'hightops') seg([foot[0], foot[1] - (SH === 'boots' ? 5.4 : 3.8)], [foot[0], foot[1] - 1.2], 3.8, 3.6, SH === 'boots' ? sc : dk(sc));
       ctx.beginPath(); ctx.moveTo(foot[0] - tx * 0.6, foot[1] - 1.6 - ty * 0.6); ctx.lineTo(foot[0] + tx, foot[1] - 1.2 + ty);
-      ctx.strokeStyle = '#3b3028'; ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.strokeStyle = SH === 'sandals' ? skin : sc; ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(foot[0] - tx * 0.6, foot[1] - 0.3 - ty * 0.6); ctx.lineTo(foot[0] + tx, foot[1] - 0.1 + ty);
-      ctx.strokeStyle = '#f4efe6'; ctx.lineWidth = 1.1; ctx.stroke();
+      ctx.strokeStyle = SH === 'sandals' ? '#8a5a36' : '#f4efe6'; ctx.lineWidth = 1.1; ctx.stroke();
     };
     // arms swing forwards and back, opposite to the legs
     const arm = side => {
@@ -284,17 +347,21 @@ function drawPersonFront(sx, sy, s, o, pose) {
     ctx.beginPath(); ctx.moveTo(-5.4, -9.5); ctx.lineTo(-5.6, -20.5); ctx.quadraticCurveTo(-5.6, -23.6, -2, -23.6); ctx.lineTo(2, -23.6); ctx.quadraticCurveTo(5.6, -23.6, 5.6, -20.5); ctx.lineTo(5.4, -9.5); ctx.closePath();
     ctx.fillStyle = shirt; ctx.fill();
     if (V[0] < 0.95) { ctx.save(); ctx.clip(); rrect(farSide > 0 ? 3.4 : -6.2, -24, 2.8, 15, 1, shade(shirt, -0.12)); ctx.restore(); }
-    rrect(-5.4, -11.6, 10.8, 2.6, 1, shade(pants, -0.08));
+    const TOP = wearing(L, 'top'), BOT = wearing(L, 'bottom');
+    if (TOP === 'dress') skirtShape(shirt); else if (BOT === 'skirt') skirtShape(pants);
+    if (TOP !== 'dress') rrect(-5.4, -11.6, 10.8, 2.6, 1, shade(pants, -0.08));
+    topDetails(L, shirt, back);
     if (back) line(0, -21.5, 0, -11.8, shade(shirt, -0.12), 0.8);
     else {
-      ctx.beginPath(); ctx.moveTo(-2.6, -23.4); ctx.lineTo(0, -20.8); ctx.lineTo(2.6, -23.4); ctx.strokeStyle = shade(shirt, 0.35); ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.stroke();
-      rrect(-1.1, -11.5, 2.2, 2.3, 0.5, '#d9b44a');
-      rrect(1.2, -19.4, 2.6, 2.4, 0.6, shade(shirt, -0.08));
+      if (TOP === 'tshirt' || TOP === 'dress') { ctx.beginPath(); ctx.moveTo(-2.6, -23.4); ctx.lineTo(0, -20.8); ctx.lineTo(2.6, -23.4); ctx.strokeStyle = shade(shirt, 0.35); ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.stroke(); }
+      if (TOP !== 'dress') rrect(-1.1, -11.5, 2.2, 2.3, 0.5, '#d9b44a');
+      if (TOP === 'tshirt') rrect(1.2, -19.4, 2.6, 2.4, 0.6, shade(shirt, -0.08));
     }
     ctx.restore();
     arm(sides[1]);
     if (o.wave) { const w = Math.sin(ts / 140) * 2; line(5, -20.6, 7.5, -25, shirt, 3.2); line(7.5, -25, 8.5 + w, -31, skin, 2.5); circle(8.5 + w, -31, 1.7, skin); }
-    headFront(T * 0.9, -30.2 + (energy === 'exhausted' ? 1.2 : 0), L, energy, ts, seed, back, T);
+    const hy = -30.2 + (energy === 'exhausted' ? 1.2 : 0);
+    unscaled(T * 0.9, hy, BD, () => { if (wearing(L, 'top') === 'hoodie' && back) ellipse(T * 0.9, hy + 6, 6, 3, shade(shirt, -0.12)); headFront(T * 0.9, hy, L, energy, ts, seed, back, T); hat(T * 0.9, hy, L, false, T); });
   });
   sleepyZ(sx, sy, s, energy, ts, seed, 40 + bounce);
 }
@@ -440,7 +507,7 @@ function drawWheelPerson(sx, sy, s, o, pose) {
     line(-1, -11.5, 6.5, -11.5, L.pants || '#4a5a78', 4);
     line(6.5, -11.5, 7.8, -3.5, L.pants || '#4a5a78', 3.4);
     ellipse(8.8, -2.6, 2.4, 1.4, '#3b3028');
-    head(0.4, -32.5, L, energy, ts, seed, o.back);
+    head(0.4, -32.5, L, energy, ts, seed, o.back); hat(0.4, -32.5, L, true);
     ctx.restore();
     circle(-0.5, -8, 8, null, '#3b3f46', 2);
     for (let k = 0; k < 4; k++) { const a = (moving ? roll : 0) + k * Math.PI / 4; line(-0.5 - Math.cos(a) * 7, -8 - Math.sin(a) * 7, -0.5 + Math.cos(a) * 7, -8 + Math.sin(a) * 7, '#8a919c', 0.6); }
@@ -474,7 +541,7 @@ function drawRider(sx, sy, s, o) {
     ctx.save(); ctx.translate(-1, -14); ctx.rotate(0.25);
     rrect(-4.8, -13, 9.6, 13, 4, L.shirt);
     ctx.restore();
-    head(1.8, -32, L, energy, ts, o.seed || 0);
+    head(1.8, -32, L, energy, ts, o.seed || 0); hat(1.8, -32, L, true);
     limb2([1.5, -25], [4.5, -20], [7.5, -16.5], L.shirt, L.skin);
   });
 }

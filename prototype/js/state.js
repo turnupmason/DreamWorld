@@ -36,6 +36,13 @@ function migrate() {
   S.stats = Object.assign({ days: 1, goalDays: 0, sleepStreak: 0, ringsAll: 0, focus120: 0, mindful: 0, workouts: 0 }, S.stats || {});
   S.souv = S.souv || [];
   S.stepGoal = S.stepGoal || STEP_GOAL;
+  S.me.wardrobe = S.me.wardrobe || [...CLOTHES_FREE];   // v0.18: clothes you own
+  S.mall = Object.assign({ movies: [], foods: [], plush: [] }, S.mall || {});   // v0.18: films seen, food tried, plush won
+  S.friends.forEach(h => {
+    const pre = [...FRIEND_PRESETS, ...FRIEND_POOL].find(p => p.id === h.id);
+    if (pre && pre.look.body && !h.look.body) Object.assign(h.look, clone(pre.look), { shirt: h.look.shirt, skin: h.look.skin, hair: h.look.hair, hairCol: h.look.hairCol, mob: h.look.mob });
+    dressUp(h.look, h.id);
+  });
   S.hist = S.hist || [];
   [S.me, ...S.friends].forEach(h => {
     h.extra = h.extra || {}; h.ups = h.ups || [];
@@ -99,7 +106,7 @@ function emptyHome(id) {
 function homeFromPreset(p) {
   const h = emptyHome(p.id), t = now();
   Object.assign(h, {
-    name: clone(p.name), look: clone(p.look), coins: p.coins, wood: p.wood, house: p.house, houses: [p.house], wall: p.wall, roof: p.roof,
+    name: clone(p.name), look: dressUp(clone(p.look), p.id), coins: p.coins, wood: p.wood, house: p.house, houses: [p.house], wall: p.wall, roof: p.roof,
     likes: p.likes, shareGoal: p.shareGoal, shareLive: !!p.shareLive, shareMood: !!p.shareMood, earn: p.earn, simAt: t, energy: 60 + Math.round(Math.random() * 35),
   });
   h.room.wall = p.roomWall; h.room.floor = p.floor;
@@ -514,13 +521,34 @@ function stealable(h, i, who = 'me') {
 // Caught by a guard dog: you pay the owner a small fine (twice what you tried to take, 🪙10–60) and that dog
 // won't let you in again today. It's a prank with a price, not a loss of anything you grew.
 function dogFine(value) { return clamp(Math.round(value * 2), STEAL_FINE[0], STEAL_FINE[1]); }
-function caught(fid, value) {
-  const f = friendById(fid), fine = Math.min(S.me.coins, dogFine(value));
+// v0.18: a neighbour may see you too ('witness'); a baby animal, or the 3rd time in 7 days, brings the police.
+function catchRoll(h, dogChance) { return hasGuardDog(h) && Math.random() < dogChance ? 'dog' : Math.random() < POLICE.witness ? 'witness' : null; }
+function caught(fid, value, how = 'dog', baby = false) {
+  const f = friendById(fid);
+  S.record = (S.record || []).filter(r => now() - r.t < POLICE.strikeDays * DAY);
+  S.record.push({ t: now(), fid, baby });
+  const police = baby || S.record.length >= POLICE.strikes;
+  const fine = Math.min(S.me.coins, police ? clamp(Math.round(value * POLICE.fineMult), POLICE.fineMin, POLICE.fineMax) : dogFine(value));
   S.me.coins -= fine; f.coins += fine;
   S.today.chased = S.today.chased || {};
   S.today.chased[fid] = true;
-  return { r: 'dog', fine };
+  if (police) {
+    S.jail = { start: now(), end: now() + POLICE.jailMin * MIN, fid, fine, why: baby ? 'baby' : 'repeat' };
+    S.stats.jailed = (S.stats.jailed || 0) + 1;
+    S.record = [];   // a fresh start after the police
+  }
+  return { r: police ? 'police' : how, fine, by: how };
 }
+// In the holding cell right now (until the time is up or you pay bail).
+const jailed = () => !!(S && S.jail && !S.jail.out && now() < S.jail.end);
+function jailTick() { if (S.jail && !S.jail.out && now() >= S.jail.end) { S.jail.out = true; return true; } return false; }
+function payBail() {
+  if (!jailed()) return 'no';
+  if (S.me.coins < POLICE.bail) return 'poor';
+  S.me.coins -= POLICE.bail; S.jail.out = true; S.jail.bail = true;
+  return 'ok';
+}
+const strikes = () => (S.record || []).filter(r => now() - r.t < POLICE.strikeDays * DAY).length;
 // Shared checks for every kind of sneaking. Returns an error code or null.
 function sneakCheck(fid) {
   if (fid && S.today.chased && S.today.chased[fid]) return 'chased';
@@ -536,7 +564,7 @@ function steal(fid, i) {
   if (f.left <= stealKeep(f.crop)) return { r: 'empty' };
   const err = sneakCheck(fid); if (err) return { r: err };
   f.thieves.push('me');
-  if (hasGuardDog(h) && Math.random() < 0.35) return caught(fid, stealSize(f.crop) * CROPS[f.crop].sell);
+  { const c = catchRoll(h, 0.35); if (c) return caught(fid, stealSize(f.crop) * CROPS[f.crop].sell, c); }
   const n = Math.min(f.left - stealKeep(f.crop), stealSize(f.crop));
   f.left -= n;
   addBarn(S.me, f.crop, n);
@@ -550,7 +578,7 @@ function stealProduct(fid, aid) {
   if ((a.stolen || 0) >= ANIMALS[a.k].n - 1) return { r: 'empty' };
   const err = sneakCheck(fid); if (err) return { r: err };
   a.thieves.push('me');
-  if (hasGuardDog(h) && Math.random() < 0.35) return caught(fid, GOODS[ANIMALS[a.k].prod].sell);
+  { const c = catchRoll(h, 0.35); if (c) return caught(fid, GOODS[ANIMALS[a.k].prod].sell, c); }
   a.stolen = (a.stolen || 0) + 1;
   addBarn(S.me, ANIMALS[a.k].prod, 1);
   return { r: 'ok', k: ANIMALS[a.k].prod, n: 1 };
@@ -563,7 +591,7 @@ function stealFruit(fid, i) {
   if ((t.stolen || 0) >= Math.floor(TREES[t.k].n / 2)) return { r: 'empty' };
   const err = sneakCheck(fid); if (err) return { r: err };
   t.thieves.push('me');
-  if (hasGuardDog(h) && Math.random() < 0.35) return caught(fid, GOODS[TREES[t.k].fruit].sell);
+  { const c = catchRoll(h, 0.35); if (c) return caught(fid, GOODS[TREES[t.k].fruit].sell, c); }
   t.stolen = (t.stolen || 0) + 1;
   addBarn(S.me, TREES[t.k].fruit, 1);
   return { r: 'ok', k: TREES[t.k].fruit, n: 1 };
@@ -1455,7 +1483,7 @@ function crowdPerson(host, k) {
   const key = host + ':' + k;
   if (CROWD[key]) return CROWD[key];
   const r = seeded(idNum(key) * 7 + 3), pick = a => a[Math.floor(r() * a.length)];
-  return (CROWD[key] = { id: 'crowd', name: pick(NPC_NAMES), look: { shirt: pick(COLORS), skin: pick(SKINS), hair: pick(HAIRS), hairCol: pick(HAIR_COLORS), mob: r() < 0.08 ? 'wheel' : 'walk' } });
+  return (CROWD[key] = { id: 'crowd', name: pick(NPC_NAMES), look: dressUp({ shirt: pick(COLORS), skin: pick(SKINS), hair: pick(HAIRS), hairCol: pick(HAIR_COLORS), mob: r() < 0.08 ? 'wheel' : 'walk' }, key) });
 }
 
 // ---------- public places (v0.12) ----------
@@ -1697,7 +1725,7 @@ function stealBaby(fid, aid) {
   if (S.today.babies[fid]) return { r: 'done' };
   const err = sneakCheck(fid); if (err) return { r: err };
   S.today.babies[fid] = true;
-  if (hasGuardDog(h) && Math.random() < 0.45) return caught(fid, ANIMALS[a.k].sell[0]);
+  { const c = catchRoll(h, 0.45); if (c) return caught(fid, ANIMALS[a.k].sell[0], c, true); }
   h.animals.splice(h.animals.indexOf(a), 1);
   if (pastureCount() < pastureCap()) S.me.animals.push({ ...a, id: uid() }); else addBarn(S.me, 'baby_' + a.k, 1);
   S.stats.babies = (S.stats.babies || 0) + 1;
@@ -1721,5 +1749,51 @@ function moveArea(k, x, y, h = S.me) {
   h.areaAt = { ...(h.areaAt || {}), [k]: [x, y] };
   if (typeof yardKeepsWay === 'function' && !yardKeepsWay(h, h.yard)) { h.areaAt = old || undefined; if (!old) delete h.areaAt; return 'block'; }
   YARD_SPOTS = {};
+  return 'ok';
+}
+
+// ---------- clothes (v0.18) ----------
+function buyClothes(k, h = S.me) {
+  const c = CLOTHES[k];
+  if (!c) return 'none';
+  h.wardrobe = h.wardrobe || [...CLOTHES_FREE];
+  if (h.wardrobe.includes(k)) return 'own';
+  if (h.coins < c.price) return 'poor';
+  h.coins -= c.price; h.wardrobe.push(k);
+  wearClothes(k, h);
+  return 'ok';
+}
+function wearClothes(k, h = S.me) {
+  const c = CLOTHES[k];
+  if (!c || !(h.wardrobe || CLOTHES_FREE).includes(k)) return false;
+  h.look[c.slot] = k;
+  if (k === 'dress' && h.look.bottom === 'skirt') h.look.bottom = 'jeans';
+  return true;
+}
+
+// ---------- the mall (v0.18) ----------
+function watchMovie(k) {
+  if (!MALL.movies[k]) return 'no';
+  if (S.me.coins < MALL.movie) return 'poor';
+  S.me.coins -= MALL.movie;
+  if (!S.mall.movies.includes(k)) S.mall.movies.push(k);
+  return 'ok';
+}
+function clawTry() {
+  if (S.me.coins < MALL.claw) return { r: 'poor' };
+  S.me.coins -= MALL.claw;
+  if (Math.random() >= MALL.clawWin) return { r: 'miss' };
+  const all = Object.keys(MALL.plush), fresh = all.filter(k => !S.mall.plush.includes(k));
+  const k = (fresh.length && Math.random() < 0.7 ? fresh : all)[Math.floor(Math.random() * (fresh.length && Math.random() < 0.7 ? fresh.length : all.length))] || all[0];
+  const key = 'room:' + k; S.me.store[key] = (S.me.store[key] || 0) + 1;
+  if (!S.mall.plush.includes(k)) S.mall.plush.push(k);
+  return { r: 'win', k };
+}
+function eatFood(k) {
+  const f = MALL.foods[k];
+  if (!f) return 'no';
+  if (S.me.coins < f.price) return 'poor';
+  S.me.coins -= f.price;
+  if (!S.mall.foods.includes(k)) S.mall.foods.push(k);
   return 'ok';
 }

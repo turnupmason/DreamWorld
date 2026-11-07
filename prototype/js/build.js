@@ -529,6 +529,7 @@ function rugFringe(x, y, w, d, rot, tint) {
 }
 function drawFurn(it, x, y, ts) {
   if (it.k === 'trophycase') return drawTrophyCase(it, x, y);
+  if (FURN[it.k] && FURN[it.k].plush) return drawPlush(it.k, x, y);
   const k = it.k, rot = it.rot, tint = it.tint || '#8d99a6', [w, d] = furnSize(k, rot), z = cam.z;
   const B = (bx, by, bw, bd, h, col, base, o) => box(bx, by, bw, bd, h, col, base, o);
   switch (k) {
@@ -1867,9 +1868,9 @@ function drawTrophyCase(it, x, y) {
 function drawStore(k, x, y, w, d, ts) {
   const S2 = STORES[k], z = cam.z, c = iso(x + w / 2, y + d / 2), glassCol = NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5';
   ellipse(c.x, c.y + 6 * z, (w + d) * 9 * z, (w + d) * 4.5 * z, 'rgba(0,0,0,.07)');
-  const front = k === 'dealer' || k === 'nursery' || k === 'ranch' ? d * 0.42 : 0;   // a yard in front of some
+  const front = k === 'dealer' || k === 'nursery' || k === 'ranch' ? d * 0.42 : k === 'police' ? d * 0.34 : 0;   // a yard in front of some
   const bd = d - front, wh = k === 'mall' ? 52 : k === 'ranch' ? 26 : k === 'nursery' ? 24 : 30;
-  if (front) flatRect(x, y + bd, w, front, k === 'dealer' ? '#d4d0c8' : k === 'ranch' ? '#c8b083' : '#cfe3b6');
+  if (front) flatRect(x, y + bd, w, front, k === 'dealer' || k === 'police' ? '#d4d0c8' : k === 'ranch' ? '#c8b083' : '#cfe3b6');
   let b;
   if (k === 'nursery') {   // a greenhouse: glass walls, a glass ridge roof, plants inside
     b = box(x + 0.3, y, w - 0.6, bd, wh, 'rgba(200,235,220,.55)', 0, { left: 'rgba(190,230,215,.65)', right: 'rgba(170,215,200,.65)', top: 'rgba(220,245,235,.7)', edge: '#8fb9a6' });
@@ -1904,10 +1905,42 @@ function drawStore(k, x, y, w, d, ts) {
     if (k === 'realty') { const p = iso(x + w + 0.2, y + bd + 0.4); line(p.x, p.y, p.x, p.y - 16 * z, '#8a5a36', 1.6 * z); rrect(p.x - 8 * z, p.y - 20 * z, 16 * z, 8 * z, 1.5 * z, '#fffaf0', '#e5484d', 1 * z); }
     if (k === 'petshop') { const p = iso(x + w * 0.85, y + bd + 0.6); drawAnimal('dog', 2, p.x, p.y, z * 0.8, { face: -1, ts, seed: 4, breed: 'shiba' }); }
     if (k === 'furniture') { const p = wallPt(b.left, 0, 0.32, 6); rrect(p.x - 7 * z, p.y - 4 * z, 14 * z, 6 * z, 2 * z, '#e5734f'); }
+    if (k === 'police') {   // v0.18: a blue sign, a flag and lights on the roof
+      const p = wallPt(b.left, 0, 0.34, 15); rrect(p.x - 13 * z, p.y - 4 * z, 26 * z, 8 * z, 2 * z, '#2f5fb3');
+      if (z > 0.25) { ctx.fillStyle = '#fff'; ctx.font = `800 ${5.4 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(curLang() === 'zh' ? '警察' : 'POLICE', p.x, p.y + 0.3 * z); }
+      const on = Math.floor(ts / 500) % 2, r0 = up(iso(x + w * 0.35, y + bd * 0.5), (wh + 3) * z), r1 = up(iso(x + w * 0.5, y + bd * 0.5), (wh + 3) * z);
+      circle(r0.x, r0.y, 2.4 * z, on ? '#ff4d4d' : '#8a2a2a'); circle(r1.x, r1.y, 2.4 * z, on ? '#3a5fa8' : '#5aa2ff');
+      const fp = iso(x + w + 0.3, y + bd + 0.3); line(fp.x, fp.y, fp.x, fp.y - 34 * z, '#888', 1 * z); rrect(fp.x, fp.y - 34 * z, 11 * z, 7 * z, 0.5 * z, '#2f5fb3');
+    }
+  }
+  if (k === 'police') {   // a police car parked out front, its lights flashing
+    drawCarDir({ k: 'sedan', color: '#f4f4f0' }, x + w * 0.35, y + bd + front * 0.5, '+x', ts);
+    const lp = up(iso(x + w * 0.35, y + bd + front * 0.5), 15 * z), on = Math.floor(ts / 300) % 2;
+    rrect(lp.x - 4 * z, lp.y - 1.2 * z, 4 * z, 2.4 * z, 0.6 * z, on ? '#ff4d4d' : '#9a2a2a'); rrect(lp.x, lp.y - 1.2 * z, 4 * z, 2.4 * z, 0.6 * z, on ? '#2f6fe0' : '#7ab0ff');
   }
   if (k === 'dealer') ['sedan', 'suv', 'sports'].forEach((ck, i) => drawCarDir({ k: ck, color: ['#2f80ed', '#f4f4f0', '#e5484d'][i] }, x + 1.8 + i * 3, y + bd + front * 0.5, '+x', ts));
   if (NIGHT > 0.3) { const p = iso(x + w / 2, y + bd); glow(p.x, p.y - 10 * z, 60 * z, 0.9); }
   const s = up(iso(x + w / 2, y + bd / 2), (wh + (k === 'ranch' || k === 'nursery' ? 18 : 6)) * z);
   if (z > 0.1) pill(`${S2.e} ${nm(S2)}`, s.x, s.y, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
   return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 24 * z, y1: iso(x + w, y + d).y };
+}
+
+// v0.18: a plush toy sitting on the floor (won at the mall's claw machine)
+function drawPlush(k, x, y) {
+  const z = cam.z, c = iso(x + 0.5, y + 0.5);
+  const col = { plushbear: '#b07a4a', plushbunny: '#f4efe6', plushcat: '#f2a33a', plushdino: '#6cbf73', plushduck: '#f2d24b', plushpanda: '#fbfbf7' }[k] || '#b07a4a';
+  const dk = shade(col, -0.18), cx = c.x, by = c.y - 2 * z;
+  ellipse(cx, c.y, 9 * z, 4 * z, 'rgba(0,0,0,.15)');
+  if (k === 'plushdino') [[-6, -14], [-3, -18], [1, -19]].forEach(([dx, dy]) => pg([[cx + dx * z, by + (dy + 4) * z], [cx + (dx + 2) * z, by + (dy - 1) * z], [cx + (dx + 4) * z, by + (dy + 4) * z]], '#3f9a52'));
+  ellipse(cx, by - 6 * z, 7.5 * z, 7 * z, col);                      // body
+  ellipse(cx - 6 * z, by - 1 * z, 3 * z, 2.2 * z, dk); ellipse(cx + 6 * z, by - 1 * z, 3 * z, 2.2 * z, dk);   // feet
+  const hy = by - 16 * z;
+  if (k === 'plushbunny') { ellipse(cx - 2.6 * z, hy - 9 * z, 1.8 * z, 6 * z, col); ellipse(cx + 2.6 * z, hy - 9 * z, 1.8 * z, 6 * z, col); ellipse(cx - 2.6 * z, hy - 9 * z, 0.8 * z, 4 * z, '#f4a6b8'); ellipse(cx + 2.6 * z, hy - 9 * z, 0.8 * z, 4 * z, '#f4a6b8'); }
+  if (k === 'plushcat') { pg([[cx - 6 * z, hy - 2 * z], [cx - 5 * z, hy - 9 * z], [cx - 1.5 * z, hy - 5 * z]], col); pg([[cx + 6 * z, hy - 2 * z], [cx + 5 * z, hy - 9 * z], [cx + 1.5 * z, hy - 5 * z]], col); }
+  if (k === 'plushbear' || k === 'plushpanda') { circle(cx - 5 * z, hy - 5 * z, 2.6 * z, k === 'plushpanda' ? '#2d2d2d' : dk); circle(cx + 5 * z, hy - 5 * z, 2.6 * z, k === 'plushpanda' ? '#2d2d2d' : dk); }
+  circle(cx, hy, 6.4 * z, col);                                      // head
+  if (k === 'plushpanda') { ellipse(cx - 2.4 * z, hy, 1.8 * z, 2.2 * z, '#2d2d2d'); ellipse(cx + 2.4 * z, hy, 1.8 * z, 2.2 * z, '#2d2d2d'); }
+  circle(cx - 2.2 * z, hy - 0.4 * z, 0.9 * z, k === 'plushpanda' ? '#fff' : '#2d2d2d'); circle(cx + 2.2 * z, hy - 0.4 * z, 0.9 * z, k === 'plushpanda' ? '#fff' : '#2d2d2d');
+  if (k === 'plushduck') ellipse(cx, hy + 2.2 * z, 2.6 * z, 1.3 * z, '#f59e0b'); else circle(cx, hy + 1.8 * z, 0.9 * z, '#5b3a2a');
+  ellipse(cx, by - 5 * z, 4 * z, 3.6 * z, shade(col, 0.15));
 }

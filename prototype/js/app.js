@@ -180,7 +180,7 @@ function renderHUD() {
     <div class="res row">
       <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>
       <button class="pill farm ${actionsLeft() === 0 ? 'done' : ''}" data-act="capInfo" style="--p:${Math.round(actionsLeft() / ACTION_CAP * 100)}"><i class="ring"></i>${t('farm_pill', { n: actionsLeft() })}</button>${live}
-      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : ''}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}
+      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : ''}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
     </div>`;
 }
@@ -215,7 +215,7 @@ function renderOverlay() {
   } else if (UI.tab === 'home') {
     if (UI.inside) {
       c = `<div class="ctx-main">🛋️ ${nm(HOUSES[S.me.house])}</div>${floorChips(S.me)}`;
-      f = b('goOut', '🌳', t('fab_exit')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn')) + petBtn();
+      f = b('goOut', '🌳', t('fab_exit')) + b('design', '✏️', t('fab_design')) + b('wardrobe', '👗', t('fab_wardrobe')) + b('barn', '🧺', t('fab_barn')) + petBtn();
     } else {
       c = S.calm ? `<button class="ctx-main link" data-act="ranking">${t('ctx_town_calm', { street: t('street_name'), lv: townLevel() })}</button>`
         : `<button class="ctx-main link" data-act="ranking">🏆 ${t('ctx_rank', { n: rankOf('me'), v: fmtNum(assetValue(S.me)) })}</button>`;
@@ -317,7 +317,7 @@ function trayHTML(ed) {
 }
 
 // ---------- shop ----------
-const SHOP_CATS = [['seeds', '🌱'], ['trees', '🌳'], ['animals', '🐣'], ['pets', '🐾'], ['land', '🗺️'], ['furn', '🛋️'], ['yard', '⛲'], ['cars', '🚗'], ['houses', '🏠'], ['excl', '🏆'], ['sell', '💰']];
+const SHOP_CATS = [['seeds', '🌱'], ['trees', '🌳'], ['animals', '🐣'], ['pets', '🐾'], ['land', '🗺️'], ['furn', '🛋️'], ['yard', '⛲'], ['cars', '🚗'], ['houses', '🏠'], ['clothes', '👕'], ['excl', '🏆'], ['sell', '💰']];
 function shopCard(img, name, sub, btns, extra = '') {
   return `<div class="item-card">${img}<div class="item-name">${name}</div><div class="item-sub">${sub}</div>${extra}<div class="item-btns">${btns}</div></div>`;
 }
@@ -325,7 +325,7 @@ function shopCard(img, name, sub, btns, extra = '') {
 let SHOP_AWAY = false;
 const buyBtn = (act, arg, label, ok, cls = 'primary') => `<button class="btn small ${cls}" data-act="${act}" data-arg="${arg}" ${ok && !(SHOP_AWAY && storeForAct(act, arg)) ? '' : 'disabled'}>${label}</button>`;
 function storeForAct(act, arg = '') {
-  const m = { buySeed: 'market', buyTree: 'nursery', buyAnimal: 'ranch', adopt: 'petshop', buyPetFood: 'petshop', buyCar: 'dealer', buyHouse: 'realty', buyLand: 'realty', buyExcl: 'mall', buyParcel: 'realty', moveHouse: 'realty', buyRun: 'realty', moveHere: 'realty' };
+  const m = { buySeed: 'market', buyTree: 'nursery', buyAnimal: 'ranch', adopt: 'petshop', buyPetFood: 'petshop', buyCar: 'dealer', buyHouse: 'realty', buyLand: 'realty', buyExcl: 'mall', buyClothes: 'mall', watchMovie: 'mall', clawTry: 'mall', eatFood: 'mall', buyParcel: 'realty', moveHouse: 'realty', buyRun: 'realty', moveHere: 'realty' };
   if (act === 'buyItem') return String(arg).startsWith('room|') ? 'furniture' : 'nursery';
   return m[act] || null;
 }
@@ -371,6 +371,7 @@ function panelShop() {
   const h = S.me, cat = UI.shop, sub = curSub(cat), store = CAT_STORE[cat], inside = UI.inStore && atStore(UI.inStore);
   SHOP_AWAY = !!store && store !== 'market' ? !atStore(store) : store === 'market' && cat === 'seeds' && !atStore('market');
   const cats = inside ? SHOP_CATS.filter(([id]) => STORES[UI.inStore].cats.includes(id)) : SHOP_CATS;
+  const mallActs = inside && UI.inStore === 'mall' ? `<div class="mall-acts">${[['cinema', '🎬'], ['claw', '🕹️'], ['food', '🍔']].map(([k, e]) => `<button class="mall-act" data-act="mallAct" data-arg="${k}"><span>${e}</span>${t('act_' + k)}</button>`).join('')}</div>` : '';
   const chips = cats.map(([id, ic]) => `<button class="cat ${cat === id ? 'on' : ''}" data-act="shopCat" data-arg="${id}"><span>${ic}</span>${t('cat_' + id)}</button>`).join('');
   const keep = k => !sub || sub.keys.includes(k);
   let body = '', note = '', subs = subChips(cat, s => s.keys.length || null);
@@ -399,6 +400,16 @@ function panelShop() {
       return shopCard(thumbImg('animal', k, { stage: 2 }), `${a.e} ${nm(a)}`, sub,
         own ? `<span class="tag ok">${t('owned')}</span>` : buyBtn('buyAnimal', k, `${t('buy_baby')} 🪙${a.price}`, ok),
         `<div class="baby-row">${[0, 1, 2].map(s => thumbImg('animal', k, { stage: s }, 60, 48, 'thumb xs')).join('<span>→</span>')}</div>`);
+    }).join('');
+  } else if (cat === 'clothes') {
+    // v0.18: clothes from the mall's clothing shop; wear them (in any colour) from the wardrobe
+    const L = S.me.look, own = S.me.wardrobe || CLOTHES_FREE;
+    note = `${t('clothes_note')} <button class="btn small" data-act="wardrobe">👗 ${t('wardrobe')}</button>`;
+    body = Object.entries(CLOTHES).filter(([k, c]) => k !== 'nohat' && keep(k)).map(([k, c]) => {
+      const on = wearing(L, c.slot) === k, mine = own.includes(k);
+      const btn = on ? `<span class="tag ok">${t('wearing')}</span>` : mine ? `<button class="btn small" data-act="wear" data-arg="${k}">${t('wear')}</button>`
+        : buyBtn('buyClothes', k, `🪙${fmtNum(c.price)}`, S.me.coins >= c.price);
+      return shopCard(thumbImg('outfit', k, { look: { ...L, [c.slot]: k } }), `${c.e} ${nm(c)}`, t('slot_' + c.slot) + (mine && !on ? ` · ${t('owned')}` : ''), btn);
     }).join('');
   } else if (cat === 'excl') {
     // things only trophy winners may buy: locked until you've earned the trophy in real life
@@ -435,7 +446,7 @@ function panelShop() {
   } else if (cat === 'furn' || cat === 'yard') {
     const scope = cat === 'furn' ? 'room' : 'yard', list = cat === 'furn' ? FURN : YARD;
     const owned = k => (scope === 'room' ? allRoomItems(h) : h.yard).filter(i => i.k === k).length + (h.store[scope + ':' + k] || 0);
-    body = Object.entries(list).filter(([k, d]) => !d.souv && !d.excl && !d.award && keep(k)).map(([k, d]) => {
+    body = Object.entries(list).filter(([k, d]) => !d.souv && !d.excl && !d.award && !d.plush && keep(k)).map(([k, d]) => {
       const n = owned(k);
       const use = d.use ? ` · ${t('use_' + d.use)}` : d.prod ? ` · ${t('makes', { e: GOODS[d.prod].e, d: fmtDur(d.every * MIN) })}` : '';
       return shopCard(thumbImg(cat, k), nm(d), t('furn_sub', { w: d.w, d: d.d }) + use + (n ? ` · ${t('owned_n', { n })}` : ''),
@@ -483,7 +494,7 @@ function panelShop() {
     : SD && cat !== 'sell' ? `<div class="store-banner"><span>${SD.e} ${t(atStore(store) ? 'store_here' : 'store_sells', { name: nm(SD) })}</span>${atStore(store) ? '' : `<button class="btn small primary" data-act="placeGo" data-arg="${store}">🚶 ${t('store_go')}</button>`}</div>` : '';
   return `<div class="shop-head"><h1 class="panel-title">${inside ? nm(SD) : t('shop_catalog')}</h1>
       <div class="row tight"><span class="pill">🪙 ${fmtNum(h.coins)}</span><span class="pill">🪵 ${h.wood}</span></div></div>
-    ${where}
+    ${where}${mallActs}
     ${inside ? '' : `<p class="muted note">${t('shop_money_note')}</p>`}
     <div class="shop-cats">${chips}</div>
     ${subs}
@@ -656,6 +667,55 @@ function stagesRow(kind, k, n, cur, names, w = 72) {
   return `<div class="stages">${names.map((nmS, s) => `<div class="${s === cur ? 'on' : ''}">${thumbImg(kind, k, { stage: s }, w, 60, 'thumb xs')}<span>${nmS}</span></div>`).join('')}</div>`;
 }
 const SHEETS = {
+  cinema() {
+    const seen = S.mall.movies;
+    return `<h2>🎬 ${t('act_cinema')}</h2><p class="muted">${t('cinema_note', { n: MALL.movie })} · ${t('seen_n', { n: seen.length, total: Object.keys(MALL.movies).length })}</p>
+      <div class="wd-grid">${Object.entries(MALL.movies).map(([k, m]) => `<button class="wd-card ${seen.includes(k) ? 'on' : ''}" data-act="watchMovie" data-arg="${k}">
+        <span class="big-emoji">${m.e}</span><span>${nm(m)}${seen.includes(k) ? ' ✓' : ''}</span><span class="muted small">🪙${MALL.movie}</span></button>`).join('')}</div>`;
+  },
+  movie(k) {
+    const m = MALL.movies[k];
+    return `<h2>${m.e} ${nm(m)}</h2><canvas id="movieCv" class="movie-cv"></canvas><button class="btn block gap-top" data-act="close">${t('movie_leave')}</button>`;
+  },
+  claw() {
+    const got = S.mall.plush;
+    return `<h2>🕹️ ${t('act_claw')}</h2><div class="jail-pic">${thumbImg('claw', 'm', {}, 300, 150, 'store-pic')}</div>
+      <p class="muted">${t('claw_note', { n: MALL.claw, p: Math.round(MALL.clawWin * 100) })}</p>
+      <button class="btn primary block" data-act="clawTry" ${UI.clawBusy ? 'disabled' : ''}>${UI.clawBusy ? '…' : `🕹️ ${t('claw_try', { n: MALL.claw })}`}</button>
+      <div class="plush-row">${Object.entries(MALL.plush).map(([k, e]) => `<span class="${got.includes(k) ? 'on' : ''}" title="${nm(FURN[k])}">${e}</span>`).join('')}</div>
+      <p class="muted small">${t('claw_got', { n: got.length, total: Object.keys(MALL.plush).length })}</p>`;
+  },
+  food() {
+    const tried = S.mall.foods;
+    return `<h2>🍔 ${t('act_food')}</h2><p class="muted">${t('food_note')} · ${t('tried_n', { n: tried.length, total: Object.keys(MALL.foods).length })}</p>
+      <div class="wd-grid">${Object.entries(MALL.foods).map(([k, f]) => `<button class="wd-card ${tried.includes(k) ? 'on' : ''}" data-act="eatFood" data-arg="${k}">
+        <span class="big-emoji">${f.e}</span><span>${nm(f)}</span><span class="muted small">🪙${f.price}</span></button>`).join('')}</div>`;
+  },
+  wardrobe() {
+    const L = S.me.look, own = S.me.wardrobe || CLOTHES_FREE, tab = UI.wdTab || 'body';
+    const sw = (list, cur, f) => list.map(c => `<button class="swatch sm ${c === cur ? 'on' : ''}" style="background:${c}" data-act="wdSet" data-arg="${f}|${c}"></button>`).join('');
+    const tabs = [['body', '🧍'], ['top', '👕'], ['bottom', '👖'], ['shoes', '👟'], ['hat', '🧢']];
+    const tabRow = `<div class="sub-cats wd-tabs">${tabs.map(([k, e]) => `<button class="sub ${tab === k ? 'on' : ''}" data-act="wdTab" data-arg="${k}">${e} ${t('wd_' + k)}</button>`).join('')}</div>`;
+    let body;
+    if (tab === 'body') {
+      body = `<div class="wd-grid">${Object.entries(BODY_TYPES).map(([k, B]) => `<button class="wd-card ${(L.body || 'regular') === k ? 'on' : ''}" data-act="wdSet" data-arg="body|${k}">
+          ${thumbImg('outfit', 'b_' + k, { look: { ...L, body: k } }, 84, 100, 'thumb xs')}<span>${nm(B)}</span></button>`).join('')}</div>
+        <div class="look-row"><span>✋</span><div class="swatches left">${sw(SKINS, L.skin, 'skin')}</div></div>
+        <div class="look-row"><span>💇</span><div>${HAIRS.map(hs => `<button class="chip ${L.hair === hs ? 'on' : ''}" data-act="wdSet" data-arg="hair|${hs}">${t('hair_' + hs)}</button>`).join('')}</div></div>
+        <div class="look-row"><span>🎨</span><div class="swatches left">${sw(HAIR_COLORS, L.hairCol, 'hairCol')}</div></div>
+        <p class="muted small">${t('wd_body_note')}</p>`;
+    } else {
+      const colF = { top: 'shirt', bottom: 'pants', shoes: 'shoeCol', hat: 'hatCol' }[tab];
+      const curCol = L[colF] || { pants: '#4a5a78', shoeCol: '#3b3028', hatCol: '#e5484d' }[colF];
+      const items = Object.entries(CLOTHES).filter(([k, c]) => c.slot === tab && own.includes(k));
+      body = `<div class="wd-grid">${items.map(([k, c]) => `<button class="wd-card ${wearing(L, tab) === k ? 'on' : ''}" data-act="wear" data-arg="${k}">
+          ${thumbImg('outfit', 'w_' + k, { look: { ...L, [tab]: k } }, 84, 100, 'thumb xs')}<span>${c.e} ${nm(c)}</span></button>`).join('')}</div>
+        ${tab === 'hat' && wearing(L, 'hat') === 'nohat' ? '' : `<div class="look-row"><span>🎨</span><div class="swatches left">${sw(CLOTH_COLORS, curCol, colF)}</div></div>`}
+        ${tab === 'bottom' && wearing(L, 'top') === 'dress' ? `<p class="muted small">${t('wd_dress_note')}</p>` : ''}
+        <button class="btn block gap-top" data-act="openShop" data-arg="clothes">🛍️ ${t('wd_more')}</button>`;
+    }
+    return `<h2>👗 ${t('wardrobe')}</h2><div class="wd-preview">${thumbImg('outfit', 'me', { look: L }, 120, 140, 'thumb')}</div>${tabRow}${body}`;
+  },
   collect() {
     const title = UI.welcome ? t('welcome_back') : t('collect_title');
     if (!S.pending.length) return `<h2>${title}</h2><p class="muted">${t('collect_empty')}</p>`;
@@ -672,7 +732,8 @@ const SHEETS = {
       <div class="card gap-top"><div class="row between"><span>${t('sleep_title')}</span><b>${s.score || '–'}</b></div>
         <div class="row between"><span>${t('today_mult')}</span><b>${multText(energyMult())}</b></div>
         <p class="muted">${t('energy_note')}</p></div>
-      <button class="btn block" data-act="tab" data-arg="real">❤️ ${t('see_health')}</button>`;
+      <button class="btn block" data-act="tab" data-arg="real">❤️ ${t('see_health')}</button>
+      <button class="btn block gap-top" data-act="wardrobe">👗 ${t('wardrobe')}</button>`;
   },
   field(arg) {
     const { owner, i } = arg, h = homeOf(owner), f = h.fields[i], mine = owner === 'me';
@@ -996,6 +1057,7 @@ function result(code, onOk) {
 function walkDo(tg, o) {
   if (S.live) { snack(t('snack_live_busy')); return false; }
   if (S.work) { snack(`💼 ${t('job_busy', { place: nm(placeInfo(S.work.place)) })}`); return false; }   // v0.14: at work
+  if (jailed()) { jailSnack(); return false; }   // v0.18: held at the police station
   const ok = Scene.go(tg, { queue: true, fail: () => snack(t('snack_cant_reach')), ...o });
   if (!ok) snack(t('snack_cant_reach'));
   refreshSoon();
@@ -1065,6 +1127,15 @@ function stealResult(fid, r) {
     Sound.play('bark'); setTimeout(() => Sound.play('bark'), 700);
     const dog = friendById(fid).animals.find(a => ANIMALS[a.k].guard);
     Scene.flee(dog && dog.id);
+  } else if (r.r === 'witness') {
+    // v0.18: a neighbour saw you: pay the owner, like with a dog
+    Scene.floatMe(`👀 -🪙${r.fine}`); snack(t('snack_witness_fine', { name: fname(fid), n: r.fine })); Sound.play('oops');
+  } else if (r.r === 'police') {
+    // v0.18: the police come: a bigger fine and a short stay in the holding cell
+    Scene.floatMe(`🚔 -🪙${r.fine}`); Sound.play('oops');
+    UI.visit = null; UI.visitInside = false; if (UI.tab !== 'town') UI.tab = 'town'; syncView();
+    const p = Scene.placePoint('police'); if (p) Scene.lookAt(p[0], p[1]);
+    openSheet('place', 'police');
   } else if (r.r === 'chased') snack(t('snack_chased', { name: fname(fid) }));
   else if (r.r === 'limit') snack(t('snack_steal_limit', { n: STEAL_CAP }));
   else if (r.r === 'cap') openSheet('cap');
@@ -1125,6 +1196,54 @@ const ACT = {
   },
   close: () => closeSheet(),
   energyInfo: () => openSheet('energy'),
+  // v0.18: things to do at the mall
+  mallAct: k => openSheet(k),
+  watchMovie(k) {
+    const r = watchMovie(k);
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r !== 'ok') return;
+    Sound.play('chime'); save(); UI.movieT0 = performance.now(); openSheet('movie', k); playMovie();
+  },
+  clawTry() {
+    if (UI.clawBusy) return;
+    const r = clawTry();
+    if (r.r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    UI.clawBusy = true; Sound.play('tick'); save();
+    setTimeout(() => {
+      UI.clawBusy = false;
+      if (r.r === 'win') { Sound.play('levelup'); snack(`${MALL.plush[r.k]} ${t('claw_win', { name: nm(FURN[r.k]) })}`); }
+      else { Sound.play('oops'); snack(t('claw_miss')); }
+      if (UI.sheet && UI.sheet.type === 'claw') renderSheet();
+      refresh();
+    }, 1100);
+  },
+  eatFood(k) {
+    const r = eatFood(k);
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r !== 'ok') return;
+    Sound.play('collect'); snack(`${MALL.foods[k].e} ${t('food_ate', { name: nm(MALL.foods[k]) })}`); save();
+  },
+  payBail() {
+    const r = payBail();
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r !== 'ok') return;
+    Sound.play('coins'); snack(`🚔 ${t('jail_bailed')}`); save(); closeSheet(); outOfJail();
+  },
+  // v0.18: the wardrobe (body type, hair, skin, the clothes you own and their colours)
+  wardrobe: () => openSheet('wardrobe'),
+  buyClothes(k) {
+    const r = buyClothes(k);
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r !== 'ok') return;
+    Sound.play('buy'); snack(t('clothes_bought', { name: nm(CLOTHES[k]) })); save();
+  },
+  wear(k) { if (wearClothes(k)) { Sound.play('pop'); save(); if (UI.sheet && UI.sheet.type === 'wardrobe') renderSheet(); } },
+  wdSet(arg) {
+    const [f, v] = arg.split('|'), L = S.me.look;
+    if (['body', 'hair', 'skin', 'hairCol', 'shirt', 'pants', 'shoeCol', 'hatCol'].includes(f)) L[f] = v;
+    save(); renderSheet();
+  },
+  wdTab(k) { UI.wdTab = k; renderSheet(); },
   liveInfo: () => setTab('real'),
   watchLive() { UI.inside = false; setTab('home'); Scene.recenter(); },
   // home & visiting
@@ -2103,6 +2222,18 @@ function jobSection(key) {
   return `<div class="card job-card">${head}${rel}${body}</div>`;
 }
 function placeBody(key) {
+  if (key === 'police') {   // v0.18: the holding cell (when you're held) or how the police work
+    if (jailed()) {
+      const J2 = S.jail, pct = Math.round(Math.min(1, (now() - J2.start) / (J2.end - J2.start)) * 100);
+      return `<div class="jail-pic">${thumbImg('cell', 'me', { look: S.me.look }, 320, 170, 'store-pic')}</div>
+        <p>${t('jail_in', { m: fmtDur(J2.end - now()), n: J2.fine, name: esc(fname(J2.fid) || '') })}</p><p class="muted small">${t('jail_why_' + J2.why)}</p>
+        <div class="bar"><i style="width:${pct}%"></i></div><p class="muted small">${t('jail_note')}</p>
+        <button class="btn primary block" data-act="payBail" ${S.me.coins >= POLICE.bail ? '' : 'disabled'}>💰 ${t('jail_bail', { n: POLICE.bail })}</button>`;
+    }
+    const n = strikes();
+    return `<p>${t('st_desc_police', { s: POLICE.strikes, d: POLICE.strikeDays, m: POLICE.jailMin, b: POLICE.bail, lo: POLICE.fineMin, hi: POLICE.fineMax })}</p>
+      <div class="card"><div class="row between"><span>${t('police_record', { d: POLICE.strikeDays })}</span><b>${n ? `${n} / ${POLICE.strikes}` : t('police_clean')}</b></div><p class="muted small">${t('police_private')}</p></div>`;
+  }
   if (STORES[key] && key !== 'market') return `<p>${t('st_desc_' + key)}</p><button class="btn primary block" data-act="enterStore" data-arg="${key}">🛍️ ${t('store_enter')}</button>`;
   const P = placeDay(), btn = (act, label, on = true, x = '') => `<button class="btn ${on ? 'primary' : ''} block" data-act="placeDo" data-arg="${key}|${act}|${x}" ${on ? '' : 'disabled'}>${label}</button>`;
   if (key === 'fields') {
@@ -2415,6 +2546,7 @@ setInterval(() => {
   if (UI.sheet && ['field', 'animal', 'tree'].includes(UI.sheet.type)) renderSheet();
   if (UI.tab === 'real' && S.live) renderPanel();
   weatherFarm(1000);
+  if (jailTick()) { Sound.play('chime'); snack(`🚔 ${t('jail_out')}`); outOfJail(); refresh(); }
   if (S.work && now() >= S.work.end) { const r = finishShift(); if (r) { Sound.play('coins'); snack(`💼 ${t(r.promoted ? 'job_promoted' : 'job_done', { n: r.pay, rank: nm(JOB_RANKS[jobRank()]) })}`); refresh(); } }
   if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }
   if (S.floodNews) { snack(`🌊 ${t('w_flooded', { n: S.floodNews })}`); S.floodNews = 0; }
@@ -2450,4 +2582,27 @@ else {
   document.documentElement.lang = OB.lang;
   $('#onboard').hidden = false;
   renderOnboarding(); renderConsole();
+}
+
+// ---------- v0.18: held at the police station ----------
+// out of the police station: your townie stands at its door (trips start from there)
+function outOfJail() { const p = Scene.placePoint('police'); if (p && UI.tab === 'town' && !UI.visit && VIEW_TOWN === myTown()) Scene.arriveAt(p, 'police'); }
+function jailSnack() { Sound.play('oops'); snack(`🚔 ${t('jail_busy', { m: fmtDur(Math.max(0, S.jail.end - now())) })}`); }
+['goTo', 'travel', 'tripFast', 'enterStore', 'jobApply', 'jobStart', 'placeDo', 'visit', 'askHost', 'harvestAll', 'plant', 'plantAll', 'collectAnimal',
+  'sell', 'sellAll', 'worldVisit', 'worldMove', 'moveHere', 'goOut', 'goIn'].forEach(k => {
+  const f = ACT[k];
+  if (f) ACT[k] = function (...a) { if (jailed()) return jailSnack(); return f.apply(this, a); };
+});
+
+// ---------- v0.18: the cinema plays a short film on a canvas while its sheet is open ----------
+let movieAnim = null;
+function playMovie() {
+  cancelAnimationFrame(movieAnim);
+  const loop = ts => {
+    const cv = $('#movieCv');
+    if (!UI.sheet || UI.sheet.type !== 'movie' || !cv) return;
+    Scene.thumb('movie', UI.sheet.arg, { canvas: cv, live: true, ts, t0: UI.movieT0, look: S.me.look }, cv.clientWidth || 320, cv.clientHeight || 190);
+    movieAnim = requestAnimationFrame(loop);
+  };
+  movieAnim = requestAnimationFrame(loop);
 }

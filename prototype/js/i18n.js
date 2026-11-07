@@ -760,19 +760,65 @@ Object.assign(STR.zh, {
   shop_catalog: '商品目录', store_sells: '这些东西在{name}卖，要去店里才能买', store_here: '你就在{name}', store_go: '去店里', store_inside: '在{name}里', store_leave: '出店',
   store_enter: '进店看看', store_enter_market: '进店买种子', store_buy_there: '要去{name}才能买',
   st_short_nursery: '树苗、花草和院子里的东西。', st_short_ranch: '鸡鸭牛羊各种牲畜。', st_short_petshop: '小狗小猫、宠物粮和宠物用品。', st_short_furniture: '屋里用的家具。',
-  st_short_realty: '买房子、买地、扩建农场。', st_short_dealer: '自行车、汽车、卡车。', st_short_mall: '奖杯专属、以后还有衣服、电影院……',
+  st_short_realty: '买房子、买地、扩建农场。', st_short_dealer: '自行车、汽车、卡车。', st_short_mall: '衣服鞋帽、奖杯专属、电影院、游戏厅、美食广场。',
   st_desc_nursery: '这里卖果树、院子里的树、花、喷泉和各种装饰。进店就能买。', st_desc_ranch: '这里卖鸡、鸭、兔子、羊、猪、牛和羊驼的小崽子。进店就能买。',
   st_desc_petshop: '这里能领养小狗小猫，也卖宠物粮、零食和宠物用品。', st_desc_furniture: '沙发、床、桌椅、灯、装饰……家里用的都在这里。',
   st_desc_realty: '房产中介：买新房子、扩建菜地 / 牧场 / 果园 / 池塘、买旁边的地。', st_desc_dealer: '车行：自行车、摩托、轿车、SUV、跑车、卡车。车越大一次拉的货越多。',
-  st_desc_mall: '购物中心：拿到奖杯才能买的专属东西在这里。以后还会有服装店、电影院和更多好玩的。',
+  st_desc_mall: '购物中心：服装店（衣服、裤子、鞋、帽子）、奖杯专属店、电影院、游戏厅和美食广场。',
 });
 Object.assign(STR.en, {
   shop_catalog: 'Catalogue', store_sells: 'Sold at the {name}: go to the store to buy', store_here: 'You’re at the {name}', store_go: 'Go there', store_inside: 'In the {name}', store_leave: 'Leave',
   store_enter: 'Go inside', store_enter_market: 'Go in for seeds', store_buy_there: 'You can buy that at the {name}',
   st_short_nursery: 'Saplings, flowers and things for the yard.', st_short_ranch: 'Chickens, ducks, sheep, cows and more.', st_short_petshop: 'Puppies, kittens, pet food and supplies.', st_short_furniture: 'Furniture for your home.',
-  st_short_realty: 'Houses, land and farm upgrades.', st_short_dealer: 'Bikes, cars and trucks.', st_short_mall: 'Trophy exclusives; clothes, a cinema and more to come.',
+  st_short_realty: 'Houses, land and farm upgrades.', st_short_dealer: 'Bikes, cars and trucks.', st_short_mall: 'Clothes, trophy exclusives, a cinema, an arcade and a food court.',
   st_desc_nursery: 'Fruit trees, yard trees, flowers, fountains and all kinds of yard things. Go in to buy.', st_desc_ranch: 'Chicks, ducklings, bunnies, lambs, piglets, calves and crias. Go in to buy.',
   st_desc_petshop: 'Adopt a puppy or a kitten, and buy pet food, treats and supplies.', st_desc_furniture: 'Sofas, beds, tables, lamps, decorations: everything for inside your home.',
   st_desc_realty: 'Estate agent: new houses, bigger fields / pasture / orchard / pond, and the land next door.', st_desc_dealer: 'Car dealer: bikes, motorbikes, cars, SUVs, sports cars, trucks. Bigger vehicles carry more to the market.',
-  st_desc_mall: 'Shopping mall: the trophy-only exclusives are here. Clothes, a cinema and more are coming.',
+  st_desc_mall: 'Shopping mall: a clothing store (tops, bottoms, shoes, hats), the trophy exclusives, a cinema, an arcade and a food court.',
+});
+
+// ---------- v0.18: bodies and clothes ----------
+Object.assign(STR.zh, {
+  cat_clothes: '服装', wardrobe: '衣柜', fab_wardrobe: '衣柜', wearing: '穿着', wear: '穿上', clothes_bought: '买了{name}，已经穿上了',
+  clothes_note: '在购物中心的服装店买，买了就是你的，颜色在衣柜里随便换。', slot_top: '上衣', slot_bottom: '下装', slot_shoes: '鞋', slot_hat: '帽子',
+  wd_body: '身材', wd_top: '上衣', wd_bottom: '下装', wd_shoes: '鞋', wd_hat: '帽子', wd_more: '去购物中心买更多',
+  wd_body_note: '身材是你自己选的，和健康数据无关，随时能换。', wd_dress_note: '穿着连衣裙时看不到下装。',
+});
+Object.assign(STR.en, {
+  cat_clothes: 'Clothes', wardrobe: 'Wardrobe', fab_wardrobe: 'Wardrobe', wearing: 'Wearing', wear: 'Wear', clothes_bought: 'Bought the {name}, you’re wearing it',
+  clothes_note: 'Sold at the mall’s clothing store. Once it’s yours, change its colour any time in the wardrobe.', slot_top: 'Top', slot_bottom: 'Bottoms', slot_shoes: 'Shoes', slot_hat: 'Hat',
+  wd_body: 'Body', wd_top: 'Tops', wd_bottom: 'Bottoms', wd_shoes: 'Shoes', wd_hat: 'Hats', wd_more: 'Buy more at the mall',
+  wd_body_note: 'Your build is your choice, not your health data. Change it any time.', wd_dress_note: 'A dress covers the bottoms.',
+});
+
+// ---------- v0.18: police ----------
+Object.assign(STR.zh, {
+  st_short_police: '偷东西被抓得太多，警察会来。',
+  st_desc_police: '偷菜被狗或邻居看见：赔给主人东西价值的两倍。{d} 天内被抓 {s} 次，或者偷小动物被抓：警察会来，罚得更多（🪙{lo}–{hi}），还要在拘留室待 {m} 分钟（可以交 🪙{b} 保释提前出来）。',
+  police_record: '最近 {d} 天被抓', police_clean: '没有记录 ✨', police_private: '只有你自己能看到。',
+  snack_witness_fine: '被邻居看见了！赔给{name} 🪙{n}', jail_in: '你在拘留室里，还要 {m}。罚款 🪙{n} 已经赔给了{name}。',
+  jail_why_baby: '偷小动物被抓到了。', jail_why_repeat: '这周被抓太多次了。', jail_note: '拘留时不能出门、干活、种地和偷菜。现实里的运动、睡眠照样算钱。',
+  jail_bail: '交保释金 🪙{n}，现在出来', jail_bailed: '交了保释金，出来了。下次小心点！', jail_out: '时间到，从警察局出来了。',
+  jail_busy: '你在警察局里，还要 {m} 才能出来',
+});
+Object.assign(STR.en, {
+  st_short_police: 'Get caught stealing too often and the police come.',
+  st_desc_police: 'Seen by a dog or a neighbour while stealing: pay the owner twice what you took. Caught {s} times in {d} days, or caught taking a baby animal: the police come, a bigger fine (🪙{lo}–{hi}) and {m} minutes in the holding cell (pay 🪙{b} bail to leave early).',
+  police_record: 'Caught in the last {d} days', police_clean: 'Clean record ✨', police_private: 'Only you can see this.',
+  snack_witness_fine: 'A neighbour saw you! You paid {name} 🪙{n}', jail_in: 'You’re in the holding cell for {m} more. Your 🪙{n} fine went to {name}.',
+  jail_why_baby: 'Caught taking a baby animal.', jail_why_repeat: 'Caught too many times this week.', jail_note: 'While held you can’t go out, work, farm or steal. Real-life movement and sleep still earn coins.',
+  jail_bail: 'Pay 🪙{n} bail and leave now', jail_bailed: 'Bail paid, you’re out. Be careful next time!', jail_out: 'Time’s up: you’re out of the police station.',
+  jail_busy: 'You’re at the police station for {m} more',
+});
+
+// ---------- v0.18: the mall ----------
+Object.assign(STR.zh, {
+  act_cinema: '电影院', act_claw: '抓娃娃', act_food: '美食广场', cinema_note: '一场 🪙{n}', seen_n: '看过 {n}/{total}', movie_leave: '离开影厅',
+  claw_note: '一次 🪙{n}，大约 {p}% 能抓到。抓到的玩偶放进仓库，进屋点「设计」就能摆出来。', claw_try: '抓一次 🪙{n}', claw_win: '抓到了{name}！已经放进仓库', claw_miss: '差一点点！再试试？',
+  claw_got: '收集了 {n}/{total} 个玩偶', food_note: '点一份就开吃', tried_n: '尝过 {n}/{total}', food_ate: '{name}真好吃！😋',
+});
+Object.assign(STR.en, {
+  act_cinema: 'Cinema', act_claw: 'Claw machine', act_food: 'Food court', cinema_note: '🪙{n} a ticket', seen_n: 'Seen {n}/{total}', movie_leave: 'Leave the cinema',
+  claw_note: '🪙{n} a go, about a {p}% chance. Prizes go to storage: tap Design at home to place them.', claw_try: 'Try for 🪙{n}', claw_win: 'You won the {name}! It’s in storage', claw_miss: 'So close! Try again?',
+  claw_got: '{n}/{total} plush toys collected', food_note: 'Tap a dish to eat', tried_n: 'Tried {n}/{total}', food_ate: 'The {name} was delicious! 😋',
 });

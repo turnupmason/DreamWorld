@@ -2,12 +2,16 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.17.0';
+const VERSION = '0.18.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
 const STEAL_CAP = 8;                    // sneaks per day
 const STEAL_FINE = [10, 60];            // caught by a guard dog: pay the owner twice the value, within this range
+// v0.18: the police. No guard dog? A neighbour may still see you (a fine, like the dog's). Caught taking a baby
+// animal, or caught 3 times in 7 days: the police come: a bigger fine and a short real-time stay in the holding cell
+// (you can pay bail to leave early). Real-life movement and sleep still count while you're in there.
+const POLICE = { witness: 0.08, strikes: 3, strikeDays: 7, fineMult: 5, fineMin: 80, fineMax: 400, jailMin: 30, bail: 150 };
 const STEP_GOAL = 6000;                  // starting step goal; it then follows your own last 7 days (see stepGoal())
 const STORAGE_KEY = 'mirror-town-proto-v3';
 
@@ -207,6 +211,10 @@ const TINTS = ['#e5675f', '#f2a33a', '#f3d36b', '#6cbf73', '#5aa2e0', '#8b7fe0',
 // ---------- furniture (inside) ----------
 // flat: rugs and mats can sit under other furniture. tint: fabric colour can be changed. use: what your townie does with it.
 const FURN = {
+  // v0.18: plush toys from the mall's claw machine (not sold in the furniture store)
+  plushbear: { zh: '小熊玩偶', en: 'Teddy bear', w: 1, d: 1, price: 0, plush: true }, plushbunny: { zh: '兔子玩偶', en: 'Bunny plush', w: 1, d: 1, price: 0, plush: true },
+  plushcat: { zh: '小猫玩偶', en: 'Kitty plush', w: 1, d: 1, price: 0, plush: true }, plushdino: { zh: '恐龙玩偶', en: 'Dino plush', w: 1, d: 1, price: 0, plush: true },
+  plushduck: { zh: '小鸭玩偶', en: 'Duckling plush', w: 1, d: 1, price: 0, plush: true }, plushpanda: { zh: '熊猫玩偶', en: 'Panda plush', w: 1, d: 1, price: 0, plush: true },
   sleepbag:  { zh: '睡袋',       en: 'Sleeping bag',     w: 1, d: 2, price: 20,  tint: true, use: 'sleep' },
   bed:       { zh: '双人床',     en: 'Double bed',       w: 2, d: 2, price: 180, tint: true, use: 'sleep' },
   nightstand:{ zh: '床头柜',     en: 'Nightstand',       w: 1, d: 1, price: 45 },
@@ -442,7 +450,7 @@ const PAPERS = [ // letter paper: background, accent
 // Friends' homes use the same shape as yours so they draw, rank and can be visited the same way.
 const FRIEND_PRESETS = [
   { id: 'li', name: { zh: '小李', en: 'Ava' }, slot: 5,
-    look: { shirt: '#ec6aa8', skin: SKINS[0], hair: 'long', hairCol: '#2b1d14', mob: 'walk' },
+    look: { shirt: '#ec6aa8', skin: SKINS[0], hair: 'long', hairCol: '#2b1d14', mob: 'walk', body: 'slim', top: 'dress', bottom: 'jeans', shoes: 'sandals', hat: 'sunhat', hatCol: '#f4f4f0' },
     house: 3, wall: '#fbe3c8', roof: '#d9534f', floor: 0, roomWall: 3,
     fieldLv: 1, crops: ['strawberry', 'strawberry', 'tomato', 'tomato', 'corn', 'carrot', 'eggplant', 'wheat'], ripe: [0, 1, 4, 5],
     pastureLv: 2, animals: [['chicken', 2], ['chicken', 2], ['duck', 2], ['sheep', 2], ['cow', 1], ['dog', 2]],
@@ -453,7 +461,7 @@ const FRIEND_PRESETS = [
     yard: ['flowers', 'flowers', 'tree', 'lamp', 'bench', 'beehive'],
     coins: 2400, wood: 40, likes: 20, shareGoal: true, shareLive: true, shareMood: true, earn: 30 },
   { id: 'wang', name: { zh: '小王', en: 'Leo' }, slot: 7,
-    look: { shirt: '#4f8ef7', skin: SKINS[2], hair: 'short', hairCol: '#1d1a17', mob: 'walk' },
+    look: { shirt: '#4f8ef7', skin: SKINS[2], hair: 'short', hairCol: '#1d1a17', mob: 'walk', body: 'broad', top: 'hoodie', bottom: 'jeans', shoes: 'hightops', shoeCol: '#e5484d', hat: 'cap', hatCol: '#2d2d2d' },
     house: 2, wall: '#f4e7cc', roof: '#3e7cc9', floor: 1, roomWall: 1,
     fieldLv: 0, crops: ['corn', 'potato', 'wheat', 'cabbage'], ripe: [2],
     pastureLv: 1, animals: [['chicken', 2], ['pig', 2], ['goat', 0]],
@@ -463,7 +471,7 @@ const FRIEND_PRESETS = [
     yard: ['pine', 'bbq', 'doghouse'],
     coins: 900, wood: 20, likes: 12, shareGoal: true, shareLive: true, shareMood: false, earn: 22 },
   { id: 'mia', name: { zh: 'Mia', en: 'Mia' }, slot: 4,
-    look: { shirt: '#f2a33a', skin: SKINS[1], hair: 'bun', hairCol: '#b5462e', mob: 'wheel' },
+    look: { shirt: '#f2a33a', skin: SKINS[1], hair: 'bun', hairCol: '#b5462e', mob: 'wheel', body: 'round', top: 'sweater', bottom: 'jeans', shoes: 'sneakers', hat: 'beanie', hatCol: '#38a3e0' },
     house: 1, wall: '#c99a6b', roof: '#4f9a4b', floor: 4, roomWall: 2,
     fieldLv: 0, crops: ['carrot', 'carrot', null, 'blueberry'], ripe: [0],
     pastureLv: 0, animals: [['cat', 2]], orchardLv: 0, trees: [], pondLv: 0, cars: [['scooter', '#34b27b']],
@@ -581,6 +589,70 @@ const COMMUNITY_TZ = { wutong: 'America/Los_Angeles', palmbay: 'America/New_York
   hangzhou: 'Asia/Shanghai', sydney: 'Australia/Sydney', andes: 'America/Bogota', london: 'Europe/London', seoul: 'Asia/Seoul',
   rio: 'America/Sao_Paulo', capetown: 'Africa/Johannesburg' };
 Object.entries(COMMUNITY_TZ).forEach(([k, tz]) => { COMMUNITIES[k].tz = tz; });
+// ---------- bodies and clothes (v0.18) ----------
+// Your townie's build is your choice (not your health data). Clothes are bought at the mall's clothing shop and
+// worn from the wardrobe, each in any colour. A dress is a top that covers the bottoms too.
+const BODY_TYPES = {
+  regular: { zh: '标准', en: 'Regular', w: 1, h: 1 }, slim: { zh: '苗条', en: 'Slim', w: 0.86, h: 1.03 }, broad: { zh: '健壮', en: 'Broad', w: 1.16, h: 1.01 },
+  round: { zh: '圆润', en: 'Round', w: 1.28, h: 0.97 }, tall: { zh: '高个', en: 'Tall', w: 0.96, h: 1.12 }, petite: { zh: '娇小', en: 'Petite', w: 0.98, h: 0.88 },
+};
+const CLOTHES = {
+  tshirt:   { slot: 'top', e: '👕', zh: 'T 恤', en: 'T-shirt', price: 0 },
+  polo:     { slot: 'top', e: '👔', zh: 'Polo 衫', en: 'Polo shirt', price: 60 },
+  hoodie:   { slot: 'top', e: '🧥', zh: '连帽卫衣', en: 'Hoodie', price: 120 },
+  sweater:  { slot: 'top', e: '🧶', zh: '毛衣', en: 'Sweater', price: 140 },
+  jacket:   { slot: 'top', e: '🧥', zh: '夹克', en: 'Jacket', price: 220 },
+  dress:    { slot: 'top', e: '👗', zh: '连衣裙', en: 'Dress', price: 200 },
+  jeans:    { slot: 'bottom', e: '👖', zh: '长裤', en: 'Trousers', price: 0 },
+  shorts:   { slot: 'bottom', e: '🩳', zh: '短裤', en: 'Shorts', price: 60 },
+  skirt:    { slot: 'bottom', e: '👗', zh: '半身裙', en: 'Skirt', price: 90 },
+  sneakers: { slot: 'shoes', e: '👟', zh: '运动鞋', en: 'Sneakers', price: 0 },
+  hightops: { slot: 'shoes', e: '👟', zh: '高帮鞋', en: 'High-tops', price: 110 },
+  boots:    { slot: 'shoes', e: '🥾', zh: '靴子', en: 'Boots', price: 150 },
+  sandals:  { slot: 'shoes', e: '🩴', zh: '凉鞋', en: 'Sandals', price: 50 },
+  nohat:    { slot: 'hat', e: '🙂', zh: '不戴帽子', en: 'No hat', price: 0 },
+  cap:      { slot: 'hat', e: '🧢', zh: '棒球帽', en: 'Cap', price: 70 },
+  beanie:   { slot: 'hat', e: '🧶', zh: '毛线帽', en: 'Beanie', price: 80 },
+  sunhat:   { slot: 'hat', e: '👒', zh: '遮阳帽', en: 'Sun hat', price: 90 },
+};
+const CLOTHES_SLOTS = ['top', 'bottom', 'shoes', 'hat'];
+SHOP_SUBS.clothes = CLOTHES_SLOTS.map(slot => ({ id: slot, e: { top: '👕', bottom: '👖', shoes: '👟', hat: '🧢' }[slot],
+  zh: { top: '上衣', bottom: '下装', shoes: '鞋', hat: '帽子' }[slot], en: { top: 'Tops', bottom: 'Bottoms', shoes: 'Shoes', hat: 'Hats' }[slot],
+  keys: Object.keys(CLOTHES).filter(k => CLOTHES[k].slot === slot && k !== 'nohat') }));
+// Townies get a build and an outfit of their own (picked from their id, so it stays the same every visit).
+function dressUp(look, id) {
+  if (!look || look.body) return look;
+  let n = 11; for (const ch of String(id)) n = (n * 131 + ch.charCodeAt(0)) % 999983;
+  const r = () => { n = (n * 16807) % 2147483647; return (n % 10000) / 10000; }, pick = a => a[Math.floor(r() * a.length)];
+  const of = slot => Object.keys(CLOTHES).filter(k => CLOTHES[k].slot === slot);
+  look.body = pick(Object.keys(BODY_TYPES));
+  // dresses and skirts are for anyone, a little more often with long hair or a bun
+  const soft = look.hair === 'long' || look.hair === 'bun', tops = of('top').filter(k => k !== 'dress' || r() < (soft ? 0.9 : 0.15));
+  look.top = pick(tops); look.bottom = look.top === 'dress' ? 'jeans' : r() < (soft ? 0.3 : 0.05) ? 'skirt' : pick(['jeans', 'jeans', 'shorts']);
+  look.shoes = pick(of('shoes')); look.hat = r() < 0.55 ? 'nohat' : pick(of('hat').filter(k => k !== 'nohat'));
+  look.pants = pick(['#4a5a78', '#2d2d2d', '#8a5a36', '#c9b98f', '#6366f1', '#9aa3ad', '#34b27b']);
+  look.shoeCol = pick(['#3b3028', '#f4f4f0', '#2d2d2d', '#e5484d', '#38a3e0', '#8a5a36']);
+  look.hatCol = pick(CLOTH_COLORS);
+  return look;
+}
+const CLOTHES_FREE = ['tshirt', 'jeans', 'sneakers', 'nohat'];
+const CLOTH_COLORS = ['#ef6f6c', '#f59e0b', '#e8c02e', '#34b27b', '#38a3e0', '#6366f1', '#a46ef0', '#ec6aa8', '#f4f4f0', '#2d2d2d', '#4a5a78', '#8a5a36', '#c9b98f', '#9aa3ad'];
+// ---------- things to do at the mall (v0.18) ----------
+// The cinema (a short film; collect them all), the claw machine (win plush toys for your home) and the food court.
+const MALL = {
+  movie: 20, claw: 10, clawWin: 0.35,
+  movies: {
+    dino:  { e: '🦖', zh: '恐龙乐园', en: 'Dino Park' },     space: { e: '🚀', zh: '星际旅行', en: 'Space Trip' },
+    love:  { e: '💕', zh: '怦然心动', en: 'Heartbeat' },     ocean: { e: '🐳', zh: '深海奇遇', en: 'Deep Blue' },
+    hero:  { e: '🦸', zh: '超级英雄', en: 'Super Hero' },    pets:  { e: '🐶', zh: '汪汪队长', en: 'Captain Woof' },
+  },
+  foods: {
+    burger: { e: '🍔', zh: '汉堡套餐', en: 'Burger meal', price: 15 }, noodles: { e: '🍜', zh: '牛肉面', en: 'Beef noodles', price: 12 },
+    pizza:  { e: '🍕', zh: '披萨', en: 'Pizza', price: 18 },          sushi:   { e: '🍣', zh: '寿司', en: 'Sushi', price: 22 },
+    boba:   { e: '🧋', zh: '珍珠奶茶', en: 'Bubble tea', price: 8 },  icecream: { e: '🍦', zh: '冰淇淋', en: 'Ice cream', price: 6 },
+  },
+  plush: { plushbear: '🧸', plushbunny: '🐰', plushcat: '🐱', plushdino: '🦖', plushduck: '🦆', plushpanda: '🐼' },
+};
 // ---------- stores (v0.17) ----------
 // Things are bought in the store that sells them (go there, go in, buy). The market sells seeds (and buys your
 // goods); the others are their own buildings in every town, placed beside a road near the town centre.
@@ -592,7 +664,8 @@ const STORES = {
   furniture: { e: '🛋️', zh: '家具店', en: 'Furniture store', cats: ['furn'], w: 7, d: 6, wall: '#efe6d6', roof: '#8a5a36' },
   realty:    { e: '🏠', zh: '房产中介', en: 'Real estate', cats: ['land', 'houses'], w: 6, d: 5.5, wall: '#eaf0f6', roof: '#2f6fb2' },
   dealer:    { e: '🚗', zh: '车行', en: 'Car dealer', cats: ['cars'], w: 10, d: 7, wall: '#e8edf2', roof: '#5b6470' },
-  mall:      { e: '🏬', zh: '购物中心', en: 'Shopping mall', cats: ['excl'], w: 12, d: 9, wall: '#f4efe6', roof: '#c9893a' },
+  police:    { e: '🚓', zh: '警察局', en: 'Police station', cats: [], civic: true, w: 7, d: 6, wall: '#eef2f8', roof: '#2f5fb3' },
+  mall:      { e: '🏬', zh: '购物中心', en: 'Shopping mall', cats: ['clothes', 'excl'], w: 12, d: 9, wall: '#f4efe6', roof: '#c9893a' },
 };
 // Which store sells each shop category.
 const CAT_STORE = {};

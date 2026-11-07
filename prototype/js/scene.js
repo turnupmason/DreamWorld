@@ -696,7 +696,7 @@ const Scene = (() => {
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
-    if (me.lot === h.id && !meInLake() && !(trip && mode === 'town') && !S.work && !S.live) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
+    if (me.lot === h.id && !meInLake() && !(trip && mode === 'town') && !S.work && !S.live && !jailed()) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
   }
   function liveBadge(p, live, mine) {
     const z = cam.z, w = WORKOUTS[live.type];
@@ -998,6 +998,7 @@ const Scene = (() => {
   // Town centre: paved square, the town hall plaza, shops along the avenue.
   function townCentre(objs, vr, ts, lv, out) {
     const C = TL.centre;
+    storeObjs(objs, vr, ts);   // v0.18: the stores draw even when the town centre is off screen
     if (!boxVisible(C.x - 1, C.y - 1, C.x + C.w + 1, C.y + C.d + 1, vr)) return;
     flatRect(C.x, C.y, C.w, C.d, '#e8e0cf');
     if (cam.z > 0.14) for (let x = C.x + 0.5; x < C.x + C.w; x += 5) flatRect(x, C.y, 0.08, C.d, 'rgba(160,140,110,.12)');
@@ -1010,7 +1011,6 @@ const Scene = (() => {
     if (lv >= 5) deco.push(['flowers', 2, 10], ['flowers', 11, 10], ['tree', 6, 13], ['tree', 8, 13]);
     deco.forEach(([k, x, y]) => objs.push({ d: px + py + x + y + 1, f: () => drawYardItem({ k }, px + x, py + y, ts) }));
     TL.shops.forEach(([k, x, y]) => objs.push({ d: x + y + 5.5, f: () => { const r = drawShop(k, x, y, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
-    storeObjs(objs, vr, ts);
     // trees along the edges of the square (not on the plaza or in front of a shop)
     const free = (x, y) => !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy]) => x > sx - 1.5 && x < sx + 7.5 && y > sy - 1.5 && y < sy + 7.5);
     for (let x = C.x + 1.5; x < C.x + C.w - 1; x += 6.5) [C.y + C.d - 2, C.y + 1].forEach(y => { if (free(x, y)) objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }); });
@@ -1127,10 +1127,13 @@ const Scene = (() => {
     // people who are online right now, out walking: to the square, the park, the lake, and home again
     if (z > 0.055) walkers(objs, dt, ts);
     if (mode === 'town') liveTownObjs(objs, dt, ts);
-    if (trip && mode === 'town' && !S.work && !S.live) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
-    if (S.work && mode === 'town' && VIEW_TOWN === myTown()) {   // at work (v0.14): your townie at the door of the workplace
-      const [wx, wy] = Scene.placePoint(S.work.place);
-      objs.push({ d: wx + wy + 0.6, f: () => { const p = iso(wx, wy); drawPerson(p.x, p.y, cam.z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand' }); if (cam.z > 0.3) nameTag(p, `💼 ${S.me.name || ''}`, true); } });
+    if (trip && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
+    const atPlace = S.work ? S.work.place : jailed() ? 'police' : null;
+    if (atPlace && mode === 'town' && VIEW_TOWN === myTown() && placePt(atPlace)) {   // at work (v0.14) or held by the police (v0.18)
+      const [wx, wy] = placePt(atPlace), jail = !S.work;
+      objs.push({ d: wx + wy + 0.6, f: () => { const p = iso(wx, wy); drawPerson(p.x, p.y, cam.z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: jail ? 'tired' : energyLevel(), ts, seed: 3, pose: 'stand' });
+        if (jail) for (let i = -2; i <= 2; i++) line(p.x + i * 3.4 * cam.z, p.y - 2 * cam.z, p.x + i * 3.4 * cam.z, p.y - 44 * cam.z, '#5b6470', 1.2 * cam.z);
+        if (cam.z > 0.3) nameTag(p, `${jail ? '🚔' : '💼'} ${S.me.name || ''}`, true); } });
     }
     if (mode === 'town') parkedObjs(objs, ts);
     if (edit && edit.scope === 'yard') { const [ox, oy] = origin('me'); yardSpots(homeW(S.me), S.me).forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)')); }
@@ -1515,6 +1518,7 @@ const Scene = (() => {
   function tripFrom(how) {
     if (how && how !== 'walk' && parked && parked.town === VIEW_TOWN) return parked.at;
     if (S.work && VIEW_TOWN === myTown() && placePt(S.work.place)) return placePt(S.work.place);
+    if (S.jail && VIEW_TOWN === myTown() && placePt('police') && !(trip && trip.arrived && trip.town === VIEW_TOWN && trip.t > S.jail.start)) return placePt('police');   // v0.18: out of the police station
     if (trip && trip.arrived && trip.town === VIEW_TOWN) return [trip.x, trip.y];
     return me.lot && lotOf(me.lot) && townOf(me.lot) === VIEW_TOWN ? gateOf(me.lot) : gateOf('me');
   }
@@ -1525,7 +1529,8 @@ const Scene = (() => {
     TL = layoutOf(VIEW_TOWN);
     const [x, y] = tripFrom(how), path = tripPath(to, how);
     if (how !== 'walk') parked = null;   // the car leaves from where it was parked
-    trip = { town: VIEW_TOWN, how, car, x, y, path, done, dest, face: 1, phase: 0, moving: true, dir: '+y', arrived: false };
+    trip = { town: VIEW_TOWN, how, car, x, y, path, done, dest, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now() };
+    if (S.jail && S.jail.out) S.jail = null;
     cancel(me); fly = null;
     return trip;
   }
@@ -1887,7 +1892,7 @@ const Scene = (() => {
     const useIt = usingId && room.items.find(x => x.id === usingId), useK = useIt && FURN[useIt.k].use;
     const bedD = useK === 'sleep' && !(trS && trS.pose === 'walk') ? useIt.x + useIt.y + itemSize('room', useIt).reduce((a, b) => a + b) / 2 + 0.02 : 0;   // in bed: right after the bed
     const meD = clipR ? clipR.x + clipR.y + 1.4 : onFlight && upR ? upR.x + upR.y + 1.38 : bedD || meIn.x + meIn.y + (meIn.seat || useK === 'sit' ? 0.7 : 0);
-    if (!((S.work || S.live) && owner === 'me')) objs.push({ d: meD, f: () => {
+    if (!((S.work || S.live || jailed()) && owner === 'me')) objs.push({ d: meD, f: () => {
       const p = iso(meIn.x, meIn.y), pose = trS ? trS.pose : meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
       const it = meIn.useId && room.items.find(x => x.id === meIn.useId), lift = meIn.lift || 0;
       ctx.save();
@@ -2430,6 +2435,12 @@ const Scene = (() => {
       ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
       drawPerson(w / 2 - 0.4 * s, h * 0.52 + 30 * s, s, { look: o.look, face: 1, energy: o.energy || 'good', ts: 0, seed: 0 });
     },
+    // v0.18: a whole townie facing you, to show a body type or an outfit
+    outfit(k, o, w, h) {
+      cam = { x: 0, y: 0, z: 1 };
+      const L = o.look || S.me.look;
+      drawPerson(w / 2, h * 0.94, Math.min(h * 0.86 / 50, w * 0.86 / 26), { look: L, face: 1, view: L.mob === 'wheel' ? undefined : 'front', turn: [0.35, 1], energy: 'great', ts: 0, seed: 0, pose: 'stand' });
+    },
     person(k, o, w, h) {
       cam = { x: 0, y: 0, z: 1 };
       drawPerson(w / 2, h * 0.9, h * 0.78 / 46, { look: o.look, face: 1, energy: o.energy || 'good', ts: o.ts || 0, seed: 0, moving: !!o.moving, phase: o.phase || 0, pose: o.pose });
@@ -2453,6 +2464,56 @@ const Scene = (() => {
       [['apple', 0.5], ['peach', 1.5]].forEach(([tk, x]) => { const c = iso(x, 0.5), d = TREES[tk]; drawFruitTree({ k: tk, planted: now() - d.grow * MIN * 2, last: now() - d.every * MIN * 1.5 }, c.x, c.y, z, 0, x); });
     },
     pond(k, o, w, h) { frameFoot(3, 2, 20, w, h, 1.6); flatRect(-0.2, -0.2, 3.4, 2.4, '#b8dd8c'); drawPond(0, 0, 3, 2, 4, 0); },
+    // v0.18: the mall's cinema: a short film on the big screen, rows of seats, you in the middle with popcorn
+    movie(k, o, w, h) {
+      const tt = Math.max(0, ((o.ts || 0) - (o.t0 || 0)) / 1000), sx = w * 0.08, sy = h * 0.05, sw = w * 0.84, sh = h * 0.52;
+      ctx.fillStyle = '#1b1530'; ctx.fillRect(0, 0, w, h);
+      const bg = { dino: ['#9fd7ff', '#7cc56b'], space: ['#0b0b2a', '#1d1d4a'], love: ['#ffd6e6', '#ffb3cf'], ocean: ['#2a7fd4', '#1c5ea3'], hero: ['#87c0ff', '#5a6b8a'], pets: ['#ffe9b0', '#9fd07a'] }[k] || ['#999', '#666'];
+      ctx.save(); ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip();
+      ctx.fillStyle = bg[0]; ctx.fillRect(sx, sy, sw, sh); ctx.fillStyle = bg[1]; ctx.fillRect(sx, sy + sh * 0.72, sw, sh * 0.28);
+      const u = (tt / 8) % 1, X = f => sx + sw * f, Y = f => sy + sh * f, E = sh * 0.26;
+      if (k === 'dino') { emoji('🌋', X(0.78), Y(0.5), E * 1.1); emoji('🌴', X(0.15), Y(0.55), E); emoji('🦖', X(-0.1 + u * 1.2), Y(0.62) - Math.abs(Math.sin(tt * 5)) * 6, E * 1.2); }
+      if (k === 'space') { for (let i = 0; i < 30; i++) circle(X((i * 37 % 100) / 100), Y((i * 61 % 100) / 100), 0.8 + (Math.sin(tt * 3 + i) + 1) * 0.5, '#fff'); emoji('🪐', X(0.78), Y(0.3), E); emoji('🚀', X(0.1 + u * 0.8), Y(0.85 - u * 0.7), E * 1.1); }
+      if (k === 'love') { emoji('🧑', X(0.38), Y(0.6), E * 1.1); emoji('👩', X(0.62), Y(0.6), E * 1.1); for (let i = 0; i < 5; i++) { const v = ((tt * 0.4 + i / 5) % 1); emoji('💕', X(0.3 + i * 0.1), Y(0.6 - v * 0.55), E * 0.5 * (1 - v * 0.4), 1 - v); } }
+      if (k === 'ocean') { for (let i = 0; i < 4; i++) { ctx.beginPath(); for (let q = 0; q <= 20; q++) { const xx = X(q / 20), yy = Y(0.2 + i * 0.2) + Math.sin(q + tt * 2 + i) * 3; q ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy); } ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1.2; ctx.stroke(); } emoji('🐳', X(1.1 - u * 1.2), Y(0.5) + Math.sin(tt * 2) * 5, E * 1.3); emoji('🐠', X(0.2 + u * 0.5), Y(0.8), E * 0.6); }
+      if (k === 'hero') { for (let i = 0; i < 8; i++) { ctx.fillStyle = '#4a5a78'; ctx.fillRect(X(i / 8), Y(0.5 + (i * 7 % 4) * 0.06), sw / 8 - 3, sh); } emoji('🦸', X(-0.1 + u * 1.2), Y(0.35) + Math.sin(tt * 3) * 6, E * 1.2); emoji('💥', X(0.7), Y(0.25), E * 0.6 * (1 + Math.sin(tt * 6) * 0.2)); }
+      if (k === 'pets') { const b = Math.abs(Math.sin(tt * 4)); emoji('⚽', X(0.15 + u * 0.8), Y(0.8) - b * 16, E * 0.6); emoji('🐶', X(0.05 + u * 0.8), Y(0.72) - Math.abs(Math.sin(tt * 4 + 1)) * 8, E * 1.1); emoji('🌳', X(0.85), Y(0.55), E); }
+      if (tt > 8) { ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(sx, sy, sw, sh); ctx.fillStyle = '#fff'; ctx.font = `800 ${sh * 0.16}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(curLang() === 'zh' ? '— 完 —' : '— The End —', w / 2, sy + sh / 2); }
+      ctx.restore();
+      const g = ctx.createLinearGradient(0, sy + sh, 0, h); g.addColorStop(0, 'rgba(160,190,255,.18)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, sy + sh, w, h - sy - sh);
+      const L = o.look || S.me.look;
+      [0.66, 0.79, 0.92].forEach((ry, r) => {
+        for (let i = 0; i < 9; i++) {
+          const cx = w * (0.08 + i * 0.105) + (r % 2) * 6, cy = h * ry, me = r === 0 && i === 4;
+          if (me) { circle(cx, cy - 10, 7, L.skin); ctx.fillStyle = L.hairCol; ctx.beginPath(); ctx.arc(cx, cy - 11, 7.4, Math.PI, Math.PI * 2); ctx.fill(); ctx.fillRect(cx - 7.4, cy - 11, 14.8, 5); emoji('🍿', cx + 12, cy - 4, 12); }
+          else if ((i * 7 + r * 3) % 5 !== 0) { circle(cx, cy - 9, 6, '#3a3352'); }
+          rrect(cx - 9, cy - 4, 18, 12, 4, me ? '#c0392b' : '#7a2430');
+        }
+      });
+    },
+    // v0.18: the claw machine full of plush toys
+    claw(k, o, w, h) {
+      const mx = w / 2 - 50, my = 6, mw = 100, mh = h - 12;
+      rrect(mx, my, mw, mh, 10, '#ec6aa8'); rrect(mx + 8, my + 10, mw - 16, mh * 0.62, 6, '#d9f1fb');
+      line(mx + 20, my + 16, mx + mw - 20, my + 16, '#9aa3ad', 2);
+      const cx = mx + mw * 0.55; line(cx, my + 16, cx, my + 34, '#9aa3ad', 1.6);
+      line(cx, my + 34, cx - 7, my + 44, '#9aa3ad', 2); line(cx, my + 34, cx + 7, my + 44, '#9aa3ad', 2);
+      Object.values(MALL.plush).forEach((e, i) => emoji(e, mx + 22 + (i % 3) * 26, my + mh * 0.6 - Math.floor(i / 3) * 16, 18));
+      rrect(mx + 8, my + mh * 0.7, mw - 16, mh * 0.24, 6, '#c2185b');
+      circle(mx + 30, my + mh * 0.82, 7, '#f2c230'); line(mx + 66, my + mh * 0.82, mx + 66, my + mh * 0.74, '#2d2d2d', 3); circle(mx + 66, my + mh * 0.73, 5, '#e5484d');
+    },
+    // v0.18: the holding cell at the police station: a bench, bars and you, a bit glum
+    cell(k, o, w, h) {
+      const z = frameFoot(4, 3, 46, w, h, 2.6), A = iso(0, 0), B = iso(4, 0), D = iso(0, 3);
+      for (let j = 0; j < 3; j++) for (let i = 0; i < 4; i++) tile(i, j, (i + j) % 2 ? '#c9ccd2' : '#bfc3ca');
+      poly([D, A, up(A, 46 * z), up(D, 46 * z)], '#dfe3ea'); poly([A, B, up(B, 46 * z), up(A, 46 * z)], '#eef1f6');
+      wallRect([A, B], 0, 0.55, 0.8, 30, 40, '#bfe6f7', '#5b6470', 1.4);
+      for (let i = 1; i < 4; i++) wallLine([A, B], 0, 0.55 + i * 0.0625, 30, 0.55 + i * 0.0625, 40, '#5b6470', 1.2);
+      box(0.2, 0.3, 2.6, 0.7, 8, '#8a6a4a', 0, { top: '#a8835c' });
+      const me2 = iso(1.5, 1.6); drawPerson(me2.x, me2.y, z, { look: S.me.look, face: 1, view: 'front', turn: [0.6, 1], energy: 'tired', ts: 0, seed: 3, pose: 'stand' });
+      const a = iso(0, 3), b = iso(4, 3); for (let i = 0; i <= 12; i++) { const u = i / 12, x = a.x + (b.x - a.x) * u, y = a.y + (b.y - a.y) * u; line(x, y, x, y - 46 * z, '#4a505a', 2 * z); }
+      line(a.x, a.y - 44 * z, b.x, b.y - 44 * z, '#4a505a', 2.4 * z); line(a.x, a.y - 22 * z, b.x, b.y - 22 * z, '#4a505a', 1.6 * z);
+    },
     // Inside a store (v0.17): a floor, two walls, shelves with the store's goods, a counter and the shopkeeper.
     storein(k, o, w, h) {
       const S2 = STORES[k] || STORES.market, z = frameFoot(6, 4, 40, w, h, 2.4), wall = S2.wall || '#f1f0ea';
@@ -2553,7 +2614,7 @@ const Scene = (() => {
     travel(to, how, car, done, dest, place) { if (mode !== 'town') return false; startTrip(to, how, car, done, dest); trip.place = place || null; return true; },
     // Public places (v0.12): where each one is (where you walk to), and whether you're there now.
     placePoint(key) { TL = layoutOf(VIEW_TOWN); return placePt(key); },
-    here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : trip && trip.arrived && trip.town === VIEW_TOWN ? trip.place : null; },
+    here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : S && jailed() && VIEW_TOWN === myTown() ? 'police' : trip && trip.arrived && trip.town === VIEW_TOWN ? trip.place : null; },
     resting() { return mode === 'interior' && owner === 'me' && !!meIn.useId && !!(homeOf('me').room.items.concat(...(homeOf('me').ups || []).map(u => u.items)).find(i => i.id === meIn.useId && FURN[i.k].use === 'sleep')); },
     arriveAt(pt, place) { if (mode !== 'town') return; trip = { town: VIEW_TOWN, how: 'walk', x: pt[0], y: pt[1], path: [], arrived: true, moving: false, place, face: 1, phase: 0 }; flyTo(pt[0], pt[1], Math.max(cam.z, 0.5)); },
     tripTime(to, how) { if (!S) return 0; TL = layoutOf(VIEW_TOWN); return Math.max(1, Math.round(pathLen(tripPath(to, how), how) / (TRIP_SPEED[how] || 3))); },

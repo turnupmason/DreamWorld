@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -136,8 +136,21 @@ table(['专属', '类型', '价格'], D.EXCLUSIVES.map(([kind, k]) => { const d 
 
 P('## 商店（v0.17）');
 P('');
-const CAT_ZH = { seeds: '种子', sell: '卖东西', trees: '树苗', yard: '庭院', animals: '牲畜', pets: '宠物', furn: '家具', land: '土地', houses: '房子', cars: '载具', excl: '专属' };
+const CAT_ZH = { seeds: '种子', sell: '卖东西', trees: '树苗', yard: '庭院', animals: '牲畜', pets: '宠物', furn: '家具', land: '土地', houses: '房子', cars: '载具', excl: '专属', clothes: '衣服' };
 table(['店', '卖什么'], Object.values(D.STORES).map(s => [`${s.e} ${s.zh} (${s.en})`, s.cats.map(c => CAT_ZH[c] || c).join('、')]));
+P('## 身材和衣服（v0.18）');
+P('');
+table(['身材', '宽', '高'], Object.values(D.BODY_TYPES).map(b => [`${b.zh} (${b.en})`, b.w, b.h]));
+const SLOT_ZH = { top: '上衣', bottom: '下装', shoes: '鞋', hat: '帽子' };
+table(['衣服', '类', '价格'], Object.values(D.CLOTHES).map(c => [`${c.e} ${c.zh} (${c.en})`, SLOT_ZH[c.slot], c.price ? `🪙${c.price}` : '免费']));
+P('## 警察（v0.18）');
+P('');
+table(['项目', '数值'], [['没有狗时被邻居看见的概率', `${D.POLICE.witness * 100}%`], ['几天内被抓几次警察会来', `${D.POLICE.strikeDays} 天 ${D.POLICE.strikes} 次（偷小动物被抓直接来）`],
+  ['警察罚款', `东西价值 ×${D.POLICE.fineMult}，🪙${D.POLICE.fineMin}–${D.POLICE.fineMax}`], ['拘留', `${D.POLICE.jailMin} 分钟`], ['保释金', `🪙${D.POLICE.bail}`]]);
+P('## 购物中心（v0.18）');
+P('');
+table(['项目', '价格'], [['🎬 电影（' + Object.values(D.MALL.movies).map(m => m.zh).join('、') + '）', `🪙${D.MALL.movie}`], ['🕹️ 抓娃娃（约 ' + Math.round(D.MALL.clawWin * 100) + '% 抓到）', `🪙${D.MALL.claw}`],
+  ...Object.values(D.MALL.foods).map(f => [`${f.e} ${f.zh}`, `🪙${f.price}`])]);
 P('## 市场、天气、打工、生病（v0.14）');
 P('');
 table(['项目', '数值'], [
