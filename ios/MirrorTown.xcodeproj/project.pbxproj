@@ -10,6 +10,7 @@
 		4D0000000000000000000020 /* MirrorTownApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0000000000000000000010 /* MirrorTownApp.swift */; };
 		4D0000000000000000000021 /* GameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0000000000000000000011 /* GameView.swift */; };
 		4D0000000000000000000022 /* HealthBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0000000000000000000012 /* HealthBridge.swift */; };
+		4D0000000000000000000026 /* NativeServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0000000000000000000016 /* NativeServices.swift */; };
 		4D0000000000000000000023 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4D0000000000000000000013 /* Assets.xcassets */; };
 		4D0000000000000000000024 /* prototype in Resources */ = {isa = PBXBuildFile; fileRef = 4D0000000000000000000015 /* prototype */; };
 /* End PBXBuildFile section */
@@ -19,6 +20,7 @@
 		4D0000000000000000000010 /* MirrorTownApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorTownApp.swift; sourceTree = "<group>"; };
 		4D0000000000000000000011 /* GameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameView.swift; sourceTree = "<group>"; };
 		4D0000000000000000000012 /* HealthBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthBridge.swift; sourceTree = "<group>"; };
+		4D0000000000000000000016 /* NativeServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeServices.swift; sourceTree = "<group>"; };
 		4D0000000000000000000013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4D0000000000000000000014 /* MirrorTown.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MirrorTown.entitlements; sourceTree = "<group>"; };
 		4D0000000000000000000015 /* prototype */ = {isa = PBXFileReference; lastKnownFileType = folder; name = prototype; path = ../prototype; sourceTree = SOURCE_ROOT; };
@@ -58,6 +60,7 @@
 				4D0000000000000000000010 /* MirrorTownApp.swift */,
 				4D0000000000000000000011 /* GameView.swift */,
 				4D0000000000000000000012 /* HealthBridge.swift */,
+				4D0000000000000000000016 /* NativeServices.swift */,
 				4D0000000000000000000013 /* Assets.xcassets */,
 				4D0000000000000000000014 /* MirrorTown.entitlements */,
 			);
@@ -138,6 +141,7 @@
 				4D0000000000000000000020 /* MirrorTownApp.swift in Sources */,
 				4D0000000000000000000021 /* GameView.swift in Sources */,
 				4D0000000000000000000022 /* HealthBridge.swift in Sources */,
+				4D0000000000000000000026 /* NativeServices.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -221,7 +225,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.0;
+				MARKETING_VERSION = 0.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mirrortown.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -251,7 +255,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.0;
+				MARKETING_VERSION = 0.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mirrortown.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

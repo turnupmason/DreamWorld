@@ -52,6 +52,10 @@ function migrate() {
     ids.filter(id => !START_LOTS[id]).forEach(id => { const r = freeRun(); if (r) S.lots.push({ id, st: r.st, p: r.p, n: CORE_PARCELS, paid: 0 }); });
     delete S.slots;
   }
+  // v0.8: dogs and cats become pets with a breed, a name and needs; sign-in and light / dark look
+  [S.me, ...S.friends].forEach(h => { h.animals.filter(isPet).forEach(a => setupPet(a, null, h)); h.petFood = h.petFood || {}; });
+  if (S.theme === undefined) S.theme = 'auto';
+  if (S.petRemind === undefined) S.petRemind = true;
   if (S.layoutV !== 2) {   // v0.5: furniture must be reachable; re-arrange the simulated friends' rooms once
     S.friends.forEach(h => { for (let lv = 0; lv < floorsOf(h); lv++) relayoutRoom(h, lv); });
     S.layoutV = 2;
@@ -72,7 +76,7 @@ function emptyHome(id) {
     orchardLv: 0, trees: [null, null, null, null, null, null],
     pondLv: 0, pond: { fish: 0, at: 0 },
     cars: [], car: -1,
-    seeds: {}, barn: {},
+    seeds: {}, barn: {}, petFood: {},
     // what friends may see: goal done, working out right now, energy face. All off by default.
     likes: 0, shareGoal: false, shareLive: false, shareMood: false, goalToday: false, energy: 75, live: null,
   };
@@ -116,7 +120,7 @@ function newGame(o) {
     v: 3, lang: o.lang, apps: o.apps, limitMin: o.limitMin, timeOffset: 0,
     created: Date.now(), seenHint: false, welcomed: false, pending: [], feed: [],
     mail: { inbox: [], sent: [] }, sleep: null, vitals: { resp: 14.5, rhr: 61, hrv: 48 }, live: null, native: false,
-    onboarding: !!o.preview, tut: 0, calm: false, souv: [], stepGoal: STEP_GOAL, hist: [], layoutV: 2,
+    onboarding: !!o.preview, tut: 0, calm: false, souv: [], stepGoal: STEP_GOAL, hist: [], layoutV: 2, theme: 'auto', petRemind: true, account: null,
     stats: { days: 1, goalDays: 0, sleepStreak: 0, ringsAll: 0, focus120: 0, mindful: 0, workouts: 0 },
   };
   S.today = freshDay();
@@ -135,6 +139,7 @@ function newGame(o) {
   autoPlace(me, 'yard', 'flowers');
   S.lots = Object.entries(START_LOTS).map(([id, [st, p, n]]) => ({ id, st, p, n: n || CORE_PARCELS, paid: 0 }));
   S.friends = FRIEND_PRESETS.map(homeFromPreset);
+  S.friends.forEach(h => h.animals.filter(isPet).forEach(a => setupPet(a, null, h)));
   genNPCs();
   simSleep(78);
   S.pending.push({ id: uid(), src: 'welcome', reward: { coins: 100, wood: 10, seeds: { tomato: 2 } }, info: {} });
@@ -899,13 +904,110 @@ function buySeed(crop, n) {
 }
 function buyAnimal(k) {
   const h = S.me, d = ANIMALS[k];
-  if (d.pet) { if (h.animals.some(a => a.k === k)) return 'own'; }
-  else if (!h.pastureLv) return 'nopasture';
+  if (d.pet) return 'pet';   // dogs and cats are adopted by breed (adoptPet)
+  if (!h.pastureLv) return 'nopasture';
   else if (pastureCount(h) >= pastureCap(h)) return 'full';
   if (h.coins < d.price) return 'poor';
   h.coins -= d.price;
   h.animals.push(newAnimal(k, 0));
   return 'ok';
+}
+// ---------- pets (v0.8) ----------
+// Dogs and cats are animals with pet: true. Each gets a breed, a name and care needs (food, water, clean, love)
+// that drop slowly in real hours. Nothing bad happens when they run low: the pet looks sad and asks for you.
+const isPet = a => !!(ANIMALS[a.k] && ANIMALS[a.k].pet);
+const myPets = (h = S.me) => h.animals.filter(isPet);
+function hasFurn(h, k) {
+  return [h.room, ...(h.ups || [])].some(r => r.items.some(i => i.k === k)) || (h.store && h.store['room:' + k] > 0);
+}
+function setupPet(a, breed, h) {
+  if (!a.breed || !PET_BREEDS[a.breed]) {
+    const list = Object.keys(PET_BREEDS).filter(b => PET_BREEDS[b].kind === a.k);
+    a.breed = breed || (h && h.id !== 'me' ? list[Math.floor(hash(a.id.length + a.id.charCodeAt(0), 3) * list.length)] : list[0]);
+  }
+  if (!a.name) {
+    const names = PET_NAMES[a.k][curLang()], taken = h ? myPets(h).map(p => p.name) : [];
+    a.name = names.find(n => !taken.includes(n)) || names[0];
+  }
+  if (!a.care) a.care = { food: 90, water: 90, clean: 90, love: 75, at: now(), warned: {} };
+  return a;
+}
+// The needs right now (they keep dropping between visits).
+function petCare(a) {
+  const c = a.care || { food: 100, water: 100, clean: 100, love: 100, at: now() }, hrs = Math.max(0, now() - c.at) / 3600000, v = {};
+  for (const k in PET_NEEDS) v[k] = clamp(c[k] - hrs * 100 / PET_NEEDS[k].hours, 0, 100);
+  return v;
+}
+function petMood(a) {
+  if (!a.care) return 'happy';
+  const v = petCare(a), m = Math.min(...Object.values(v));
+  return m > 60 ? 'happy' : m > PET_REMIND ? 'ok' : 'sad';
+}
+const petAsks = a => (a.care ? Object.entries(petCare(a)).filter(([, n]) => n <= PET_REMIND).map(([k]) => k) : []);
+function adoptPet(breed, h = S.me) {
+  const B = PET_BREEDS[breed];
+  if (!B) return { r: 'none' };
+  if (myPets(h).length >= PET_MAX) return { r: 'full' };
+  if (h.coins < B.price) return { r: 'poor' };
+  h.coins -= B.price;
+  const a = setupPet(newAnimal(B.kind, 0), breed, h);
+  a.care = { food: 100, water: 100, clean: 100, love: 80, at: now(), warned: {} };
+  h.animals.push(a);
+  h.petFood = h.petFood || {};
+  h.petFood[B.kind + 'food'] = (h.petFood[B.kind + 'food'] || 0) + PET_START_FOOD;
+  // the first dog or cat comes with its bowls (and a cat with a litter box)
+  if (!hasFurn(h, 'petbowl')) autoPlace(h, 'room', 'petbowl', null, 0);
+  if (B.kind === 'cat' && !hasFurn(h, 'litterbox')) autoPlace(h, 'room', 'litterbox', null, 0);
+  return { r: 'ok', a };
+}
+function buyPetFood(k, h = S.me) {
+  const f = PET_FOOD[k];
+  if (!f) return 'none';
+  if (h.coins < f.price) return 'poor';
+  h.coins -= f.price;
+  h.petFood = h.petFood || {};
+  h.petFood[k] = (h.petFood[k] || 0) + f.n;
+  return 'ok';
+}
+// Looking after a pet: food (uses a meal), water, clean (scoop the litter / a walk), pet, play, treat (uses a treat).
+function careFor(id, act, h = S.me) {
+  const a = h.animals.find(x => x.id === id && isPet(x));
+  if (!a) return 'none';
+  setupPet(a, null, h);
+  const v = petCare(a), food = a.k + 'food';
+  h.petFood = h.petFood || {};
+  if (act === 'food') { if (!(h.petFood[food] > 0)) return 'nofood'; h.petFood[food]--; v.food = 100; v.love = Math.min(100, v.love + 5); }
+  else if (act === 'water') v.water = 100;
+  else if (act === 'clean') { v.clean = 100; if (a.k === 'dog') v.love = Math.min(100, v.love + 10); }
+  else if (act === 'treat') { if (!(h.petFood.treats > 0)) return 'nofood'; h.petFood.treats--; v.love = Math.min(100, v.love + PET_LOVE.treat); v.food = Math.min(100, v.food + 10); }
+  else if (PET_LOVE[act]) v.love = Math.min(100, v.love + PET_LOVE[act]);
+  else return 'none';
+  a.care = { ...v, at: now(), warned: Object.fromEntries(Object.entries(a.care.warned || {}).filter(([k]) => v[k] <= PET_REMIND)) };
+  S.stats.petCare = (S.stats.petCare || 0) + 1;
+  return 'ok';
+}
+// New things your pets are asking for (each need is told once until you look after it). Your friends' pets are always fine.
+function petNews() {
+  const out = [];
+  myPets().forEach(a => {
+    if (!a.care) return;
+    a.care.warned = a.care.warned || {};
+    petAsks(a).forEach(k => { if (!a.care.warned[k]) { a.care.warned[k] = true; out.push({ a, need: k }); } });
+  });
+  return out;
+}
+// When each pet will next need something, for phone reminders (game time, ms).
+function petSchedule() {
+  const out = [];
+  myPets().forEach(a => {
+    if (!a.care) return;
+    const v = petCare(a);
+    for (const k in PET_NEEDS) {
+      const h = (v[k] - PET_REMIND) / (100 / PET_NEEDS[k].hours);
+      if (h > 0) out.push({ id: a.id + '-' + k, pet: a.id, need: k, at: now() + h * 3600000 });
+    }
+  });
+  return out;
 }
 function buyLand(kind, h = S.me) {
   const table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];

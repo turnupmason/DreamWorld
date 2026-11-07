@@ -34,6 +34,7 @@ function giftText(g) {
 const goodE = k => (CROPS[k] || GOODS[k] || {}).e || '';
 function fname(id) { const h = homeOf(id); return h ? homeName(h) : ''; }
 function feedText(it) {
+  if (it.kind === 'pet') { const a = myPets().find(x => x.id === it.pet); return petAskText(a ? a.name : '', a ? a.k : 'dog', it.need); }
   const name = esc(fname(it.from));
   if (it.kind === 'gift') return t(it.msgKey === 'welcome' ? 'feed_welcome' : it.msgKey === 'thanks' ? 'feed_thanks' : 'feed_gift', { name, gift: giftText(it.gift) });
   if (it.kind === 'like') return t('feed_like', { name });
@@ -136,6 +137,9 @@ function syncView() {
   if (UI.tab === 'home') Scene.setView(UI.inside ? 'interior' : 'home', 'me');
   else if (UI.tab === 'town') Scene.setView(UI.visit ? (UI.visitInside ? 'interior' : 'home') : 'town', UI.visit || 'me');
   Scene.setVisible(UI.tab === 'home' || UI.tab === 'town');
+  // each place has its own tune
+  const inside = (UI.tab === 'home' && UI.inside) || (UI.tab === 'town' && UI.visit && UI.visitInside);
+  Sound.setScene(UI.tab === 'shop' ? 'shop' : inside ? 'inside' : UI.tab === 'town' ? (UI.world ? 'world' : UI.visit ? 'home' : 'town') : 'home');
 }
 function setTab(tab) {
   if (Scene.getEdit()) Scene.stopEdit();
@@ -156,7 +160,7 @@ function renderHUD() {
       <button class="row me plain" data-act="energyInfo">${avatar(S.me.look, 'hud e-' + e, e)}<div><div class="me-name">${esc(S.me.name)}</div>
         <div class="energy">${ENERGY_EMOJI[e]} ${energyName(e)} · ${t('sleep_short', { n: S.sleep ? S.sleep.score : '–' })}</div></div></button>
       <div class="row tight">${mail ? `<button class="pill mail" data-act="mailGo">✉️ ${mail}</button>` : ''}
-        <div class="cap ${actionsLeft() === 0 ? 'done' : ''}" title="${t('cap_title')}">🔨 ${S.today.actions}/${ACTION_CAP}</div></div>
+        <button class="pill farm ${actionsLeft() === 0 ? 'done' : ''}" data-act="capInfo" style="--p:${Math.round(actionsLeft() / ACTION_CAP * 100)}"><i class="ring"></i>🌱 ${actionsLeft()}</button></div>
     </div>
     <div class="res row">
       <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>${live}${weatherPill()}
@@ -185,18 +189,19 @@ function renderOverlay() {
   const ctxEl = $('#ctxbar'), fab = $('#fab'), tray = $('#tray'), hv = $('#harvestAll'), lb = $('#liveBanner');
   const onScene = UI.tab === 'home' || UI.tab === 'town', ed = Scene.getEdit();
   if (!onScene) { ctxEl.hidden = fab.hidden = tray.hidden = hv.hidden = lb.hidden = true; return; }
-  const b = (act, ic, label, arg = '') => `<button class="fab-btn" data-act="${act}" data-arg="${arg}"><span>${ic}</span>${label}</button>`;
+  const b = (act, ic, label, arg = '', badge = 0) => `<button class="fab-btn" data-act="${act}" data-arg="${arg}"><span>${ic}</span>${label}${badge ? `<i class="fab-badge">${badge}</i>` : ''}</button>`;
+  const petBtn = () => b('pets', '🐾', t('fab_pets'), '', petAlertCount());
   let c = '', f = '';
   if (ed) {
     c = `<div class="ctx-main">✏️ ${t(ed.scope === 'room' ? 'ctx_edit_room' : 'ctx_edit_yard')}</div><button class="btn small primary" data-act="editDone">${t('done')}</button>`;
   } else if (UI.tab === 'home') {
     if (UI.inside) {
       c = `<div class="ctx-main">🛋️ ${nm(HOUSES[S.me.house])}</div>${floorChips(S.me)}`;
-      f = b('goOut', '🌳', t('fab_exit')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn'));
+      f = b('goOut', '🌳', t('fab_exit')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn')) + petBtn();
     } else {
       c = S.calm ? `<button class="ctx-main link" data-act="ranking">${t('ctx_town_calm', { street: t('street_name'), lv: townLevel() })}</button>`
         : `<button class="ctx-main link" data-act="ranking">🏆 ${t('ctx_rank', { n: rankOf('me'), v: fmtNum(assetValue(S.me)) })}</button>`;
-      f = b('goIn', '🚪', t('fab_enter')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn')) + b('recenter', '🎯', t('fab_center'));
+      f = b('goIn', '🚪', t('fab_enter')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn')) + petBtn() + b('recenter', '🎯', t('fab_center'));
     }
   } else if (UI.visit) {
     const h = homeOf(UI.visit), fr = isFriend(h.id), street = STREETS[lotOf(h.id).st];
@@ -226,7 +231,7 @@ function renderOverlay() {
   }
 }
 function overlaySig() {
-  return [UI.tab, UI.inside, UI.visit, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL].join('|');
+  return [UI.tab, UI.inside, UI.visit, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang].join('|');
 }
 // 1F 2F 3F … chips inside a house, plus ＋ to build another storey in your own.
 function floorChips(h) {
@@ -276,7 +281,7 @@ function trayHTML(ed) {
 }
 
 // ---------- shop ----------
-const SHOP_CATS = [['seeds', '🌱'], ['trees', '🌳'], ['animals', '🐣'], ['land', '🗺️'], ['furn', '🛋️'], ['yard', '⛲'], ['cars', '🚗'], ['houses', '🏠'], ['sell', '💰']];
+const SHOP_CATS = [['seeds', '🌱'], ['trees', '🌳'], ['animals', '🐣'], ['pets', '🐾'], ['land', '🗺️'], ['furn', '🛋️'], ['yard', '⛲'], ['cars', '🚗'], ['houses', '🏠'], ['sell', '💰']];
 function shopCard(img, name, sub, btns, extra = '') {
   return `<div class="item-card">${img}<div class="item-name">${name}</div><div class="item-sub">${sub}</div>${extra}<div class="item-btns">${btns}</div></div>`;
 }
@@ -348,6 +353,16 @@ function panelShop() {
         own ? `<span class="tag ok">${t('owned')}</span>` : buyBtn('buyAnimal', k, `${t('buy_baby')} 🪙${a.price}`, ok),
         `<div class="baby-row">${[0, 1, 2].map(s => thumbImg('animal', k, { stage: s }, 60, 48, 'thumb xs')).join('<span>→</span>')}</div>`);
     }).join('');
+  } else if (cat === 'pets') {
+    // adopt a dog or a cat by breed; food and treats; bowls, litter box, beds
+    const n = myPets(h).length, pf = h.petFood || {};
+    note = t('pets_note', { n, max: PET_MAX, food: PET_START_FOOD });
+    body = Object.entries(PET_BREEDS).filter(([k]) => keep(k)).map(([k, B]) => shopCard(thumbImg('pet', k, {}), `${B.kind === 'dog' ? '🐕' : '🐈'} ${nm(B)}`,
+      t('pet_sub_' + B.kind), buyBtn('adopt', k, `${t('adopt')} 🪙${B.price}`, h.coins >= B.price && n < PET_MAX))).join('')
+      + Object.entries(PET_FOOD).filter(([k]) => keep(k)).map(([k, f]) => shopCard(`<div class="emoji-thumb">${f.e}</div>`, nm(f),
+        t(k === 'treats' ? 'treat_sub' : 'petfood_sub', { n: f.n, have: pf[k] || 0, love: PET_LOVE.treat }), buyBtn('buyPetFood', k, `🪙${f.price}`, h.coins >= f.price))).join('')
+      + ['petbowl', 'litterbox', 'petbed', 'cattree'].filter(k => keep(k)).map(k => { const d = FURN[k];
+        return shopCard(thumbImg('furn', k), nm(d), t('furn_sub', { w: d.w, d: d.d }), buyBtn('buyItem', 'room|' + k, `🪙${fmtNum(d.price)}`, h.coins >= d.price)); }).join('');
   } else if (cat === 'land') {
     body = landCard('field', thumbImg('field', 'f'), '🟫') + landCard('pasture', thumbImg('pasture', 'p'), '🐄')
       + landCard('orchard', thumbImg('orchard', 'o'), '🌳') + landCard('pond', thumbImg('pond', 'p'), '🐟');
@@ -512,7 +527,12 @@ function panelReal() {
         <button class="chip ${S.lang === 'zh' ? 'on' : ''}" data-act="lang" data-arg="zh">中文</button>
         <button class="chip ${S.lang === 'en' ? 'on' : ''}" data-act="lang" data-arg="en">English</button></span></div>
       <label class="row between toggle-row"><span>🎵 ${t('set_music')}</span><input type="checkbox" class="switch" data-act="toggleMusic" ${S.music !== false ? 'checked' : ''}></label>
-      <label class="row between toggle-row"><span>🔊 ${t('set_sfx')}</span><input type="checkbox" class="switch" data-act="toggleSfx" ${S.sfx !== false ? 'checked' : ''}></label></div>`;
+      <label class="row between toggle-row"><span>🔊 ${t('set_sfx')}</span><input type="checkbox" class="switch" data-act="toggleSfx" ${S.sfx !== false ? 'checked' : ''}></label>
+      <div class="row between"><span>🌗 ${t('set_theme')}</span><span>${['auto', 'light', 'dark'].map(m => `<button class="chip ${S.theme === m ? 'on' : ''}" data-act="setTheme" data-arg="${m}">${t('theme_' + m)}</button>`).join('')}</span></div>
+      <label class="row between toggle-row"><span>🐾 ${t('pet_remind')}<small>${t('pet_remind_note')}</small></span><input type="checkbox" class="switch" data-act="togglePetRemind" ${S.petRemind !== false ? 'checked' : ''}></label></div>
+    <div class="card privacy-card"><h3>👤 ${t('account')}</h3>
+      <div class="row between"><span>${S.account ? t('signed_in_with', { p: t('p_' + S.account.provider) }) + (S.account.email ? `<small>${esc(S.account.email)}</small>` : '') + (S.account.sim ? `<small>${t('login_sim')}</small>` : '') : t('not_signed_in')}</span>
+        ${S.account ? `<button class="btn small" data-act="signOut">${t('sign_out')}</button>` : `<button class="btn small primary" data-act="showLogin">${t('sign_in')}</button>`}</div></div>`;
 }
 
 // Privacy and pressure: what friends can see of you, and calm mode (no ranking, no friends' fitness).
@@ -551,7 +571,7 @@ function openSheet(type, arg) {
   UI.sheet = { type, arg };
   renderSheet();
   const compact = ['friend', 'field', 'animal', 'car', 'tree'].includes(type);
-  $('#sheet').className = 'sheet' + (compact ? ' compact' : '');
+  $('#sheet').className = 'sheet' + (compact ? ' compact' : '') + (type === 'pets' ? ' tall' : '');
   $('#sheet').hidden = false;
   $('#backdrop').hidden = false;
   $('#backdrop').classList.toggle('light', compact);
@@ -884,27 +904,27 @@ function hiveJob(id) {
 }
 function plantJob(i, crop) {
   return { tg: { kind: 'field', i }, o: { pose: 'crouch', dur: 700, valid: () => !S.me.fields[i] && S.me.seeds[crop] > 0,
-    done: after(() => result(plant(i, crop), () => { Scene.floatField(i, '🌱'); Sound.play('plant'); })) } };
+    done: after(() => result(plant(i, crop), () => { Scene.floatField(i, '🌱'); Sound.play('sow'); })) } };
 }
 function harvestField(i) {
   const r = harvest(i);
   if (!r) return;
   tutDone('harvest');
-  Sound.play('pop');
+  Sound.play('harvest');
   Scene.floatField(i, `+${r.n} ${CROPS[r.crop].e}`);
   snack(t('snack_harvest', { n: r.n, e: CROPS[r.crop].e }));
 }
 function collectFrom(id) {
   const r = collectAnimal(id);
   if (!r) return;
-  Sound.play('pop');
+  Sound.play('collect');
   if (r.type === 'baby') { Scene.floatAnimal('me', id, '🍼'); snack(t(r.placed ? 'snack_baby' : 'snack_baby_barn', { name: nm(ANIMALS[r.k].baby) })); }
   else { Scene.floatAnimal('me', id, `+${r.n} ${GOODS[r.k].e}`); snack(t('snack_prod', { n: r.n, e: GOODS[r.k].e })); }
 }
 function pickTree(i) {
   const r = collectTree(i);
   if (!r) return;
-  Sound.play('pop');
+  Sound.play('fruit');
   Scene.floatMe(`+${r.n} ${GOODS[r.k].e}`);
   snack(t('snack_prod', { n: r.n, e: GOODS[r.k].e }));
 }
@@ -1248,6 +1268,7 @@ function onSceneHit(h) {
     if (!mine && isFriend(h.owner) && stealable(hm, h.i)) return sneakDo({ kind: 'field', i: h.i }, () => stealResult(h.owner, steal(h.owner, h.i)));
     return openSheet('field', { owner: h.owner, i: h.i });
   }
+  if (k === 'pet' || (k === 'animal' && mine && isPet(homeOf('me').animals.find(x => x.id === h.id) || { k: '' }))) { UI.pet = h.id; return ACT.pets(); }
   if (k === 'animal') {
     const a = homeOf(h.owner).animals.find(x => x.id === h.id);
     if (mine && a && animalReady(a)) { const j = animalJob(h.id); return walkDo(j.tg, j.o); }
@@ -1389,7 +1410,10 @@ function renderOnboarding() {
 }
 Object.assign(ACT, {
   obLang(l) { OB.lang = l; S.lang = l; document.documentElement.lang = l; renderOnboarding(); renderConsole(); },
-  obNext() { OB.step = Math.min(5, OB.step + 1); renderOnboarding(); },
+  obNext() {
+    if (OB.step === 0 && !S.account) { UI.login = { step: 'pick' }; return renderLoginInto($('#onboard')); }   // sign in first
+    OB.step = Math.min(5, OB.step + 1); renderOnboarding();
+  },
   obGo(n) { OB.step = +n; renderOnboarding(); },
   obShirt(c) { OB.look.shirt = c; obLook(); renderOnboarding(); },
   obSkin(c) { OB.look.skin = c; obLook(); renderOnboarding(); },
@@ -1491,6 +1515,7 @@ function coachLoop() {
 // ---------- boot ----------
 function start() {
   document.documentElement.lang = S.lang;
+  applyTheme();
   checkDay();
   simFriends();
   setTab('home');
@@ -1501,21 +1526,230 @@ function start() {
     if (S.pending.length) { UI.welcome = true; openSheet('collect'); }
     welcomeGifts();
   }
+  if (!S.account) showLogin();   // players from before v0.8 sign in once
+  syncPetReminders();
 }
+
+// ================= v0.8 =================
+// ---------- light / dark ----------
+const darkMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+function applyTheme() {
+  const dark = !!S && (S.theme === 'dark' || (S.theme !== 'light' && !!darkMQ && darkMQ.matches));
+  document.body.classList.toggle('dark', dark);
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.content = dark ? '#1c1916' : '#f6f1e7';
+}
+if (darkMQ && darkMQ.addEventListener) darkMQ.addEventListener('change', applyTheme);
+
+// ---------- signing in: Apple, Google or email ----------
+// In the iPhone app, Apple sign-in goes through the Swift shell (window.onNativeSignIn). Google and email need our
+// server (not built yet), so the prototype signs you in with a stand-in account and says so in Settings.
+const GOOGLE_G = '<svg class="glyph" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+const APPLE_LOGO = '<svg class="glyph" viewBox="0 0 24 24"><path fill="currentColor" d="M16.4 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.8-3-.8-1.6 0-3 .9-3.8 2.3-1.6 2.8-.4 6.9 1.2 9.2.8 1.1 1.7 2.3 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.2-2.6 0 0-2.4-.9-2.4-3.8zM14.1 5.9c.6-.8 1.1-1.8.9-2.9-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.7-1 2.8 1.1.1 2.1-.5 2.8-1.3z"/></svg>';
+function loginHTML() {
+  const L = UI.login || { step: 'pick' }, err = L.err ? `<p class="login-err">${t(L.err)}</p>` : '';
+  if (L.busy) return `<div class="ob-card login-card center"><div class="login-hero spin">🏡</div><h2>${t('login_busy')}</h2></div>`;
+  if (L.step === 'email') return `<div class="ob-card login-card"><h2>✉️ ${t('login_email_title')}</h2>
+    <input id="loginEmail" class="input" type="email" inputmode="email" autocomplete="email" placeholder="${t('login_email_ph')}" value="${esc(L.email || '')}">${err}
+    <button class="btn primary big block" data-act="loginSend">${t('login_send')}</button>
+    <button class="btn block" data-act="loginBack">${t('login_back')}</button></div>`;
+  if (L.step === 'code') return `<div class="ob-card login-card"><h2>🔢 ${t('login_code_title')}</h2><p class="ob-sub">${t('login_code_sub', { email: esc(L.email) })}</p>
+    <input id="loginCode" class="input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="${t('login_code_ph')}" value="${esc(L.code || '')}">${err}
+    <p class="login-note">${t('login_proto')}</p>
+    <button class="btn primary big block" data-act="loginVerify">${t('login_verify')}</button>
+    <button class="btn block" data-act="loginBack">${t('login_back')}</button></div>`;
+  return `<div class="ob-card login-card"><div class="login-hero">🏡</div><h2>${t('login_title')}</h2><p class="ob-sub">${t('login_sub')}</p>
+    <button class="btn login apple" data-act="signIn" data-arg="apple">${APPLE_LOGO}${t('login_apple')}</button>
+    <button class="btn login google" data-act="signIn" data-arg="google">${GOOGLE_G}${t('login_google')}</button>
+    <button class="btn login email" data-act="loginEmail"><span class="glyph">✉️</span>${t('login_email')}</button>
+    <p class="login-note">${t('login_terms')}</p></div>`;
+}
+function renderLoginInto(el) {
+  el.hidden = false;
+  el.className = 'onboard ob-login';
+  const langs = OB ? `<div class="ob-lang"><button class="chip ${OB.lang === 'zh' ? 'on' : ''}" data-act="obLang" data-arg="zh">中文</button>
+    <button class="chip ${OB.lang === 'en' ? 'on' : ''}" data-act="obLang" data-arg="en">English</button></div>` : '';
+  el.innerHTML = `<div class="ob-top">${langs}</div>${loginHTML()}`;
+  const inp = $('#loginEmail') || $('#loginCode');
+  if (inp) setTimeout(() => inp.focus(), 50);
+}
+function showLogin() {
+  UI.login = { step: 'pick' };
+  document.body.classList.add('ob-mode');
+  Scene.setView('town', 'me'); Scene.attract(0.42);
+  renderLoginInto($('#onboard'));
+}
+function finishLogin(acc) {
+  clearTimeout(UI.loginWait);
+  if (!S || !UI.login) return;
+  S.account = { ...acc, at: Date.now() };
+  UI.login = null;
+  save();
+  Sound.play('chime');
+  if (OB) { if (acc.name && !OB.name) OB.name = acc.name; OB.step = 1; renderOnboarding(); return; }   // carry on with the intro
+  const el = $('#onboard');
+  el.hidden = true; el.innerHTML = '';
+  document.body.classList.remove('ob-mode');
+  Scene.attract(false);
+  syncView(); refresh();
+  snack(t('login_ok'));
+}
+window.onNativeSignIn = d => {
+  d = typeof d === 'string' ? JSON.parse(d) : d || {};
+  if (d.ok) return finishLogin({ provider: 'apple', id: d.id, email: d.email || '', name: d.name || '' });
+  snack(t('login_native_fail'));
+  finishLogin({ provider: 'apple', id: 'sim-' + uid(), email: '', sim: true });
+};
+const reLogin = () => renderLoginInto($('#onboard'));
+
+// ---------- pets ----------
+const petAlertCount = () => (S ? myPets().filter(a => petAsks(a).length).length : 0);
+const petAskText = (name, kind, need) => t(need === 'clean' ? 'pet_ask_clean_' + kind : 'pet_ask_' + need, { name: esc(name) });
+let petSyncAt = 0, petAnim = null;
+// Tell the iPhone app when each pet will next need something, so it can remind you even when the game is closed.
+function syncPetReminders() {
+  petSyncAt = Date.now();
+  if (!S) return;
+  const off = now() - Date.now();
+  const items = S.petRemind === false ? [] : petSchedule().map(x => {
+    const a = myPets().find(p => p.id === x.pet);
+    return { id: x.id, at: Math.round(x.at - off), title: t('app_name'), body: petAskText(a.name, a.k, x.need) };
+  });
+  postNative({ type: 'petReminders', items });
+}
+// The pet page: your pet alive and big, how it's doing, and what you can do for it.
+function petLoop(ts) {
+  const cvs = $('#petCanvas');
+  if (!cvs || !UI.sheet || UI.sheet.type !== 'pets') { petAnim = null; return; }
+  const a = myPets().find(x => x.id === UI.pet);
+  if (a) {
+    const w = cvs.clientWidth || 340, h = cvs.clientHeight || 190, fx = UI.petFx && ts - UI.petFx.t < 1600 ? UI.petFx : null;
+    const dark = document.body.classList.contains('dark');
+    Scene.thumb('pet', a.breed, { canvas: cvs, live: true, ts, big: true, stage: animalStage(a), mood: fx ? 'happy' : petMood(a), moving: !!(fx && fx.play), phase: ts / 55,
+      face: fx && fx.play ? (Math.floor(ts / 700) % 2 ? -1 : 1) : 1, bg: dark ? ['#2f2924', '#241f1b'] : ['#fff6e8', '#ffe4c6'] }, w, h);
+    const g = cvs.getContext('2d'), dpr = cvs.width / w;
+    g.save(); g.scale(dpr, dpr); g.textAlign = 'center';
+    if (fx) { const k = (ts - fx.t) / 1600; g.globalAlpha = 1 - k; g.font = `30px ${EMOJI_FONT}`; g.fillText(fx.e, w / 2 + 36, 64 - k * 44); }
+    else { const ask = petAsks(a); if (ask.length) { g.font = `24px ${EMOJI_FONT}`; g.fillText(PET_NEEDS[ask[Math.floor(ts / 1500) % ask.length]].e, w / 2 + 40, 52 + Math.sin(ts / 300) * 3); } }
+    g.restore();
+  }
+  petAnim = requestAnimationFrame(petLoop);
+}
+const PET_MOOD_E = { happy: '😊', ok: '🙂', sad: '🥺' };
+Object.assign(SHEETS, {
+  pets() {
+    const pets = myPets();
+    if (!pets.length) return `<div class="center"><div class="big-emoji xl">🐾</div><h2>${t('pets_title')}</h2><p class="muted">${t('pets_empty')}</p>
+      <button class="btn primary block gap-top" data-act="openShop" data-arg="pets">${t('pets_adopt')}</button></div>`;
+    const cur = pets.find(a => a.id === UI.pet) || pets[0];
+    UI.pet = cur.id;
+    const B = PET_BREEDS[cur.breed], v = petCare(cur), mood = petMood(cur), pf = S.me.petFood || {}, fk = cur.k + 'food';
+    const tabs = `<div class="pet-tabs">${pets.map(a => `<button class="pet-tab ${a.id === cur.id ? 'on' : ''}" data-act="petPick" data-arg="${a.id}">
+        ${thumbImg('pet', a.breed, { stage: animalStage(a) }, 48, 40, 'thumb xs')}<span>${esc(a.name)}</span>${petAsks(a).length ? '<i class="dot"></i>' : ''}</button>`).join('')}
+      ${pets.length < PET_MAX ? `<button class="pet-tab add" data-act="openShop" data-arg="pets"><span class="plus">＋</span><span>${t('pets_more')}</span></button>` : ''}</div>`;
+    const bar = k => {
+      const n = Math.round(v[k]), label = k === 'clean' ? t(cur.k === 'cat' ? 'need_litter' : 'need_walk') : t('need_' + k);
+      return `<div class="need ${n <= PET_REMIND ? 'low' : ''}"><span>${k === 'clean' && cur.k === 'dog' ? '🦮' : PET_NEEDS[k].e} ${label}</span><div class="bar"><i style="width:${n}%"></i></div><b>${n}</b></div>`;
+    };
+    const act = (a, e, label, n) => `<button class="pet-act" data-act="petCare" data-arg="${a}" ${n === 0 ? 'disabled' : ''}><span>${e}</span>${label}${n !== undefined ? `<small>${n}</small>` : ''}</button>`;
+    const name = UI.petEdit !== undefined
+      ? `<div class="name-edit"><input id="petName" class="input" maxlength="10" placeholder="${t('pet_name_ph')}" value="${esc(UI.petEdit)}"><button class="btn small primary" data-act="petNameSave">${t('save')}</button></div>`
+      : `<h2>${esc(cur.name)} <button class="link-btn" data-act="petRename">✏️</button></h2>`;
+    return `<div class="pet-page">${tabs}
+      <canvas id="petCanvas" class="pet-stage"></canvas>
+      <div class="pet-head"><div class="grow">${name}<div class="muted">${nm(B)} · ${t('pet_stage_' + animalStage(cur))} · ${t('mood_' + mood)}</div></div><div class="pet-mood">${PET_MOOD_E[mood]}</div></div>
+      <div class="card needs">${['food', 'water', 'clean', 'love'].map(bar).join('')}</div>
+      <div class="pet-acts">
+        ${act('food', '🍖', t('pet_feed'), pf[fk] || 0)}${act('water', '💧', t('pet_water'))}${act('clean', cur.k === 'cat' ? '🧹' : '🦮', t(cur.k === 'cat' ? 'pet_scoop' : 'pet_walk'))}
+        ${act('pet', '🤚', t('pet_pet'))}${act('play', cur.k === 'cat' ? '🧶' : '🎾', t('pet_play'))}${act('treat', '🍪', t('pet_treat'), pf.treats || 0)}</div>
+      ${(pf[fk] || 0) < 3 ? `<div class="shop-note">${t('pet_food_low', { e: PET_FOOD[fk].e, name: nm(PET_FOOD[fk]) })} <button class="btn small" data-act="openShop" data-arg="pets">${t('go_shop')}</button></div>` : ''}
+      <div class="card privacy-card"><label class="row between toggle-row"><span>🔔 ${t('pet_remind')}<small>${t('pet_remind_note')}</small></span>
+        <input type="checkbox" class="switch" data-act="togglePetRemind" ${S.petRemind !== false ? 'checked' : ''}></label></div>
+      <p class="muted center">${t('pet_never')}</p></div>`;
+  },
+});
+const PET_FX = { food: '😋', water: '💦', treat: '🍪', pet: '💕' };
+Object.assign(ACT, {
+  capInfo() { snack(t('cap_info', { n: actionsLeft(), cap: ACTION_CAP })); },
+  pets() { UI.petEdit = undefined; openSheet('pets'); if (!petAnim) petAnim = requestAnimationFrame(petLoop); },
+  petPick(id) { UI.pet = id; UI.petEdit = undefined; renderSheet(); },
+  petCare(what) {
+    const a = myPets().find(x => x.id === UI.pet);
+    if (!a) return;
+    const r = careFor(a.id, what);
+    if (r === 'nofood') { Sound.play('oops'); return snack(t('pet_nofood', { name: nm(PET_FOOD[what === 'treat' ? 'treats' : a.k + 'food']) })); }
+    if (r !== 'ok') return;
+    const voice = a.k === 'dog' ? 'woof' : 'meow';
+    UI.petFx = { e: PET_FX[what] || (what === 'clean' ? (a.k === 'cat' ? '✨' : '🦮') : a.k === 'cat' ? '🧶' : '🎾'), t: performance.now(), play: what === 'play' || (what === 'clean' && a.k === 'dog') };
+    Sound.play({ food: 'crunch', water: 'lap', treat: 'crunch', clean: a.k === 'cat' ? 'sweep' : voice }[what] || voice);
+    if (what !== 'clean') setTimeout(() => Sound.play(voice), 450);
+    save(); renderSheet(); syncPetReminders();
+  },
+  petRename() { const a = myPets().find(x => x.id === UI.pet); UI.petEdit = a ? a.name : ''; renderSheet(); const i = $('#petName'); if (i) i.focus(); },
+  petNameSave() {
+    const a = myPets().find(x => x.id === UI.pet), n = (UI.petEdit || '').trim().slice(0, 10);
+    if (a && n) a.name = n;
+    UI.petEdit = undefined; save(); renderSheet();
+  },
+  adopt(breed) {
+    const r = adoptPet(breed);
+    if (r.r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r.r === 'full') return snack(t('pet_full', { n: PET_MAX }));
+    if (r.r !== 'ok') return;
+    Sound.play('buy'); setTimeout(() => Sound.play(r.a.k === 'dog' ? 'woof' : 'meow'), 400);
+    UI.pet = r.a.id; save();
+    snack(t('pet_adopted', { name: r.a.name }));
+    ACT.pets();
+  },
+  buyPetFood(k) {
+    const r = buyPetFood(k);
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r === 'ok') { Sound.play('buy'); snack(t('petfood_bought', { e: PET_FOOD[k].e, name: nm(PET_FOOD[k]), n: PET_FOOD[k].n })); save(); }
+  },
+  togglePetRemind() { S.petRemind = S.petRemind === false; save(); syncPetReminders(); },
+  setTheme(m) { S.theme = m; save(); applyTheme(); },
+  showLogin() { showLogin(); },
+  signOut() { S.account = null; save(); showLogin(); },
+  signIn(p) {
+    UI.login = { step: 'pick', busy: true }; reLogin();
+    const native = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mirror;
+    if (p === 'apple' && native) {
+      postNative({ type: 'signIn', provider: 'apple' });
+      UI.loginWait = setTimeout(() => window.onNativeSignIn({ ok: false }), 30000);   // an older app without the bridge never answers
+    } else setTimeout(() => finishLogin({ provider: p, id: 'sim-' + uid(), email: '', sim: true }), 700);
+  },
+  loginEmail() { UI.login = { step: 'email', email: '' }; reLogin(); },
+  loginSend() {
+    const e = (UI.login.email || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { UI.login.err = 'login_bad_email'; return reLogin(); }
+    UI.login = { step: 'code', email: e, code: '' }; reLogin();
+  },
+  loginVerify() {
+    if (!/^\d{6}$/.test(UI.login.code || '')) { UI.login.err = 'login_bad_code'; return reLogin(); }
+    finishLogin({ provider: 'email', id: 'email:' + UI.login.email, email: UI.login.email, sim: true });
+  },
+  loginBack() { UI.login = { step: 'pick' }; reLogin(); },
+});
 
 document.addEventListener('click', e => {
   if (e.target.id === 'backdrop') return closeSheet();
   const el = e.target.closest('[data-act]');
-  if (!el || el.disabled) return;
+  if (!el || el.disabled) { if (e.target.closest('.item-card')) Sound.play('select'); return; }
   const fn = ACT[el.dataset.act];
   if (!fn) return;
+  // every button makes a sound: picking things (shop categories, tabs, cards) a bubbly blip, everything else a soft tick
+  Sound.play(CLICK_SOUND[el.dataset.act] || 'tick');
   const ta = $('#draftText');
   if (ta && UI.draft) UI.draft.text = ta.value;
   fn(el.dataset.arg);
   if (S && !S.onboarding && !el.dataset.act.startsWith('ob')) refresh();
 });
+const CLICK_SOUND = { shopCat: 'select', shopSub: 'select', tab: 'select', petPick: 'select', worldPick: 'select' };
 document.addEventListener('input', e => {
   if (e.target.id === 'obName') OB.name = e.target.value;
+  if (e.target.id === 'loginEmail' && UI.login) UI.login.email = e.target.value;
+  if (e.target.id === 'loginCode' && UI.login) UI.login.code = e.target.value.replace(/\D/g, '').slice(0, 6);
+  if (e.target.id === 'petName' && UI.petEdit !== undefined) UI.petEdit = e.target.value;
   if (e.target.id === 'draftText' && UI.draft) UI.draft.text = e.target.value;
 });
 
@@ -1537,6 +1771,13 @@ setInterval(() => {
   if (UI.sheet && ['field', 'animal', 'tree'].includes(UI.sheet.type)) renderSheet();
   if (UI.tab === 'real' && S.live) renderPanel();
   rainGrow(1000);
+  // pets: say once when one of them needs something; keep the phone reminders up to date
+  if (!S.onboarding) {
+    const news = petNews();
+    news.forEach(n => { addFeed({ kind: 'pet', from: 'me', pet: n.a.id, need: n.need }); snack(petAskText(n.a.name, n.a.k, n.need)); });
+    if (news.length) { save(); refresh(); }
+    if (Date.now() - petSyncAt > 10 * MIN) syncPetReminders();
+  }
   Sound.ambience(NIGHT > 0.5, weatherNow().kind);
   if (S.weatherReal && (!S.weather || !S.weather.real || now() - S.weather.at > 30 * MIN) && Date.now() - weatherTried > 5 * MIN) realWeather(false);
 }, 1000);

@@ -443,3 +443,115 @@ body { letter-spacing: .01em; }
 .land-pic b { font-size: 17px; font-weight: 800; }
 .land-pic i { font-style: normal; font-size: 12.5px; color: #6b7f55; font-weight: 700; }
 .pill.weather { cursor: pointer; background: #eef6ff; }
+
+/* ================= v0.8 ================= */
+/* farm jobs left: a little ring that empties as you work */
+.pill.farm { cursor: pointer; gap: 5px; line-height: 1; }
+.pill.farm .ring { width: 15px; height: 15px; border-radius: 50%; flex: none; background: conic-gradient(var(--green) calc(var(--p) * 1%), rgba(120, 100, 70, .18) 0);
+  -webkit-mask: radial-gradient(circle, transparent 4.3px, #000 4.8px); mask: radial-gradient(circle, transparent 4.3px, #000 4.8px); }
+.pill.farm.done { color: #5b52a3; }
+.fab-btn { position: relative; }
+.fab-badge { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: #e5484d; color: #fff; font-size: 10.5px; font-style: normal; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 0 0 2px #fff; }
+/* the shop has ten departments now: two rows of five */
+.shop-cats { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.cat { padding: 8px 2px 6px; font-size: 11.5px; border-radius: 16px; }
+.cat span { font-size: 23px; }
+.emoji-thumb { font-size: 46px; line-height: 92px; height: 92px; text-align: center; }
+.sheet.tall { max-height: 92%; }
+.link-btn { border: 0; background: none; font-size: 16px; cursor: pointer; padding: 0 2px; }
+/* pet page */
+.pet-page { display: flex; flex-direction: column; gap: 10px; }
+.pet-page .card { margin-bottom: 0; }
+.pet-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 4px; }
+.pet-tab { border: 0; background: var(--card); box-shadow: var(--shadow); border-radius: 16px; padding: 4px 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 12px; font-weight: 800; position: relative; cursor: pointer; flex: none; min-width: 66px; color: var(--ink); }
+.pet-tab .thumb.xs { width: 48px; }
+.pet-tab.on { box-shadow: 0 0 0 2px var(--accent) inset, var(--shadow); }
+.pet-tab .dot { position: absolute; top: 5px; right: 7px; width: 9px; height: 9px; border-radius: 50%; background: #e5484d; }
+.pet-tab .plus { font-size: 24px; line-height: 40px; color: var(--accent); }
+.pet-stage { width: 100%; height: 190px; border-radius: 22px; display: block; box-shadow: var(--shadow); }
+.pet-head { display: flex; align-items: center; gap: 10px; }
+.pet-head h2 { display: flex; align-items: center; gap: 2px; margin: 0; }
+.pet-mood { font-size: 36px; flex: none; }
+.name-edit { display: flex; gap: 6px; align-items: center; }
+.name-edit .input { padding: 8px 12px; font-size: 16px; text-align: left; }
+.needs { display: flex; flex-direction: column; gap: 4px; }
+.needs .need { display: grid; grid-template-columns: 76px 1fr 28px; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 800; }
+.needs .need .bar { margin: 0; height: 9px; }
+.needs .need b { text-align: right; font-size: 12px; color: var(--muted); }
+.needs .need.low span { color: #d0531f; }
+.needs .need.low .bar i { background: linear-gradient(90deg, #f2a33a, #ef7d3c); }
+.pet-acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pet-act { border: 0; background: var(--card); color: var(--ink); box-shadow: var(--shadow); border-radius: 18px; padding: 9px 4px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 13px; font-weight: 800; position: relative; cursor: pointer; transition: transform .1s; }
+.pet-act span { font-size: 27px; line-height: 1.15; }
+.pet-act small { position: absolute; top: 6px; right: 9px; font-size: 11px; color: var(--accent); font-weight: 800; }
+.pet-act:disabled { opacity: .45; cursor: default; }
+.pet-act:active:not(:disabled) { transform: scale(.95); }
+/* sign in */
+.ob-login { justify-content: flex-end; background: linear-gradient(rgba(255,246,232,.35), rgba(60,40,20,.25)); }
+.login-card { display: flex; flex-direction: column; gap: 10px; padding: 20px 18px 16px; }
+.login-card h2 { margin-top: 2px; }
+.login-hero { width: 64px; height: 64px; margin: 0 auto; border-radius: 18px; font-size: 36px; line-height: 64px; text-align: center; background: linear-gradient(160deg, #ffd59e, #ef7d3c); box-shadow: 0 6px 16px rgba(239,125,60,.35); }
+.login-hero.spin { animation: bob 1s ease-in-out infinite; }
+.btn.login { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 16.5px; padding: 14px; border-radius: 16px; font-weight: 700; }
+.btn.login .glyph { width: 20px; height: 20px; flex: none; font-size: 18px; line-height: 20px; }
+.btn.login.apple { background: #000; color: #fff; }
+.btn.login.google { background: #fff; color: #1f1f1f; box-shadow: 0 0 0 1px #dadce0 inset; }
+.btn.login.email { background: var(--chip); color: var(--ink); }
+.login-note { font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.5; }
+.login-err { color: #d0531f; font-size: 13px; font-weight: 700; text-align: center; }
+.code-input { letter-spacing: .45em; font-size: 22px; font-weight: 800; }
+.privacy-card .row.between small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+/* ================= v0.8 dark mode (Settings, Appearance; or it follows the phone) ================= */
+body.dark { --bg: #1c1916; --ink: #f2ece3; --muted: #a89e8f; --card: #2a2622; --line: #3b352e; --chip: #3a332c;
+  --shadow: 0 2px 12px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.04); --shadow-up: 0 8px 26px rgba(0,0,0,.5);
+  background: #0f0d0b; color: var(--ink); }
+body.dark .screen { background: var(--bg); }
+body.dark .hud { background: linear-gradient(#26221e, #1f1b18); box-shadow: 0 3px 12px rgba(0,0,0,.4); }
+body.dark .panel { background: linear-gradient(#1f1b18, #1a1714); }
+body.dark .sheet { background: linear-gradient(#27231f, #1f1b18); box-shadow: 0 -10px 30px rgba(0,0,0,.45); }
+body.dark .sheet .grab { background: #4a4239; }
+body.dark .sheet-backdrop { background: rgba(0,0,0,.5); }
+body.dark .muted, body.dark .energy, body.dark .act-tile i, body.dark .tip span, body.dark .cap-text, body.dark .ob-sub, body.dark .ob-logo p { color: var(--muted); }
+body.dark .pill, body.dark .status-line, body.dark .act-tile, body.dark .tip, body.dark .tip::after, body.dark .coach-bubble, body.dark .tray-item, body.dark .app-pick, body.dark .cat { background: var(--card); color: var(--ink); }
+body.dark .pill.mail, body.dark .pill.weather { background: #1f3346; }
+body.dark .pill.live { background: #46281c; color: #ffb38f; }
+body.dark .pill.pending { background: var(--accent); color: #fff; }
+body.dark .btn { background: #3a332c; color: var(--ink); }
+body.dark .btn.primary { color: #fff; background: linear-gradient(180deg, #f8924f, #ea6c29); }
+body.dark .btn.login.email { background: var(--chip); }
+body.dark .btn.danger { background: #4a2424; color: #ffb4ad; }
+body.dark .chip, body.dark .sub, body.dark .tag, body.dark .fl, body.dark .profile-tags span { background: var(--chip); color: var(--ink); }
+body.dark .chip.on, body.dark .cat.on, body.dark .app-pick.on { background: #4a2f1c; color: #ffc7a0; }
+body.dark .sub.on, body.dark .fl.on { background: #f2ece3; color: #1c1916; }
+body.dark .sub i { color: var(--muted); background: rgba(255,255,255,.08); }
+body.dark .tab.on { color: #ff9a5c; }
+body.dark .tab.on::before { background: #3d2a1d; }
+body.dark .ctxbar, body.dark .fab-btn { background: rgba(38,34,30,.93); color: var(--ink); }
+body.dark .item-card > .thumb { background: radial-gradient(ellipse at 50% 62%, #3a332c 0, #3a332c 52%, rgba(58,51,44,0) 53%); }
+body.dark .tip .thumb { background: #3a332c; }
+body.dark .bar { background: #3a332c; }
+body.dark .switch { background: #4a4239; }
+body.dark .snack, body.dark .toast { background: rgba(42,38,34,.97); color: var(--ink); }
+body.dark .vitals div, body.dark .ob-promise { background: #2f2a25; color: var(--ink); }
+body.dark .me-row { background: #3a2c1f; }
+body.dark .card.earn, body.dark .town-card, body.dark .energy-card.e-great, body.dark .energy-card.e-tired, body.dark .energy-card.e-exhausted, body.dark .mail-card, body.dark .live-card, body.dark .souv-card { background: var(--card); }
+body.dark .floor-card { background: #33291e; border-color: #5a4630; }
+body.dark .souv { background: rgba(255,255,255,.05); }
+body.dark .land-pic { background: linear-gradient(160deg, #24331c, #1d2a17); }
+body.dark .land-pic i { color: #a9c48c; }
+body.dark .live-banner { background: rgba(70,40,28,.95); border-color: #6b3f2c; color: #ffc9b0; }
+body.dark .live-banner span { color: #e0a487; }
+body.dark .ob-card, body.dark .ob-logo { background: rgba(38,34,30,.96); color: var(--ink); }
+body.dark .ob-skip, body.dark .ob-lang .chip { background: rgba(38,34,30,.88); color: var(--ink); }
+body.dark .input { background: #2f2a25; color: var(--ink); }
+body.dark .console { background: rgba(38,34,30,.92); }
+body.dark .reward { color: #ffab6b; }
+body.dark .tag.ok, body.dark .mult.up { background: #1f3a27; color: #8fd6a2; }
+body.dark .mult.down { background: #2c2840; color: #b9b0f0; }
+body.dark .harvest-all.busy { background: #5a534a; }
+body.dark .tray { background: var(--bg); }
+body.dark .fab-badge { box-shadow: 0 0 0 2px #2a2622; }
+body.dark .btn.login.apple { background: #fff; color: #000; }
+body.dark .btn.login.google { background: #fff; }
+body.dark .ob-login { background: linear-gradient(rgba(0,0,0,.25), rgba(0,0,0,.55)); }

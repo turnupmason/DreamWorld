@@ -15,6 +15,7 @@ ios/
     ├── MirrorTownApp.swift      App 入口
     ├── GameView.swift           全屏 WKWebView，加载 prototype/index.html，负责 JS 桥
     ├── HealthBridge.swift       读 Apple 健康，整理成 JSON
+    ├── NativeServices.swift     通过 Apple 登录、宠物提醒（本地通知），v0.8.0
     ├── MirrorTown.entitlements  HealthKit 权限
     └── Assets.xcassets          App 图标（占位图，正式上线前换成设计好的）
 ```
@@ -51,6 +52,9 @@ ios/
 | 网页 → Swift | `postMessage({type: 'refresh'})` | 打开「健康」页时要一次最新数据 |
 | Swift → 网页 | `window.onNativeHealth(json)` | 今天的 steps、pushes、kcal、exMin、standH、mindful、workouts[]、rhr、hrv、resp、sleep{asleep, deep, rem, core, awake, source}。每分钟一次，App 回到前台时也推 |
 | Swift → 网页 | `window.onNativeWorkout(json)` | 正在进行的训练 {active, type, start, hr}，小人同步做这个运动 |
+| 网页 → Swift | `postMessage({type: 'signIn', provider: 'apple'})` | 点「通过 Apple 登录」（v0.8.0）。Swift 弹出苹果的登录框 |
+| Swift → 网页 | `window.onNativeSignIn(json)` | 登录结果 {ok, provider, id, email, name}；失败是 {ok: false, error}，游戏会提示并先用模拟登录 |
+| 网页 → Swift | `postMessage({type: 'petReminders', items: [{id, at, title, body}]})` | 宠物下一次需要喂饭 / 换水 / 铲猫砂或遛狗 / 陪伴的时间（毫秒时间戳）。Swift 删掉旧的宠物提醒，按这些时间排本地通知；空列表 = 关掉提醒。第一次会请求通知权限 |
 
 网页端的处理在 `prototype/js/app.js`（`window.onNativeHealth` / `onNativeWorkout`）和 `prototype/js/state.js`（`applyNative`、`startLive`）。
 
@@ -58,6 +62,19 @@ ios/
 
 - 工程里加了 `NSLocationWhenInUseUsageDescription`（在 Build Settings 的 `INFOPLIST_KEY_NSLocationWhenInUseUsageDescription`）。只有玩家在游戏里打开「用我所在地区的真实天气」时，网页才会请求位置（`navigator.geolocation`），坐标取一位小数（约 10 公里）后向 Open-Meteo 查天气，位置不保存。
 - 如果 App 里的网页拿不到位置（WKWebView 对本地文件页面的定位支持不确定），游戏会自动用小镇自己的天气，不会出错。真机上要是一直拿不到，以后改成 Swift 用 CoreLocation 读大概位置，再传给网页（`window.onNativeLocation`）。**等 Mason 在真机上试一下。**
+
+## 通过 Apple 登录（v0.8.0）
+
+- 代码在 `NativeServices.swift` 的 `AppleSignIn`（AuthenticationServices）。
+- **要真的能用，需要付费的 Apple Developer 账号**，并在 Xcode 的 Signing & Capabilities 里点「+ Capability」加上 **Sign in with Apple**（会在 entitlements 里加 `com.apple.developer.applesignin`）。免费个人账号加不了这个能力，所以工程里**还没加**，免得 Mason 第一次编译签名失败。没加时点 Apple 登录会收到错误，游戏提示「Apple 登录还没开通」并用模拟登录，不影响试玩。
+- Google 登录和邮箱验证码需要服务器（还没做），现在网页里是模拟登录。上架规定：用了 Google 等第三方登录，就必须同时提供「通过 Apple 登录」（App Store 审核指南 4.8），我们两个都有。
+
+## 宠物提醒（v0.8.0）
+
+- `PetReminders.schedule` 用 `UNUserNotificationCenter` 排本地通知（标识都以 `pet-` 开头），不需要服务器。游戏设置里和宠物页都可以关掉「宠物提醒」。
+- 第一次有提醒要排时会弹出系统的通知权限请求。
+
+**以上 Swift 代码在 Windows 上写的，没经过编译器，等 Mason 在 Mac 上编译。**
 
 ## 还没做的
 

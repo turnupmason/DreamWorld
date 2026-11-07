@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -477,3 +477,55 @@ const FRIEND_POOL = [
 // What the townie does while the real you is working out ("mini me").
 const WORKOUT_POSE = { walk: 'walk', run: 'run', cycle: 'bike', swim: 'swim', strength: 'lift', yoga: 'yoga', hiit: 'jacks', dance: 'dance', wheel: 'walk' };
 // Fruit stages and the plaza use minutes too; the game converts with MIN where it needs milliseconds.
+
+// ---------- pets (v0.8) ----------
+// Dogs and cats live with you: pick a breed, give it a name, and look after it in its own pet page.
+// They need meals, fresh water, a clean litter box (cats) or a walk (dogs), and love. They never get sick,
+// run away or die: when you forget, they just look sad until you come back (reward, never punish).
+const PET_BREEDS = {
+  shiba:   { kind: 'dog', zh: '柴犬', en: 'Shiba Inu', price: 600, col: '#e0913f', belly: '#fff3e2', ears: 'up', tail: 'curl' },
+  corgi:   { kind: 'dog', zh: '柯基', en: 'Corgi', price: 700, col: '#e8a24a', belly: '#fffaf2', ears: 'big', tail: 'stub', short: true },
+  golden:  { kind: 'dog', zh: '金毛', en: 'Golden Retriever', price: 800, col: '#e7b75f', belly: '#f4d999', ears: 'flop', tail: 'plume', big: true },
+  husky:   { kind: 'dog', zh: '哈士奇', en: 'Husky', price: 800, col: '#7b838d', belly: '#f6f6f3', ears: 'up', tail: 'plume', mask: true, eyes: '#5aa7e0', big: true },
+  poodle:  { kind: 'dog', zh: '泰迪', en: 'Poodle', price: 700, col: '#a8714a', belly: '#b98560', ears: 'flop', tail: 'pom', curly: true },
+  tabby:   { kind: 'cat', zh: '橘猫', en: 'Orange tabby', price: 400, col: '#f0a04b', belly: '#fff1dc', stripe: '#d17a2a', eyes: '#8bbf3a' },
+  black:   { kind: 'cat', zh: '黑猫', en: 'Black cat', price: 400, col: '#34302e', belly: '#46403c', eyes: '#f2c230' },
+  white:   { kind: 'cat', zh: '白猫', en: 'White cat', price: 500, col: '#f6f3ed', belly: '#ffffff', eyes: '#6fb6e8' },
+  calico:  { kind: 'cat', zh: '三花', en: 'Calico', price: 500, col: '#f7f2ea', belly: '#ffffff', spots: ['#e0913f', '#3b3330'], eyes: '#c9a23a' },
+  ragdoll: { kind: 'cat', zh: '布偶猫', en: 'Ragdoll', price: 900, col: '#f2e8da', belly: '#fffaf3', point: '#7d665a', eyes: '#5aa7e0', fluffy: true },
+};
+const PET_MAX = 4;                 // pets per home
+// Each need runs from 100 down to 0 over this many hours; at PET_REMIND or below the pet asks for you.
+const PET_NEEDS = {
+  food:  { e: '🍖', hours: 8 },    // a meal three times a day
+  water: { e: '💧', hours: 12 },   // fresh water twice a day
+  clean: { e: '🧹', hours: 24 },   // cats: scoop the litter box once a day; dogs: a walk once a day
+  love:  { e: '❤️', hours: 16 },   // petting and playing
+};
+const PET_REMIND = 30;
+const PET_LOVE = { pet: 15, play: 30, treat: 40 };   // how much love petting, playing and a treat give
+// Pet food is bought with coins and used up; one bag is several meals.
+const PET_FOOD = {
+  dogfood: { e: '🦴', zh: '狗粮', en: 'Dog food', kind: 'dog', n: 10, price: 40 },
+  catfood: { e: '🐟', zh: '猫粮', en: 'Cat food', kind: 'cat', n: 10, price: 40 },
+  treats:  { e: '🍪', zh: '零食', en: 'Treats', kind: 'any', n: 5, price: 30 },
+};
+const PET_START_FOOD = 6;          // a new pet comes with this many meals
+const PET_NAMES = {
+  dog: { zh: ['旺财', '豆豆', '可乐', '阿黄', '布丁', '小虎'], en: ['Buddy', 'Max', 'Bella', 'Daisy', 'Coco', 'Milo'] },
+  cat: { zh: ['咪咪', '橘子', '团子', '奶茶', '芝麻', '小雪'], en: ['Luna', 'Mochi', 'Simba', 'Nala', 'Oreo', 'Kitty'] },
+};
+// Pet things for the house (also sold in the shop's pet section). A new pet gets a free bowl (and a litter box for a cat).
+Object.assign(FURN, {
+  petbowl:   { zh: '食盆水盆', en: 'Food & water bowls', w: 1, d: 1, price: 30, pet: true },
+  litterbox: { zh: '猫砂盆',   en: 'Litter box',         w: 1, d: 1, price: 50, pet: true },
+  petbed:    { zh: '宠物窝',   en: 'Pet bed',            w: 1, d: 1, price: 90, pet: true, tint: true },
+});
+SHOP_SUBS.animals = SHOP_SUBS.animals.filter(s => s.id !== 'pets');
+SHOP_SUBS.pets = [
+  { id: 'dogs', e: '🐕', zh: '狗狗', en: 'Dogs', keys: Object.keys(PET_BREEDS).filter(k => PET_BREEDS[k].kind === 'dog') },
+  { id: 'cats', e: '🐈', zh: '猫咪', en: 'Cats', keys: Object.keys(PET_BREEDS).filter(k => PET_BREEDS[k].kind === 'cat') },
+  { id: 'food', e: '🦴', zh: '粮食零食', en: 'Food', keys: Object.keys(PET_FOOD) },
+  { id: 'gear', e: '🧺', zh: '用品', en: 'Supplies', keys: ['petbowl', 'litterbox', 'petbed', 'cattree'] },
+];
+SHOP_SUBS.furn.find(s => s.id === 'decor').keys = SHOP_SUBS.furn.find(s => s.id === 'decor').keys.filter(k => k !== 'cattree');

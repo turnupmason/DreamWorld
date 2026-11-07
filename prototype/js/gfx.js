@@ -167,6 +167,74 @@ function hipRoof(x, y, w, d, base, rh, col) {
   line(R1.x, R1.y, R2.x, R2.y, shade(col, 0.3), 1.4 * z);
 }
 
+// ---------- soft things and round things ----------
+// Outline of a rectangle with rounded corners (r in tiles), lifted to height hh (unscaled px).
+function softPts(x, y, w, d, r, hh) {
+  const z = cam.z, pts = [], n = 4;
+  r = Math.max(0.001, Math.min(r, w / 2, d / 2));
+  [[x + w - r, y + r, -Math.PI / 2], [x + w - r, y + d - r, 0], [x + r, y + d - r, Math.PI / 2], [x + r, y + r, Math.PI]].forEach(([cx, cy, a0]) => {
+    for (let k = 0; k <= n; k++) { const a = a0 + k / n * Math.PI / 2; pts.push(up(iso(cx + Math.cos(a) * r, cy + Math.sin(a) * r), hh * z)); }
+  });
+  return pts;
+}
+// Something soft (pillow, cushion, quilt, mattress): rounded corners, sides that bulge out in the middle and
+// tuck in at the bottom, a top that puffs up with a soft highlight. Same footprint as box().
+function soft(x, y, w, d, h, col, base = 0, o = {}) {
+  const r = Math.min(w, d) * (o.round ?? 0.32), puff = o.puff ?? 0.05, n = 5;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, bulge = Math.sin(t * Math.PI) * puff - (1 - t) * puff * 0.6;
+    poly(softPts(x - bulge, y - bulge, w + bulge * 2, d + bulge * 2, r, base + h * t * 0.94), shade(col, -0.24 + t * 0.16));
+  }
+  const top = softPts(x + puff * 0.3, y + puff * 0.3, w - puff * 0.6, d - puff * 0.6, r, base + h);
+  poly(top, o.top || shade(col, 0.06));
+  const z = cam.z, c = up(iso(x + w * 0.45, y + d * 0.45), (base + h + 0.6) * z), rx = (w + d) * 9 * z, ry = (w + d) * 4.2 * z;
+  ctx.save(); ctx.scale(1, ry / rx);
+  const cy = c.y * rx / ry, g = ctx.createRadialGradient(c.x, cy, 0, c.x, cy, rx);
+  g.addColorStop(0, `rgba(255,255,255,${o.shine ?? 0.38})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ellipse(c.x, cy, rx, rx, g); ctx.restore();
+  if (o.seam) { const a = up(iso(x + w * 0.12, y + d / 2), (base + h) * z), b = up(iso(x + w * 0.88, y + d / 2), (base + h) * z); line(a.x, a.y, b.x, b.y, shade(col, -0.12), 0.7 * z); }
+  return top;
+}
+// A wheel standing on a side that runs along `dir` (a screen direction, e.g. AXIS_Y): drawn the way a circle
+// on that side really looks in this view, so it leans with the car body instead of a tilted oval.
+const AXIS_X = { x: 2, y: 1 }, AXIS_Y = { x: -2, y: 1 };
+function wheelOn(cx, cy, dir, r, fill, stroke, lw) {
+  const L = Math.hypot(dir.x, dir.y), k = r * 0.9;
+  ctx.save(); ctx.transform(dir.x / L * k, dir.y / L * k, 0, -r, cx, cy);
+  ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.restore();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke(); }
+}
+// A tyre with a rim and a hub, on a side running along dir.
+function tyre(cx, cy, dir, r, rim = '#c9ced4', tyreCol = '#26262a') {
+  wheelOn(cx, cy, dir, r, tyreCol);
+  wheelOn(cx, cy, dir, r * 0.58, rim);
+  wheelOn(cx, cy, dir, r * 0.22, shade(rim, -0.35));
+}
+// A leaf with a soft rounded outline and a light midrib (local space).
+function vleaf(x, y, len, wid, ang, col, rib = true) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  ctx.beginPath(); ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(len * 0.22, -wid * 1.15, len * 0.72, -wid * 0.95, len, 0);
+  ctx.bezierCurveTo(len * 0.72, wid * 0.95, len * 0.22, wid * 1.15, 0, 0);
+  ctx.fillStyle = col; ctx.fill();
+  if (rib && len > 2.5) { ctx.beginPath(); ctx.moveTo(len * 0.08, 0); ctx.quadraticCurveTo(len * 0.5, -wid * 0.12, len * 0.86, 0); ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = Math.max(0.25, wid * 0.16); ctx.stroke(); }
+  ctx.restore();
+}
+// A big round leaf lying on the ground (pumpkin, melon): heart-shaped, squashed by the view, with veins.
+function heartLeaf(x, y, r, col, ang = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.62); ctx.rotate(ang);
+  ctx.beginPath(); ctx.moveTo(0, r * 0.95);
+  ctx.bezierCurveTo(-r * 1.35, r * 0.25, -r * 0.95, -r * 1.05, 0, -r * 0.45);
+  ctx.bezierCurveTo(r * 0.95, -r * 1.05, r * 1.35, r * 0.25, 0, r * 0.95);
+  ctx.fillStyle = col; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = Math.max(0.3, r * 0.08); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, r * 0.8); ctx.lineTo(0, -r * 0.35);
+  [-1, 1].forEach(s => { ctx.moveTo(0, r * 0.3); ctx.lineTo(s * r * 0.6, -r * 0.2); ctx.moveTo(0, r * 0.6); ctx.lineTo(s * r * 0.7, r * 0.3); });
+  ctx.stroke();
+  ctx.restore();
+}
+
 // ---------- labels ----------
 function pill(text, x, y, bg, fg, font, h = 22) {
   ctx.font = font;

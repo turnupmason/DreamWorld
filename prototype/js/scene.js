@@ -139,7 +139,7 @@ const Scene = (() => {
     const [fx, fy, w, d] = HOUSES[h.house].fp;
     block(fx, fy, w, d);
     const pr = pastureRect(h);
-    if (pr) block(pr.x + pr.w - 2, pr.y, 2, 2);
+    if (pr) { block(pr.x + pr.w - 2, pr.y, 2, 2); block(pr.x + 1, pr.y + pr.d - 1, 1, 1); block(pr.x, pr.y, 1, 1); }   // barn, water trough, hay
     if (h.pondLv) block(AREA.pond.x, AREA.pond.y, AREA.pond.w, AREA.pond.d);
     h.trees.forEach((t, i) => { if (t && i < orchardSlots(h)) block(ORCHARD_SLOTS[i][0], ORCHARD_SLOTS[i][1], 1, 1); });
     h.yard.forEach(it => { const [w2, d2] = itemSize('yard', it); block(it.x, it.y, w2, d2); });
@@ -219,7 +219,8 @@ const Scene = (() => {
     return true;
   }
   // Path to a point: exact if its tile is reachable, otherwise to the closest reachable tile (within reach).
-  function planPath(a, N, px, py, reach = 2.2) {
+  // grid: keep to the tile grid (no diagonal shortcuts), for animals, whose side view must match the way they walk.
+  function planPath(a, N, px, py, reach = 2.2, grid = false) {
     const sx = clamp(Math.floor(a.x), 0, N.gw - 1), sy = clamp(Math.floor(a.y), 0, N.gh - 1), start = sy * N.gw + sx;
     const prev = bfsFrom(N, sx, sy);
     const tx = Math.floor(px), ty = Math.floor(py);
@@ -233,7 +234,8 @@ const Scene = (() => {
     for (let c = goal; c !== start; c = prev[c]) tiles.push(c);
     tiles.reverse();
     const pts = tiles.map(c => [c % N.gw + 0.5, Math.floor(c / N.gw) + 0.5]);
-    if (exact) pts.push([px, py]);
+    if (exact) pts.push(grid ? [pts.length ? pts[pts.length - 1][0] : a.x, py] : [px, py]);
+    if (grid) return pts.filter((p, i) => i === pts.length - 1 || !pts[i + 1] || !((i > 0 && pts[i - 1][0] === p[0] && pts[i + 1][0] === p[0]) || (i > 0 && pts[i - 1][1] === p[1] && pts[i + 1][1] === p[1])));
     const out = [];
     let cx = a.x, cy = a.y, i = 0;
     while (i < pts.length) {
@@ -304,11 +306,11 @@ const Scene = (() => {
     e.wait -= dt;
     if (e.wait <= 0) { e.path = pick(e) || []; e.wait = 1.2 + Math.random() * 3.5; }
   }
-  function randomWalk(e, N, maxD = 6, maxY = LOT_D) {
+  function randomWalk(e, N, maxD = 6, maxY = LOT_D, grid = false) {
     for (let k = 0; k < 10; k++) {
       const tx = Math.floor(e.x + (Math.random() - 0.5) * maxD * 2), ty = Math.floor(e.y + (Math.random() - 0.5) * maxD * 2);
       if (ty >= maxY || !open(N, tx, ty)) continue;
-      const p = planPath(e, N, tx + 0.3 + Math.random() * 0.4, ty + 0.3 + Math.random() * 0.4, 0);
+      const p = planPath(e, N, tx + 0.3 + Math.random() * 0.4, ty + 0.3 + Math.random() * 0.4, 0, grid);
       if (p && p.length) return p;
     }
     return null;
@@ -491,7 +493,7 @@ const Scene = (() => {
     if (pr) {
       const bx = pr.x + pr.w - 2;
       objs.push({ d: ox + oy + bx + pr.y + 2, f: () => drawBarn(ox + bx, oy + pr.y) });
-      objs.push({ d: ox + oy + pr.x + 0.75 + pr.y + pr.d - 0.6, f: () => drawTrough(ox + pr.x + 0.3, oy + pr.y + pr.d - 0.8) });
+      objs.push({ d: ox + oy + pr.x + 1.6 + pr.y + pr.d - 0.3, f: () => drawTrough(ox + pr.x + 1.05, oy + pr.y + pr.d - 0.55, ts) });
       objs.push({ d: ox + oy + pr.x + 0.7 + pr.y + 0.6, f: () => drawHay(ox + pr.x + 0.4, oy + pr.y + 0.4) });
     }
     fenceObjs(h, ox, oy, objs);
@@ -566,18 +568,22 @@ const Scene = (() => {
         stepAlong(e, dt, 3.2);
         if (performance.now() > e.chase) e.chase = 0;
       } else wander(e, dt, SPEED[a.k] * (st === 0 ? 0.8 : 1), en => {
-        if (pet) return randomWalk(en, lotNav(h), 5);
+        if (pet) return randomWalk(en, lotNav(h), 5, LOT_D, true);
         if (!pr) return null;
-        for (let n = 0; n < 6; n++) {
+        // one leg along x and one along y (never straight up or down the screen), around the barn, trough and hay
+        const bad = (x, y) => (x > pr.x + pr.w - 2.3 && y < pr.y + 2.3) || (x > pr.x + 0.85 && x < pr.x + 2.15 && y > pr.y + pr.d - 1.15) || (x < pr.x + 1.15 && y < pr.y + 1.15);
+        const clear = (a, b) => { for (let t = 0; t <= 1; t += 0.1) if (bad(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)) return false; return true; };
+        for (let n = 0; n < 10; n++) {
           const x = pr.x + 0.4 + Math.random() * (pr.w - 0.8), y = pr.y + 0.4 + Math.random() * (pr.d - 0.8);
-          if (x > pr.x + pr.w - 2.4 && y < pr.y + 2.4) continue;
-          if (Math.hypot(x - en.x, y - en.y) < 3) return [[x, y]];
+          if (bad(x, y) || Math.hypot(x - en.x, y - en.y) > 3) continue;
+          for (const c of Math.random() < 0.5 ? [[x, en.y], [en.x, y]] : [[en.x, y], [x, en.y]]) if (clear([en.x, en.y], c) && clear(c, [x, y])) return [c, [x, y]];
         }
         return null;
       });
       objs.push({ d: ox + oy + e.x + e.y, f: () => {
         const p = iso(ox + e.x, oy + e.y);
-        drawAnimal(a.k, st, p.x, p.y, z, { face: e.face, moving: e.moving, phase: e.phase, ts, seed: k * 1.7 });
+        drawAnimal(a.k, st, p.x, p.y, z, { face: e.face, moving: e.moving, phase: e.phase, ts, seed: k * 1.7, breed: a.breed, mood: pet && h.id === 'me' ? petMood(a) : 'happy' });
+        if (pet && h.id === 'me' && petAsks(a).length && !e.moving) emoji(PET_NEEDS[petAsks(a)[0]].e, p.x + 8 * z, p.y - 26 * z, 12 * z);
         if (focus) {
           hits.push({ kind: 'animal', owner: h.id, id: a.id, x0: p.x - 16 * z, x1: p.x + 16 * z, y0: p.y - 30 * z, y1: p.y + 6 * z });
           if (animalReady(a)) {
@@ -1073,6 +1079,18 @@ const Scene = (() => {
       };
       if (flat) fn(); else objs.push({ d: it.x + it.y + (w + dd) / 2, f: fn });
     });
+    // your pets come inside with you: they wander the room, and say what they need
+    if (owner === 'me' && lv === 0) myPets(h).forEach((a, k) => {
+      const e = ent('pin:' + a.id, () => ({ x: 1.5 + k, y: rd - 1.5 }));
+      wander(e, dt, SPEED[a.k] * 0.6, en => randomWalk(en, roomNav(h), 3, 99, true));
+      objs.push({ d: e.x + e.y, f: () => {
+        const p = iso(e.x, e.y), st = animalStage(a);
+        drawAnimal(a.k, st, p.x, p.y, z * 0.8, { face: e.face, moving: e.moving, phase: e.phase, ts, seed: k * 2.3, breed: a.breed, mood: petMood(a) });
+        const ask = petAsks(a);
+        if (ask.length && !e.moving) emoji(PET_NEEDS[ask[0]].e, p.x + 8 * z, p.y - 24 * z, 12 * z);
+        if (!edit) hits.push({ kind: 'pet', id: a.id, pri: 2, x0: p.x - 14 * z, x1: p.x + 14 * z, y0: p.y - 24 * z, y1: p.y + 4 * z });
+      } });
+    });
     if (owner !== 'me') {
       const e = ent('in:' + h.id, () => ({ x: rw - 1.5, y: rd - 1.5 }));
       wander(e, dt, speedOf(h) * 0.7, en => randomWalk(en, roomNav(h), 4, 99));
@@ -1082,15 +1100,17 @@ const Scene = (() => {
         if (!edit) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
-    if (meIn.room !== owner) { cancel(meIn); meIn.anim = null; meIn.room = owner; meIn.lv = lv; meIn.x = 0.6; meIn.y = rd * 0.9; meIn.face = 1; }
-    if (meIn.lv !== lv) { cancel(meIn); meIn.anim = null; meIn.lv = lv; meIn.seat = 0; meIn.useId = null; [meIn.x, meIn.y, meIn.face] = stairsSpot(h); }
+    if (meIn.room !== owner) { cancel(meIn); meIn.anim = null; meIn.tr = null; meIn.using = null; meIn.room = owner; meIn.lv = lv; meIn.x = 0.6; meIn.y = rd * 0.9; meIn.face = 1; }
+    if (meIn.lv !== lv) { cancel(meIn); meIn.anim = null; meIn.tr = null; meIn.using = null; meIn.lv = lv; meIn.seat = 0; meIn.useId = null; [meIn.x, meIn.y, meIn.face] = stairsSpot(h); }
     // on the stairs: after the steps but before their railing (inside the opening: before its railing)
     const an = meIn.anim, clipR = an && an.clip && meIn.y < an.clip.y + an.clip.d ? an.clip : null, onFlight = an && an.flight && meIn.y < 1 && meIn.x > an.flight.x - 0.2;
-    const useIt = meIn.useId && room.items.find(x => x.id === meIn.useId), useK = useIt && FURN[useIt.k].use;
-    const bedD = useK === 'sleep' ? useIt.x + useIt.y + itemSize('room', useIt).reduce((a, b) => a + b) / 2 + 0.02 : 0;   // in bed: right after the bed
+    // getting on or off a seat / bed (meIn.tr) shows that step's pose; meIn.using is the seat or bed being used
+    const trS = meIn.tr && meIn.tr.cur, usingId = meIn.useId || (meIn.using && meIn.using.id);
+    const useIt = usingId && room.items.find(x => x.id === usingId), useK = useIt && FURN[useIt.k].use;
+    const bedD = useK === 'sleep' && !(trS && trS.pose === 'walk') ? useIt.x + useIt.y + itemSize('room', useIt).reduce((a, b) => a + b) / 2 + 0.02 : 0;   // in bed: right after the bed
     const meD = clipR ? clipR.x + clipR.y + 1.4 : onFlight && upR ? upR.x + upR.y + 1.38 : bedD || meIn.x + meIn.y + (meIn.seat || useK === 'sit' ? 0.7 : 0);
     objs.push({ d: meD, f: () => {
-      const p = iso(meIn.x, meIn.y), pose = meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
+      const p = iso(meIn.x, meIn.y), pose = trS ? trS.pose : meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
       const it = meIn.useId && room.items.find(x => x.id === meIn.useId), lift = meIn.lift || 0;
       ctx.save();
       if (meIn.alpha < 1) ctx.globalAlpha = Math.max(0, meIn.alpha);
@@ -1099,7 +1119,7 @@ const Scene = (() => {
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(b.x, b.y - 400); ctx.lineTo(a.x, a.y - 400); ctx.closePath(); ctx.clip();
       }
       // sitting: hips on the seat, feet on the floor; lying: on the mattress, then the quilt goes back over you
-      const sitH = pose === 'sit' && useK === 'sit' ? SEAT_H[useIt.k] || 9 : 0, lieH = pose === 'lie' ? LIE_H[useIt.k] || 10 : 0;
+      const sitH = pose !== 'sit' ? 0 : trS ? trS.seatH : useK === 'sit' ? SEAT_H[useIt.k] || 9 : 0, lieH = pose === 'lie' && useIt ? LIE_H[useIt.k] || 10 : 0;
       const yOff = sitH ? 0 : lieH || meIn.seat || 0;
       drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: meIn.moving ? meIn.view : null, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
       if (pose === 'lie' && useIt) drawBedQuilt(useIt);
@@ -1179,7 +1199,12 @@ const Scene = (() => {
       return;
     }
     runActor(me, () => lotNav(h), dt, ts, speedOf(S.me));
-    if (mode === 'interior') { if (meIn.anim) stepAnim(meIn, dt); else runActor(meIn, () => roomNav(homeOf(owner)), dt, ts, speedOf(S.me) * 0.8); }
+    if (mode === 'interior') {
+      if (meIn.using && (!meIn.tr || meIn.tr.enter) && meIn.useId !== meIn.using.id) { const b = meIn.using; meIn.tr = { steps: exitSteps(b), done: () => { if (meIn.using === b) meIn.using = null; } }; }
+      if (meIn.tr) stepTr(meIn, dt);
+      else if (meIn.anim) stepAnim(meIn, dt);
+      else runActor(meIn, () => roomNav(homeOf(owner)), dt, ts, speedOf(S.me) * 0.8);
+    }
   }
   function meInLake() { return me.livePose === 'swim' && !!S.live && inLake(...lakeWorld()); }
   function lakeWorld() { const [ox, oy] = origin(me.lot); return [ox + me.x, oy + me.y]; }
@@ -1200,6 +1225,41 @@ const Scene = (() => {
     }
     const face = use === 'sit' || use === 'bike' ? (it.rot ? 1 : -1) : use === 'run' ? (it.rot ? -1 : 1) : 1;
     return [it.x + w / 2, it.y + d / 2, face];
+  }
+  // Getting onto a seat or into bed, step by step: walk up to the edge, sit down (on a bed: sit on the edge first,
+  // then lie back and slide under the quilt). `back` remembers the way out for getting up again.
+  function seatSteps(a, it, sp, use) {
+    const [w, d] = itemSize('room', it), m = 0.2;
+    const ex = clamp(a.x, it.x + m, it.x + w - m), ey = clamp(a.y, it.y + m, it.y + d - m);
+    let ox = a.x - ex, oy = a.y - ey; const L = Math.hypot(ox, oy) || 1; ox /= L; oy /= L;
+    const F = [ex + ox * 0.42, ey + oy * 0.42], out = ox - oy >= 0 ? 1 : -1, walk = Math.hypot(F[0] - a.x, F[1] - a.y), steps = [];
+    if (walk > 0.05) steps.push({ pose: 'walk', x: F[0], y: F[1], dur: walk / 1.6 });
+    const seatH = use === 'sleep' ? (LIE_H[it.k] || 10) - 1 : SEAT_H[it.k] || 9;
+    if (use === 'sleep') {
+      steps.push({ pose: 'sit', x: ex, y: ey, dur: 0.32, seatH, face: out });
+      steps.push({ pose: 'sit', dur: 0.28, seatH, face: out });
+      steps.push({ pose: 'lie', x: sp[0], y: sp[1], dur: 0.55 });
+    } else steps.push({ pose: 'sit', x: sp[0], y: sp[1], dur: 0.38, seatH, face: sp[2] });
+    return { steps, back: { id: it.id, use, ex, ey, F, seatH, out } };
+  }
+  function exitSteps(b) {
+    if (b.use === 'sleep') return [{ pose: 'lie', x: b.ex, y: b.ey, dur: 0.4 }, { pose: 'sit', dur: 0.3, seatH: b.seatH, face: b.out }, { pose: 'walk', x: b.F[0], y: b.F[1], dur: 0.3 }];
+    return [{ pose: 'sit', dur: 0.12, seatH: b.seatH }, { pose: 'walk', x: b.F[0], y: b.F[1], dur: 0.32 }];
+  }
+  function stepTr(a, dt) {
+    const tr = a.tr;
+    if (!tr.cur) {
+      tr.cur = tr.steps.shift();
+      if (!tr.cur) { a.tr = null; a.moving = false; if (tr.done) tr.done(); return; }
+      tr.t = 0; tr.from = [a.x, a.y];
+    }
+    const s = tr.cur, k = s.dur > 0 ? Math.min(1, (tr.t += dt) / s.dur) : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(2 - 2 * k, 2) / 2;
+    const tx = s.x ?? tr.from[0], ty = s.y ?? tr.from[1], u = s.pose === 'walk' ? k : e;
+    const nx = tr.from[0] + (tx - tr.from[0]) * u, ny = tr.from[1] + (ty - tr.from[1]) * u;
+    if (s.pose === 'walk') { faceTo(a, nx - a.x, ny - a.y); a.phase += dt * 11; a.moving = true; }
+    else { a.moving = false; a.view = null; a.back = false; if (s.face) a.face = s.face; }
+    a.x = nx; a.y = ny;
+    if (k >= 1) tr.cur = null;
   }
   function render(ts) {
     if (!visible || !S || !W) return;
@@ -1378,7 +1438,11 @@ const Scene = (() => {
       spot = () => sp;
       pose = { sit: 'sit', sleep: 'lie', run: 'run', bike: 'bike', lift: 'lift', box: 'box', yoga: 'yoga' }[use];
       dur = Infinity;
-      start = a => { if (use !== 'lift' && use !== 'box') { a.x = sp[0]; a.y = sp[1]; } a.seat = SEAT[it.k] || 0; a.useId = it.id; if (use === 'run') a.phase = 0; };
+      start = a => {
+        if (use === 'sit' || use === 'sleep') { const q = seatSteps(a, it, sp, use); a.using = q.back; a.tr = { steps: q.steps, enter: true }; }
+        else if (use !== 'lift' && use !== 'box') { a.x = sp[0]; a.y = sp[1]; }
+        a.seat = SEAT[it.k] || 0; a.useId = it.id; if (use === 'run') a.phase = 0;
+      };
     }
     meIn.jobs.push({ key: tg.kind, spot, pose, dur, reach: 2.5, start, done: o.done, fail: o.fail });
     return true;
@@ -1438,6 +1502,14 @@ const Scene = (() => {
       const z = frameFoot(1, 1, 26, w, h, 2.4), c = iso(0.5, 0.6);
       ellipse(c.x, c.y, 30 * z, 14 * z, '#b8dd8c');
       drawAnimal(k, o.stage === undefined ? 2 : o.stage, c.x, c.y, z * 1.25, { face: 1, ts: 0, seed: 1 });
+    },
+    // A pet, big and alive (the pet page draws this every frame), or a breed in the shop.
+    pet(k, o, w, h) {
+      cam = { x: 0, y: 0, z: 1 };
+      const B = PET_BREEDS[k] || PET_BREEDS.shiba, s = h / (o.big ? 34 : 30);
+      if (o.bg) { const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, o.bg[0]); g.addColorStop(1, o.bg[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h); }
+      ellipse(w / 2, h * 0.86, w * 0.26, h * 0.06, 'rgba(90,70,40,.12)');
+      drawAnimal(B.kind, o.stage === undefined ? 2 : o.stage, w / 2 - 1.5 * s, h * 0.86, s, { face: o.face || 1, ts: o.ts || 0, seed: 1, breed: k, mood: o.mood || 'happy', moving: !!o.moving, phase: o.phase || 0 });
     },
     good(k, o, w, h) { ctx.font = `${h * 0.6}px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText((GOODS[k] || CROPS[k]).e, w / 2, h / 2); },
     furn(k, o, w, h) {

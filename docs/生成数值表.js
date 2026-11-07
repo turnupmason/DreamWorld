@@ -5,7 +5,8 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'prototype', 'js', 'data.
 const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FIELD_LEVELS, FIELD_COST, PASTURE, ORCHARD, POND, FISH_KINDS, FISH_EVERY,
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
-  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS})`);
+  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -109,6 +110,15 @@ P('## 纪念品（' + D.SOUVENIRS.length + ' 件，买不到，只能在现实�
 P('');
 table(['纪念品', '怎么得到'], D.SOUVENIRS.map(s => [`${D.FURN[s.k].zh} (${D.FURN[s.k].en})`, NEED[s.need].replace('{n}', s.n)]));
 P('得到后自动摆进一楼（放不下就进仓库），不计入家产。');
+P('');
+
+P('## 宠物（' + Object.keys(D.PET_BREEDS).length + ' 个品种，每家最多 ' + D.PET_MAX + ' 只）');
+P('');
+table(['品种', '种类', '领养价'], Object.values(D.PET_BREEDS).map(b => [`${b.zh} (${b.en})`, b.kind === 'dog' ? '狗' : '猫', `🪙${b.price}`]));
+const NEED_ZH = { food: '吃饭', water: '喝水', clean: '猫砂（猫）/ 散步（狗）', love: '心情' };
+table(['需要', '从 100 降到 0 要', '提醒'], Object.entries(D.PET_NEEDS).map(([k, n]) => [`${n.e} ${NEED_ZH[k]}`, `${n.hours} 小时`, `降到 ${D.PET_REMIND} 以下`]));
+table(['宠物粮', '价格', '份数'], Object.values(D.PET_FOOD).map(f => [`${f.e} ${f.zh} (${f.en})`, `🪙${f.price}`, `${f.n}`]));
+P(`领养送 ${D.PET_START_FOOD} 顿饭和食盆（猫还送猫砂盆）。摸摸心情 +${D.PET_LOVE.pet}，玩耍 +${D.PET_LOVE.play}，零食 +${D.PET_LOVE.treat}。宠物不会生病、不会离开，忘了照顾只会难过。`);
 P('');
 
 P('## 庭院（' + Object.keys(D.YARD).length + ' 件）');

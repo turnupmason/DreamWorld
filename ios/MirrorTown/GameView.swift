@@ -6,6 +6,8 @@ import WebKit
 ///
 /// Bridge:
 /// - the game calls `window.webkit.messageHandlers.mirror.postMessage({type: "ready" | "refresh"})`
+/// - `{type: "signIn", provider: "apple"}`: Sign in with Apple, answered with `window.onNativeSignIn(json)`
+/// - `{type: "petReminders", items: [...]}`: schedule local notifications for the pets (see NativeServices.swift)
 /// - we call `window.onNativeHealth(json)` with today's numbers and last night's sleep
 /// - we call `window.onNativeWorkout(json)` while a workout is live ({active, type, start, hr})
 struct GameView: UIViewRepresentable {
@@ -38,6 +40,7 @@ struct GameView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         weak var web: WKWebView?
         private let health = HealthBridge()
+        private let apple = AppleSignIn()
         private var timer: Timer?
         private var started = false
 
@@ -53,6 +56,10 @@ struct GameView: UIViewRepresentable {
                 health.requestAccess { [weak self] _ in self?.start() }
             case "refresh":
                 pushHealth()
+            case "signIn":
+                DispatchQueue.main.async { self.apple.start { [weak self] json in self?.send("onNativeSignIn", json) } }
+            case "petReminders":
+                PetReminders.schedule(body["items"] as? [[String: Any]] ?? [])
             default:
                 break
             }

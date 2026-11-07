@@ -482,11 +482,13 @@ function tubeLeaves(n, H, sw, col, flop) {
     circle(tx, -h * (flop ? 0.7 : 1), 0.65, col);
   }
 }
+// A rosette of wide leaves (cabbage, broccoli): back leaves first (darker), front leaves last, each with a midrib.
 function broadLeaves(R, sw, col, n = 6, lift = 0.6) {
-  for (let k = 0; k < n; k++) {
-    const a = k / n * Math.PI * 2 + 0.4;
-    ellipse(Math.cos(a) * R * 0.55 + sw * 2, Math.sin(a) * R * 0.25 - R * lift, R * 0.55, R * 0.32, k % 2 ? col : shade(col, 0.12), null, 0, a * 0.3);
-  }
+  const cy = -R * lift, order = Array.from({ length: n }, (_, k) => k / n * Math.PI * 2 + 0.4).sort((a, b) => Math.sin(a) - Math.sin(b));
+  order.forEach((a, k) => {
+    const ex = Math.cos(a) * R * 1.05, ey = Math.sin(a) * R * 0.48, front = Math.sin(a) > 0;
+    vleaf(sw * 2, cy, Math.hypot(ex, ey) + R * 0.15, R * 0.42, Math.atan2(ey, ex) + sw * 0.2, front ? shade(col, 0.1) : shade(col, -0.12));
+  });
 }
 function staked(H, sw, leafCol) {
   line(-3.6, 0.5, -3.6 + sw * 3, -H - 2, '#a77b4f', 1.1);
@@ -495,17 +497,27 @@ function staked(H, sw, leafCol) {
   for (let j = 0; j < 5; j++) { const u = 0.22 + j * 0.17; leaf(tip * u, -H * u, 6 - j * 0.6, 2.3, j % 2 ? -0.45 : -2.7, j % 2 ? leafCol : shade(leafCol, 0.1)); }
   return tip;
 }
+// A creeping vine (pumpkin, melons, sweet potato): a curly runner with big heart-shaped leaves and tendrils.
 function vine(sw, L, col) {
-  stem(-9, 1, 9, -1, '#4f8f35', 1.1, -4);
-  [[-7, -2.5], [6.5, -3.5], [-1.5, -6.5]].forEach(([x, y], k) => {
+  ctx.beginPath(); ctx.moveTo(-9, 1); ctx.bezierCurveTo(-4, -3, 2, 3, 9, -1);
+  ctx.strokeStyle = '#4f8f35'; ctx.lineWidth = 1.1; ctx.lineCap = 'round'; ctx.stroke();
+  [[-6.5, -0.5], [7, -1.8]].forEach(([x, y], k) => {   // tendrils
+    ctx.beginPath(); ctx.arc(x + sw * 2, y - 1.4, 1.2, k ? 0 : Math.PI, k ? Math.PI * 1.6 : Math.PI * 2.6); ctx.strokeStyle = '#6aa84a'; ctx.lineWidth = 0.5; ctx.stroke();
+  });
+  [[-7, -2.2, -0.4], [6.5, -3.2, 0.5], [-1.5, -5.6, 0.1], [2.5, 0.2, -0.2]].forEach(([x, y, a], k) => {
     x += sw * 3;
-    circle(x, y, L, k % 2 ? col : shade(col, 0.1));
-    circle(x - L * 0.6, y - L * 0.2, L * 0.6, shade(col, 0.1)); circle(x + L * 0.6, y - L * 0.2, L * 0.6, col);
+    stem(x * 0.6, y * 0.3, x, y, '#5f9a3f', 0.6);
+    heartLeaf(x, y, L * 1.1, k % 2 ? col : shade(col, 0.12), a + sw * 0.3);
   });
 }
+// A leafy little bush (peppers, chillies, potatoes, roses, berries): a few stems with pointed leaves fanning out,
+// darker leaves behind, lighter in front, a soft shadow at the foot.
 function bush(R, sw, col) {
-  for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2; circle(Math.cos(a) * R * 0.45 + sw * 2, -R * 0.7 + Math.sin(a) * R * 0.35, R * 0.55, k % 2 ? col : shade(col, 0.1)); }
-  circle(sw * 2, -R * 0.9, R * 0.6, shade(col, 0.06));
+  ellipse(0, 0.4, R * 0.85, R * 0.3, 'rgba(60,40,20,.16)');
+  const dark = shade(col, -0.2), light = shade(col, 0.14), cx = sw * R * 0.25, cy = -R * 0.55;
+  [-0.6, 0, 0.6].forEach(a => stem(0, 0, cx + Math.sin(a) * R * 0.6, cy - R * 0.25 * Math.cos(a), shade(col, -0.35), 0.8, a * 2));
+  for (let k = 0; k < 9; k++) { const a = -Math.PI + k / 8 * Math.PI; vleaf(cx + Math.cos(a) * R * 0.15, cy + Math.sin(a) * R * 0.12, R * 0.95, R * 0.34, a + sw * 0.25, k % 2 ? dark : shade(col, -0.08)); }
+  for (let k = 0; k < 6; k++) { const a = -Math.PI * 0.9 + k / 5 * Math.PI * 0.8; vleaf(cx, cy + R * 0.1, R * 0.72, R * 0.3, a + sw * 0.3, k % 2 ? col : light); }
 }
 const PLANTS = {
   wheat(st, sw) {
@@ -594,14 +606,27 @@ const PLANTS = {
   chili(st, sw) {
     bush([5, 6.5, 7][st - 2], sw, '#4f9a40');
     if (st === 3) [[-3, -6], [2, -8], [4, -4]].forEach(([x, y]) => circle(x + sw * 3, y, 0.9, '#fff'));
-    if (st === 4) for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2, x = Math.cos(a) * 4 + sw * 3, y = -5 + Math.sin(a) * 2.5; ellipse(x, y + 1.5, 0.8, 2.2, k % 3 ? '#e5373b' : '#f28c28', null, 0, a * 0.2); }
+    if (st === 4) for (let k = 0; k < 6; k++) {
+      const a = k / 6 * Math.PI * 2, x = Math.cos(a) * 4 + sw * 3, y = -5 + Math.sin(a) * 2.5, c = k % 3 ? '#e5373b' : '#f28c28', bend = k % 2 ? 1 : -1;
+      ctx.beginPath(); ctx.moveTo(x - 0.7, y); ctx.quadraticCurveTo(x - 0.6, y + 3, x + bend * 1.2, y + 4.4); ctx.quadraticCurveTo(x + 0.9, y + 2.4, x + 0.7, y); ctx.closePath();
+      ctx.fillStyle = c; ctx.fill(); ellipse(x - 0.2, y + 1.2, 0.25, 0.9, 'rgba(255,255,255,.5)');
+      line(x, y, x, y - 1, '#3f8f34', 0.6);
+    }
   },
   pepper(st, sw) {
     bush([5, 6.5, 7.5][st - 2], sw, '#4a8f3a');
     if (st >= 3) [[-3, -4], [3, -6], [0, -9]].forEach(([x, y], k) => {
       x += sw * 3;
-      if (st === 3) circle(x, y, 1.4, '#7bbf5a');
-      else { rrect(x - 2, y - 1.5, 4, 4.2, 1.6, ['#e5373b', '#f2c230', '#f28c28'][k]); rrect(x - 0.4, y - 2.6, 0.8, 1.4, 0.3, '#3f8f34'); }
+      if (st === 3) { ellipse(x, y, 1.3, 1.6, '#7bbf5a'); return; }
+      const c = ['#e5373b', '#f2c230', '#f28c28'][k];
+      // a bell pepper: three rounded lobes, shine, green cap and stalk
+      ctx.beginPath(); ctx.moveTo(x - 2.2, y - 1.2);
+      ctx.bezierCurveTo(x - 2.8, y + 1.6, x - 1.6, y + 3.2, x - 0.7, y + 2.6); ctx.quadraticCurveTo(x, y + 3.4, x + 0.7, y + 2.6);
+      ctx.bezierCurveTo(x + 1.6, y + 3.2, x + 2.8, y + 1.6, x + 2.2, y - 1.2); ctx.quadraticCurveTo(x, y - 2.4, x - 2.2, y - 1.2);
+      ctx.fillStyle = c; ctx.fill();
+      line(x, y - 1, x, y + 2.4, shade(c, -0.18), 0.5);
+      ellipse(x - 1.1, y + 0.2, 0.45, 1.2, 'rgba(255,255,255,.55)');
+      ellipse(x, y - 1.6, 1.4, 0.6, '#3f8f34'); line(x, y - 1.8, x + 0.3, y - 3, '#3f7f30', 0.7);
     });
   },
   corn(st, sw) {
@@ -617,7 +642,11 @@ const PLANTS = {
   },
   strawberry(st, sw) {
     const R = [4, 6, 7][st - 2];
-    for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2 + 0.4, cx = Math.cos(a) * R * 0.6 + sw * 3, cy = Math.sin(a) * R * 0.3 - R * 0.55; for (let j = 0; j < 3; j++) { const b = j / 3 * Math.PI * 2 - Math.PI / 2; circle(cx + Math.cos(b) * 1.5, cy + Math.sin(b) * 1.2, 1.8, j ? '#4aa84a' : '#5bb954'); } }
+    for (let k = 0; k < 5; k++) {
+      const a = k / 5 * Math.PI * 2 + 0.4, cx = Math.cos(a) * R * 0.6 + sw * 3, cy = Math.sin(a) * R * 0.3 - R * 0.55;
+      stem(sw, -0.5, cx, cy, '#4f8f35', 0.5);
+      [-0.9, 0, 0.9].forEach((b, j) => vleaf(cx, cy, 2.8, 1.25, -Math.PI / 2 + b + a * 0.15, j === 1 ? '#5bb954' : '#45a045'));
+    }
     [[-R * 0.7, -0.6], [R * 0.75, -1.2], [-R * 0.2, 0.4], [R * 0.3, -R * 0.75]].forEach(([x, y], k) => {
       x += sw * 2;
       if (st === 3) { if (k < 2) { for (let p = 0; p < 5; p++) { const a = p / 5 * Math.PI * 2; circle(x + Math.cos(a) * 1.1, y - 2 + Math.sin(a) * 1.1, 0.9, '#fff'); } circle(x, y - 2, 0.6, '#f3d36b'); } else ellipse(x, y, 1.2, 1.5, '#a8d66e'); }
@@ -675,8 +704,13 @@ const PLANTS = {
     bush([5, 6.5, 7][st - 2], sw, '#3f7d3f');
     [[-3, -6], [3, -8], [0, -11]].forEach(([x, y]) => {
       x += sw * 3;
-      if (st === 3) ellipse(x, y, 1, 1.5, '#c8203a');
-      if (st === 4) { circle(x, y, 2.2, '#d6233d'); ctx.beginPath(); ctx.arc(x, y, 1.3, 0, Math.PI * 1.5); ctx.strokeStyle = '#8f1428'; ctx.lineWidth = 0.5; ctx.stroke(); }
+      if (st === 3) { ellipse(x, y, 1, 1.5, '#c8203a'); pg([[x - 1, y + 0.6], [x, y + 1.6], [x + 1, y + 0.6]], '#3f8f34'); }
+      if (st === 4) {
+        for (let p = 0; p < 5; p++) { const a = p / 5 * Math.PI * 2 + 0.3; circle(x + Math.cos(a) * 1.3, y + Math.sin(a) * 1.05, 1.35, p % 2 ? '#c81d39' : '#de2d47'); }
+        circle(x, y, 1.3, '#e8475e');
+        ctx.beginPath(); ctx.arc(x, y, 0.8, 0.3, Math.PI * 1.7); ctx.strokeStyle = '#9b1730'; ctx.lineWidth = 0.45; ctx.stroke();
+        ellipse(x - 0.6, y - 0.7, 0.5, 0.3, 'rgba(255,255,255,.45)');
+      }
     });
   },
   sunflower(st, sw) {
@@ -899,35 +933,77 @@ const ANIMAL_DRAW = {
     pg([[6, -18 - neck], [6.5, -21 - neck], [7.5, -18 - neck]], shade(wool, -0.1)); pg([[8, -18 - neck], [8.8, -21 - neck], [9.4, -18 - neck]], shade(wool, -0.1));
     circle(8.6, -15.6 - neck, 0.7, '#2a2018');
   },
+  // Dogs and cats come in breeds (PET_BREEDS) and show how they feel (o.mood: happy / ok / sad).
   dog(st, o) {
-    const fur = '#e39b4b', belly = '#fff4e2', ts = o.ts || 0, wag = Math.sin(ts / (o.moving ? 140 : 90)) * 0.5;
-    if (st === 0) {
-      legs4([-3, 3], -3.5, 1.6, fur, o);
-      ellipse(0, -5.5, 5.5, 3.8, fur);
-      ctx.save(); ctx.translate(-5, -7); ctx.rotate(-0.6 + wag); ellipse(-0.5, -2, 1.3, 2.6, fur); ctx.restore();
-      circle(5, -9.5, 4.2, fur); ellipse(7.6, -8.4, 2, 1.5, belly);
-      pg([[2.6, -12], [3.2, -15.2], [5, -12.8]], fur); pg([[5.6, -13.2], [7.2, -15.6], [7.6, -12.4]], fur);
-      circle(9.3, -8.8, 0.7, '#2a2018'); circle(6.4, -10.2, 0.7, '#2a2018');
-      return;
+    const B = PET_BREEDS[o.breed] || PET_BREEDS.shiba, fur = B.col, belly = B.belly, ts = o.ts || 0, mood = o.mood || 'ok', sad = mood === 'sad';
+    const pup = st === 0, hs = pup ? 1.3 : 1, legH = B.short ? 3.8 : pup ? 4.4 : B.big ? 7 : 6;
+    const wag = sad ? 0 : Math.sin(ts / (o.moving ? 140 : mood === 'happy' ? 75 : 120)) * 0.45;
+    const bw = B.big ? 9.2 : 8.4, bh = B.big ? 5.3 : 4.7, by = -legH - bh * 0.62, droop = sad ? 1.6 : 0;
+    // tail: curled (shiba), stub (corgi), pom-pom (poodle) or a feathery plume
+    ctx.save(); ctx.translate(-bw + 0.8, by - 1.2);
+    if (B.tail === 'curl') { ctx.rotate(wag * 0.5); ctx.beginPath(); ctx.arc(0.6, -3, 2.5, Math.PI * 0.6, Math.PI * 2.25); ctx.strokeStyle = fur; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.stroke(); circle(2.9, -4.2, 1, belly); }
+    else if (B.tail === 'stub') circle(0, 0.4, 1.7, fur);
+    else if (B.tail === 'pom') { ctx.rotate(-0.7 + wag); line(0, 0, -1, -4, fur, 1.4); circle(-1.2, -4.9, 2.1, shade(fur, 0.08)); }
+    else { ctx.rotate(-0.55 + wag + droop * 0.5); ellipse(-1.3, -3.4, 2.3, 4.6, fur); ellipse(-1.5, -5.4, 1.3, 2.2, belly); }
+    ctx.restore();
+    legs4([-bw * 0.58, bw * 0.55], -legH, B.big ? 2.5 : 2.2, fur, o);
+    if (B.curly) for (let k = -2; k <= 2; k++) circle(k * bw * 0.32, by - (2 - Math.abs(k)) * 0.4, bh * 0.78, k % 2 ? fur : shade(fur, 0.07));
+    else { ellipse(0, by, bw, bh, fur); ellipse(1.2, by + bh * 0.42, bw * 0.62, bh * 0.45, belly); ellipse(-2, by - bh * 0.45, bw * 0.5, bh * 0.25, shade(fur, 0.1)); }
+    const hx = bw - 0.8, hy = by - bh - 1.6 * hs + droop;
+    ellipse(hx - 1.4, hy + 3.4 * hs, 1.3, 2.6 * hs, '#e5484d', null, 0, 0.35);   // red collar
+    circle(hx - 0.6, hy + 5 * hs, 0.9, '#f2c230');                                 // tag
+    ctx.save(); ctx.translate(hx, hy); ctx.scale(hs, hs);
+    const r = 4.8;
+    if (B.ears === 'up' || B.ears === 'big') {
+      const eh = B.ears === 'big' ? 5.8 : 4.4, tilt = sad ? 1.6 : 0;
+      pg([[-3.2, -2.4], [-2.6 - tilt, -2.4 - eh + tilt], [0.4, -3.8]], fur); pg([[0.2, -4], [2 + tilt * 0.3, -4 - eh + tilt], [3.4, -2.5]], fur);
+      pg([[-2.5, -2.9], [-2.3 - tilt, -2.4 - eh * 0.72 + tilt], [-0.5, -3.6]], '#f2b0a4');
     }
-    legs4([-5, 5], -6, 2.1, fur, o);
-    ellipse(0, -9, 8.5, 5, fur); ellipse(1, -6.6, 5, 2.4, belly);
-    ctx.save(); ctx.translate(-8, -11); ctx.rotate(-0.6 + wag); ellipse(-1, -3, 2, 4, fur); ellipse(-1, -4.6, 1.2, 2, belly); ctx.restore();
-    circle(8, -14.5, 4.8, fur); ellipse(11.4, -13, 2.6, 2, belly); circle(13.6, -13.6, 0.9, '#2a2018');
-    pg([[5.2, -17.5], [6.2, -21.6], [8.3, -18.6]], fur); pg([[8.6, -18.8], [10.8, -21.6], [10.9, -17.4]], fur);
-    circle(9.4, -15.4, 0.8, '#2a2018');
-    if (!o.moving && Math.sin(ts / 700 + (o.seed || 0)) > 0.6) ellipse(12, -10.8, 1, 1.6, '#f07a8a');
+    circle(0, 0, r, fur);
+    if (B.curly) for (let k = 0; k < 6; k++) { const a = -Math.PI * 0.95 + k * 0.38; circle(Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92, 1.9, shade(fur, 0.05)); }
+    if (B.mask) { ctx.beginPath(); ctx.moveTo(-1, -1.4); ctx.quadraticCurveTo(2, -2.6, 4.6, -0.6); ctx.lineTo(4.6, 4); ctx.quadraticCurveTo(0, 5.4, -2.6, 2.4); ctx.closePath(); ctx.fillStyle = belly; ctx.fill(); ellipse(0.2, -2.4, 1.2, 0.7, belly); }
+    ellipse(4.1, 1.3, 2.9, 2.2, belly);
+    circle(6.4, 0.5, 1.1, '#2a2018'); circle(6.1, 0.2, 0.35, 'rgba(255,255,255,.6)');
+    ctx.beginPath(); ctx.moveTo(6.2, 1.5); ctx.quadraticCurveTo(5.4, 2.8, 4.2, 2.4); ctx.strokeStyle = '#3a2a20'; ctx.lineWidth = 0.5; ctx.stroke();
+    if (mood === 'happy' && !o.moving) ellipse(4.8, 3.3, 0.95, 1.4, '#f07a8a');
+    const blink = Math.sin(ts / 1900 + (o.seed || 0) * 5) > 0.97;
+    if (sad || blink) { ctx.beginPath(); ctx.arc(1.9, -0.7, 0.9, 0.2, Math.PI - 0.2); ctx.strokeStyle = '#2a2018'; ctx.lineWidth = 0.6; ctx.stroke(); }
+    else { circle(1.9, -0.8, 1, B.eyes || '#2a2018'); if (B.eyes) circle(1.9, -0.8, 0.45, '#1a1410'); circle(2.2, -1.1, 0.35, '#fff'); }
+    if (B.ears === 'flop') { ctx.save(); ctx.translate(-1.4, -2.8); ctx.rotate(0.3 + droop * 0.12); ellipse(0, 2.6, 2, 3.8, shade(fur, -0.12)); ctx.restore(); }
+    ctx.restore();
   },
   cat(st, o) {
-    const fur = '#f0a35a', stripe = '#c97a32', ts = o.ts || 0;
-    const tail = Math.sin(ts / 600 + (o.seed || 0)) * 0.4;
-    legs4([-3.5, 3.5], -4.5, 1.5, fur, o);
-    ctx.save(); ctx.translate(-6, -7); ctx.rotate(-1 + tail); line(0, 0, 0, -8, fur, 1.8); circle(0, -8.5, 1.1, stripe); ctx.restore();
-    ellipse(0, -7, 6.5, 3.8, fur);
-    [-3, 0, 3].forEach(x => line(x, -10.4, x + 0.8, -8, stripe, 0.9));
-    circle(6, -10.5, 3.8, fur);
-    pg([[3.5, -12.5], [4.2, -16.5], [6, -13.5]], fur); pg([[6.5, -13.8], [8.5, -16.5], [8.6, -12.5]], fur);
-    circle(7.4, -11, 0.6, '#2a2018'); circle(9.2, -10.6, 0.6, '#2a2018'); circle(9.6, -9.4, 0.5, '#f07a8a');
-    line(9.5, -9.4, 12, -10, '#fff', 0.3); line(9.5, -9.2, 12, -8.8, '#fff', 0.3);
+    const B = PET_BREEDS[o.breed] || PET_BREEDS.tabby, fur = B.col, ts = o.ts || 0, mood = o.mood || 'ok', sad = mood === 'sad';
+    const hs = st === 0 ? 1.3 : 1, sway = Math.sin(ts / 600 + (o.seed || 0)) * (sad ? 0.1 : 0.4), pt = B.point || fur;
+    // tail: a soft curve rising behind (it hangs low when sad)
+    ctx.save(); ctx.translate(-6, -7.2);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-3.4 + sway * 3, -3.6 + (sad ? 4 : 0), -1 + sway * 4, sad ? -1 : -9);
+    ctx.strokeStyle = B.point || fur; ctx.lineWidth = B.fluffy ? 3.4 : 2; ctx.lineCap = 'round'; ctx.stroke();
+    if (B.stripe) circle(-1 + sway * 4, sad ? -1 : -9, 1.1, B.stripe);
+    ctx.restore();
+    legs4([-3.5, 3.5], -4.5, 1.6, fur, o);
+    if (B.point) [-3.5, 3.5].forEach(x => ellipse(x + 0.5, -0.3, 1.2, 0.7, shade(pt, 0.2)));
+    ellipse(0, -7.2, B.fluffy ? 7.2 : 6.5, B.fluffy ? 4.4 : 3.8, fur);
+    ellipse(1.2, -5.6, 4.2, 1.8, B.belly);
+    if (B.stripe) [-3.6, -1, 1.6].forEach(x => { ctx.beginPath(); ctx.moveTo(x, -10.6); ctx.quadraticCurveTo(x + 1.1, -8.6, x + 0.4, -6.9); ctx.strokeStyle = B.stripe; ctx.lineWidth = 1; ctx.lineCap = 'round'; ctx.stroke(); });
+    if (B.spots) { ellipse(-3, -8.6, 2.7, 1.9, B.spots[0]); ellipse(2.2, -9.6, 2, 1.4, B.spots[1]); }
+    ctx.save(); ctx.translate(6, -11 + (sad ? 1 : 0)); ctx.scale(hs, hs);
+    const ear = B.point || (B.spots ? B.spots[0] : fur);
+    pg([[-3.1, -1.4], [-2.6, -6.2 + (sad ? 1.5 : 0)], [-0.1, -3.2]], ear); pg([[0.5, -3.4], [3.3, -6 + (sad ? 1.5 : 0)], [3.5, -1.1]], ear);
+    pg([[-2.4, -2.2], [-2.2, -4.9 + (sad ? 1.2 : 0)], [-0.9, -3.2]], '#f3b4a8'); pg([[1.3, -3.2], [2.8, -4.9 + (sad ? 1.2 : 0)], [2.8, -2.1]], '#f3b4a8');
+    circle(0, 0, 3.9, fur);
+    if (B.point) ellipse(1.7, 1, 2.5, 2.1, shade(B.point, 0.3));
+    if (B.stripe) { line(-0.6, -3.6, -0.4, -2.2, B.stripe, 0.7); line(0.6, -3.8, 0.6, -2.4, B.stripe, 0.7); }
+    if (B.spots) ellipse(-1.6, -1.7, 1.8, 1.6, B.spots[1]);
+    const blink = Math.sin(ts / 2100 + (o.seed || 0) * 7) > 0.97;
+    [[0.6, -0.5], [2.8, -0.2]].forEach(([ex, ey]) => {
+      if (sad || blink) { ctx.beginPath(); ctx.arc(ex, ey - 0.3, 0.75, 0.25, Math.PI - 0.25); ctx.strokeStyle = '#2a2018'; ctx.lineWidth = 0.55; ctx.stroke(); }
+      else { ellipse(ex, ey, 0.85, 1, B.eyes || '#8bbf3a'); ellipse(ex, ey, 0.3, 0.85, '#1a1410'); circle(ex + 0.25, ey - 0.35, 0.22, '#fff'); }
+    });
+    pg([[3.3, 0.8], [4.3, 0.8], [3.8, 1.5]], '#f07a8a');
+    ctx.beginPath(); ctx.moveTo(3.8, 1.5); ctx.quadraticCurveTo(3.4, 2.3, 2.8, 2); ctx.moveTo(3.8, 1.5); ctx.quadraticCurveTo(4.2, 2.3, 4.8, 2);
+    ctx.strokeStyle = '#3a2a20'; ctx.lineWidth = 0.4; ctx.stroke();
+    [[-0.3, 0.3], [0.1, 0.7]].forEach(([d, e]) => line(4.4, 1.2 + d, 7.2, 0.6 + e * 1.2, 'rgba(255,255,255,.85)', 0.25));
+    ctx.restore();
   },
 };
