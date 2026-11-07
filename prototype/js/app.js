@@ -247,6 +247,7 @@ function renderOverlay() {
     c = `<button class="ctx-main link" data-act="ranking">🏛️ ${t('ctx_town', { street: t('street_name'), lv: townLevel(), v: fmtCompact(townTotal()) })}</button>`;
     f = (S.calm ? '' : b('ranking', '🏆', t('fab_rank'))) + b('goHome', '🏡', t('fab_home'));
   }
+  if (!ed && UI.tab !== 'world') f = b('findMe', '📍', t('fab_findme')) + f;   // v0.22: where's my townie?
   ctxEl.innerHTML = c; ctxEl.hidden = !c;
   fab.innerHTML = f; fab.hidden = !f;
   tray.hidden = !ed;
@@ -1309,6 +1310,28 @@ const ACT = {
   },
   close: () => closeSheet(),
   energyInfo: () => openSheet('energy'),
+  // v0.22: show me where my townie is (in a store, out in town, at work, at home)
+  findMe() {
+    closeSheet();
+    if (UI.inStore) { Scene.pingMe(); return; }
+    if (S.out && S.out.place && STORES[S.out.place] && STORES[S.out.place].cats.length && S.out.town === myTown() && UI.lastStore === S.out.place) { ACT.enterStore(S.out.place); Scene.pingMe(); return; }
+    const out = S.work || S.jail || (S.out && S.out.town === myTown());
+    if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
+    UI.wtown = null;
+    if (out) { UI.tab = 'town'; syncView(); const p = Scene.mePoint(); if (p) Scene.lookAt(p[0], p[1]); }
+    else { UI.tab = 'home'; UI.inside = false; syncView(); Scene.focusMe(1.2, 0.45); }
+    Scene.pingMe(); refresh();
+  },
+  pickCar(i) { UI.tripCar = +i; renderSheet(); },
+  takeClass() {
+    const r = takeClass();
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r === 'done') return snack(t('school_done'));
+    if (r === 'max') return snack(t('school_max'));
+    Sound.play(r === 'cert' ? 'levelup' : 'chime');
+    snack(r === 'cert' ? `🎓 ${t('school_cert', { n: S.school.certs, p: Math.round(S.school.certs * SCHOOL.certPay * 100) })}` : `📚 ${t('school_class', { n: S.school.classes % SCHOOL.perCert, m: SCHOOL.perCert })}`);
+    save(); if (UI.sheet) renderSheet();
+  },
   // v0.18: things to do at the mall
   mallAct: k => (k === 'trophies' ? openSheet('trophies', 'me') : openSheet(k)),
   watchMovie(k) {
@@ -1424,10 +1447,12 @@ const ACT = {
     if (UI.tab !== 'town') UI.tab = 'town';
     syncView();
     // v0.19: "straight there" goes the same way (by car if you have one), it just skips the time on the road
-    const car = S.me.cars[S.me.car], useCar = !!car && (how === 'car' || how === 'now'), kind = !useCar ? 'walk' : CARS[car.k].kind === 'two' ? 'bike' : 'car';
+    const pick = UI.tripCar != null && !S.carAt && S.me.cars[UI.tripCar] ? UI.tripCar : null; UI.tripCar = null;
+    const car = S.me.cars[pick ?? S.me.car], useCar = !!car && (how === 'car' || how === 'now'), kind = !useCar ? 'walk' : CARS[car.k].kind === 'two' ? 'bike' : 'car';
     UI.tripTo = T.short;
     if (a.place === 'market') { const n = loadCargo(useCar ? 'car' : 'walk'); if (how !== 'now') snack(n ? `📦 ${t('mk_loaded', { n, cap: carryCap(useCar ? 'car' : 'walk') })}` : `📦 ${t('mk_nothing')}`); }
-    Scene.travel(T.pt, kind, useCar ? car : null, arrive, a.id || null, a.place || null);
+    Scene.travel(T.pt, kind, useCar ? car : null, arrive, a.id || null, a.place || null, useCar && pick !== null ? pick : undefined);
+    if (useCar && pick !== null) S.me.car = pick;   // the one you took is the one you drive now
     if (how === 'now') Scene.finishTrip();
     else if (kind !== 'walk') Sound.play('select');
   },
@@ -1436,14 +1461,14 @@ const ACT = {
   enterStore(k, wareId) {
     if (!STORES[k] || !STORES[k].cats.length) return;
     if (!atStore(k)) return ACT.placeGo(k);
-    closeSheet(); UI.inStore = k; UI.basket = UI.basket && UI.basket.store === k ? UI.basket : { store: k, items: [] };
+    closeSheet(); UI.inStore = k; UI.lastStore = k; UI.basket = UI.basket && UI.basket.store === k ? UI.basket : { store: k, items: [] };
     UI.visit = null; UI.tab = 'town'; syncView(); Sound.play('chime');
     if (wareId) setTimeout(() => Scene.shopGoWare(wareId, () => { openSheet('ware', wareId); refresh(); }), 250);
     else if (!S.shopTip) { S.shopTip = 1; setTimeout(() => snack(`🛒 ${t('shop_tip')}`), 400); }
   },
   leaveStore() {
     if (UI.basket && UI.basket.items.length && !confirm(t('basket_leave_q', { n: UI.basket.items.length }))) return;
-    closeSheet(); UI.inStore = null; UI.basket = null; UI.tab = 'town'; syncView();
+    closeSheet(); UI.inStore = null; UI.lastStore = null; UI.basket = null; UI.tab = 'town'; syncView();
   },
   addWare(arg) {
     const [id, n0] = arg.split('#'), w = Scene.shopWare(id), n = +n0 || 1;
@@ -2341,10 +2366,13 @@ function goTarget(a) {
 }
 // Walk / drive (or ride) / straight there, with how long each takes.
 function goTiles(T) {
-  const car = S.me.cars[S.me.car], two = car && CARS[car.k].kind === 'two';
+  // v0.22: leaving home with more than one car: choose which one (you walk to it in the drive / the garage first)
+  const home = !(S.out && S.out.town === myTown()) && !S.carAt && !S.work, pick = home && S.me.cars.length > 1 ? (UI.tripCar ?? S.me.car) : null;
+  const car = S.me.cars[pick ?? S.me.car], two = car && CARS[car.k].kind === 'two';
+  const chooser = pick !== null ? `<div class="sec-title">${t('go_which_car')}</div><div class="car-pick">${S.me.cars.map((c, i) => `<button class="car-chip ${i === pick ? 'on' : ''}" data-act="pickCar" data-arg="${i}">${thumbImg('car', c.k, { color: c.color }, 96, 64, 'thumb xs')}<span>${nm(CARS[c.k])}</span></button>`).join('')}</div>` : '';
   const tile = (how, ic, label, sub, on = true) => `<button class="act-tile" data-act="travel" data-arg="${how}" ${on ? '' : 'disabled'}><span>${ic}</span><b>${label}</b><i>${sub}</i></button>`;
-  const secs = how => t('go_secs', { n: Scene.tripTime(T.pt, how, T.dest, T.place) });
-  return `<div class="act-grid three">
+  const secs = how => t('go_secs', { n: Scene.tripTime(T.pt, how, T.dest, T.place, pick ?? undefined) });
+  return `${chooser}<div class="act-grid three">
     ${tile('walk', '🚶', t('go_walk'), secs('walk'))}
     ${car ? tile('car', two ? '🚲' : '🚗', t(two ? 'go_ride' : 'go_drive'), secs(two ? 'bike' : 'car')) : tile('car', '🚗', t('go_drive'), t('go_no_car'), false)}
     ${tile('now', '⚡', t('go_now'), t('go_now_sub'))}
@@ -2402,6 +2430,14 @@ function jobSection(key) {
   return `<div class="card job-card">${head}${rel}${body}</div>`;
 }
 function placeBody(key) {
+  if (key === 'school') {   // v0.22: evening classes
+    const sc = S.school || { classes: 0, certs: 0 }, done = sc.day === today(), max = sc.certs >= SCHOOL.maxCerts;
+    return `<p>${t('st_desc_school', { n: SCHOOL.fee, m: SCHOOL.perCert, p: Math.round(SCHOOL.certPay * 100), max: SCHOOL.maxCerts })}</p>
+      <div class="card"><div class="row between"><span>🎓 ${t('school_certs')}</span><b>${sc.certs} / ${SCHOOL.maxCerts}</b></div><div class="row between"><span>📚 ${t('school_next')}</span><b>${sc.classes % SCHOOL.perCert} / ${SCHOOL.perCert}</b></div>
+      <div class="muted small">${t('school_pay_now', { p: Math.round(sc.certs * SCHOOL.certPay * 100) })}</div></div>
+      <button class="btn primary block" data-act="takeClass" ${done || max || S.me.coins < SCHOOL.fee ? 'disabled' : ''}>📚 ${max ? t('school_max') : done ? t('school_done') : t('school_take', { n: SCHOOL.fee })}</button>`;
+  }
+  if (key === 'firestation' || key === 'gas') return `<p>${t('st_desc_' + key)}</p>`;
   if (key === 'police') {   // v0.18: the holding cell (when you're held) or how the police work
     if (jailed()) {
       const J2 = S.jail, pct = Math.round(Math.min(1, (now() - J2.start) / (J2.end - J2.start)) * 100);

@@ -12,6 +12,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // The prototype can fast-forward time, so all game time goes through now().
 function now() { return Date.now() + (S ? S.timeOffset : 0); }
 function dayKey(ms) { const d = new Date(ms); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+const today = () => dayKey(now());   // v0.22
 function freshDay() {
   return {
     date: dayKey(now()),
@@ -1666,7 +1667,7 @@ function unloadCargo() {
 
 // ---------- jobs (v0.14) ----------
 const jobRank = (rel = (S.job || {}).rel || 0) => JOB_RANKS.filter(r => rel >= r.at).length - 1;
-const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay);
+const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay * (1 + ((S.school || {}).certs || 0) * SCHOOL.certPay));
 function shiftEnd(place, ms = now()) { const d = new Date(ms); d.setHours(JOBS[place].to, 0, 0, 0); return d.getTime(); }
 function inShift(place, ms = now()) { const h = localHour(myTown(), ms); return h >= JOBS[place].from && h < JOBS[place].to; }
 function takeJob(place) { if (S.work) return 'working'; S.job = { place, rel: S.job && S.job.place === place ? S.job.rel : 0, since: now() }; return 'ok'; }
@@ -1948,3 +1949,14 @@ function dueDeliveries() {
 // v0.20: a good meal at the mall: more pay for a shift that started while you were full, and quicker on foot
 const isFed = () => !!(S && S.fed && S.fed.until > now());
 const fedMult = w => (S.fed && w && S.fed.until > w.start ? 1 + MALL.fed.pay : 1);
+
+// ---------- the school (v0.22) ----------
+function takeClass() {
+  S.school = S.school || { classes: 0, certs: 0, day: null };
+  if (S.school.day === today()) return 'done';
+  if (S.school.certs >= SCHOOL.maxCerts) return 'max';
+  if (S.me.coins < SCHOOL.fee) return 'poor';
+  S.me.coins -= SCHOOL.fee; S.school.day = today(); S.school.classes++;
+  if (S.school.classes % SCHOOL.perCert === 0) { S.school.certs++; return 'cert'; }
+  return 'ok';
+}

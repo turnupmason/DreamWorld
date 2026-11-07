@@ -56,7 +56,7 @@ const Scene = (() => {
     fly = { wx, wy, z };
   }
   function frameView(instant) {
-    if (mode === 'shop') { const P = shopPlan(owner); cam.z = clamp(W / (12 * 32), 0.6, 1.3); centerOn(P.RW * 0.55, P.RD - 5, 0.5); return; }   // close enough to see prices, near the door
+    if (mode === 'shop') { const P = shopPlan(owner); cam.z = clamp(W / (12 * 32), 0.6, 1.3); centerOn(P.RW * 0.5, P.RD - 5, 0.5); return; }   // close enough to see prices, near the door
     if (mode === 'interior') {
       const [rw, rd] = roomSize(homeOf(owner));
       // the room fills the screen from side to side (its far corners just off the edges), sitting a bit low
@@ -145,7 +145,7 @@ const Scene = (() => {
     const [lo, hi] = ZOOM[mode === 'interior' || mode === 'shop' ? 'interior' : 'world'];
     // pinching out past the whole town opens the world map
     if (mode === 'town' && z < cam.z && cam.z <= minWorldZoom() * 1.001 && z < minWorldZoom() * 0.96 && onWorldOut && performance.now() - worldOutAt > 1500) { worldOutAt = performance.now(); onWorldOut(); }
-    z = clamp(z, mode === 'interior' ? minRoomZoom() : mode === 'shop' ? (() => { const P = shopPlan(owner); return clamp(W * 0.8 / ((P.RW + P.RD) * 32), 0.3, 1); })() : mode === 'home' ? minHomeZoom() : Math.max(lo, minWorldZoom()), hi);
+    z = clamp(z, mode === 'interior' ? minRoomZoom() : mode === 'shop' ? (() => { const P = shopPlan(owner); return clamp(W * 1.6 / ((P.RW + P.RD) * 32), 0.45, 1); })() : mode === 'home' ? minHomeZoom() : Math.max(lo, minWorldZoom()), hi);
     const w = unIso(px, py);
     cam.z = z;
     cam.x = px - (w.x - w.y) * TW / 2 * z;
@@ -1152,6 +1152,7 @@ const Scene = (() => {
     // people who are online right now, out walking: to the square, the park, the lake, and home again
     if (z > 0.055) walkers(objs, dt, ts);
     if (z > 0.07 && mode === 'town') traffic(objs, dt, ts);   // v0.21
+    if (mode === 'town') signalObjs(objs, vr);   // v0.22
     if (mode === 'town') liveTownObjs(objs, dt, ts);
     if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
     else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = S.out.pt; objs.push({ d: mx + my + 0.6, f: () => drawMeOut(mx, my, ts) }); }
@@ -1536,6 +1537,54 @@ const Scene = (() => {
       return true;
     });
   }
+  // ---------- traffic lights (v0.22): at every crossing on an avenue; cars along x and along y take turns ----------
+  let SIGNALS = null;
+  function signals() {
+    if (SIGNALS && SIGNALS.id === TL.id) return SIGNALS;
+    const N = roadNet(), list = [];
+    N.nodes.forEach((n, i) => {
+      const h = N.H.find(r => Math.abs(r.y - n.y) < 0.01 && n.x >= r.a - 0.6 && n.x <= r.b + 0.6), v = N.V.find(r => Math.abs(r.x - n.x) < 0.01 && n.y >= r.a - 0.6 && n.y <= r.b + 0.6);
+      if (!h || !v) return;
+      const kh = TL.roads.find(r => r[2] - r[0] >= r[3] - r[1] && Math.abs((r[1] + r[3]) / 2 - n.y) < 0.01), kv = TL.roads.find(r => r[2] - r[0] < r[3] - r[1] && Math.abs((r[0] + r[2]) / 2 - n.x) < 0.01);
+      if (!(kh && kh[4] === 'avenue') && !(kv && kv[4] === 'avenue')) return;
+      if (n.e.length < 3) return;   // a bend, not a crossing
+      list.push({ x: n.x, y: n.y, hw: (h.y1 - h.y0) / 2, vw: (v.x1 - v.x0) / 2, off: (i * 2.3) % 4 });
+    });
+    SIGNALS = { id: TL.id, list, at: new Map(list.map(s2 => [Math.round(s2.x * 10) + ',' + Math.round(s2.y * 10), s2])) };
+    return SIGNALS;
+  }
+  // 'g' / 'y' / 'r' for traffic along x (axis 'x') or along y at a signal, now
+  function lightAt(sg, axis) {
+    const t0 = (performance.now() / 1000 + sg.off) % 12, xs = t0 < 5 ? 'g' : t0 < 6 ? 'y' : 'r', ys = t0 >= 6 && t0 < 11 ? 'g' : t0 >= 11 ? 'y' : 'r';
+    return axis === 'x' ? xs : ys;
+  }
+  // a car about to drive into a crossing on red (or yellow, if it's not already in it) waits at the line
+  function mustStop(x, y, tx, ty) {
+    const sg = signals().at.get(Math.round(tx * 10) + ',' + Math.round(ty * 10));
+    if (!sg) return false;
+    const d = Math.hypot(tx - x, ty - y), axis = Math.abs(tx - x) > Math.abs(ty - y) ? 'x' : 'y';
+    return d < 3.2 && d > 1.9 && lightAt(sg, axis) !== 'g';
+  }
+  function signalObjs(objs, vr) {
+    if (cam.z < 0.16) return;
+    signals().list.forEach(sg => {
+      if (sg.x < vr.x0 - 2 || sg.x > vr.x1 + 2 || sg.y < vr.y0 - 2 || sg.y > vr.y1 + 2) return;
+      [[-1, -1], [1, 1]].forEach(([sx, sy]) => {
+        const px = sg.x + sx * (sg.vw + 0.25), py = sg.y + sy * (sg.hw + 0.25);
+        objs.push({ d: px + py + 0.2, f: () => {
+          const z = cam.z, b = iso(px, py), top = up(b, 34 * z);
+          line(b.x, b.y, top.x, top.y, '#4a4f57', 1.6 * z);
+          [['x', -6], ['y', 6]].forEach(([axis, dx]) => {
+            const L = lightAt(sg, axis), hx = top.x + dx * z, hy = top.y + 2 * z;
+            rrect(hx - 2.6 * z, hy - 2 * z, 5.2 * z, 13 * z, 1.4 * z, '#2b2e33');
+            [['r', '#ff4d4d', 0], ['y', '#ffc83d', 4], ['g', '#3ddc6a', 8]].forEach(([c2, col, oy]) => circle(hx, hy + 0.6 * z + oy * z, 1.5 * z, L === c2 ? col : '#4a4f57'));
+            line(top.x, top.y + 2 * z, hx, hy, '#4a4f57', 1 * z);
+            if (L !== 'r' && NIGHT > 0.3) glow(hx, hy + 8 * z, 10 * z, 0.6);
+          });
+        } });
+      });
+    });
+  }
   // ---------- traffic (v0.21): other people's cars driving between the places in town ----------
   let CARS_OUT = { town: null, list: [], next: 0 };
   function traffic(objs, dt, ts) {
@@ -1551,6 +1600,7 @@ const Scene = (() => {
     }
     CARS_OUT.list = CARS_OUT.list.filter(c => {
       let go = 6 * dt;
+      if (c.path.length && !c.h && mustStop(c.x, c.y, c.path[0][0], c.path[0][1])) go = 0;   // v0.22: red light
       while (go > 0 && c.path.length) { const [tx, ty, th = 0] = c.path[0], dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy); if (d > 0.01) c.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); if (d <= go) { c.x = tx; c.y = ty; c.h = th; c.path.shift(); go -= d; } else { c.x += dx / d * go; c.y += dy / d * go; c.h += (th - c.h) * (go / d); go = 0; } }
       c.alpha = c.path.length ? Math.min(1, c.alpha + dt * 2) : c.alpha - dt * 2;
       if (c.alpha <= 0 && !c.path.length) return false;
@@ -1564,7 +1614,7 @@ const Scene = (() => {
   // Where you are is kept in S.out (null = at home) and where your car is in S.carAt (null = in your drive). A trip is a
   // few legs: walk to your car if it isn't with you, drive along the roads to the car park of where you're going and
   // park in a bay, then walk to the door. Nobody jumps from place to place.
-  let trip = null;
+  let trip = null, TRIP_CAR = null;
   const outHere = () => !!(S && S.out && S.out.town === VIEW_TOWN);
   // Where you're standing in this town right now.
   function mePos() {
@@ -1576,6 +1626,14 @@ const Scene = (() => {
   const atHomeNow = () => !outHere() && !S.work && !S.jail;
   // Your car: in a car park somewhere (S.carAt) or in your drive.
   const homeBay = () => { const [ox, oy] = origin('me'); return [ox + 1, oy + 10.2]; };
+  // v0.22: where each car waits at home: the one you drive in the drive, the others in the garage's spaces
+  function homeCarPt(i) {
+    const h = S.me, [ox, oy] = origin('me');
+    if (i === h.car || !h.garageLv) return homeBay();
+    const G = areaOf(h, 'garage'), slot = h.cars.filter((c, j) => j !== h.car).indexOf(h.cars[i]), bay = (G.w - 0.4) / garageCap(h);
+    return [ox + G.x + 0.2 + bay * (Math.max(0, slot) + 0.5), oy + G.y + G.d - 0.4];
+  }
+  const doorPt = () => { const [ox, oy] = origin('me'), [fx, fy, fw, fd] = HOUSES[S.me.house].fp; return [ox + DOOR_X, oy + fy + fd + 0.7]; };
   const carPos = () => (S.carAt && S.carAt.town === VIEW_TOWN ? S.carAt.pt : homeBay());
   // Where a car parks: a bay in the store's car park, the car park by a place, a friend's drive, your own drive.
   const PARK_OF = { plaza: 'centre', bakery: 'centre', cafe: 'centre', market: 'centre', gym: 'centre', library: 'centre', post: 'centre', clinic: 'centre', park: 'park', lake: 'lake', fields: 'fields' };
@@ -1596,9 +1654,12 @@ const Scene = (() => {
     TL = layoutOf(VIEW_TOWN);
     const from = mePos(), legs = [];
     if (how === 'walk') return [{ how: 'walk', from, path: route(from, to) }];
-    const car0 = carPos(), bay = bayOf(dest, place, to);
-    if (!(atHomeNow() && !S.carAt) && Math.hypot(car0[0] - from[0], car0[1] - from[1]) > 0.8) legs.push({ how: 'walk', from, path: route(from, car0), toCar: true });
-    legs.push({ how, from: car0, path: route(car0, bay.pt, false), car: true, bay });
+    const home = atHomeNow() && !S.carAt, pick = home && TRIP_CAR !== null ? TRIP_CAR : S.me.car;
+    const car0 = home ? homeCarPt(pick) : carPos(), bay = bayOf(dest, place, to);
+    if (home) legs.push({ how: 'walk', from: doorPt(), path: [car0], toCar: true });   // v0.22: out of the house to the drive / the garage
+    else if (Math.hypot(car0[0] - from[0], car0[1] - from[1]) > 0.8) legs.push({ how: 'walk', from, path: route(from, car0), toCar: true });
+    const out = home && Math.hypot(car0[0] - homeBay()[0], car0[1] - homeBay()[1]) > 0.5 ? [homeBay()] : [];   // a garage car comes out by the drive
+    legs.push({ how, from: car0, path: [...out, ...route(out[0] || car0, bay.pt, false)], car: true, bay });
     const far = Math.hypot(to[0] - bay.pt[0], to[1] - bay.pt[1]);
     if (!bay.home && far > 0.6) legs.push({ how: 'walk', from: bay.pt, path: far < 7 ? [to] : route(bay.pt, to) });
     return legs;
@@ -1646,6 +1707,8 @@ const Scene = (() => {
     if (!trip) return;
     if (trip.town !== VIEW_TOWN || mode !== 'town') { finishTripNow(true); return; }
     if (trip.arrived) return;
+    if (trip.inCar && trip.path.length && !trip.h && mustStop(trip.x, trip.y, trip.path[0][0], trip.path[0][1]) && (trip.waited = (trip.waited || 0) + dt) < 7) return;   // v0.22: red light
+    if (trip.inCar && trip.path.length && !mustStop(trip.x, trip.y, trip.path[0][0], trip.path[0][1])) trip.waited = 0;
     const base = (TRIP_SPEED[trip.how] || 3) * dt * (trip.how === 'walk' && isFed() ? 1 + MALL.fed.walk : 1);
     let left = 1;   // the share of this frame's travel still to go
     while (left > 0 && trip.path.length) {
@@ -1693,7 +1756,7 @@ const Scene = (() => {
   function shopPlan(k) {
     const wares = storeWares(k);
     if (SHOPS[k] && SHOPS[k].n === wares.length) return SHOPS[k];
-    const RW = SHOP_W[k] || 15, placed = [];
+    const area = wares.reduce((t, w) => t + (w.w + 0.8) * (w.d + 1.5), 0), RW = clamp(Math.round(Math.sqrt(area) * 1.1) + 2, SHOP_W[k] || 13, 26), placed = [];   // v0.22: about square
     let x = 1, y = 1.3, rowD = 0;
     wares.forEach(w => {
       if (x + w.w > RW - 0.8) { x = 1; y += rowD + 1.5; rowD = 0; }
@@ -1838,7 +1901,15 @@ const Scene = (() => {
   function renderShop(ts, dt) {
     const P = shopPlan(owner), S2 = STORES[owner], z = cam.z, WH = 80, { RW, RD } = P, fl = SHOP_FLOOR[owner] || SHOP_FLOOR.market;
     stepShop(dt);
-    ctx.fillStyle = '#e9e1d4'; ctx.fillRect(0, 0, W, H);
+    // v0.22: outside the store: the pavement and car park in front, a road, grass and trees round it (no empty space)
+    ctx.fillStyle = shade(PAL.town, -0.02); ctx.fillRect(0, 0, W, H);
+    flatRect(-14, -14, RW + 28, RD + 30, shade(PAL.town, -0.02));
+    flatRect(-2.5, -2.5, RW + 5, RD + 9, '#d9d4ca');                     // pavement all round
+    flatRect(-2.5, RD + 0.6, RW + 5, 3.6, '#7d848c');                    // the car park in front
+    for (let i = 0; i <= RW + 4; i += 1.7) { const a2 = iso(-2.3 + i, RD + 0.8), b2 = iso(-2.3 + i, RD + 3.1); line(a2.x, a2.y, b2.x, b2.y, 'rgba(255,255,255,.75)', 1.1 * z); }
+    flatRect(-14, RD + 6.5, RW + 28, 3.4, '#8e959c');                    // the road
+    for (let i = -13; i < RW + 13; i += 1.6) { const a2 = iso(i, RD + 8.2), b2 = iso(i + 0.8, RD + 8.2); line(a2.x, a2.y, b2.x, b2.y, 'rgba(255,255,255,.8)', 1.4 * z); }
+    [[-4.5, -3], [-4, RD * 0.4], [-4.6, RD * 0.8], [RW * 0.3, -4.2], [RW * 0.7, -4.6], [RW + 4, -2], [RW + 4.4, RD * 0.5], [RW + 4, RD + 2]].forEach(([tx, ty], i) => drawWildTree(tx, ty, hash(i, 77), 0));
     for (let j = 0; j < RD; j++) for (let i = 0; i < RW; i++) tile(i, j, (i + j) % 2 ? fl[0] : fl[1]);
     const A = iso(0, 0), B = iso(RW, 0), D = iso(0, RD), wall = S2.wall || '#f1f0ea', acc = S2.roof || '#c9893a';
     poly([D, A, up(A, WH * z), up(D, WH * z)], shade(wall, -0.08)); poly([A, B, up(B, WH * z), up(A, WH * z)], wall);
@@ -1860,6 +1931,9 @@ const Scene = (() => {
     objs.push({ d: meS.x + meS.y + 0.3, f: () => { const p2 = iso(meS.x, meS.y); drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand' }); carryBox(p2, z); } });
     { const dp = iso(P.door[0], RD - 0.45); hits.push({ kind: 'shopDoor', x0: dp.x - 30 * z, x1: dp.x + 30 * z, y0: dp.y - 14 * z, y1: dp.y + 14 * z }); }
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
+    { const S3 = STORES[owner], acc2 = S3.roof || '#c9893a', F1 = [iso(0, RD), iso(RW, RD)], F2 = [iso(RW, RD), iso(RW, 0)];
+      [F1, F2].forEach((F, k) => { wallRect(F, 0, 0, 1, 0, 5, shade(acc2, k ? -0.08 : -0.18)); wallRect(F, 0, 0, 1, 5, 6.2, '#ffffff'); });
+      const du0 = (P.door[0] - 1.2) / RW, du1 = (P.door[0] + 1.2) / RW; wallRect(F1, 0, du0, du1, 0, 6.2, '#cfc9bd'); }
     const dp = iso(P.door[0], RD - 0.2); pill(`🚪 ${t('store_leave')}`, dp.x, dp.y + 12 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z));
   }
   // ---------- the country around town (v0.9): other villages, farms, woods and lakes, out to the horizon ----------
@@ -2384,6 +2458,23 @@ const Scene = (() => {
       else renderWorld(ts, dt);
     } catch (e) { console.error(e); }
     drawFloats(ts);
+    drawPing(ts);
+  }
+  let PING = 0;
+  function drawPing(ts) {
+    const age = (performance.now() - PING) / 1000;
+    if (!PING || age > 4) return;
+    let pt = null;
+    if (mode === 'shop') pt = [meS.x, meS.y];
+    else if (mode === 'town' && VIEW_TOWN === myTown()) pt = trip && !trip.arrived ? [trip.x, trip.y] : (S.work || S.jail || outHere()) ? mePos() : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })();
+    else if (mode === 'home' && owner === me.lot) { const [ox, oy] = origin(me.lot); pt = [ox + me.x, oy + me.y]; }
+    if (!pt) return;
+    const p = iso(pt[0], pt[1]), z = cam.z, k = (age * 1.4) % 1, a = Math.min(1, (4 - age) * 1.5);
+    ctx.save(); ctx.globalAlpha = a;
+    ellipse(p.x, p.y, (14 + k * 40) * Math.max(0.5, z), (7 + k * 20) * Math.max(0.5, z), null, `rgba(239,125,60,${1 - k})`, 3);
+    const bob = Math.sin(ts / 180) * 4, py = p.y - Math.max(70, 64 * z) - bob;
+    pill(`📍 ${t('you_here')}`, p.x, py, '#ef7d3c', '#ffffff', `800 13px ${UI_FONT},${EMOJI_FONT}`, 26);
+    ctx.restore();
   }
 
   // ---------- input ----------
@@ -2405,9 +2496,9 @@ const Scene = (() => {
       const h = [...hits].reverse().find(x => x.kind === 'clerk' && inside(x, sx, sy)) || [...hits].reverse().find(x => x.kind === 'ware' && inside(x, sx, sy))
         || [...hits].reverse().find(x => x.kind === 'shopDoor' && inside(x, sx, sy));
       const P = shopPlan(owner);
-      if (h && h.kind === 'clerk') return shopWalk(P.till, () => onHit(h));
+      if (h && h.kind === 'clerk') { shopWalk(P.till); return onHit(h); }   // v0.22: it opens at once; you walk over meanwhile
       if (h && h.kind === 'shopDoor') return shopWalk(P.door, () => onHit(h));
-      if (h) { const w2 = P.wares.find(x => x.id === h.id); return shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55], () => onHit(h)); }
+      if (h) { const w2 = P.wares.find(x => x.id === h.id); shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55]); return onHit(h); }
       const w0 = unIso(sx, sy);
       if (w0.x > 0 && w0.y > 0 && w0.x < P.RW && w0.y < P.RD) shopWalk([w0.x, w0.y]);
       return;
@@ -2916,13 +3007,15 @@ const Scene = (() => {
     takeStairs,
     dropEnts() { ents.clear(); },
     // Going somewhere in town (v0.12). to: a world point (a gate or a place); how: walk / bike / car.
-    travel(to, how, car, done, dest, place) { if (mode !== 'town') return false; startTrip(to, how, car, done, dest, place); return true; },
+    travel(to, how, car, done, dest, place, pick) { if (mode !== 'town') return false; TRIP_CAR = pick === undefined ? null : pick; try { startTrip(to, how, car, done, dest, place); } finally { TRIP_CAR = null; } return true; },
+    mePoint() { if (!S) return null; TL = layoutOf(myTown()); const keep = VIEW_TOWN; return S.work || S.jail || (S.out && S.out.town === myTown()) ? (VIEW_TOWN === myTown() ? mePos() : null) : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })(); },
+    pingMe() { PING = performance.now(); },
     // Public places (v0.12): where each one is (where you walk to), and whether you're there now.
     placePoint(key) { TL = layoutOf(VIEW_TOWN); return placePt(key); },
     here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : S && jailed() && VIEW_TOWN === myTown() ? 'police' : trip && !trip.arrived ? null : outHere() ? S.out.place : null; },
     resting() { return mode === 'interior' && owner === 'me' && !!meIn.useId && !!(homeOf('me').room.items.concat(...(homeOf('me').ups || []).map(u => u.items)).find(i => i.id === meIn.useId && FURN[i.k].use === 'sleep')); },
     arriveAt(pt, place) { if (!S) return; S.out = { town: VIEW_TOWN, pt, place: place || null, id: null }; trip = null; if (mode === 'town') flyTo(pt[0], pt[1], Math.max(cam.z, 0.5)); },
-    tripTime(to, how, dest, place) { if (!S) return 0; return Math.max(1, Math.round(tripSecs(planTrip(to, how, dest, place)))); },
+    tripTime(to, how, dest, place, pick) { if (!S) return 0; TRIP_CAR = pick === undefined ? null : pick; try { return Math.max(1, Math.round(tripSecs(planTrip(to, how, dest, place)))); } finally { TRIP_CAR = null; } },
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
     tripPlan(to, how, dest, place) { return planTrip(to, how, dest, place); },   // for testing

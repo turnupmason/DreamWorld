@@ -220,9 +220,10 @@ function gableY(x, y, w, d, baseH, roofH, roofCol, endCol) {
 }
 function pyramid(x, y, w, d, base, rh, col) {
   const z = cam.z;
-  const Bu = up(iso(x + w, y), base * z), Cu = up(iso(x + w, y + d), base * z), Du = up(iso(x, y + d), base * z);
+  const Au = up(iso(x, y), base * z), Bu = up(iso(x + w, y), base * z), Cu = up(iso(x + w, y + d), base * z), Du = up(iso(x, y + d), base * z);
   const apex = up(iso(x + w / 2, y + d / 2), (base + rh) * z);
-  poly([Du, Cu, apex], col, 'rgba(0,0,0,.08)');
+  poly([Au, Bu, apex], shade(col, -0.3)); poly([Au, Du, apex], shade(col, -0.22));   // v0.22: the back slopes too (no flat lid showing)
+  if (z >= 0.32) roofPlane([Du, Cu, apex, apex], col, z); else poly([Du, Cu, apex], col, 'rgba(0,0,0,.08)');
   poly([Cu, Bu, apex], shade(col, -0.18), 'rgba(0,0,0,.08)');
   return apex;
 }

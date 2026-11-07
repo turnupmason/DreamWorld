@@ -884,3 +884,21 @@ Object.assign(STR.en, {
   claw_use: 'Plush toys decorate your home and add to its worth. Win all six and you get a giant teddy too.', claw_big: 'All six plush toys! Here’s a giant teddy, it’s in storage',
   food_use: 'Full for {h} hours: {p}% more pay at work, {w}% quicker on foot.', food_full: 'Full for {h} hours: {p}% more pay at work', food_still: 'Still full for {m}',
 });
+
+// ---------- v0.22 ----------
+Object.assign(STR.zh, {
+  fab_findme: '我在哪', you_here: '你在这里', go_which_car: '开哪辆车（先走到车道 / 车库去取）',
+  st_short_school: '晚上可以来上课，拿证书，工资会涨。', st_short_firestation: '镇上的消防员和消防车。', st_short_gas: '加油、买点零食。',
+  st_desc_school: '夜校：每天可以上一节课（🪙{n}）。每上 {m} 节课拿一张证书，每张证书让所有工作的工资多 {p}%（最多 {max} 张）。',
+  st_desc_firestation: '消防站：消防员随时待命，门口停着消防车。', st_desc_gas: '加油站：车可以在这里加油（现在加油还不收钱）。',
+  school_certs: '证书', school_next: '下一张证书', school_pay_now: '现在工资多 {p}%', school_take: '上一节课 🪙{n}', school_done: '今天的课上完了，明天再来',
+  school_max: '证书都拿齐了', school_class: '上完一节课（{n}/{m}）', school_cert: '拿到第 {n} 张证书！工资一共多 {p}%',
+});
+Object.assign(STR.en, {
+  fab_findme: 'Find me', you_here: 'You’re here', go_which_car: 'Which car? (you walk to the drive / garage for it)',
+  st_short_school: 'Evening classes: earn certificates for better pay.', st_short_firestation: 'The town’s firefighters and their engine.', st_short_gas: 'Fuel and snacks.',
+  st_desc_school: 'Evening school: one class a day (🪙{n}). Every {m} classes earn a certificate; each one raises the pay of every job by {p}% (up to {max}).',
+  st_desc_firestation: 'Fire station: the firefighters are always ready, the engine parked out front.', st_desc_gas: 'Petrol station: fill up here (free for now).',
+  school_certs: 'Certificates', school_next: 'Next certificate', school_pay_now: 'Pay is {p}% higher now', school_take: 'Take a class 🪙{n}', school_done: 'Today’s class is done: come back tomorrow',
+  school_max: 'You have every certificate', school_class: 'Class done ({n}/{m})', school_cert: 'Certificate {n}! Pay is {p}% higher in all',
+});

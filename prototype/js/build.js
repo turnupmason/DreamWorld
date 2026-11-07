@@ -129,6 +129,7 @@ function drawHouse(h, ox, oy, ts) {
     storyRows(m, 60, n, { left: [0.2, mdu, 0.9], right: [0.5, 0.86], uw: 0.07, uwR: 0.07, band: shade(wall, -0.12) });
     doorFace(m.left, mdu, 0.08, 23, '#5a3a22');
     hipRoof(x - 0.18, y - 0.18, mw + 0.36, d + 0.36, wh, 34, roof);
+    chimney(x + 0.5, y + 0.9, wh + 6, 30);   // v0.22
     const wb = box(x + mw, y + 1, 2, 3, 34, wall);
     wallRect(wb.left, 0, 0, 1, 0, 3.2, shade(wall, -0.35));
     wallRect(wb.left, 0, 0.12, 0.88, 6, 27, '#fffaf0');
@@ -1947,6 +1948,17 @@ function drawStore(st, ts) {
     [0.3, 0.7].forEach(u => winFace(Sd, u, 0.08, 10, Math.min(24, wh - 6)));
     box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(S2.wall, -0.12), wh);
     if (k === 'furniture') { const p = wallPt(F, 0, 0.32, 6); rrect(p.x - 7 * z, p.y - 4 * z, 14 * z, 6 * z, 2 * z, '#e5734f'); }
+    if (k === 'school') {   // v0.22: a red-brick school with a clock and a flag
+      wallMaterial(b, wh, 'brick', S2.wall, 0);
+      [0.15, 0.85].forEach(u => winFace(F, u, 0.06, 6, 16)); [0.15, 0.4, 0.6, 0.85].forEach(u => winFace(F, u, 0.05, wh - 12, wh - 4));
+      const p = wallPt(F, 0, 0.5, wh + 6); circle(p.x, p.y, 6 * z, '#fffaf0', '#3b3125', 1 * z); const tm = new Date(); line(p.x, p.y, p.x + Math.sin(tm.getHours() / 6 * Math.PI) * 3 * z, p.y - Math.cos(tm.getHours() / 6 * Math.PI) * 3 * z, '#3b3125', 1 * z); line(p.x, p.y, p.x + Math.sin(tm.getMinutes() / 30 * Math.PI) * 4.5 * z, p.y - Math.cos(tm.getMinutes() / 30 * Math.PI) * 4.5 * z, '#3b3125', 0.7 * z);
+      const fp = iso(x + w + 0.4, y + d * 0.2), wv = Math.sin(ts / 280) * 1.5 * z; line(fp.x, fp.y, fp.x, fp.y - 48 * z, '#999', 1.2 * z); pg([[fp.x, fp.y - 48 * z], [fp.x + 7 * z, fp.y - 47 * z + wv * 0.5], [fp.x + 13 * z, fp.y - 45 * z + wv], [fp.x + 13 * z, fp.y - 39 * z + wv], [fp.x + 7 * z, fp.y - 41 * z + wv * 0.5], [fp.x, fp.y - 42 * z]], '#e5484d');
+    }
+    if (k === 'firestation') {   // big red doors for the engines
+      [0.25, 0.62].forEach(u => { wallRect(F, 0, u - 0.15, u + 0.15, 0, 22, '#f4f1ea'); for (let r = 1; r < 5; r++) wallLine(F, 0, u - 0.15, r * 4.4, u + 0.15, r * 4.4, '#d6d0c4', 0.8); });
+      const p = wallPt(F, 0, 0.5, 26); rrect(p.x - 16 * z, p.y - 3.5 * z, 32 * z, 7 * z, 1.5 * z, '#fffaf0'); if (z > 0.25) { ctx.fillStyle = '#c9433b'; ctx.font = `800 ${5 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(curLang() === 'zh' ? '消防站' : 'FIRE', p.x, p.y + 0.3 * z); }
+    }
+    if (k === 'gas') { const p = wallPt(F, 0, 0.5, 26); rrect(p.x - 12 * z, p.y - 3.5 * z, 24 * z, 7 * z, 1.5 * z, '#e5484d'); emoji('⛽', p.x, p.y + 3.5 * z, 7 * z); }
     if (k === 'police') {   // v0.18: a blue sign, a flag and lights on the roof
       const p = wallPt(F, 0, 0.34, 15); rrect(p.x - 13 * z, p.y - 4 * z, 26 * z, 8 * z, 2 * z, '#2f5fb3');
       if (z > 0.25) { ctx.fillStyle = '#fff'; ctx.font = `800 ${5.4 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(curLang() === 'zh' ? '警察' : 'POLICE', p.x, p.y + 0.3 * z); }
@@ -1974,6 +1986,13 @@ function storeShow(st, objs, ts) {
     if (sl[1]) { const [qx, qy] = sl[1]; put(qx, qy, () => { const p = iso(qx, qy); drawAnimal('sheep', 2, p.x, p.y, z * 0.85, { face: -1, ts, seed: 3 }); }); } }
   if (k === 'petshop' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); drawAnimal('dog', 2, p.x, p.y, z * 0.8, { face: -1, ts, seed: 4, breed: 'shiba' }); }); }
   if (k === 'mall') sl.slice(0, 3).forEach(([px, py], i) => put(px, py, () => { const p = iso(px, py), wv = Math.sin(ts / 260 + i * 1.3) * 1.6 * z; line(p.x, p.y, p.x, p.y - 40 * z, '#888', 1 * z); pg([[p.x, p.y - 40 * z], [p.x + 5 * z, p.y - 39.5 * z + wv * 0.5], [p.x + 10 * z, p.y - 37 * z + wv], [p.x + 5 * z, p.y - 34.5 * z + wv * 0.5], [p.x, p.y - 33 * z]], ['#e5484d', '#2f80ed', '#f2c230'][i]); }));   // v0.21: flags flutter
+  if (k === 'school' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => drawCarDir({ k: 'boxtruck', color: '#f2c230' }, px, py, G.dir, ts)); }   // the school bus
+  if (k === 'firestation' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { drawCarDir({ k: 'boxtruck', color: '#d63a32' }, px, py, G.dir, ts); const lp = up(iso(px, py), 22 * z), on = Math.floor(ts / 280) % 2; circle(lp.x - 3 * z, lp.y, 1.6 * z, on ? '#ff4d4d' : '#7a2020'); circle(lp.x + 3 * z, lp.y, 1.6 * z, on ? '#7a2020' : '#ff4d4d'); }); }
+  if (k === 'gas') {   // a canopy over two pumps in the forecourt, and a car filling up
+    const [cx0, cy0, cw, cd] = G.c, mx = cx0 + cw / 2, my = cy0 + cd / 2;
+    put(mx - 0.6, my, () => { [[-1.2, 0], [1.2, 0]].forEach(([dx, dy]) => box(mx + dx - 0.2, my + dy - 0.15, 0.4, 0.3, 12, '#f4f4f0', 0, { top: '#e5484d' })); drawCarDir({ k: 'sedan', color: CAR_COLORS[Math.floor(ts / 9000) % CAR_COLORS.length] }, mx + 0.2, my + (G.along === 'x' ? 0.9 : 0), G.dir, ts); });
+    put(mx, my + 0.1, () => { [[-1.6, -1], [1.6, -1], [-1.6, 1], [1.6, 1]].forEach(([dx, dy]) => box(mx + dx * (G.along === 'x' ? 1 : 0.5) - 0.06, my + dy * (G.along === 'x' ? 0.5 : 1) - 0.06, 0.12, 0.12, 30, '#d9d9d9', 0, { shadow: false })); box(mx - 2, my - 1.3, 4, 2.6, 3, '#f4f4f0', 30, { top: '#ffffff', shadow: false }); const fr = wallPt([iso(mx - 2, my + 1.3), iso(mx + 2, my + 1.3)], 0, 0.5, 31.5); rrect(fr.x - 30 * z, fr.y - 1.5 * z, 60 * z, 3 * z, 0.5 * z, '#e5484d'); });
+  }
   if (k === 'realty' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 16 * z, '#8a5a36', 1.6 * z); rrect(p.x - 8 * z, p.y - 20 * z, 16 * z, 8 * z, 1.5 * z, '#fffaf0', '#e5484d', 1 * z); }); }
 }
 
