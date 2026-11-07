@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.12.0';
+const VERSION = '0.13.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -301,26 +301,28 @@ const YARD = {
 
 // ---------- vehicles ----------
 const CARS = {
-  bike:        { zh: '自行车',     en: 'Bicycle',       cost: { coins: 120 },   kind: 'two' },
-  scooter:     { zh: '电动车',     en: 'E-bike',        cost: { coins: 350 },   kind: 'two' },
-  vespa:       { zh: '踏板摩托',   en: 'Vespa scooter', cost: { coins: 700 },   kind: 'two' },
-  motorcycle:  { zh: '摩托车',     en: 'Motorcycle',    cost: { coins: 1100 },  kind: 'two' },
-  sportbike:   { zh: '赛车摩托',   en: 'Sport bike',    cost: { coins: 2600 },  kind: 'two' },
-  mini:        { zh: '小轿车',     en: 'Compact car',   cost: { coins: 1200 } },
-  sedan:       { zh: '三厢轿车',   en: 'Sedan',         cost: { coins: 2000 } },
-  convertible: { zh: '敞篷车',     en: 'Convertible',   cost: { coins: 4500 } },
-  pickup:      { zh: '皮卡',       en: 'Pickup truck',  cost: { coins: 2500 } },
-  suv:         { zh: 'SUV',        en: 'SUV',           cost: { coins: 4000 } },
-  jeep:        { zh: '越野车',     en: 'Off-roader',    cost: { coins: 5200 } },
-  sports:      { zh: '跑车',       en: 'Sports car',    cost: { coins: 9000 } },
-  tractor:     { zh: '拖拉机',     en: 'Tractor',       cost: { coins: 3000 } },
-  camper:      { zh: '房车',       en: 'Camper van',    cost: { coins: 15000 } },
-  luxury:      { zh: '豪华轿车',   en: 'Luxury sedan',  cost: { coins: 7500 } },
-  muscle:      { zh: '肌肉车',     en: 'Muscle car',    cost: { coins: 6500 } },
-  supercar:    { zh: '超级跑车',   en: 'Supercar',      cost: { coins: 20000 } },
-  minivan:     { zh: '面包车',     en: 'Minivan',       cost: { coins: 2800 } },
-  boxtruck:    { zh: '厢式卡车',   en: 'Box truck',     cost: { coins: 6000 } },
+  bike:        { zh: '自行车',     en: 'Bicycle',       cost: { coins: 120 }, cargo: 10,   kind: 'two' },
+  scooter:     { zh: '电动车',     en: 'E-bike',        cost: { coins: 350 }, cargo: 14,   kind: 'two' },
+  vespa:       { zh: '踏板摩托',   en: 'Vespa scooter', cost: { coins: 700 }, cargo: 16,   kind: 'two' },
+  motorcycle:  { zh: '摩托车',     en: 'Motorcycle',    cost: { coins: 1100 }, cargo: 12,  kind: 'two' },
+  sportbike:   { zh: '赛车摩托',   en: 'Sport bike',    cost: { coins: 2600 }, cargo: 8,  kind: 'two' },
+  mini:        { zh: '小轿车',     en: 'Compact car',   cost: { coins: 1200 }, cargo: 30, look: '#f2a33a' },
+  sedan:       { zh: '三厢轿车',   en: 'Sedan',         cost: { coins: 2000 }, cargo: 40, look: '#2f80ed' },
+  convertible: { zh: '敞篷车',     en: 'Convertible',   cost: { coins: 4500 }, cargo: 20, look: '#e5484d' },
+  pickup:      { zh: '皮卡',       en: 'Pickup truck',  cost: { coins: 2500 }, cargo: 120, look: '#34b27b' },
+  suv:         { zh: 'SUV',        en: 'SUV',           cost: { coins: 4000 }, cargo: 70, look: '#f4f4f0' },
+  jeep:        { zh: '越野车',     en: 'Off-roader',    cost: { coins: 5200 }, cargo: 60, look: '#6b7f3a' },
+  sports:      { zh: '跑车',       en: 'Sports car',    cost: { coins: 9000 }, cargo: 15, look: '#f2d24b' },
+  tractor:     { zh: '拖拉机',     en: 'Tractor',       cost: { coins: 3000 }, cargo: 150, look: '#34b27b' },
+  camper:      { zh: '房车',       en: 'Camper van',    cost: { coins: 15000 }, cargo: 80, look: '#f59e0b' },
+  luxury:      { zh: '豪华轿车',   en: 'Luxury sedan',  cost: { coins: 7500 }, cargo: 45, look: '#2d2d2d' },
+  muscle:      { zh: '肌肉车',     en: 'Muscle car',    cost: { coins: 6500 }, cargo: 20, look: '#e5484d' },
+  supercar:    { zh: '超级跑车',   en: 'Supercar',      cost: { coins: 20000 }, cargo: 10, look: '#a46ef0' },
+  minivan:     { zh: '面包车',     en: 'Minivan',       cost: { coins: 2800 }, cargo: 100, look: '#f4f4f0' },
+  boxtruck:    { zh: '厢式卡车',   en: 'Box truck',     cost: { coins: 6000 }, cargo: 300, look: '#2f80ed' },
 };
+// On foot you can carry only a few things to the market at a time; vehicles carry `cargo` (v0.13).
+const WALK_CARRY = 6;
 const CAR_COLORS = ['#e5484d', '#f59e0b', '#f2d24b', '#34b27b', '#2f80ed', '#a46ef0', '#f4f4f0', '#2d2d2d'];
 
 // ---------- shop: second-level categories ----------
@@ -861,8 +863,8 @@ Object.assign(YARD, {
   flame:           { zh: '圣火台',         en: 'Champion flame',       w: 1, d: 1, price: 1100, excl: 'g:outdoor' },
 });
 Object.assign(CARS, {
-  champcar: { zh: '冠军金色超跑', en: 'Champion gold supercar', cost: { coins: 5000 }, excl: 'steps10k:2', color: '#f2c230' },
-  goldbike: { zh: '金色公路车',   en: 'Golden road bike',       cost: { coins: 1200 }, kind: 'two', excl: 'g:cycle', color: '#f2c230' },
+  champcar: { zh: '冠军金色超跑', en: 'Champion gold supercar', cost: { coins: 5000 }, cargo: 12, excl: 'steps10k:2', color: '#f2c230' },
+  goldbike: { zh: '金色公路车',   en: 'Golden road bike',       cost: { coins: 1200 }, cargo: 10, kind: 'two', excl: 'g:cycle', color: '#f2c230' },
 });
 PET_BREEDS.collie = { kind: 'dog', zh: '冠军边牧', en: 'Champion collie', price: 1500, col: '#2d2a28', belly: '#ffffff', ears: 'flop', tail: 'plume', mask: true, eyes: '#8a5a2a', excl: 'steps20k:0' };
 ANIMALS.rainbowalpaca = { ...ANIMALS.alpaca, e: '🦄', zh: '彩虹羊驼', en: 'Rainbow alpaca', baby: { zh: '彩虹小羊驼', en: 'Rainbow cria' }, price: 2600, sell: [400, 700, 1200], excl: 'steps20k:2' };

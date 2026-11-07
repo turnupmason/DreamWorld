@@ -211,14 +211,14 @@ function rail(ax, ay, bx, by) {
 
 // ---------- vehicles (front faces the road, +y) ----------
 const CAR_SPEC = {
-  mini:        { len: 1.6, wid: 0.82, body: 9,   cab: [0.32, 0.9],  cabH: 8 },
-  sedan:       { len: 2.0, wid: 0.9,  body: 8,   cab: [0.55, 0.92], cabH: 7.5 },
-  convertible: { len: 2.0, wid: 0.9,  body: 7,   cab: [0.7, 0.6],   cabH: 0, open: true },
+  mini:        { len: 1.6, wid: 0.84, shape: 'hatch' },
+  sedan:       { len: 2.05, wid: 0.9, shape: 'sedan' },
+  convertible: { len: 2.0, wid: 0.9, shape: 'convertible' },
   suv:         { len: 1.9, wid: 0.95, body: 12,  cab: [0.2, 1.38],  cabH: 10, rack: true },
   jeep:        { len: 1.8, wid: 0.95, body: 12,  cab: [0.25, 1.15], cabH: 10, lift: 3, lights: true, big: true },
   sports:      { len: 1.9, wid: 0.92, sleek: 'coupe' },
   pickup:      { len: 2.0, wid: 0.95, body: 11,  cab: [1.0, 0.66],  cabH: 9, bed: true },
-  luxury:      { len: 2.3, wid: 0.92, body: 8.5, cab: [0.6, 1.05],  cabH: 7.5, chrome: true },
+  luxury:      { len: 2.35, wid: 0.94, shape: 'luxury' },
   muscle:      { len: 2.15, wid: 0.96, sleek: 'muscle' },
   supercar:    { len: 2.05, wid: 1.02, sleek: 'super' },
   champcar:    { len: 2.1, wid: 1.02, sleek: 'super' },
@@ -250,6 +250,7 @@ function drawCar(c, x, y, ts) {
   if (c.k === 'tractor') return drawTractor(c, x, y, ts);
   const s = CAR_SPEC[c.k] || CAR_SPEC.mini, cx = x + (1 - s.wid) / 2, base = 3.5 + (s.lift || 0);
   if (s.sleek) return drawSleekCar(c, cx, y, s, ts);
+  if (s.shape) return drawShapedCar(c, cx, y, s, ts);
   const ctr = iso(cx + s.wid / 2, y + s.len / 2);
   ellipse(ctr.x, ctr.y + 2 * z, (s.wid + s.len) * 15 * z, (s.wid + s.len) * 7 * z, 'rgba(0,0,0,.2)');
   const b = box(cx, y, s.wid, s.len, s.body, col, base);
@@ -338,6 +339,66 @@ function drawSleekCar(c, x, y, s, ts) {
   }
   if (NIGHT > 0.3) { const p = iso(x + w / 2, y + L); glow(p.x, p.y + 4 * z, 40 * z); }
   return { x0: iso(x, y + L).x - 4, x1: iso(x + w, y).x + 4, y0: iso(x, y).y - 26 * z, y1: iso(x + w, y + L).y + 4 };
+}
+// Everyday cars with their own silhouettes (v0.13): a round hatchback, a three-box sedan, an open convertible and a
+// long luxury car. Seen from the front-right: the front (+y) and the right side (+x) show.
+function drawShapedCar(c, x, y, s, ts) {
+  const z = cam.z, col = c.color, w = s.wid, L = s.len, glass = '#2c3b4c', glassHi = '#44607a', chrome = '#e8edf2';
+  const ctr = iso(x + w / 2, y + L / 2), at = (px, py, h) => up(iso(px, py), h * z);
+  ellipse(ctr.x, ctr.y + 2 * z, (w + L) * 15 * z, (w + L) * 7 * z, 'rgba(0,0,0,.22)');
+  const side = [iso(x + w, y + L), iso(x + w, y)], front = [iso(x, y + L), iso(x + w, y + L)];
+  const wheel = (u, r = 4.5, rim = '#c9ced4', white) => {
+    const p = lerp(side[0], side[1], u);
+    tyre(p.x, p.y, AXIS_Y, r * z, rim);
+    if (white) ellipse(p.x, p.y - r * 0.5 * z, r * 0.55 * z, r * 0.62 * z, null, '#f4f4f0', 1.3 * z);
+  };
+  const lamp = (u, h, r, round) => { const p = up(lerp(front[0], front[1], u), h * z); if (round) circle(p.x, p.y, r * z, HL(), shade(col, -0.35), 0.6 * z); else ellipse(p.x, p.y, r * z, r * 0.6 * z, HL()); };
+  if (s.shape === 'hatch') {
+    // a short round hatchback: rounded nose, tall bubbly cabin with a white roof, round eyes
+    slope(x, y, w, L, 5.5, 3.2, 0.06, 0.16, { front: shade(col, -0.04), side: shade(col, -0.16), top: shade(col, 0.1) });
+    slope(x + 0.05, y + 0.06, w - 0.1, L - 0.42, 6.5, 8.7, 0.06, 0.42, { front: glass, side: glassHi, top: '#f4f4f0' }, 0.06);
+    const pl = lerp(iso(x + w - 0.05, y + 0.6), iso(x + w - 0.05, y + 0.7), 0.5); line(pl.x, pl.y - 8.8 * z, pl.x, pl.y - 15 * z, shade(col, -0.2), 1.6 * z);
+    lamp(0.2, 5.6, 1.7, true); lamp(0.8, 5.6, 1.7, true);
+    { const a = up(front[0], 3.4 * z), b = up(front[1], 3.4 * z); line(a.x, a.y, b.x, b.y, '#d5d5d0', 1.6 * z); }
+    wheel(0.2, 4.2); wheel(0.8, 4.2);
+  } else if (s.shape === 'sedan') {
+    // three boxes: a long hood, the cabin in the middle with sloped windows, the boot behind
+    const b = box(x, y, w, L, 6, col, 3.5);
+    wallRect(b.left, 3.5, 0, 1, 0, 1.8, '#d5d5d0');
+    wallRect(b.left, 3.5, 0.3, 0.7, 2.6, 4.8, shade(col, -0.45));
+    wallLine(b.right, 3.5, 0.05, 5.4, 0.95, 5.4, chrome, 0.7);
+    slope(x + 0.05, y + 0.48, w - 0.1, 1.02, 5.8, 9.5, 0.28, 0.34, { front: glass, side: glassHi, top: shade(col, 0.06) }, 0.07);
+    const m = lerp(iso(x + w - 0.07, y + 0.62), iso(x + w - 0.07, y + 1.32), 0.5); line(m.x, m.y - 9.6 * z, m.x, m.y - 15 * z, shade(col, -0.25), 1.4 * z);
+    lamp(0.14, 7.2, 1.9); lamp(0.86, 7.2, 1.9);
+    wheel(0.2); wheel(0.8);
+  } else if (s.shape === 'convertible') {
+    // low and open: two seats, a steering wheel, the soft top folded behind, chrome trim, white-wall tyres
+    slope(x, y, w, L, 5.2, 3.4, 0.18, 0.28, { front: shade(col, -0.04), side: shade(col, -0.16), top: shade(col, 0.1) });
+    const top = 8.6;
+    flatRect(x + 0.12, y + 0.5, w - 0.24, 0.85, '#3a2a22', null, top);   // the cabin floor
+    [0.22, 0.56].forEach(u => { box(x + 0.1 + u * (w - 0.2) - 0.02, y + 0.58, 0.26, 0.24, 4, '#e8dcc8', top); box(x + 0.1 + u * (w - 0.2) - 0.02, y + 0.58, 0.26, 0.06, 7, '#d6c8b0', top); });
+    { const p = at(x + w * 0.3, y + 1.12, top + 3.5); ellipse(p.x, p.y, 2.4 * z, 1.4 * z, null, '#2d2d2d', 0.9 * z); }
+    box(x + 0.08, y + 1.3, w - 0.16, 0.05, 5, 'rgba(190,225,245,.75)', top, { left: 'rgba(170,215,240,.7)', right: 'rgba(190,225,245,.7)', top: chrome });
+    box(x + 0.12, y + 0.16, w - 0.24, 0.3, 2.4, '#2d2d2d', top, { top: '#3d3d3d' });   // folded soft top
+    { const a = at(x + w, y + L - 0.1, 7.2), b2 = at(x + w, y + 0.1, 7.2); line(a.x, a.y, b2.x, b2.y, chrome, 0.9 * z); }
+    lamp(0.18, 6.4, 1.8, true); lamp(0.82, 6.4, 1.8, true);
+    wheel(0.2, 4.4, '#c9ced4', true); wheel(0.8, 4.4, '#c9ced4', true);
+  } else {
+    // luxury: long and stately, a long hood, the cabin set back with dark glass, a chrome grille and a hood ornament
+    const lo = shade(col, -0.25);
+    const b = box(x, y, w, L, 7, col, 3.5);
+    wallRect(b.right, 3.5, 0, 1, 0, 2.6, lo); wallRect(b.left, 3.5, 0, 1, 0, 2.6, lo);
+    wallLine(b.right, 3.5, 0.02, 4.4, 0.98, 4.4, chrome, 0.9);
+    for (let k = 0; k < 7; k++) { const u = 0.36 + k * 0.047; wallLine(b.left, 3.5, u, 2.6, u, 6, chrome, 0.7); }
+    wallRect(b.left, 3.5, 0.34, 0.66, 2.4, 2.8, chrome);
+    slope(x + 0.06, y + 0.4, w - 0.12, 1.15, 6.8, 10.5, 0.32, 0.38, { front: '#1f2a36', side: '#33475c', top: shade(col, 0.04) }, 0.08);
+    const m = lerp(iso(x + w - 0.08, y + 0.6), iso(x + w - 0.08, y + 1.4), 0.5); line(m.x, m.y - 10.6 * z, m.x, m.y - 17 * z, shade(col, -0.2), 1.5 * z);
+    { const p = at(x + w / 2, y + L - 0.12, 11.2); circle(p.x, p.y, 1.1 * z, chrome); line(p.x, p.y, p.x, p.y - 2 * z, chrome, 0.7 * z); }
+    lamp(0.14, 8.2, 1.7); lamp(0.86, 8.2, 1.7);
+    wheel(0.18, 4.6, chrome); wheel(0.82, 4.6, chrome);
+  }
+  if (NIGHT > 0.3) { const p = iso(x + w / 2, y + L); glow(p.x, p.y + 4 * z, 40 * z); }
+  return { x0: iso(x, y + L).x - 4, x1: iso(x + w, y).x + 4, y0: iso(x, y).y - 24 * z, y1: iso(x + w, y + L).y + 4 };
 }
 function drawCamper(c, x, y) {
   const z = cam.z, cx = x - 0.02, wid = 1.05, len = 2.5, col = c.color;

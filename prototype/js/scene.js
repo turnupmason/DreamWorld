@@ -26,7 +26,7 @@ const Scene = (() => {
   const far = () => cam.z < 0.2;             // zoomed far out: simple houses, no animals or people
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const SEAT = { spinbike: 9, treadmill: 5 };                                   // standing / riding on a machine
-  const SEAT_H = { sofa: 10, armchair: 10, chair: 11.5, rocker: 10, beanbag: 6 }; // seat height: hips here, feet on the floor
+  const SEAT_H = { sofa: 8.5, armchair: 8.5, chair: 10.5, rocker: 9, beanbag: 4.5 }; // seat height: hips here (sinking into soft cushions), feet on the floor
   const LIE_H = { bed: 13.5, singlebed: 12.5, bunkbed: 14.5, sleepbag: 6 };      // lying: on top of the mattress
   const LIE_HEAD = { bed: 0.38, singlebed: 0.36, bunkbed: 0.36, sleepbag: 0.3 };  // where the head goes (on the pillow)
   // Which way your head points when lying: towards the pillow (the back of the bed).
@@ -189,6 +189,42 @@ const Scene = (() => {
     };
     return { g, gw: GW, gh: GH, wall };
   }
+  // v0.13: from the gate, can you still reach the house door, every field, the pasture gate, the pond, every fruit
+  // tree, the mailbox and every yard thing? Placing (or moving) something in the yard must keep all of them reachable.
+  function yardOK(h, yard) {
+    const saved = h.yard;
+    h.yard = yard;
+    try {
+      const N = lotNav(h), seen = new Uint8Array(N.gw * N.gh), q = [];
+      const push = (x, y, px, py) => {
+        if (x < 0 || y < 0 || x >= N.gw || y >= LOT_D || !N.g[y * N.gw + x] || seen[y * N.gw + x]) return;
+        if (px !== undefined && N.wall(px, py, x, y)) return;
+        seen[y * N.gw + x] = 1; q.push([x, y]);
+      };
+      push(3, LOT_D - 1);
+      for (let k = 0; k < q.length; k++) { const [x, y] = q[k]; push(x + 1, y, x, y); push(x - 1, y, x, y); push(x, y + 1, x, y); push(x, y - 1, x, y); }
+      const r = (x, y) => x >= 0 && y >= 0 && x < N.gw && y < LOT_D && !!seen[y * N.gw + x];
+      // close enough to work on it: a reachable tile within the reach jobs use (2.2 tiles from the thing)
+      const near = (x, y, w = 1, d = 1) => {
+        for (let j = Math.floor(y) - 3; j < y + d + 3; j++) for (let i = Math.floor(x) - 3; i < x + w + 3; i++) {
+          if (!r(i, j)) continue;
+          const dx = Math.max(x - (i + 0.5), 0, i + 0.5 - (x + w)), dy = Math.max(y - (j + 0.5), 0, j + 0.5 - (y + d));
+          if (Math.hypot(dx, dy) <= 2.2) return true;
+        }
+        return false;
+      };
+      const [fx, fy, w, d] = HOUSES[h.house].fp;
+      if (!r(Math.floor(DOOR_X), fy + d)) return false;   // the front door
+      if (!h.fields.every((f, i) => { const [x, y] = fieldPos(i); return near(x, y); })) return false;
+      const pr = pastureRect(h);
+      if (pr && !r(pr.x - 1, pr.y + pr.d - 1)) return false;
+      if (h.pondLv && !near(AREA.pond.x, AREA.pond.y, AREA.pond.w, AREA.pond.d)) return false;
+      if (!h.trees.every((t, i) => !t || i >= orchardSlots(h) || near(ORCHARD_SLOTS[i][0], ORCHARD_SLOTS[i][1]))) return false;
+      if (!near(MAILBOX[0], MAILBOX[1])) return false;
+      return yard.every(it => { const [w2, d2] = itemSize('yard', it); return near(it.x, it.y, w2, d2); });
+    } finally { h.yard = saved; }
+  }
+  window.yardKeepsWay = yardOK;
   function roomNav(h) {
     const [rw, rd] = roomSize(h), g = new Uint8Array(rw * rd).fill(1);
     const block = (x, y, w, d) => { for (let j = y; j < y + d; j++) for (let i = x; i < x + w; i++) if (i < rw && j < rd) g[j * rw + i] = 0; };
@@ -215,13 +251,16 @@ const Scene = (() => {
   // Walking towards the camera or away from it (that includes along the ground's diagonals, the usual way):
   // a front or back 3/4 view, turned towards where we're going (a.turn −1…1). Only walking straight across the
   // screen shows the side. (Screen pixels: x = sx · 32, y = sy · 16.)
+  // Which way someone faces while walking (v0.13): towards the camera or away from it, turned along the way they go
+  // (turn = the walking direction on the ground). Only when walking almost straight across the screen: side-on.
   function faceTo(a, dx, dy) {
-    const sx = dx - dy, sy = dx + dy, px = sx * 2, py = sy;
+    const sx = dx - dy, sy = dx + dy, n = Math.hypot(dx, dy);
     if (Math.abs(sx) > 0.02) a.face = sx > 0 ? 1 : -1;
     if (Math.abs(sy) > 0.02) a.back = sy < 0;
-    if (Math.abs(px) + Math.abs(py) > 0.02) {
-      if (Math.abs(py) > Math.abs(px) * 0.28) { a.view = py > 0 ? 'front' : 'back'; a.turn = clamp(px / (Math.abs(px) + Math.abs(py)), -1, 1); }
-      else { a.view = null; a.turn = 0; }
+    if (n > 0.01) {
+      const across = Math.abs(sy) < Math.abs(sx) * 0.12;   // e.g. a diagonal step that's straight left or right on screen
+      a.view = across ? null : sy > 0 ? 'front' : 'back';
+      a.turn = across ? 0 : [dx / n, dy / n];
     }
   }
   function bfsFrom(N, sx, sy) {
@@ -678,19 +717,52 @@ const Scene = (() => {
 
   // ---------- the world ----------
   // Roads: street (2 wide, dashed centre line), avenue (3 wide, double yellow line), dirt (country road).
-  function drawRoad(r, vr) {
-    const [x0, y0, x1, y1, kind] = r, z = cam.z, horiz = x1 - x0 >= y1 - y0;
-    if (x1 < vr.x0 || x0 > vr.x1 || y1 < vr.y0 || y0 > vr.y1) return;
-    const R = (a, b, c, d, col) => (horiz ? flatRect(a, b, c, d, col) : flatRect(b, a, d, c, col));
-    const [a0, a1, b0, b1] = horiz ? [x0, x1, y0, y1] : [y0, y1, x0, x1], w = b1 - b0;
-    if (kind === 'dirt') { R(a0, b0, a1 - a0, w, '#c9ad80'); R(a0, b0 + 0.35, a1 - a0, w - 0.7, '#d6bf95'); return; }
-    R(a0, b0, a1 - a0, w, '#d9d2c3');                                     // sidewalk edges
-    R(a0, b0 + 0.14, a1 - a0, w - 0.28, kind === 'avenue' ? '#80878f' : '#8e959c');
+  // Roads (v0.13): a paved sidewalk along both sides (people walk there), the asphalt between, lane lines, and a
+  // zebra crossing where a road meets another. Drawn in passes so crossings join up cleanly.
+  const SIDEWALK = { avenue: 0.5, street: 0.42, dirt: 0 };
+  function drawRoads(vr) {
+    const z = cam.z, vis = r => !(r[2] < vr.x0 || r[0] > vr.x1 || r[3] < vr.y0 || r[1] > vr.y1), roads = TL.roads.filter(vis);
+    const horiz = r => r[2] - r[0] >= r[3] - r[1];
+    roads.forEach(([x0, y0, x1, y1, kind]) => {   // pavement (or the dirt road's edges)
+      flatRect(x0, y0, x1 - x0, y1 - y0, kind === 'dirt' ? '#c9ad80' : '#ddd6c8');
+    });
+    roads.forEach(r => {   // asphalt
+      const [x0, y0, x1, y1, kind] = r, sw = SIDEWALK[kind] || 0.35, h = horiz(r);
+      if (kind === 'dirt') { if (h) flatRect(x0, y0 + 0.35, x1 - x0, y1 - y0 - 0.7, '#d6bf95'); else flatRect(x0 + 0.35, y0, x1 - x0 - 0.7, y1 - y0, '#d6bf95'); return; }
+      const col = kind === 'avenue' ? '#80878f' : '#8e959c';
+      if (h) flatRect(x0, y0 + sw, x1 - x0, y1 - y0 - 2 * sw, col); else flatRect(x0 + sw, y0, x1 - x0 - 2 * sw, y1 - y0, col);
+    });
     if (z < 0.1) return;
-    const m = (b0 + b1) / 2, lo = Math.max(a0, Math.floor(horiz ? vr.x0 : vr.y0)), hi = Math.min(a1, horiz ? vr.x1 : vr.y1);
-    const seg = (p, q, off, col, lw) => { const A = horiz ? iso(p, m + off) : iso(m + off, p), B = horiz ? iso(q, m + off) : iso(m + off, q); line(A.x, A.y, B.x, B.y, col, lw * z); };
-    if (kind === 'avenue') { seg(lo, hi, -0.06, '#f2c230', 1.3); seg(lo, hi, 0.06, '#f2c230', 1.3); }
-    else for (let p = Math.ceil(lo) + 0.3; p < hi; p += 1) seg(p, p + 0.45, 0, 'rgba(255,255,255,.85)', 1.6);
+    roads.forEach(r => {   // paving joints and the kerb
+      const [x0, y0, x1, y1, kind] = r, sw = SIDEWALK[kind];
+      if (!sw || z < 0.3) return;
+      const h = horiz(r), lo = Math.max(h ? x0 : y0, Math.floor(h ? vr.x0 : vr.y0)), hi = Math.min(h ? x1 : y1, h ? vr.x1 : vr.y1);
+      for (const e of h ? [y0 + sw, y1 - sw] : [x0 + sw, x1 - sw]) { const A = h ? iso(lo, e) : iso(e, lo), B = h ? iso(hi, e) : iso(e, hi); line(A.x, A.y, B.x, B.y, 'rgba(120,110,95,.45)', 1.2 * z); }
+      for (let u = Math.ceil(lo); u < hi; u += 1) for (const [p, q] of h ? [[y0, y0 + sw], [y1 - sw, y1]] : [[x0, x0 + sw], [x1 - sw, x1]]) {
+        const A = h ? iso(u, p) : iso(p, u), B = h ? iso(u, q) : iso(q, u); line(A.x, A.y, B.x, B.y, 'rgba(150,140,120,.3)', 0.8 * z);
+      }
+    });
+    roads.forEach(r => {   // lane lines
+      const [x0, y0, x1, y1, kind] = r;
+      if (kind === 'dirt') return;
+      const h = horiz(r), [a0, a1, b0, b1] = h ? [x0, x1, y0, y1] : [y0, y1, x0, x1], m = (b0 + b1) / 2;
+      const lo = Math.max(a0, Math.floor(h ? vr.x0 : vr.y0)), hi = Math.min(a1, h ? vr.x1 : vr.y1);
+      const seg = (p, q, off, col, lw) => { const A = h ? iso(p, m + off) : iso(m + off, p), B = h ? iso(q, m + off) : iso(m + off, q); line(A.x, A.y, B.x, B.y, col, lw * z); };
+      if (kind === 'avenue') { seg(lo, hi, -0.06, '#f2c230', 1.3); seg(lo, hi, 0.06, '#f2c230', 1.3); }
+      else for (let p = Math.ceil(lo) + 0.3; p < hi; p += 1) seg(p, p + 0.45, 0, 'rgba(255,255,255,.85)', 1.6);
+    });
+    if (z < 0.25) return;
+    // zebra crossings: across each road just beside every road that joins it
+    roads.forEach(a => {
+      if (a[4] === 'dirt' || !horiz(a)) return;
+      roads.forEach(b => {
+        if (b[4] === 'dirt' || horiz(b) || b[2] < a[0] - 0.5 || b[0] > a[2] + 0.5 || b[3] < a[1] - 0.5 || b[1] > a[3] + 0.5) return;
+        const swA = SIDEWALK[a[4]], y0 = a[1] + swA, y1 = a[3] - swA;
+        [b[0] - 0.75, b[2] + 0.15].forEach(x => { if (x < a[0] || x + 0.6 > a[2]) return; for (let k = 0; k < 5; k++) { const yy = y0 + (y1 - y0) * (k + 0.2) / 5; flatRect(x, yy, 0.6, (y1 - y0) / 5 * 0.55, 'rgba(255,255,255,.8)'); } });
+        const swB = SIDEWALK[b[4]], x0 = b[0] + swB, x1 = b[2] - swB;
+        [a[1] - 0.75, a[3] + 0.15].forEach(y => { if (y < b[1] || y + 0.6 > b[3]) return; for (let k = 0; k < 5; k++) { const xx = x0 + (x1 - x0) * (k + 0.2) / 5; flatRect(xx, y, (x1 - x0) / 5 * 0.55, 0.6, 'rgba(255,255,255,.8)'); } });
+      });
+    });
   }
   const inRectXY = (x, y, x0, y0, x1, y1) => x >= x0 && x < x1 && y >= y0 && y < y1;
   const inLake = (x, y) => ((x - TL.lake.x) / (TL.lake.rx + 1)) ** 2 + ((y - TL.lake.y) / (TL.lake.ry + 1)) ** 2 < 1;
@@ -893,7 +965,7 @@ const Scene = (() => {
     lakeSide(objs, vr, ts);
     park(objs, vr, ts);
     farmland(objs, vr, ts);
-    TL.roads.forEach(r => drawRoad(r, vr));
+    drawRoads(vr);
     bridges(vr);
     townCentre(objs, vr, ts, lv, out);
     woods(objs, vr, ts);
@@ -1166,7 +1238,7 @@ const Scene = (() => {
       wander(e, dt, speedOf(v) * 0.75, en => randomWalk(en, N.nav, 4, inside ? 99 : LOT_D));
       objs.push({ d: ox + oy + e.x + e.y, f: () => {
         const p = iso(ox + e.x, oy + e.y);
-        drawPerson(p.x, p.y, z, { look: v.look, face: e.face, back: e.back && e.moving, view: e.moving ? e.view : null, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(v), ts, seed: 5 + k, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: v.look, face: e.face, back: e.back && e.moving, view: e.view, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(v), ts, seed: 5 + k, wave: e.wave > performance.now() });
         if (focus) { if (z > 0.55) nameTag(p, nm(v.name), true); if (!crowd) hits.push({ kind: 'avatar', owner: vid, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z }); }
       } });
     });
@@ -1180,7 +1252,7 @@ const Scene = (() => {
   function roadNet() {
     if (NET && NET.id === TL.id) return NET;
     const H = [], V = [], nodes = [], on = new Map();
-    TL.roads.forEach(([x0, y0, x1, y1]) => { if (x1 - x0 >= y1 - y0) H.push({ y: (y0 + y1) / 2, a: x0, b: x1, y0, y1 }); else V.push({ x: (x0 + x1) / 2, a: y0, b: y1, x0, x1 }); });
+    TL.roads.forEach(([x0, y0, x1, y1, kind]) => { const sw = SIDEWALK[kind] || 0.6; if (x1 - x0 >= y1 - y0) H.push({ y: (y0 + y1) / 2, a: x0, b: x1, y0, y1, sw }); else V.push({ x: (x0 + x1) / 2, a: y0, b: y1, x0, x1, sw }); });
     const at = (r, i) => { if (!on.has(r)) on.set(r, []); on.get(r).push(i); };
     H.forEach(h => V.forEach(v => {   // roads that cross or just touch (a street ending at an avenue)
       if (v.x1 < h.a - 0.6 || v.x0 > h.b + 0.6 || h.y1 < v.a - 0.6 || h.y0 > v.b + 0.6) return;
@@ -1201,8 +1273,19 @@ const Scene = (() => {
     N.V.forEach(r => { const y = clamp(p[1], r.a, r.b), d = Math.hypot(r.x - p[0], y - p[1]); if (d < bd) { bd = d; best = { r, pt: [r.x, y] }; } });
     return best;
   }
-  // A route along the roads from a to b (shortest way through the crossings).
-  function route(a, b) {
+  // On foot you keep to the sidewalk (the one on the top / left side of each road); cars keep to the road.
+  function toSidewalk(N, pts) {
+    return pts.map(([x, y]) => {
+      const h = N.H.find(r => Math.abs(y - r.y) < 0.01 && x >= r.a - 2.2 && x <= r.b + 2.2), v = N.V.find(r => Math.abs(x - r.x) < 0.01 && y >= r.a - 2.2 && y <= r.b + 2.2);   // a crossing can be just past a road's end
+      return [v ? v.x0 + v.sw / 2 : x, h ? h.y0 + h.sw / 2 : y];
+    });
+  }
+  // A route along the roads from a to b (shortest way through the crossings); on the sidewalk unless foot is false.
+  function route(a, b, foot = true) {
+    const r = routeMid(a, b);
+    return foot ? [...toSidewalk(roadNet(), r.slice(0, -1)), r[r.length - 1]] : r;
+  }
+  function routeMid(a, b) {
     const N = roadNet(), A = nearestRoad(N, a), B = nearestRoad(N, b);
     if (!A || !B) return [b];
     const out = [A.pt];
@@ -1227,7 +1310,7 @@ const Scene = (() => {
     return out;
   }
   // A home's gate: on the road right in front of it.
-  const gateOf = id => { const [ox, oy] = origin(id), n = nearestRoad(roadNet(), [ox + 3.5, oy + LOT_D + 0.6]); return n ? n.pt : [ox + 3.5, oy + LOT_D + 1]; };
+  const gateOf = id => { const [ox, oy] = origin(id), N = roadNet(), n = nearestRoad(N, [ox + 3.5, oy + LOT_D + 0.6]); return n ? toSidewalk(N, [n.pt])[0] : [ox + 3.5, oy + LOT_D + 1]; };
   let WALK = { town: null, list: [], next: 0 };
   const walkerOut = id => WALK.town === VIEW_TOWN && WALK.list.some(w => w.id === id);
   function walkers(objs, dt, ts) {
@@ -1255,7 +1338,7 @@ const Scene = (() => {
       objs.push({ d: w.x + w.y, f: () => {
         const p = iso(w.x, w.y);
         ctx.save(); ctx.globalAlpha = w.alpha;
-        drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.moving ? w.view : null, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: !w.moving && Math.sin(ts / 900 + w.x) > 0.7 });
+        drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: !w.moving && Math.sin(ts / 900 + w.x) > 0.7 });
         ctx.restore();
         if (z > 0.3) pill(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z));
         else if (z > 0.12) circle(p.x, p.y - 48 * z, Math.max(2, 3.5 * z), '#34c759', '#fff', 1);
@@ -1269,7 +1352,7 @@ const Scene = (() => {
   // going and parks at the roadside (and at the end of their drive, seen from their home); on foot you walk right up.
   let trip = null, parked = null;
   const tripFrom = () => (me.lot && lotOf(me.lot) && townOf(me.lot) === VIEW_TOWN ? gateOf(me.lot) : gateOf('me'));
-  function tripPath(to, how) { const r = route(tripFrom(), to); return how === 'walk' ? r : r.slice(0, -1); }
+  function tripPath(to, how) { return how === 'walk' ? route(tripFrom(), to) : route(tripFrom(), to, false).slice(0, -1); }
   const pathLen = pts => { let d = 0, [x, y] = tripFrom(); pts.forEach(([a, b]) => { d += Math.abs(a - x) + Math.abs(b - y); x = a; y = b; }); return d; };
   function startTrip(to, how, car, done, dest) {
     TL = layoutOf(VIEW_TOWN);
@@ -1304,7 +1387,7 @@ const Scene = (() => {
   function drawTrip(ts) {
     const z = cam.z, p = iso(trip.x, trip.y);
     if (trip.how !== 'walk' && !trip.arrived) { drawCarDir(trip.car, trip.x, trip.y, trip.dir, ts); return; }
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.moving ? trip.view : null, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
   }
   // Your car parked at the roadside where you drove to.
@@ -1518,9 +1601,11 @@ const Scene = (() => {
     const A = iso(0, 0), B = iso(rw, 0), C = iso(rw, rd), D = iso(0, rd), dn = (p, k) => ({ x: p.x, y: p.y + k });
     // v0.11: the room is a doll's house standing in its garden: woods and lawn all round, a stone base under the
     // floor, flower beds in front, and the roof (seen from inside) over the walls. No empty space round it.
-    woodsFill();
-    flatRect(-3.4, -3.4, rw + 7, rd + 7.5, shade(PAL.town, -0.08));
-    flatRect(-3, -3, rw + 6.2, rd + 6.8, PAL.town);
+    // v0.13: a calm lawn all round (no busy woods behind the house): soft mowing stripes and a gentle vignette
+    ctx.fillStyle = shade(PAL.town, -0.03); ctx.fillRect(0, 0, W, H);
+    for (let k = -14; k < rd + 16; k += 2) flatRect(-16, k, rw + 34, 1, 'rgba(255,255,255,.045)');
+    flatRect(-3, -3, rw + 6.2, rd + 6.8, 'rgba(255,255,255,.05)');
+    { const g = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.3, W / 2, H * 0.55, Math.max(W, H) * 0.75); g.addColorStop(0, 'rgba(30,50,20,0)'); g.addColorStop(1, 'rgba(30,50,20,.18)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
     flowerBed(0.2, rd + 0.55, rw - 0.4, 0.8, 21);
     flowerBed(rw + 0.55, 0.2, 0.8, rd - 0.4, 22);
     [[-1.4, rd + 1.6], [rw + 1.8, rd + 1.4], [rw + 1.6, -1.2], [-1.6, -1.4], [rw * 0.5, rd + 2.6]].forEach(([x, y], k) => drawBushWild(x, y, hash(k, 31)));
@@ -1618,7 +1703,7 @@ const Scene = (() => {
       wander(e, dt, speedOf(h) * 0.7, en => randomWalk(en, roomNav(h), 4, 99));
       objs.push({ d: e.x + e.y, f: () => {
         const p = iso(e.x, e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && e.moving, view: e.moving ? e.view : null, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: 1, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && e.moving, view: e.view, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: 1, wave: e.wave > performance.now() });
         if (!edit && z > 0.55) nameTag(p, homeName(h), isOnline(h.id));
         if (!edit) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
@@ -1644,7 +1729,7 @@ const Scene = (() => {
       // sitting: hips on the seat, feet on the floor; lying: on the mattress, then the quilt goes back over you
       const sitH = pose !== 'sit' ? 0 : trS ? trS.seatH : useK === 'sit' ? SEAT_H[useIt.k] || 9 : 0, lieH = pose === 'lie' && useIt ? LIE_H[useIt.k] || 10 : 0;
       const yOff = sitH ? 0 : lieH || meIn.seat || 0;
-      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: meIn.moving ? meIn.view : null, turn: meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
+      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: meIn.view, turn: meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
       if (pose === 'lie' && useIt) drawBedQuilt(useIt);
       ctx.restore();
       if (S.live) liveBadge(p, S.live, true);
@@ -1982,17 +2067,34 @@ const Scene = (() => {
     if (mode === 'home') follow = false;
     return true;
   }
+  // Where you get onto a seat or into bed from (v0.13): in front of a seat (or another free side), beside the pillow
+  // of a bed. You walk there along the floor first, so you never cut through the sofa or the bed on the way.
+  function approachPt(it, a, h) {
+    const [w, d] = itemSize('room', it), use = FURN[it.k].use, N = roomNav(h), free = ([x, y]) => open(N, Math.floor(x), Math.floor(y));
+    let c;
+    if (use === 'sleep') {
+      const hy = (LIE_HEAD[it.k] || 0.35) + 0.42, along = it.rot ? 'x' : 'y';
+      const side = n => (along === 'y' ? [n < 0 ? it.x - 0.45 : it.x + w + 0.45, it.y + hy] : [it.x + hy, n < 0 ? it.y - 0.45 : it.y + d + 0.45]);
+      const nearFirst = (along === 'y' ? a.x < it.x + w / 2 : a.y < it.y + d / 2) ? [-1, 1] : [1, -1];
+      c = [...nearFirst.map(side), it.rot ? [it.x + w + 0.45, it.y + d / 2] : [it.x + w / 2, it.y + d + 0.45]];
+    } else {
+      const front = it.rot ? [it.x + w + 0.45, it.y + d / 2] : [it.x + w / 2, it.y + d + 0.45];
+      c = [front, it.rot ? [it.x + w / 2, it.y + d + 0.45] : [it.x + w + 0.45, it.y + d / 2], [it.x - 0.45, it.y + d / 2], [it.x + w / 2, it.y - 0.45]];
+    }
+    return c.find(free) || null;
+  }
   function goInside(tg, o) {
     const h = homeOf(owner);
     cancel(meIn);
-    let spot, pose = o.pose, dur = o.dur || 0, start = null;
+    let spot, pose = o.pose, dur = o.dur || 0, start = null, reach = 2.5;
     if (tg.kind === 'floor') spot = () => [tg.x, tg.y, 0];
     else if (tg.kind === 'exit') spot = () => [0.5, roomSize(h)[1] * 0.9, -1];
     else {
       const it = viewRoom(h).items.find(x => x.id === tg.id);
       if (!it) return false;
-      const use = FURN[it.k].use, sp = useSpot(it);
-      spot = () => sp;
+      const use = FURN[it.k].use, sp = useSpot(it), ap = use === 'sit' || use === 'sleep' ? approachPt(it, meIn, h) : null;
+      spot = () => (ap ? [ap[0], ap[1], sp[2]] : sp);
+      if (ap) reach = 0.6;
       pose = { sit: 'sit', sleep: 'lie', run: 'run', bike: 'bike', lift: 'lift', box: 'box', yoga: 'yoga' }[use];
       dur = Infinity;
       start = a => {
@@ -2001,7 +2103,7 @@ const Scene = (() => {
         a.seat = SEAT[it.k] || 0; a.useId = it.id; if (use === 'run') a.phase = 0;
       };
     }
-    meIn.jobs.push({ key: tg.kind, spot, pose, dur, reach: 2.5, start, done: o.done, fail: o.fail });
+    meIn.jobs.push({ key: tg.kind, spot, pose, dur, reach, start, done: o.done, fail: o.fail });
     return true;
   }
   // Order a batch of jobs by walking distance (nearest next), then queue them.
@@ -2038,6 +2140,23 @@ const Scene = (() => {
   }
 
   // ---------- thumbnails for the shop and sheets ----------
+  // How far an animal's drawing sits right of its anchor (measured once from the pixels), so thumbnails can centre it.
+  const ANIMAL_MID = {};
+  function animalMid(k, stage, breed = '') {
+    const key = k + '|' + stage + '|' + breed;
+    if (ANIMAL_MID[key] !== undefined) return ANIMAL_MID[key];
+    const c = document.createElement('canvas'); c.width = 240; c.height = 200;
+    const saved = [ctx, cam]; ctx = c.getContext('2d'); cam = { x: 0, y: 0, z: 1 };
+    let mid = 0;
+    try {
+      drawAnimal(k, stage, 120, 160, 2, { face: 1, ts: 0, seed: 1, breed: breed || undefined });
+      const d = ctx.getImageData(0, 0, 240, 200).data; let x0 = 240, x1 = -1;
+      for (let y = 0; y < 200; y++) for (let x = 0; x < 240; x++) if (d[(y * 240 + x) * 4 + 3] > 150) { if (x < x0) x0 = x; if (x > x1) x1 = x; }
+      if (x1 >= x0) mid = ((x0 + x1) / 2 - 120) / 2;
+    } catch (e) { mid = 0; }
+    [ctx, cam] = saved;
+    return (ANIMAL_MID[key] = mid);
+  }
   const thumbCache = new Map();
   function frameFoot(fw, fd, hgt, w, h, zmax = 2.2) {
     const z = Math.min(zmax, w * 0.84 / ((fw + fd) * 32), h * 0.86 / ((fw + fd) * 16 + hgt));
@@ -2057,9 +2176,9 @@ const Scene = (() => {
       drawFruitTree({ k, planted: now() - d.grow * MIN * [0.1, 0.7, 2][st], last: now() - d.every * MIN * (o.fruit ? 1.2 : 0.2) }, c.x, c.y, z, 0, 1);
     },
     animal(k, o, w, h) {
-      const z = frameFoot(1, 1, 26, w, h, 2.4), c = iso(0.5, 0.6);
+      const z = frameFoot(1, 1, 26, w, h, 2.4), c = iso(0.5, 0.6), st = o.stage === undefined ? 2 : o.stage, dx = animalMid(k, st) * z * 1.25;
       ellipse(c.x, c.y, 30 * z, 14 * z, '#b8dd8c');
-      drawAnimal(k, o.stage === undefined ? 2 : o.stage, c.x, c.y, z * 1.25, { face: 1, ts: 0, seed: 1 });
+      drawAnimal(k, st, c.x - dx, c.y, z * 1.25, { face: 1, ts: 0, seed: 1 });   // centred over its patch of grass
     },
     // A corner of a community, in its own look: lawn, a house and its kind of trees (for the world map).
     commune(k, o, w, h) {
@@ -2080,7 +2199,7 @@ const Scene = (() => {
       const B = PET_BREEDS[k] || PET_BREEDS.shiba, s = h / (o.big ? 34 : 30);
       if (o.bg) { const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, o.bg[0]); g.addColorStop(1, o.bg[1]); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h); }
       ellipse(w / 2, h * 0.86, w * 0.26, h * 0.06, 'rgba(90,70,40,.12)');
-      drawAnimal(B.kind, o.stage === undefined ? 2 : o.stage, w / 2 - 1.5 * s, h * 0.86, s, { face: o.face || 1, ts: o.ts || 0, seed: 1, breed: k, mood: o.mood || 'happy', moving: !!o.moving, phase: o.phase || 0 });
+      drawAnimal(B.kind, o.stage === undefined ? 2 : o.stage, w / 2 - animalMid(B.kind, o.stage === undefined ? 2 : o.stage, k) * s * (o.face || 1), h * 0.86, s, { face: o.face || 1, ts: o.ts || 0, seed: 1, breed: k, mood: o.mood || 'happy', moving: !!o.moving, phase: o.phase || 0 });
     },
     good(k, o, w, h) { ctx.font = `${h * 0.6}px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText((GOODS[k] || CROPS[k]).e, w / 2, h / 2); },
     furn(k, o, w, h) {

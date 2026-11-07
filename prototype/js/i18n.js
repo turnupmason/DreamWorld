@@ -684,3 +684,7 @@ Object.assign(STR.en, {
   excl_req_award: '{e} Earn the “{name}” award: {what}', excl_req_sport: '{e} Gold trophy in {name} ({n} workouts)',
   excl_sec_trophy: 'Trophy exclusives', excl_sec_award: 'Award sculptures', excl_sec_statue: 'Golden sport statues (each sport’s gold)', excl_all_statues: 'See all {n} sport statues',
 });
+
+// ---------- v0.13 ----------
+Object.assign(STR.zh, { car_cargo: '📦 一次能拉 {n} 件货去卖' });
+Object.assign(STR.en, { car_cargo: '📦 Carries {n} goods to market' });

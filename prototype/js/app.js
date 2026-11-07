@@ -112,7 +112,7 @@ function realWeather(loud) {
 }
 // A little label above the thing you tapped: picture, name and what it does.
 let tipTimer = null;
-// A little label over the thing you tapped. It goes away by itself, when you tap anywhere else,
+// A little label about the thing you tapped (a bar at the top). It goes away by itself, when you tap anywhere else,
 // or when you tap the same thing again.
 let tipKey = null, tipHidAt = 0;
 function hideTip() { const el = $('#tip'); if (el) el.hidden = true; tipKey = null; }
@@ -122,9 +122,9 @@ function tip(kind, k, name, sub) {
   tipKey = key;
   el.innerHTML = `${kind ? thumbImg(kind, k, {}, 52, 44, 'thumb') : ''}<div><b>${esc(name)}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
   el.hidden = false;
-  const w = el.offsetWidth, vw = el.parentElement.clientWidth;
-  el.style.left = clamp(p.x - w / 2, 8, vw - w - 8) + 'px';
-  el.style.top = Math.max(8, p.y - el.offsetHeight - 26) + 'px';
+  // v0.13: a slim bar at the top of the scene (under the context bar), so it never covers what you tapped
+  const cb = $('#ctxbar'), top = cb && !cb.hidden ? cb.offsetTop + cb.offsetHeight + 8 : 10;
+  el.style.left = ''; el.style.top = top + 'px';
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   clearTimeout(tipTimer);
   tipTimer = setTimeout(hideTip, 2600);
@@ -423,12 +423,12 @@ function panelShop() {
     if (sub && sub.id === 'souv') { note = ''; body = ''; subs += souvCard(); }
   } else if (cat === 'cars') {
     body = Object.entries(CARS).filter(([k, c]) => keep(k) && !c.excl).map(([k, c]) => {
-      const i = h.cars.findIndex(x => x.k === k), color = i >= 0 ? h.cars[i].color : CAR_COLORS[0];
+      const i = h.cars.findIndex(x => x.k === k), color = i >= 0 ? h.cars[i].color : c.look || CAR_COLORS[0];
       let btn;
       if (i < 0) btn = buyBtn('buyCar', k, costText(c.cost), canAfford(c.cost));
       else if (i === h.car) btn = `<span class="tag ok">${t('car_driving')}</span>`;
       else btn = buyBtn('driveCar', i, t('car_drive'), true, '');
-      return shopCard(thumbImg('car', k, { color }), nm(c), i >= 0 ? t('owned') : t(c.kind === 'two' ? 'car_sub_two' : 'car_sub'), btn);
+      return shopCard(thumbImg('car', k, { color }), nm(c), (i >= 0 ? t('owned') + ' · ' : '') + t('car_cargo', { n: c.cargo || WALK_CARRY }), btn);
     }).join('');
     note = t('note_cars');
   } else if (cat === 'houses') {

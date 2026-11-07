@@ -229,42 +229,61 @@ function drawProp(k, ts, B) {
   if (k.prop === 'notes') { const u = (ts / 900) % 1; ctx.save(); ctx.globalAlpha = 1 - u; ctx.font = '8px sans-serif'; ctx.fillStyle = '#6b5bd0'; ctx.fillText('♪', 6, -34 - u * 10); ctx.fillText('♫', -10, -30 - ((u + 0.5) % 1) * 10); ctx.restore(); }
 }
 
-// Front / back view (o.view): symmetric body; when walking, the legs step up and down and the arms swing,
-// so the townie walks towards you (or away) instead of sliding sideways.
+// Front / back view (o.view), turned the way you're walking (v0.13). o.turn is the walking direction on the
+// ground [dx, dy] (or a number for an older -1..1 turn). Feet, hips and shoulders sit on the ground plane, seen
+// from the camera: walking along a road the body is at 3/4, the shoulders slant, and the feet step along the road
+// (not up and down while the body slides sideways).
 function drawPersonFront(sx, sy, s, o, pose) {
   const L = o.look, ts = o.ts || 0, seed = o.seed || 0, energy = o.energy || 'good', back = o.view === 'back';
-  const T = clamp(o.turn || 0, -1, 1), far = T >= 0 ? -1 : 1, nar = 1 - Math.abs(T) * 0.14;   // 3/4 turn: far side a bit narrower and behind
+  // ground directions on screen: F = forwards, V = sideways (to the screen right), both for one step of ~1
+  let F, V;
+  if (Array.isArray(o.turn)) {
+    const [dx, dy] = o.turn, n = Math.hypot(dx, dy) || 1, fx = dx / n, fy = dy / n;
+    F = [(fx - fy) / Math.SQRT2, (fx + fy) / 2 / Math.SQRT2]; V = [(-fy - fx) / Math.SQRT2, (-fy + fx) / 2 / Math.SQRT2];
+    if (V[0] < 0) V = [-V[0], -V[1]];
+  } else { const T0 = clamp(o.turn || 0, -1, 1); F = [T0 * 0.7, back ? -0.5 : 0.5]; V = [1 - Math.abs(T0) * 0.3, back ? T0 * 0.35 : -T0 * 0.35]; }
+  const T = clamp(F[0] / (Math.hypot(F[0], F[1] * 2) || 1) * 1.15, -1, 1);   // how far the face is turned (for the head)
   const moving = pose !== 'stand', run = pose === 'run', ph = o.phase || 0, sw = moving ? Math.sin(ph) : 0;
   const tired = energy === 'tired' || energy === 'exhausted';
   const bounce = moving ? Math.abs(Math.cos(ph)) * (run ? 2 : tired ? 0.6 : 1.1) : (energy === 'great' && !o.wave ? Math.max(0, Math.sin(ts / 240 + seed)) * 2.5 : 0);
-  const pants = L.pants || '#4a5a78', shirt = L.shirt, skin = L.skin, step = run ? 3.2 : 2.2;
+  const pants = L.pants || '#4a5a78', shirt = L.shirt, skin = L.skin, stride = run ? 6 : 4.2, liftH = run ? 3 : 1.8;
+  const G = (side, w, fwd) => [side * w * V[0] + fwd * F[0], side * w * V[1] + fwd * F[1]];   // a point on the ground
   ellipse(sx, sy, 8 * s, 3.4 * s, 'rgba(0,0,0,.18)');
   local(sx, sy, s, 1, () => {
     ctx.translate(0, -bounce);
-    // legs: the lifted one bends its knee
-    [[-1, -sw], [1, sw]].forEach(([side, u]) => {
-      const lift = Math.max(0, u) * step, hip = [side * 2.1 * nar + T * 0.5, -10], foot = [side * 2.3 * nar + T * 1.2, -lift + bounce], knee = [side * 2.4 * nar + T * 0.9, -5 - lift * 0.8 + bounce * 0.5];
-      const col = u > 0 || side === far ? shade(pants, -0.12) : pants;
+    // which side is further from the camera (drawn first)
+    const farSide = V[1] < 0 ? 1 : -1, sides = [farSide, -farSide];
+    const leg = side => {
+      const u = side > 0 ? sw : -sw, f = G(side, 2.2, u * stride), lift = Math.max(0, u) * liftH;
+      const hip = [side * 2.1 * V[0], -10 + side * 2.1 * V[1]], foot = [f[0], f[1] - lift + bounce], knee = mixPt(hip, foot, 0.5);
+      knee[1] -= 0.6 + lift * 0.6; knee[0] += F[0] * 1.2;
+      const col = side === farSide ? shade(pants, -0.12) : pants;
       seg(hip, knee, 4.6, 3.8, col); seg(knee, [foot[0], foot[1] - 1.4], 3.8, 3.1, col); seg([foot[0], foot[1] - 2.4], [foot[0], foot[1] - 1.4], 3.4, 3.3, shade(col, -0.18));
-      // a sneaker seen from the front (or the heel from behind)
-      ellipse(foot[0], foot[1] - 1, 2.3, 1.7, '#3b3028'); rrect(foot[0] - 2.4, foot[1] - 0.7, 4.8, 1, 0.5, '#f4efe6');
-      if (!back) line(foot[0] - 0.8, foot[1] - 1.9, foot[0] + 0.8, foot[1] - 1.9, 'rgba(255,255,255,.7)', 0.45);
-    });
-    // arms swing forward and back, opposite to the legs
-    const arm = (side, u) => {
-      const k = side === far ? nar * 0.9 : 1, sh = [side * 5 * k + T * 0.6, -20.6], hand = [side * (5.8 + Math.abs(u) * 0.4) * k + T * 1.4, -12.2 + u * (run ? 2.6 : 1.6)], el = [side * 5.9 * k + T, -16.3 + u * 0.8];
-      seg(sh, el, 3.2, 2.8, skin); seg(el, hand, 2.8, 2.3, skin);
-      seg(sh, mixPt(sh, el, 0.62), 4.2, 3.9, shade(shirt, -0.06));
-      circle(hand[0], hand[1], 1.85, skin);
+      // a sneaker, pointing the way you walk
+      const tx = F[0] * 2.2, ty = F[1] * 2.2;
+      ctx.beginPath(); ctx.moveTo(foot[0] - tx * 0.6, foot[1] - 1.6 - ty * 0.6); ctx.lineTo(foot[0] + tx, foot[1] - 1.2 + ty);
+      ctx.strokeStyle = '#3b3028'; ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(foot[0] - tx * 0.6, foot[1] - 0.3 - ty * 0.6); ctx.lineTo(foot[0] + tx, foot[1] - 0.1 + ty);
+      ctx.strokeStyle = '#f4efe6'; ctx.lineWidth = 1.1; ctx.stroke();
     };
+    // arms swing forwards and back, opposite to the legs
+    const arm = side => {
+      const u = side > 0 ? -sw : sw, sh = [side * 5 * V[0], -20.6 + side * 5 * V[1]], swing = u * (run ? 4 : 2.6);
+      const hand = [sh[0] + side * 0.8 * V[0] + F[0] * swing, -12.4 + side * 0.8 * V[1] + F[1] * swing - Math.abs(u) * 0.6];
+      const el = mixPt(sh, hand, 0.5); el[0] += side * 0.5 * V[0];
+      const col = side === farSide ? shade(skin, -0.06) : skin;
+      seg(sh, el, 3.2, 2.8, col); seg(el, hand, 2.8, 2.3, col);
+      seg(sh, mixPt(sh, el, 0.62), 4.2, 3.9, side === farSide ? shade(shirt, -0.14) : shade(shirt, -0.06));
+      circle(hand[0], hand[1], 1.85, col);
+    };
+    leg(sides[0]); leg(sides[1]);
     if (L.hair === 'long' && back) rrect(-5.6, -31, 11.2, 13, 4.5, L.hairCol);
-    if (T) arm(far, far < 0 ? sw : -sw);   // turned: the far arm is behind the body
-    // torso (narrower when turned, the far side in shadow)
-    ctx.save(); ctx.translate(T * 0.6, 0); ctx.scale(nar, 1);
+    arm(sides[0]);
+    // the body, turned: drawn front-on, then squeezed and slanted onto the ground directions
+    ctx.save(); ctx.transform(V[0], V[1], 0, 1, 0, 0);
     ctx.beginPath(); ctx.moveTo(-5.4, -9.5); ctx.lineTo(-5.6, -20.5); ctx.quadraticCurveTo(-5.6, -23.6, -2, -23.6); ctx.lineTo(2, -23.6); ctx.quadraticCurveTo(5.6, -23.6, 5.6, -20.5); ctx.lineTo(5.4, -9.5); ctx.closePath();
     ctx.fillStyle = shirt; ctx.fill();
-    if (T) { ctx.save(); ctx.clip(); rrect(far < 0 ? -6 : 3.6, -24, 2.6, 15, 1, shade(shirt, -0.12)); ctx.restore(); }
-    ctx.restore();
+    if (V[0] < 0.95) { ctx.save(); ctx.clip(); rrect(farSide > 0 ? 3.4 : -6.2, -24, 2.8, 15, 1, shade(shirt, -0.12)); ctx.restore(); }
     rrect(-5.4, -11.6, 10.8, 2.6, 1, shade(pants, -0.08));
     if (back) line(0, -21.5, 0, -11.8, shade(shirt, -0.12), 0.8);
     else {
@@ -272,7 +291,8 @@ function drawPersonFront(sx, sy, s, o, pose) {
       rrect(-1.1, -11.5, 2.2, 2.3, 0.5, '#d9b44a');
       rrect(1.2, -19.4, 2.6, 2.4, 0.6, shade(shirt, -0.08));
     }
-    if (T) arm(-far, far < 0 ? -sw : sw); else { arm(-1, sw); arm(1, -sw); }
+    ctx.restore();
+    arm(sides[1]);
     if (o.wave) { const w = Math.sin(ts / 140) * 2; line(5, -20.6, 7.5, -25, shirt, 3.2); line(7.5, -25, 8.5 + w, -31, skin, 2.5); circle(8.5 + w, -31, 1.7, skin); }
     headFront(T * 0.9, -30.2 + (energy === 'exhausted' ? 1.2 : 0), L, energy, ts, seed, back, T);
   });

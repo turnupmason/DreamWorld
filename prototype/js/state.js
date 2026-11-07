@@ -26,7 +26,7 @@ function freshDay() {
 function load() {
   try { S = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { S = null; }
   if (!S || S.v !== 3) S = null;
-  if (S) { migrate(); genNPCs(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); }
+  if (S) { migrate(); genNPCs(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); fixBlockedYards(); }
   return S;
 }
 // Saves from v0.3 get the v0.4 fields (floors, privacy, souvenirs, personal goal). Old players skip the tutorial.
@@ -316,6 +316,7 @@ function ensureNPCs(t) {
     if (t !== HOME_TOWN) { p.house = Math.floor(r() * HOUSES.length); p.name = NPC_NAMES[(i + ti * 3) % NPC_NAMES.length]; }
     const h = homeFromPreset(p);
     h.npc = true; h.town = t;
+    relayoutYard(h);
     // the extra land of a bigger lot: a garden with trees, a pool or a swing set
     for (let k = 0; k < (spec.n - CORE_PARCELS) * 3; k++) autoPlace(h, 'yard', pick(['tree', 'pine', 'flowers', 'hedge', 'fountain', 'pool', 'picnic', 'trampoline', 'windmill']));
     h.animals.filter(isPet).forEach(a => setupPet(a, null, h));
@@ -868,6 +869,7 @@ function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
     if (x < it.x + iw && x + w > it.x && y < it.y + id && y + d > it.y) return false;
   }
   if (scope === 'room' && !def.flat && !roomReachable(h, lvOf(h, lv), [...others, { k, x, y, rot }])) { PLACE_WHY = 'block'; return false; }
+  if (scope === 'yard' && typeof yardKeepsWay === 'function' && !yardKeepsWay(h, [...others, { k, x, y, rot, id: '_new' }])) { PLACE_WHY = 'block'; return false; }   // v0.13
   return true;
 }
 // Lays a room out again from scratch (used for simulated friends whose old layouts blocked the way).
@@ -1153,7 +1155,7 @@ function buyCar(k, h = S.me) {
   const c = CARS[k].cost;
   if (!canAfford(c, h)) return 'poor';
   pay(c, h);
-  h.cars.push({ k, color: CARS[k].color || (h === S.me ? CAR_COLORS[0] : rand(CAR_COLORS)) });
+  h.cars.push({ k, color: CARS[k].color || (h === S.me ? CARS[k].look || CAR_COLORS[0] : rand(CAR_COLORS)) });
   h.car = h.cars.length - 1;
   return 'ok';
 }
@@ -1519,4 +1521,20 @@ function checkAwards() {
   const m = st.month && st.month.key === k.split('-').slice(0, 2).join('-') ? st.month.days : 0;
   if (m + (steps >= AWARD_RULES.monthSteps ? 1 : 0) >= AWARD_RULES.monthDays) A.monthly = A.monthly || k;
   return Object.keys(A);
+}
+
+// v0.13: yards whose things block the way get laid out again, once (needs the scene's yard map, so it runs after it).
+function relayoutYard(h) {
+  if (typeof yardKeepsWay !== 'function' || yardKeepsWay(h, h.yard)) return;
+  const items = h.yard.slice().sort((a, b) => (YARD[b.k].w * YARD[b.k].d) - (YARD[a.k].w * YARD[a.k].d));
+  h.yard = [];
+  items.forEach(it => { const n = autoPlace(h, 'yard', it.k, it.tint); if (n) Object.assign(n, { id: it.id, placed: it.placed, last: it.last }); });
+}
+function fixBlockedYards() {
+  if (!S || typeof yardKeepsWay !== 'function') return;
+  NPCS.forEach(relayoutYard);   // made up every time, so always checked
+  if (S.yardWayV === 1) return;
+  [S.me, ...S.friends].forEach(relayoutYard);
+  S.yardWayV = 1;
+  save();
 }

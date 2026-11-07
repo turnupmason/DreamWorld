@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -169,7 +169,9 @@ table(['装饰', '占地', '价格', '产出'], Object.values(D.YARD).map(y => [
 
 P('## 载具（' + Object.keys(D.CARS).length + ' 种）');
 P('');
-table(['载具', '价格', '类型'], Object.values(D.CARS).map(c => [`${c.zh} (${c.en})`, cost(c.cost), c.kind === 'two' ? '两轮' : '汽车 / 特种']));
+table(['载具', '价格', '类型', '一次拉货'], Object.values(D.CARS).map(c => [`${c.zh} (${c.en})`, cost(c.cost), c.kind === 'two' ? '两轮' : '汽车 / 特种', (c.cargo || '—') + ' 件']));
+P(`走路一次只能拿 ${D.WALK_CARRY} 件。`);
+P('');
 
 P('## 现实奖励');
 P('');

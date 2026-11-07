@@ -637,3 +637,6 @@ body.dark .lib-card { background: linear-gradient(160deg, #3a3226, #2e281f); }
 .grid-head { grid-column: 1 / -1; font-weight: 800; font-size: 14px; margin: 10px 2px 2px; }
 .btn.grid-head { margin: 8px 0 4px; }
 .aw-grid { margin-bottom: 12px; }
+.tip { left: 12px; right: 12px; max-width: none; margin: 0 auto; width: fit-content; min-width: 200px; max-width: calc(100% - 24px); padding-right: 16px; }
+.tip.show { animation: tipDown .22s ease-out; }
+@keyframes tipDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
