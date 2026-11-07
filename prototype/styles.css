@@ -555,3 +555,32 @@ body.dark .fab-badge { box-shadow: 0 0 0 2px #2a2622; }
 body.dark .btn.login.apple { background: #fff; color: #000; }
 body.dark .btn.login.google { background: #fff; }
 body.dark .ob-login { background: linear-gradient(rgba(0,0,0,.25), rgba(0,0,0,.55)); }
+
+/* ================= v0.9: the world map ================= */
+.world-head { display: flex; align-items: center; gap: 10px; }
+.world-head .panel-title { margin: 0; }
+.wmap-scroll { overflow-x: auto; overflow-y: hidden; border-radius: 22px; box-shadow: var(--shadow); margin-bottom: 12px; -webkit-overflow-scrolling: touch; }
+.wmap { position: relative; }
+.wmap canvas { display: block; }
+.wpin { position: absolute; transform: translate(-50%, -100%); border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; cursor: pointer; z-index: 1; }
+.wpin-dot { width: 30px; height: 30px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); background: #fff; box-shadow: 0 3px 8px rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.wpin-dot { line-height: 1; }
+.wpin-dot > i { transform: rotate(45deg); font-style: normal; }
+.wpin-name { margin-top: 2px; font-size: 10.5px; font-weight: 800; background: rgba(255,255,255,.9); color: #3b3125; border-radius: 999px; padding: 1px 6px; white-space: nowrap; }
+.wpin.on { z-index: 2; }
+.wpin.on .wpin-dot { background: var(--accent); box-shadow: 0 0 0 3px #fff, 0 4px 12px rgba(239,125,60,.5); }
+.wpin.home .wpin-dot { background: #ffe08a; }
+.wpin.on .wpin-name { background: #3b3125; color: #fff; }
+.world-card .world-name { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.world-card .tag { margin-top: 0; }
+.world-stats { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12.5px; font-weight: 700; margin-top: 6px; }
+.world-card .row.gap-top { gap: 8px; }
+.world-card .btn.grow { flex: 1; }
+.world-row { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; cursor: pointer; font: inherit; color: var(--ink); }
+.world-row.on { background: rgba(239,125,60,.08); border-radius: 12px; }
+body.dark .wpin-dot { background: #3a332c; }
+body.dark .wpin-name { background: rgba(38,34,30,.92); color: var(--ink); }
+body.dark .wpin.home .wpin-dot { background: #6b5320; }
+.online-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #34c759; margin: 0 3px 1px 0; box-shadow: 0 0 0 2px rgba(52,199,89,.2); }
+.world-head { justify-content: space-between; }
+.tabbar .tab { font-size: 10.5px; }

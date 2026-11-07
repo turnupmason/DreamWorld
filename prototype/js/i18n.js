@@ -500,6 +500,36 @@ Object.assign(STR.en, {
   login_native_fail: 'Sign in with Apple isn’t set up yet (needs a developer account), using a test sign-in', login_ok: 'Signed in 👋', login_sim: 'Prototype sign-in, no server yet',
 });
 
+// ---------- v0.9 ----------
+Object.assign(STR.zh, {
+  fab_world: '世界', world_title: '世界', world_sub: '全世界的玩家住在不同的社区。去别的社区逛逛，喜欢的话可以把家搬过去。',
+  world_here: '你住这里', world_visit: '去看看', world_move: '搬到这里', world_my_town: '回我的小镇', world_all: '所有社区',
+  world_pop: '{n} 位居民', world_parcel: '一块地 🪙{n} 起', world_free: '{n} 块空地', world_friends: '{n} 个朋友住这里',
+  world_pick_land: '点一块「出售」的空地，就能把整个家搬过来',
+  world_note: '原型里别的社区的居民是模拟的；正式版里住的都是真实玩家（需要服务器）。',
+  snack_moved_town: '搬到了{town}！🎉',
+  theme_maple: '梧桐绿荫', theme_sakura: '樱花', theme_autumn: '红枫', theme_palm: '椰林海滩', theme_snow: '雪山', theme_desert: '沙漠',
+  theme_lavender: '薰衣草', theme_tulip: '郁金香', theme_bamboo: '竹林', theme_fjord: '峡湾',
+  out_east: '邻镇 · 东边', out_south: '邻镇 · 南边', out_west: '邻镇 · 西边', pinch_world: '🌍 继续缩小，看看世界',
+  tab_world: '世界', fab_map: '地图', online_n: '{n} 人在线', online_world: '全世界 {n} 人在线',
+  sea_pacific: '太平洋', sea_atlantic: '大西洋', sea_indian: '印度洋', sea_arctic: '北冰洋',
+  reg_na: '北美洲', reg_sa: '南美洲', reg_eu: '欧洲', reg_af: '非洲', reg_asia: '亚洲', reg_oc: '大洋洲',
+});
+Object.assign(STR.en, {
+  fab_world: 'World', world_title: 'World', world_sub: 'Players all over the world live in different communities. Look around, and move your home if you like one.',
+  world_here: 'You live here', world_visit: 'Look around', world_move: 'Move here', world_my_town: 'My town', world_all: 'All communities',
+  world_pop: '{n} residents', world_parcel: 'Land from 🪙{n}', world_free: '{n} empty lots', world_friends: '{n} friends live here',
+  world_pick_land: 'Tap an empty lot “for sale” to move your whole home here',
+  world_note: 'In the prototype the other communities’ residents are made up; in the real game they are real players (needs the server).',
+  snack_moved_town: 'Moved to {town}! 🎉',
+  theme_maple: 'Green maples', theme_sakura: 'Cherry blossom', theme_autumn: 'Red maples', theme_palm: 'Palm beach', theme_snow: 'Snowy mountains', theme_desert: 'Desert',
+  theme_lavender: 'Lavender', theme_tulip: 'Tulips', theme_bamboo: 'Bamboo', theme_fjord: 'Fjords',
+  out_east: 'Next town · east', out_south: 'Next town · south', out_west: 'Next town · west', pinch_world: '🌍 Zoom out more to see the world',
+  tab_world: 'World', fab_map: 'Map', online_n: '{n} online', online_world: '{n} online worldwide',
+  sea_pacific: 'Pacific Ocean', sea_atlantic: 'Atlantic Ocean', sea_indian: 'Indian Ocean', sea_arctic: 'Arctic Ocean',
+  reg_na: 'North America', reg_sa: 'South America', reg_eu: 'Europe', reg_af: 'Africa', reg_asia: 'Asia', reg_oc: 'Oceania',
+});
+
 const LETTER_TPL = {
   zh: {
     friend: ['今天在湖边散步，看到一群小鸭子。你那边天气好吗？', '你家的菜长得真好，教教我怎么种！', '周末一起去湖边散步吗？', '我昨晚睡得特别好，今天精神满满！',

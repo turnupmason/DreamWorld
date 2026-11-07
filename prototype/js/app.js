@@ -133,16 +133,22 @@ function snack(text) {
 }
 
 // ---------- view ----------
+// The scene is on screen for Home, Town, and in World once you've picked a community (UI.wtown); World without
+// one is the map (a panel). The Town tab is always your own community (friends and family); World is everyone.
+const sceneTab = () => UI.tab === 'home' || UI.tab === 'town' || (UI.tab === 'world' && !!UI.wtown);
 function syncView() {
+  setViewTown(UI.tab === 'world' && UI.wtown ? UI.wtown : myTown());
   if (UI.tab === 'home') Scene.setView(UI.inside ? 'interior' : 'home', 'me');
-  else if (UI.tab === 'town') Scene.setView(UI.visit ? (UI.visitInside ? 'interior' : 'home') : 'town', UI.visit || 'me');
-  Scene.setVisible(UI.tab === 'home' || UI.tab === 'town');
+  else if (sceneTab()) Scene.setView(UI.visit ? (UI.visitInside ? 'interior' : 'home') : 'town', UI.visit || 'me');
+  Scene.setVisible(sceneTab());
   // each place has its own tune
-  const inside = (UI.tab === 'home' && UI.inside) || (UI.tab === 'town' && UI.visit && UI.visitInside);
-  Sound.setScene(UI.tab === 'shop' ? 'shop' : inside ? 'inside' : UI.tab === 'town' ? (UI.world ? 'world' : UI.visit ? 'home' : 'town') : 'home');
+  const inside = (UI.tab === 'home' && UI.inside) || (UI.visit && UI.visitInside);
+  Sound.setScene(UI.tab === 'shop' ? 'shop' : inside ? 'inside' : UI.tab === 'world' && !UI.wtown ? 'world' : (UI.tab === 'town' || UI.tab === 'world') ? (UI.visit ? 'home' : 'town') : 'home');
 }
 function setTab(tab) {
   if (Scene.getEdit()) Scene.stopEdit();
+  if (tab !== UI.tab && (tab === 'town' || tab === 'world')) { UI.visit = null; UI.visitInside = false; setLevel(0); }   // a visit belongs to the tab it started in
+  if (tab === 'world' && UI.tab === 'world') { UI.wtown = null; UI.visit = null; }   // tapping World again: back to the map
   UI.tab = tab;
   tutDone('tab:' + tab);
   if (tab === 'feed') S.feed.forEach(i => { i.read = true; });
@@ -169,25 +175,26 @@ function renderHUD() {
 }
 function renderTabbar() {
   const n = unreadCount() + unreadMail();
-  $('#tabbar').innerHTML = [['home', '🏡'], ['town', '🏘️'], ['shop', '🛒'], ['real', '❤️'], ['feed', '🔔']].map(([id, ic]) =>
+  $('#tabbar').innerHTML = [['home', '🏡'], ['town', '🏘️'], ['world', '🌍'], ['shop', '🛒'], ['real', '❤️'], ['feed', '🔔']].map(([id, ic]) =>
     `<button class="tab ${UI.tab === id ? 'on' : ''}" data-act="tab" data-arg="${id}">
       <span class="ic">${ic}</span>${t('tab_' + id)}${id === 'feed' && n ? `<span class="badge">${n}</span>` : ''}</button>`).join('');
 }
 function renderPanel() {
-  const el = $('#panel'), onScene = UI.tab === 'home' || UI.tab === 'town';
+  const el = $('#panel'), onScene = sceneTab();
   el.hidden = onScene;
   document.querySelectorAll('[data-i18n]').forEach(n => { n.textContent = t(n.dataset.i18n); });
-  const top = el.scrollTop;
+  const top = el.scrollTop, ws = $('.wmap-scroll'), wx = ws ? ws.scrollLeft : null;
   if (UI.tab === 'shop') el.innerHTML = panelShop();
   else if (UI.tab === 'real') el.innerHTML = panelReal();
   else if (UI.tab === 'feed') el.innerHTML = panelFeed();
+  else if (UI.tab === 'world') { el.innerHTML = panelWorld(); afterWorld(wx); }
   el.scrollTop = top;
 }
 
 // Buttons and banners laid over the scene.
 function renderOverlay() {
   const ctxEl = $('#ctxbar'), fab = $('#fab'), tray = $('#tray'), hv = $('#harvestAll'), lb = $('#liveBanner');
-  const onScene = UI.tab === 'home' || UI.tab === 'town', ed = Scene.getEdit();
+  const onScene = sceneTab(), ed = Scene.getEdit();
   if (!onScene) { ctxEl.hidden = fab.hidden = tray.hidden = hv.hidden = lb.hidden = true; return; }
   const b = (act, ic, label, arg = '', badge = 0) => `<button class="fab-btn" data-act="${act}" data-arg="${arg}"><span>${ic}</span>${label}${badge ? `<i class="fab-badge">${badge}</i>` : ''}</button>`;
   const petBtn = () => b('pets', '🐾', t('fab_pets'), '', petAlertCount());
@@ -206,10 +213,14 @@ function renderOverlay() {
   } else if (UI.visit) {
     const h = homeOf(UI.visit), fr = isFriend(h.id), street = STREETS[lotOf(h.id).st];
     const sub = fr ? (S.calm ? '' : ` · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}`) : ` · ${nm(street)}`;
-    c = `<button class="btn small" data-act="backTown">← ${t('tab_town')}</button><div class="ctx-main">${t('home_of', { name: esc(homeName(h)) })}${sub}</div>${UI.visitInside ? floorChips(h) : ''}`;
+    c = `<button class="btn small" data-act="backTown">← ${UI.tab === 'world' ? nm(COMMUNITIES[VIEW_TOWN]) : t('tab_town')}</button><div class="ctx-main">${t('home_of', { name: esc(homeName(h)) })}${sub}</div>${UI.visitInside ? floorChips(h) : ''}`;
     f = UI.visitInside ? b('goOut', '🌳', t('fab_exit'))
       : fr ? b('goIn', '🚪', t('fab_peek')) + b('like', '❤️', t('like'), h.id) + b('friendSheet', '🎁', t('fab_gift'), h.id) + b('compose', '✉️', t('fab_letter'), h.id) + b('goHome', '🏡', t('fab_home'))
         : b('goIn', '🚪', t('fab_peek')) + b('goHome', '🏡', t('fab_home'));
+  } else if (UI.tab === 'world') {   // looking around a community somewhere in the world
+    const cm = COMMUNITIES[VIEW_TOWN];
+    c = `<button class="btn small" data-act="worldMap">← 🌍</button><div class="ctx-main">${cm.flag} ${nm(cm)} · ${nm(cm.place)} · <span class="online-dot"></span>${t('online_n', { n: onlineIn(VIEW_TOWN) })}</div>`;
+    f = b('worldMap', '🗺️', t('fab_map')) + b('goHome', '🏡', t('fab_home'));
   } else {
     c = `<button class="ctx-main link" data-act="ranking">🏛️ ${t('ctx_town', { street: t('street_name'), lv: townLevel(), v: fmtCompact(townTotal()) })}</button>`;
     f = (S.calm ? '' : b('ranking', '🏆', t('fab_rank'))) + b('goHome', '🏡', t('fab_home'));
@@ -231,7 +242,7 @@ function renderOverlay() {
   }
 }
 function overlaySig() {
-  return [UI.tab, UI.inside, UI.visit, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang].join('|');
+  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang].join('|');
 }
 // 1F 2F 3F … chips inside a house, plus ＋ to build another storey in your own.
 function floorChips(h) {
@@ -748,9 +759,9 @@ const SHEETS = {
   },
   // Empty land: next to your home → buy one more parcel; elsewhere → move your home there.
   land(a) {
-    const st = STREETS[a.st], nb = NEIGHBORHOODS[st.nb], l = lotOf('me');
-    const next = l.st === a.st && a.p === l.p + l.n;
-    const shot = `<div class="land-pic"><span>🏷️</span><b>${nm(st)}</b><i>${nm(nb)}</i></div>`;
+    const st = STREETS[a.st], nb = NEIGHBORHOODS[st.nb], l = lotOf('me'), other = VIEW_TOWN !== myTown(), cm = COMMUNITIES[VIEW_TOWN];
+    const next = !other && l.st === a.st && a.p === l.p + l.n;
+    const shot = `<div class="land-pic"><span>🏷️</span><b>${other ? `${cm.flag} ${nm(cm)} · ` : ''}${nm(st)}</b><i>${nm(nb)}</i></div>`;
     if (next) {
       const c = parcelCost();
       return `${shot}<h2>${t('land_buy_title')}</h2><p class="muted">${t('land_buy_desc', { w: PARCEL, d: LOT_D, now: homeW(S.me) })}</p>
@@ -1045,9 +1056,9 @@ const ACT = {
   },
   souvGo() { closeSheet(); UI.tab = 'home'; setLevel(0); UI.inside = true; syncView(); },
   recenter: () => Scene.recenter(),
-  goHome() { UI.visit = null; UI.visitInside = false; setLevel(0); setTab('home'); },
+  goHome() { UI.visit = null; UI.visitInside = false; UI.wtown = null; setLevel(0); setTab('home'); },
   backTown() { UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); },
-  visit(id) { closeSheet(); setLevel(0); if (id === 'me') { setTab('home'); return; } UI.tab = 'town'; UI.visit = id; UI.visitInside = false; syncView(); },
+  visit(id) { closeSheet(); setLevel(0); if (id === 'me') { setTab('home'); return; } if (UI.tab !== 'world') UI.tab = 'town'; UI.visit = id; UI.visitInside = false; syncView(); },
   ranking: () => openSheet('ranking'),
   barn: () => openSheet('barn'),
   friendSheet: id => openSheet('friend', id),
@@ -1146,11 +1157,12 @@ const ACT = {
     result(buyParcel(), () => { closeSheet(); snack(t('snack_parcel', { w: homeW(S.me) })); UI.tab = 'home'; UI.inside = false; syncView(); Scene.recenter(); });
   },
   moveHere(arg) {
-    const [st, p] = arg.split('|'), r = relocate(st, +p);
+    const [st, p] = arg.split('|'), was = myTown(), r = relocate(st, +p);
     if (r.r === 'poor') return snack(t('snack_poor'));
     if (r.r !== 'ok') return snack(t('land_taken'));
     closeSheet();
-    snack(t('snack_moved_street', { street: nm(STREETS[st]) }) + (r.refund ? ` +🪙${fmtNum(r.refund)}` : ''));
+    snack((myTown() !== was ? t('snack_moved_town', { town: nm(COMMUNITIES[myTown()]) }) : t('snack_moved_street', { street: nm(STREETS[st]) })) + (r.refund ? ` +🪙${fmtNum(r.refund)}` : ''));
+    if (myTown() !== was) Sound.play('chime');
     setLevel(0); UI.visit = null; UI.tab = 'home'; UI.inside = false; Scene.moveHome(); syncView(); Scene.recenter();
   },
   weatherInfo: () => openSheet('weather'),
@@ -1299,6 +1311,7 @@ function onSceneHit(h) {
     else snack(`👋 ${homeName(homeOf(h.owner))} · ${t('stranger')}`);
     return;
   }
+  if (k === 'worldMap') { ACT.world(); return refresh(); }
   if (k === 'shop') { const L = SHOP_LOOK[h.k]; return tip(null, null, `${L.e} ${nm(L)}`, t('shop_soon')); }
   if (k === 'land') return openSheet('land', { st: h.st, p: h.p, n: h.n, run: h.run });
   if (k === 'buyParcel') return openSheet('land', { st: lotOf('me').st, p: lotOf('me').p + lotOf('me').n, n: 1, next: true });
@@ -1530,6 +1543,183 @@ function start() {
   syncPetReminders();
 }
 
+// ================= v0.9: the world =================
+// Every community on a map you can scroll; tap one to see it, look around it, or move your home there.
+const WMAP = { w: 1080, h: 384, lat0: 78, lat1: -50 };
+const wmapXY = (lon, lat) => [(lon + 180) / 360 * WMAP.w, (WMAP.lat0 - lat) / (WMAP.lat0 - WMAP.lat1) * WMAP.h];
+const THEME_E = { maple: '🌳', sakura: '🌸', autumn: '🍁', palm: '🌴', snow: '❄️', desert: '🌵', lavender: '💜', tulip: '🌷', bamboo: '🎋', fjord: '⛰️' };
+// Continents, roughly (lon, lat), drawn soft and round like a picture-book map.
+const LANDS = [
+  [[-168, 66], [-150, 71], [-120, 72], [-95, 70], [-80, 64], [-62, 58], [-55, 50], [-66, 44], [-75, 35], [-81, 25], [-90, 29], [-97, 26], [-105, 20], [-95, 16], [-85, 10], [-79, 8], [-90, 15], [-105, 22], [-112, 30], [-118, 34], [-124, 40], [-125, 48], [-135, 57], [-150, 60], [-160, 58]],
+  [[-50, 60], [-42, 60], [-20, 70], [-22, 78], [-45, 78], [-60, 76], [-55, 70]],
+  [[-80, 8], [-72, 12], [-60, 8], [-50, 0], [-35, -6], [-38, -15], [-48, -25], [-58, -35], [-65, -42], [-70, -50], [-74, -48], [-72, -40], [-71, -25], [-75, -15], [-80, -5]],
+  [[-10, 36], [-9, 43], [-2, 44], [-5, 48], [0, 50], [5, 53], [8, 57], [5, 62], [12, 66], [20, 70], [30, 70], [40, 66], [30, 60], [28, 55], [30, 46], [40, 45], [28, 41], [24, 38], [20, 40], [15, 40], [12, 44], [8, 44], [3, 43], [-5, 36]],
+  [[-5, 50], [1, 51], [2, 53], [-2, 57], [-5, 58], [-6, 55], [-3, 54]],
+  [[-17, 15], [-17, 21], [-12, 28], [-6, 35], [10, 37], [20, 32], [32, 31], [35, 28], [43, 12], [51, 12], [44, 0], [40, -15], [35, -25], [20, -35], [17, -29], [12, -17], [13, -6], [9, 4], [0, 5], [-8, 4], [-14, 10]],
+  [[30, 70], [60, 72], [90, 76], [120, 73], [140, 72], [160, 70], [178, 66], [170, 60], [160, 55], [142, 46], [135, 35], [128, 38], [122, 30], [120, 22], [108, 20], [105, 10], [100, 13], [98, 8], [100, 2], [104, 1], [98, 16], [93, 22], [88, 22], [80, 15], [77, 8], [72, 20], [66, 25], [57, 25], [50, 30], [48, 30], [55, 24], [58, 20], [52, 16], [44, 12], [40, 20], [35, 30], [30, 36], [28, 41], [40, 45], [30, 46], [28, 55], [30, 60], [40, 66]],
+  [[130, 31], [132, 34], [136, 35], [140, 36], [141, 41], [142, 45], [140, 43], [138, 38], [135, 34]],
+  [[113, -22], [115, -34], [124, -34], [132, -31], [138, -35], [146, -39], [150, -37], [153, -28], [146, -19], [142, -11], [136, -12], [130, -12], [125, -15], [120, -19]],
+  [[95, 5], [105, -6], [115, -8], [120, -5], [110, 0], [100, 4]], [[140, -3], [150, -6], [145, -9], [138, -7]], [[166, -46], [174, -41], [178, -38], [172, -35], [168, -44]],
+];
+// Picture-book details on the map: [lon, lat, rx, ry] areas and [lon, lat] spots.
+const MAP_DESERTS = [[10, 23, 22, 7], [47, 22, 7, 5], [105, 42, 11, 3.5], [130, -25, 12, 6], [-112, 33, 6, 3], [-70, -24, 2, 7], [22, -23, 6, 4], [72, 27, 4, 3], [60, 40, 7, 3]];
+const MAP_FORESTS = [[-62, -5, 13, 8], [22, 0, 8, 5], [100, 60, 38, 6], [-100, 56, 26, 6], [20, 54, 12, 4], [104, 14, 6, 8], [-82, 38, 7, 5], [-123, 47, 3, 6], [145, -32, 4, 5], [138, 37, 2, 4]];
+const MAP_PEAKS = [[-120, 52], [-114, 45], [-108, 39], [-117, 58], [-140, 61], [-106, 33], [-70, -12], [-69, -22], [-70, -33], [-72, -42], [-76, 2], [7, 46], [11, 46.5], [14, 47], [43, 42], [80, 31], [86, 28], [91, 29], [96, 30], [74, 36], [70, 38], [102, 34], [138, 36], [37, -3], [30, -28], [146, -36], [60, 60], [100, 52], [-150, 64]];
+const MAP_RIVERS = [[[-95, 47], [-91, 40], [-90, 33], [-90, 29]], [[-73, -4], [-62, -3], [-55, -2], [-50, -1]], [[31, 3], [32, 15], [31, 25], [31, 30]], [[95, 33], [105, 30], [112, 30], [121, 31]], [[10, 48], [18, 47], [24, 44], [29, 45]], [[80, 31], [85, 26], [90, 24]], [[100, 50], [104, 58], [105, 66]]];
+const MAP_LAKES = [[-84, 45, 5, 2.2], [33, -1, 2.2, 2], [51, 41, 3.5, 4], [-96, 52, 2, 3], [107, 53, 1.2, 3]];
+const MAP_SEAS = [[-150, 15, 'sea_pacific'], [170, 10, 'sea_pacific'], [-38, 28, 'sea_atlantic'], [-25, -25, 'sea_atlantic'], [78, -20, 'sea_indian'], [0, 74, 'sea_arctic']];
+const MAP_LANDS_LABEL = [[-102, 50, 'reg_na'], [-58, -14, 'reg_sa'], [16, 57, 'reg_eu'], [20, 8, 'reg_af'], [92, 50, 'reg_asia'], [134, -24, 'reg_oc']];
+// A smooth closed curve through the midpoints of the points (picture-book coastlines).
+function mapShape(path, pts) {
+  const Q = pts.map(([lo, la]) => wmapXY(lo, la));
+  Q.forEach((p, i) => { const q = Q[(i + 1) % Q.length], m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; if (!i) path.moveTo(m[0], m[1]); else path.quadraticCurveTo(p[0], p[1], m[0], m[1]); });
+  const p0 = Q[0], q0 = Q[1 % Q.length];
+  path.quadraticCurveTo(p0[0], p0[1], (p0[0] + q0[0]) / 2, (p0[1] + q0[1]) / 2);
+  path.closePath();
+  return path;
+}
+function drawWorldMap(cv) {
+  const dpr = Math.min(3, Math.max(2, window.devicePixelRatio || 1)), g = cv.getContext('2d'), dark = document.body.classList.contains('dark');
+  cv.width = WMAP.w * dpr; cv.height = WMAP.h * dpr; g.scale(dpr, dpr);
+  const P = (lo, la) => wmapXY(lo, la), kx = WMAP.w / 360, ky = WMAP.h / (WMAP.lat0 - WMAP.lat1);
+  // the sea: a grid of latitude and longitude, the equator, little waves
+  const sea = g.createLinearGradient(0, 0, 0, WMAP.h);
+  sea.addColorStop(0, dark ? '#1e3a56' : '#b9e2f6'); sea.addColorStop(0.5, dark ? '#183049' : '#9fd4ef'); sea.addColorStop(1, dark ? '#142a40' : '#8ccbea');
+  g.fillStyle = sea; g.fillRect(0, 0, WMAP.w, WMAP.h);
+  g.strokeStyle = dark ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.3)'; g.lineWidth = 1;
+  for (let lon = -150; lon <= 180; lon += 30) { const [x] = P(lon, 0); g.beginPath(); g.moveTo(x, 0); g.lineTo(x, WMAP.h); g.stroke(); }
+  for (let lat = 60; lat >= -40; lat -= 20) { const [, y] = P(0, lat); g.beginPath(); g.moveTo(0, y); g.lineTo(WMAP.w, y); g.stroke(); }
+  g.setLineDash([6, 6]); g.strokeStyle = dark ? 'rgba(255,220,150,.12)' : 'rgba(255,255,255,.7)';
+  const eq = P(0, 0)[1]; g.beginPath(); g.moveTo(0, eq); g.lineTo(WMAP.w, eq); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = dark ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.55)'; g.lineWidth = 1.2;
+  for (let k = 0; k < 90; k++) { const x = hash(k, 1) * WMAP.w, y = hash(k, 2) * WMAP.h; g.beginPath(); g.arc(x, y, 4, Math.PI * 1.15, Math.PI * 1.85); g.moveTo(x + 7 + 4 * Math.cos(Math.PI * 1.15), y + 4 * Math.sin(Math.PI * 1.15)); g.arc(x + 7, y, 4, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
+  const lands = new Path2D();
+  LANDS.forEach(pts => mapShape(lands, pts));
+  // shallow water along the coasts, a shadow under the land, then the land itself
+  g.strokeStyle = dark ? 'rgba(90,150,190,.25)' : 'rgba(255,255,255,.55)'; g.lineWidth = 14; g.lineJoin = 'round'; g.stroke(lands);
+  g.save(); g.translate(0, 5); g.fillStyle = dark ? 'rgba(0,0,0,.35)' : 'rgba(40,90,120,.2)'; g.fill(lands); g.restore();
+  const land = g.createLinearGradient(0, 0, 0, WMAP.h);
+  land.addColorStop(0, dark ? '#4a6248' : '#d4e6ad'); land.addColorStop(0.45, dark ? '#3c5a3a' : '#b4da86'); land.addColorStop(1, dark ? '#3a5638' : '#a9d47e');
+  g.fillStyle = land; g.fill(lands);
+  // everything below stays on the land
+  g.save(); g.clip(lands);
+  const icy = P(0, 57)[1], ice = g.createLinearGradient(0, 0, 0, icy);
+  ice.addColorStop(0, dark ? 'rgba(220,230,240,.5)' : 'rgba(255,255,255,.95)'); ice.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = ice; g.fillRect(0, 0, WMAP.w, icy);
+  MAP_DESERTS.forEach(([lo, la, rx, ry]) => {   // sand with little dunes
+    const [x, y] = P(lo, la), R = rx * kx;
+    g.save(); g.translate(x, y); g.scale(1, ry * ky / R);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, R);
+    gr.addColorStop(0, dark ? 'rgba(170,140,80,.9)' : 'rgba(240,214,150,.95)'); gr.addColorStop(1, 'rgba(240,214,150,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R, 0, Math.PI * 2); g.fill(); g.restore();
+    g.strokeStyle = 'rgba(190,150,80,.5)'; g.lineWidth = 1;
+    for (let k = 0; k < rx; k++) { const dx = (hash(k, lo) - 0.5) * R * 1.2, dy = (hash(k, la) - 0.5) * ry * ky * 1.2; g.beginPath(); g.arc(x + dx, y + dy + 3, 4, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); }
+  });
+  MAP_FORESTS.forEach(([lo, la, rx, ry], fi) => {   // lots of little round trees
+    const [x, y] = P(lo, la), n = Math.round(rx * ry * 1.6);
+    for (let k = 0; k < n; k++) {
+      const a = hash(k, fi * 7) * Math.PI * 2, r = Math.sqrt(hash(k, fi * 7 + 1)), tx = x + Math.cos(a) * r * rx * kx, ty = y + Math.sin(a) * r * ry * ky;
+      g.fillStyle = 'rgba(0,0,0,.12)'; g.beginPath(); g.ellipse(tx + 1, ty + 3, 3, 1.4, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = k % 3 ? (dark ? '#2d5a33' : '#5fa356') : (dark ? '#25502b' : '#4f9448'); g.beginPath(); g.arc(tx, ty, 3.2, 0, Math.PI * 2); g.fill();
+      g.fillStyle = dark ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.25)'; g.beginPath(); g.arc(tx - 1, ty - 1, 1.2, 0, Math.PI * 2); g.fill();
+    }
+  });
+  g.strokeStyle = dark ? '#3f6f95' : '#7cc3ea'; g.lineWidth = 2; g.lineCap = 'round';   // rivers and lakes
+  MAP_RIVERS.forEach(r => {
+    const Q = r.map(([lo, la]) => P(lo, la));
+    g.beginPath(); g.moveTo(Q[0][0], Q[0][1]);
+    for (let i = 1; i < Q.length; i++) { const m = [(Q[i - 1][0] + Q[i][0]) / 2, (Q[i - 1][1] + Q[i][1]) / 2]; g.quadraticCurveTo(Q[i - 1][0], Q[i - 1][1], m[0], m[1]); }
+    g.lineTo(Q[Q.length - 1][0], Q[Q.length - 1][1]); g.stroke();
+  });
+  g.fillStyle = dark ? '#3f6f95' : '#8fd0f0';
+  MAP_LAKES.forEach(([lo, la, rx, ry]) => { const [x, y] = P(lo, la); g.beginPath(); g.ellipse(x, y, rx * kx, ry * ky, 0, 0, Math.PI * 2); g.fill(); });
+  MAP_PEAKS.forEach(([lo, la]) => {   // rocky peaks with snowy tops, three together
+    const [x, y] = P(lo, la);
+    [[-6, 2, 0.8], [0, 0, 1], [6, 3, 0.75]].forEach(([dx, dy, k]) => {
+      const px = x + dx, py = y + dy, hh = 13 * k, ww = 9 * k;
+      g.fillStyle = dark ? '#6a6f68' : '#9a9f8e'; g.beginPath(); g.moveTo(px - ww, py + 4); g.lineTo(px, py + 4 - hh); g.lineTo(px + ww, py + 4); g.closePath(); g.fill();
+      g.fillStyle = dark ? '#565b55' : '#80866f'; g.beginPath(); g.moveTo(px, py + 4 - hh); g.lineTo(px + ww, py + 4); g.lineTo(px + ww * 0.15, py + 4); g.closePath(); g.fill();
+      g.fillStyle = '#f7fafb'; g.beginPath(); g.moveTo(px - ww * 0.36, py + 4 - hh * 0.62); g.lineTo(px, py + 4 - hh); g.lineTo(px + ww * 0.36, py + 4 - hh * 0.62); g.lineTo(px + ww * 0.1, py + 4 - hh * 0.55); g.closePath(); g.fill();
+    });
+  });
+  g.restore();
+  g.strokeStyle = dark ? '#5d8455' : '#f7f1d8'; g.lineWidth = 2.2; g.stroke(lands);   // coastline
+  g.textAlign = 'center'; g.textBaseline = 'middle';   // names of the oceans and the continents
+  MAP_SEAS.forEach(([lo, la, key]) => { const [x, y] = P(lo, la); g.font = `italic 700 13px ${UI_FONT}`; g.fillStyle = dark ? 'rgba(200,225,245,.45)' : 'rgba(40,110,160,.5)'; g.fillText(t(key), x, y); });
+  MAP_LANDS_LABEL.forEach(([lo, la, key]) => {
+    const [x, y] = P(lo, la);
+    g.font = `800 12px ${UI_FONT}`; g.lineWidth = 3; g.strokeStyle = dark ? 'rgba(0,0,0,.4)' : 'rgba(255,255,255,.85)'; g.strokeText(t(key), x, y);
+    g.fillStyle = dark ? '#e3dccd' : '#5d5448'; g.fillText(t(key), x, y);
+  });
+  [[-40, 40], [-140, -10], [70, -5], [160, 25], [-20, -40]].forEach(([lo, la], i) => {   // little ships with wakes
+    const [x, y] = P(lo, la);
+    g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x - 6, y + 3); g.lineTo(x - 18, y + 1); g.moveTo(x - 6, y + 5); g.lineTo(x - 16, y + 7); g.stroke();
+    g.fillStyle = '#6b4a2e'; g.beginPath(); g.moveTo(x - 7, y + 2); g.lineTo(x + 7, y + 2); g.lineTo(x + 4, y + 6); g.lineTo(x - 5, y + 6); g.closePath(); g.fill();
+    g.fillStyle = '#fffaf0'; g.beginPath(); g.moveTo(x - 1, y + 1); g.lineTo(x - 1, y - 9); g.lineTo(x + 5, y + 1); g.closePath(); g.fill();
+    g.fillStyle = i % 2 ? '#e5484d' : '#3f6fb5'; g.fillRect(x - 1, y - 11, 4, 2);
+  });
+  const cxp = 44, cyp = WMAP.h - 44;   // compass rose
+  g.fillStyle = dark ? 'rgba(38,34,30,.75)' : 'rgba(255,253,248,.85)'; g.beginPath(); g.arc(cxp, cyp, 26, 0, Math.PI * 2); g.fill();
+  [[0, -1, '#e5484d'], [0, 1, '#8b8274'], [1, 0, '#8b8274'], [-1, 0, '#8b8274']].forEach(([dx, dy, col]) => {
+    g.fillStyle = col; g.beginPath(); g.moveTo(cxp + dx * 20, cyp + dy * 20); g.lineTo(cxp - dy * 5, cyp + dx * 5); g.lineTo(cxp + dy * 5, cyp - dx * 5); g.closePath(); g.fill();
+  });
+  g.fillStyle = dark ? '#f2ece3' : '#3b3125'; g.font = `800 10px ${UI_FONT}`; g.fillText('N', cxp, cyp - 26 + 5);
+}
+function panelWorld() {
+  const mine = myTown(), sel = COMMUNITIES[UI.wsel] ? UI.wsel : mine, cm = COMMUNITIES[sel], here = sel === mine;
+  const friendsIn = id => S.friends.filter(f => townOf(f.id) === id).length;
+  const reg = UI.wregion, inReg = id => !reg || COMMUNITIES[id].region === reg;
+  const chips = `<div class="sub-cats">${Object.entries(REGIONS).map(([r, R]) => `<button class="sub ${reg === r ? 'on' : ''}" data-act="worldRegion" data-arg="${r}">${R.e} ${nm(R)}</button>`).join('')}</div>`;
+  const pins = Object.entries(COMMUNITIES).map(([id, c]) => {
+    const [x, y] = wmapXY(c.lon, c.lat);
+    return `<button class="wpin ${id === sel ? 'on' : ''} ${id === mine ? 'home' : ''}" style="left:${x}px;top:${y}px" data-act="worldPick" data-arg="${id}">
+      <span class="wpin-dot"><i>${id === mine ? '🏡' : THEME_E[c.theme]}</i></span>${id === sel || id === mine ? `<span class="wpin-name">${nm(c)}</span>` : ''}</button>`;
+  }).join('');
+  const free = id => vacantRuns(id).filter(r => r.n >= CORE_PARCELS).length;
+  const nf = friendsIn(sel), parcel = round50(LAND.parcel * NEIGHBORHOODS.maple.price * cm.price);
+  const card = `<div class="card world-card"><div class="row">${thumbImg('commune', sel, {}, 96, 84, 'thumb sm')}
+      <div class="grow"><div class="world-name">${cm.flag} ${nm(cm)} ${here ? `<span class="tag ok">${t('world_here')}</span>` : ''}</div>
+        <div class="muted">${nm(cm.place)} · ${THEME_E[cm.theme]} ${t('theme_' + cm.theme)}</div>
+        <div class="world-stats"><span>👥 ${t('world_pop', { n: fmtNum(cm.pop + (here ? 1 : 0)) })}</span><span>🏷️ ${t('world_parcel', { n: fmtNum(parcel) })}</span><span>🌱 ${t('world_free', { n: free(sel) })}</span>${nf ? `<span>💛 ${t('world_friends', { n: nf })}</span>` : ''}</div></div></div>
+    <div class="row gap-top">${here ? `<button class="btn primary grow" data-act="worldVisit" data-arg="${sel}">🏘️ ${t('world_my_town')}</button>`
+      : `<button class="btn grow" data-act="worldVisit" data-arg="${sel}">👀 ${t('world_visit')}</button><button class="btn primary grow" data-act="worldMove" data-arg="${sel}">🚚 ${t('world_move')}</button>`}</div></div>`;
+  const list = Object.entries(COMMUNITIES).filter(([id]) => inReg(id)).sort((a, b) => (b[0] === mine) - (a[0] === mine) || b[1].pop - a[1].pop).map(([id, c]) =>
+    `<button class="list-item world-row ${id === sel ? 'on' : ''}" data-act="worldPick" data-arg="${id}"><span class="big-emoji">${c.flag}</span>
+      <div class="grow"><b>${nm(c)}</b> ${id === mine ? '🏡' : ''}<div class="muted">${nm(c.place)} · ${THEME_E[c.theme]} · 👥 ${fmtNum(c.pop)} · <span class="online-dot"></span>${onlineIn(id)}</div></div><span class="muted">×${c.price}</span></button>`).join('');
+  return `<div class="world-head"><h1 class="panel-title">🌍 ${t('world_title')}</h1><span class="muted"><span class="online-dot"></span>${t('online_world', { n: fmtNum(Object.keys(COMMUNITIES).reduce((a, id) => a + onlineIn(id), 0)) })}</span></div>
+    <p class="muted note">${t('world_sub')}</p>${chips}
+    <div class="wmap-scroll"><div class="wmap" style="width:${WMAP.w}px;height:${WMAP.h}px"><canvas id="worldCanvas" style="width:${WMAP.w}px;height:${WMAP.h}px"></canvas>${pins}</div></div>
+    ${card}
+    <div class="card"><h3>🗺️ ${t('world_all')}</h3>${list}</div>
+    <p class="muted center">${t('world_note')}</p>`;
+}
+// How many people are online in a community right now (made up for the prototype; slowly changes through the day).
+function onlineIn(id) {
+  const c = COMMUNITIES[id], i = Object.keys(COMMUNITIES).indexOf(id), hr = (Date.now() / 3600000) % 24;
+  return Math.max(3, Math.round(c.pop * (0.04 + 0.03 * Math.sin(hr / 24 * Math.PI * 2 + i))));
+}
+// After the world panel is drawn: paint the map and scroll to the community you picked (or keep where you were).
+function afterWorld(wx) {
+  const cv = $('#worldCanvas');
+  if (!cv) return;
+  drawWorldMap(cv);
+  const sc = $('.wmap-scroll'), c = COMMUNITIES[UI.wsel] || COMMUNITIES[myTown()];
+  if (UI.wscroll) { const [x] = wmapXY(c.lon, c.lat); sc.scrollLeft = x - sc.clientWidth / 2; UI.wscroll = false; }
+  else if (wx != null) sc.scrollLeft = wx;
+}
+Object.assign(ACT, {
+  world() { closeSheet(); UI.wtown = null; UI.visit = null; UI.visitInside = false; UI.wsel = UI.wsel || myTown(); UI.wscroll = true; setTab('world'); },
+  worldMap() { UI.wtown = null; UI.visit = null; UI.visitInside = false; setLevel(0); UI.wscroll = true; syncView(); },
+  worldPick(id) { UI.wsel = id; UI.wscroll = true; },
+  worldRegion(r) { UI.wregion = UI.wregion === r ? null : r; const c = Object.keys(COMMUNITIES).find(id => COMMUNITIES[id].region === r); if (c && UI.wregion) UI.wsel = c; UI.wscroll = true; },
+  // look around a community (your own one is the Town tab)
+  worldVisit(id) {
+    if (id === myTown()) return setTab('town');
+    UI.tab = 'world'; UI.wtown = id; UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); Scene.recenter();
+  },
+  worldMove(id) { ACT.worldVisit(id); setTimeout(() => snack(t('world_pick_land')), 400); },
+});
+
 // ================= v0.8 =================
 // ---------- light / dark ----------
 const darkMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -1754,6 +1944,7 @@ document.addEventListener('input', e => {
 });
 
 Scene.init($('#town'), onSceneHit);
+Scene.onWorldOut(() => { if (UI.tab === 'town') { ACT.world(); refresh(); } });   // pinching out past your town opens the world map
 // Sound can only start after the first touch (browser and iPhone rule).
 document.addEventListener('pointerdown', () => {
   Sound.start();

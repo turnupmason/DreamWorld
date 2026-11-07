@@ -156,11 +156,19 @@ function drawPerson(sx, sy, s, o) {
     ctx.save(); ctx.translate(lean, -lift);
     const top = k.top;
     if (L.hair === 'long') rrect(-7.4, top - 13, 12, 17, 5, L.hairCol);
-    ctx.beginPath(); ctx.moveTo(-5.2, -9); ctx.lineTo(-5.2, top + 4); ctx.quadraticCurveTo(-5.2, top, -1, top); ctx.lineTo(1, top); ctx.quadraticCurveTo(5.2, top, 5.2, top + 4); ctx.lineTo(5.2, -9); ctx.closePath();
+    rrect(-1.5, top - 2.6, 3, 3.6, 1.2, shade(skin, -0.08));   // neck
+    // shirt: rounded shoulders, a little wider at the chest, a soft shadow on the back side and a curved hem
+    ctx.beginPath(); ctx.moveTo(-5, -8.6); ctx.lineTo(-5.4, top + 4.4); ctx.quadraticCurveTo(-5.4, top, -1, top); ctx.lineTo(1.2, top);
+    ctx.quadraticCurveTo(5.6, top, 5.5, top + 4.4); ctx.lineTo(5.2, -8.6); ctx.quadraticCurveTo(0, -7.6, -5, -8.6); ctx.closePath();
     ctx.fillStyle = shirt; ctx.fill();
-    rrect(-5.2, -11.5, 10.4, 2.6, 1, shade(pants, -0.05));
+    ctx.save(); ctx.clip(); rrect(-6, top - 1, 3, 20, 1, shade(shirt, -0.12)); ctx.restore();
+    rrect(-5.2, -11.6, 10.4, 2.6, 1, shade(pants, -0.08));   // belt
+    if (!o.back) rrect(1.6, -11.5, 2.2, 2.3, 0.5, '#d9b44a');   // buckle
     if (o.back) line(-0.6, top + 2, -0.6, -10, shade(shirt, -0.12), 0.8);   // back seam instead of the collar
-    else line(-2.2, top + 0.3, 2.6, top + 0.3, shade(shirt, 0.35), 1.1);
+    else {
+      ctx.beginPath(); ctx.moveTo(-1.6, top + 0.2); ctx.lineTo(1.4, top + 2.4); ctx.lineTo(3.8, top + 0.2); ctx.strokeStyle = shade(shirt, 0.35); ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.stroke();   // collar
+      rrect(1.4, top + 4.2, 2.6, 2.4, 0.6, shade(shirt, -0.08));   // pocket
+    }
     ctx.restore();
     if (k.legFront) leg2(k.legs[1], pants, lift, lean);
     head(k.head[0] + lean, k.head[1] - lift, L, energy, ts, seed, o.back);
@@ -169,16 +177,42 @@ function drawPerson(sx, sy, s, o) {
   });
   sleepyZ(sx, sy, s, energy, ts, seed, 40 + air);
 }
-function leg2(l, col, lift, lean) {
-  const hx = l.h[0] + lean * 0.5, hy = l.h[1] - lift;
-  ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(l.k[0], l.k[1]); ctx.lineTo(l.f[0], l.f[1] - 1.2);
-  ctx.strokeStyle = col; ctx.lineWidth = 3.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
-  ellipse(l.f[0] + 1.1, l.f[1] - 0.9, 2.6, 1.5, '#3b3028');
+// A limb segment: a capsule that is w0 wide at a and w1 wide at b (thigh, calf, upper arm, forearm).
+function seg(a, b, w0, w1, col) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 0.001, nx = -dy / L, ny = dx / L, th = Math.atan2(ny, nx);
+  ctx.beginPath();
+  ctx.moveTo(a[0] + nx * w0 / 2, a[1] + ny * w0 / 2);
+  ctx.lineTo(b[0] + nx * w1 / 2, b[1] + ny * w1 / 2);
+  ctx.arc(b[0], b[1], w1 / 2, th, th + Math.PI, true);
+  ctx.lineTo(a[0] - nx * w0 / 2, a[1] - ny * w0 / 2);
+  ctx.arc(a[0], a[1], w0 / 2, th + Math.PI, th, true);
+  ctx.closePath(); ctx.fillStyle = col; ctx.fill();
 }
+const mixPt = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+// A sneaker seen from the side, toe forward: dark upper, white sole, a lace.
+function shoe(x, y, col = '#3b3028') {
+  ctx.beginPath(); ctx.moveTo(x - 1.7, y - 0.6); ctx.quadraticCurveTo(x - 1.9, y - 3, x + 0.3, y - 3);
+  ctx.quadraticCurveTo(x + 3.7, y - 2.3, x + 4, y - 0.7); ctx.lineTo(x + 4, y - 0.3); ctx.lineTo(x - 1.7, y - 0.3); ctx.closePath();
+  ctx.fillStyle = col; ctx.fill();
+  rrect(x - 1.9, y - 1.1, 6.1, 1.2, 0.55, '#f4efe6');
+  line(x + 0.4, y - 2.4, x + 1.6, y - 2.1, 'rgba(255,255,255,.75)', 0.45);
+}
+// Legs: thigh and calf in the trousers, a darker hem, and a sneaker.
+function leg2(l, col, lift, lean) {
+  const hip = [l.h[0] + lean * 0.5, l.h[1] - lift], knee = l.k, ankle = [l.f[0] + 0.2, l.f[1] - 1.8];
+  seg(hip, knee, 4.7, 3.9, col);
+  seg(knee, ankle, 3.9, 3.1, col);
+  seg(mixPt(knee, ankle, 0.82), ankle, 3.4, 3.3, shade(col, -0.18));
+  shoe(l.f[0], l.f[1]);
+}
+// Arms: a short sleeve over the shoulder, bare arm below, a hand with a thumb.
 function limb2(sh, el, ha, sleeve, skin) {
-  line(sh[0], sh[1], el[0], el[1], sleeve, 3.3);
-  line(el[0], el[1], ha[0], ha[1], skin, 2.6);
-  circle(ha[0], ha[1], 1.7, skin);
+  seg(sh, el, 3.3, 2.9, skin);
+  seg(el, ha, 2.9, 2.4, skin);
+  seg(sh, mixPt(sh, el, 0.62), 4.4, 4.1, sleeve);
+  const m = mixPt(sh, el, 0.62); circle(m[0], m[1], 2.05, shade(sleeve, -0.12));
+  circle(ha[0], ha[1], 1.85, skin);
+  circle(ha[0] + 1.1, ha[1] - 0.9, 0.85, shade(skin, -0.05));
 }
 function drawProp(k, ts, B) {
   const hand = i => B(k.arms[i].h);
@@ -209,23 +243,30 @@ function drawPersonFront(sx, sy, s, o, pose) {
     // legs: the lifted one bends its knee
     [[-1, -sw], [1, sw]].forEach(([side, u]) => {
       const lift = Math.max(0, u) * step, hip = [side * 2.1, -10], foot = [side * 2.3, -lift + bounce], knee = [side * 2.4, -5 - lift * 0.8 + bounce * 0.5];
-      ctx.beginPath(); ctx.moveTo(hip[0], hip[1]); ctx.lineTo(knee[0], knee[1]); ctx.lineTo(foot[0], foot[1] - 1);
-      ctx.strokeStyle = u > 0 ? shade(pants, -0.12) : pants; ctx.lineWidth = 3.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
-      rrect(foot[0] - 1.9, foot[1] - 1.7, 3.8, 2.2, 1, '#3b3028');
+      const col = u > 0 ? shade(pants, -0.12) : pants;
+      seg(hip, knee, 4.6, 3.8, col); seg(knee, [foot[0], foot[1] - 1.4], 3.8, 3.1, col); seg([foot[0], foot[1] - 2.4], [foot[0], foot[1] - 1.4], 3.4, 3.3, shade(col, -0.18));
+      // a sneaker seen from the front (or the heel from behind)
+      ellipse(foot[0], foot[1] - 1, 2.3, 1.7, '#3b3028'); rrect(foot[0] - 2.4, foot[1] - 0.7, 4.8, 1, 0.5, '#f4efe6');
+      if (!back) line(foot[0] - 0.8, foot[1] - 1.9, foot[0] + 0.8, foot[1] - 1.9, 'rgba(255,255,255,.7)', 0.45);
     });
     // arms swing forward and back, opposite to the legs
     const arm = (side, u) => {
       const sh = [side * 5, -20.6], hand = [side * (5.8 + Math.abs(u) * 0.4), -12.2 + u * (run ? 2.6 : 1.6)], el = [side * 5.9, -16.3 + u * 0.8];
-      line(sh[0], sh[1], el[0], el[1], shade(shirt, -0.08), 3.2);
-      line(el[0], el[1], hand[0], hand[1], skin, 2.5); circle(hand[0], hand[1], 1.7, skin);
+      seg(sh, el, 3.2, 2.8, skin); seg(el, hand, 2.8, 2.3, skin);
+      seg(sh, mixPt(sh, el, 0.62), 4.2, 3.9, shade(shirt, -0.06));
+      circle(hand[0], hand[1], 1.85, skin);
     };
     if (L.hair === 'long' && back) rrect(-5.6, -31, 11.2, 13, 4.5, L.hairCol);
     // torso
     ctx.beginPath(); ctx.moveTo(-5.4, -9.5); ctx.lineTo(-5.6, -20.5); ctx.quadraticCurveTo(-5.6, -23.6, -2, -23.6); ctx.lineTo(2, -23.6); ctx.quadraticCurveTo(5.6, -23.6, 5.6, -20.5); ctx.lineTo(5.4, -9.5); ctx.closePath();
     ctx.fillStyle = shirt; ctx.fill();
-    rrect(-5.4, -11.6, 10.8, 2.6, 1, shade(pants, -0.05));
+    rrect(-5.4, -11.6, 10.8, 2.6, 1, shade(pants, -0.08));
     if (back) line(0, -21.5, 0, -11.8, shade(shirt, -0.12), 0.8);
-    else { ctx.beginPath(); ctx.moveTo(-2.4, -23.4); ctx.quadraticCurveTo(0, -21.2, 2.4, -23.4); ctx.strokeStyle = shade(shirt, 0.35); ctx.lineWidth = 1; ctx.stroke(); }
+    else {
+      ctx.beginPath(); ctx.moveTo(-2.6, -23.4); ctx.lineTo(0, -20.8); ctx.lineTo(2.6, -23.4); ctx.strokeStyle = shade(shirt, 0.35); ctx.lineWidth = 1.1; ctx.lineJoin = 'round'; ctx.stroke();
+      rrect(-1.1, -11.5, 2.2, 2.3, 0.5, '#d9b44a');
+      rrect(1.2, -19.4, 2.6, 2.4, 0.6, shade(shirt, -0.08));
+    }
     arm(-1, sw); arm(1, -sw);
     if (o.wave) { const w = Math.sin(ts / 140) * 2; line(5, -20.6, 7.5, -25, shirt, 3.2); line(7.5, -25, 8.5 + w, -31, skin, 2.5); circle(8.5 + w, -31, 1.7, skin); }
     headFront(0, -30.2 + (energy === 'exhausted' ? 1.2 : 0), L, energy, ts, seed, back);
@@ -254,6 +295,8 @@ function headFront(cx, cy, L, energy, ts, seed, back) {
   if (L.hair === 'curly') for (let k = 0; k <= 7; k++) { const a = Math.PI + k / 7 * Math.PI; circle(cx + Math.cos(a) * (r + 0.4), cy + Math.sin(a) * (r + 0.4) - 0.4, 2.5, hc); }
   const blink = Math.sin(ts / 1700 + seed * 5) > 0.985, yawn = energy === 'tired' && Math.sin(ts / 2600 + seed) > 0.93;
   const eyes = [-2.4, 2.4];
+  eyes.forEach(x => line(cx + x - 1.1, cy - 2.1 - (energy === 'tired' ? -0.3 : 0), cx + x + 1.1, cy - 2.3, shade(hc, 0.1), 0.8));   // eyebrows
+  ellipse(cx, cy + 1.6, 0.7, 0.5, shade(L.skin, -0.12));   // nose
   if (energy === 'exhausted') {
     eyes.forEach(x => ellipse(cx + x, cy + 1.8, 1.6, 0.8, 'rgba(110,80,140,.35)'));
     ctx.strokeStyle = ink; ctx.lineWidth = 0.9; ctx.lineCap = 'round';
@@ -319,6 +362,8 @@ function head(cx, cy, L, energy, ts, seed, back) {
   const ink = '#2a2018';
   const blink = Math.sin(ts / 1700 + seed * 5) > 0.985;
   const yawn = energy === 'tired' && Math.sin(ts / 2600 + seed) > 0.93;
+  [2.2, 5.2].forEach(x => line(cx + x - 1, cy - 2.2, cx + x + 1.1, cy - 2.4, shade(hc, 0.1), 0.8));   // eyebrows
+  ellipse(cx + 6.6, cy + 1.4, 0.8, 0.6, shade(L.skin, -0.1));   // nose
   if (energy === 'exhausted') {
     ellipse(cx + 2.2, cy + 1.8, 1.6, 0.8, 'rgba(110,80,140,.35)'); ellipse(cx + 5.2, cy + 1.8, 1.6, 0.8, 'rgba(110,80,140,.35)');
     ctx.strokeStyle = ink; ctx.lineWidth = 0.9; ctx.lineCap = 'round';

@@ -1493,18 +1493,53 @@ function drawYard2(it, x, y, ts) {
 }
 
 // ---------- nature around town ----------
+// The look of the community you're in (TOWN_THEMES): leaf colours and the kind of wild tree.
+let PAL = TOWN_THEMES.maple;
 function drawWildTree(x, y, v, ts) {
-  const z = cam.z, c = iso(x, y), s = (0.8 + v * 0.6) * z, sw = Math.sin(ts / 1500 + x * 0.7) * 1.2 * z;
+  const z = cam.z, c = iso(x, y), s = (0.8 + v * 0.6) * z, sw = Math.sin(ts / 1500 + x * 0.7) * 1.2 * z, L = PAL.leaf, kind = PAL.tree;
   ellipse(c.x, c.y, 16 * s, 7 * s, 'rgba(0,0,0,.14)');
-  if (v < 0.45) {
-    line(c.x, c.y, c.x, c.y - 12 * s, '#7a4f2e', 3 * s);
-    [[34, 16, '#2f7d4a'], [46, 13, '#38905a'], [57, 9, '#45a368']].forEach(([h, r, col]) => pg([[c.x - r * s, c.y - (h - 20) * s], [c.x + r * s, c.y - (h - 20) * s], [c.x + sw, c.y - (h + 4) * s]], col));
-  } else {
-    line(c.x, c.y, c.x, c.y - 16 * s, '#8a5a36', 3.4 * s);
-    ellipse(c.x + sw * 0.5, c.y - 28 * s, 16 * s, 13 * s, v > 0.8 ? '#5a9a3e' : '#4f9a4b');
-    ellipse(c.x - 5 * s + sw, c.y - 33 * s, 10 * s, 9 * s, v > 0.8 ? '#6fb04a' : '#62b05a');
-    ellipse(c.x + 5 * s + sw, c.y - 37 * s, 8 * s, 7 * s, v > 0.8 ? '#86c25a' : '#74c169');
+  if (kind === 'palm') {
+    // a palm: a leaning ringed trunk, drooping fronds and a few coconuts
+    const lean = (hash(x, y) - 0.5) * 10 * s, top = { x: c.x + lean + sw, y: c.y - 46 * s };
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.quadraticCurveTo(c.x + lean * 0.2, c.y - 24 * s, top.x, top.y);
+    ctx.strokeStyle = '#9a7650'; ctx.lineWidth = 4 * s; ctx.lineCap = 'round'; ctx.stroke();
+    for (let k = 1; k < 6; k++) { const u = k / 6, px = c.x + lean * u * u + sw * u, py = c.y - 46 * s * u; line(px - 2 * s, py, px + 2 * s, py, '#7d5d3c', 0.8 * s); }
+    for (let k = 0; k < 7; k++) { const a = -Math.PI / 2 + (k - 3) * 0.55 + sw * 0.02; vleaf(top.x, top.y, 22 * s, 4.5 * s, a + (Math.abs(k - 3) * 0.12), k % 2 ? L[1] : L[0], false); }
+    [[-2, 3], [2, 3.5], [0, 5]].forEach(([dx, dy]) => circle(top.x + dx * s, top.y + dy * s, 2.2 * s, '#7a5230'));
+    return;
   }
+  if (kind === 'cactus') {
+    if (v < 0.5) { ellipse(c.x, c.y - 6 * s, 7 * s, 7 * s, L[0]); ellipse(c.x - 1.5 * s, c.y - 8 * s, 3 * s, 4 * s, L[2]); circle(c.x, c.y - 13 * s, 2 * s, '#f07a8a'); return; }   // barrel cactus
+    const arm = (dx, h0, h1) => { rrect(c.x + dx * s - 2.5 * s, c.y - h1 * s, 5 * s, (h1 - h0) * s, 2.5 * s, L[0]); rrect(c.x + (dx > 0 ? 2.5 : dx - 2.5) * s - (dx > 0 ? 0 : 0), c.y - h0 * s - 2.5 * s, Math.abs(dx) * s, 5 * s, 2.5 * s, L[0]); };
+    arm(-9, 16, 30); arm(9, 22, 36);
+    rrect(c.x - 4.5 * s, c.y - 46 * s, 9 * s, 46 * s, 4.5 * s, L[1]);
+    for (const dx of [-2, 0.5, 3]) line(c.x + dx * s, c.y - 43 * s, c.x + dx * s, c.y - 3 * s, 'rgba(0,0,0,.12)', 0.6 * s);
+    return;
+  }
+  if (kind === 'bamboo') {
+    // a clump of bamboo: thin jointed stalks with leaf sprays
+    [-5, -1.5, 2, 5.5].forEach((dx, k) => {
+      const h = (40 + hash(x + k, y) * 18) * s, tx = c.x + dx * s + sw * (1 + k * 0.2);
+      line(c.x + dx * s, c.y, tx, c.y - h, k % 2 ? '#7fae4a' : '#6f9f3f', 1.8 * s);
+      for (let j = 1; j < 5; j++) { const py = c.y - h * j / 5; line(c.x + dx * s - 1.2 * s + (tx - c.x - dx * s) * j / 5, py, c.x + dx * s + 1.2 * s + (tx - c.x - dx * s) * j / 5, py, '#5a8a33', 0.7 * s); }
+      [[-0.6, 0.75], [0.5, 0.85], [-0.3, 1]].forEach(([a, u]) => vleaf(c.x + dx * s + (tx - c.x - dx * s) * u, c.y - h * u, 9 * s, 2 * s, -Math.PI / 2 + a * 2, k % 2 ? L[1] : L[2], false));
+    });
+    return;
+  }
+  if (v < 0.45 || kind === 'pine') {
+    const cols = kind === 'pine' ? [L[0], L[1], shade(L[1], 0.1)] : ['#2f7d4a', '#38905a', '#45a368'];
+    line(c.x, c.y, c.x, c.y - 12 * s, '#7a4f2e', 3 * s);
+    [[34, 16], [46, 13], [57, 9]].forEach(([h, r], i) => {
+      pg([[c.x - r * s, c.y - (h - 20) * s], [c.x + r * s, c.y - (h - 20) * s], [c.x + sw, c.y - (h + 4) * s]], cols[i]);
+      if (PAL.snow) pg([[c.x - r * 0.45 * s + sw * 0.5, c.y - (h - 6) * s], [c.x + r * 0.45 * s + sw * 0.5, c.y - (h - 6) * s], [c.x + sw, c.y - (h + 4) * s]], '#f8fbfc');
+    });
+    return;
+  }
+  line(c.x, c.y, c.x, c.y - 16 * s, '#8a5a36', 3.4 * s);
+  ellipse(c.x + sw * 0.5, c.y - 28 * s, 16 * s, 13 * s, v > 0.8 ? shade(L[0], 0.1) : L[0]);
+  ellipse(c.x - 5 * s + sw, c.y - 33 * s, 10 * s, 9 * s, L[1]);
+  ellipse(c.x + 5 * s + sw, c.y - 37 * s, 8 * s, 7 * s, L[2]);
+  if (PAL.petals) for (let k = 0; k < 3; k++) { const ph = ((ts / 2600 + hash(x, k) ) % 1); circle(c.x + (hash(k, y) - 0.5) * 30 * s + ph * 10 * s, c.y - (30 - ph * 30) * s, 1.4 * s, '#fbd0e0'); }
 }
 function drawRock(x, y, v) {
   const z = cam.z, c = iso(x, y), s = (0.6 + v) * z;
@@ -1527,4 +1562,15 @@ function drawLake(cx, cy, rx, ry, ts) {
     line(a.x, a.y, b.x, b.y, `rgba(255,255,255,${0.4 * Math.sin(u * Math.PI)})`, 1.2 * z);
   }
   [[0.3, -0.4], [-0.5, 0.2]].forEach(([u, v]) => { const p = iso(cx + u * rx, cy + v * ry); ellipse(p.x, p.y, 7 * z, 3 * z, '#5fae47'); circle(p.x + 2 * z, p.y - 1 * z, 1.5 * z, '#f7a8c8'); });
+}
+
+// An inflatable paddling pool (swimming at home when there's no pond or pool).
+function drawTub(x, y, ts) {
+  const z = cam.z, c = iso(x, y), ph = ts / 700;
+  ellipse(c.x, c.y + 3 * z, 32 * z, 15 * z, 'rgba(0,0,0,.14)');
+  ellipse(c.x, c.y, 30 * z, 14 * z, '#3f8fd0');
+  ellipse(c.x, c.y - 7 * z, 30 * z, 14 * z, '#6fb9ef');
+  for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; ellipse(c.x + Math.cos(a) * 27 * z, c.y - 7 * z + Math.sin(a) * 12.5 * z, 4 * z, 2.4 * z, k % 2 ? '#ffffff' : '#ffd84a'); }
+  ellipse(c.x, c.y - 7 * z, 22 * z, 10 * z, '#5bb8e8');
+  ellipse(c.x - 6 * z + Math.sin(ph) * 3 * z, c.y - 9 * z, 7 * z, 2 * z, 'rgba(255,255,255,.55)');
 }

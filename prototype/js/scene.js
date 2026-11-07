@@ -36,7 +36,7 @@ const Scene = (() => {
   const meIn = { x: 1, y: 1, path: [], face: 1, phase: 0, moving: false, jobs: [], cur: null, act: null, sneak: false, room: null };
 
   const origin = id => lotOrigin(id);
-  const cam0 = () => (mode === 'interior' ? roomCams[owner] : worldCam);
+  const cam0 = () => (mode === 'interior' ? roomCams[owner] : mode === 'home' ? homeCams[owner] || worldCam : worldCam);
   const fine = () => cam.z >= 0.34;
 
   // ---------- camera ----------
@@ -47,7 +47,8 @@ const Scene = (() => {
   function homeZoom() { return clamp(W / 520, 0.6, 1.2); }
   function townZoom() { return clamp(W / 2700, 0.1, 0.22); }
   function lotCenter(id) { const [ox, oy] = origin(id); return [ox + 5.5, oy + 9]; }
-  function townCenter() { const [ox, oy] = origin('me'); return [ox + 24, oy + 22]; }
+  // Looking at your own community: around your home. Another community: around its town centre.
+  function townCenter() { if (VIEW_TOWN !== townOf('me')) return [80, 30]; const [ox, oy] = origin('me'); return [ox + 24, oy + 22]; }
   function flyTo(wx, wy, z, instant) {
     if (instant || !worldReady) { cam.z = z; centerOn(wx, wy); fly = null; worldReady = true; return; }
     fly = { wx, wy, z };
@@ -58,12 +59,18 @@ const Scene = (() => {
       cam.z = clamp(Math.min(W * 0.92 / ((rw + rd) * 32), H * 0.7 / ((rw + rd) * 16 + 100)), 0.5, 1.9);
       centerOn(rw / 2, rd / 2, 0.63);
     } else if (mode === 'town') { const [cx, cy] = townCenter(); flyTo(cx, cy, townZoom(), instant); }
+    else if (mode === 'home') { const [ox, oy] = origin(owner), h = homeOf(owner); cam.z = clamp(W / 400, minHomeZoom(), 2.4); centerOn(ox + Math.min(homeW(h || S.me), LOT_W) / 2 - 1, oy + LOT_D / 2 - 0.5, 0.5); fly = null; return; }
     else { const [cx, cy] = lotCenter(owner); flyTo(cx, cy, homeZoom(), instant); }
   }
+  // Inside, and every home (it's its own little island), keeps its own camera; the town has one.
+  const homeCams = {};
   function useCam() {
     if (mode === 'interior') {
       if (!roomCams[owner]) { roomCams[owner] = { x: 0, y: 0, z: 1 }; cam = roomCams[owner]; frameView(true); }
       cam = roomCams[owner];
+    } else if (mode === 'home') {
+      if (!homeCams[owner]) { homeCams[owner] = { x: 0, y: 0, z: 1 }; cam = homeCams[owner]; frameView(true); }
+      cam = homeCams[owner];
     } else cam = worldCam;
   }
   function stepCamera(dt) {
@@ -98,14 +105,24 @@ const Scene = (() => {
   // The camera stays over the town (not out over the woods), and can't zoom out past the whole town filling the screen.
   function clampCam() {
     if (mode === 'interior') return;
+    if (mode === 'home') {   // the island stays on screen
+      if (cam.z < minHomeZoom()) { const c0 = unIso(W / 2, H / 2); cam.z = minHomeZoom(); centerOn(c0.x, c0.y); }
+      const R = islandRect(owner), c = unIso(W / 2, H / 2), x = clamp(c.x, R.x0 + 1, R.x1 - 1), y = clamp(c.y, R.y0 + 1, R.y1 - 1);
+      if (x !== c.x || y !== c.y) centerOn(x, y);
+      return;
+    }
     if (cam.z < minWorldZoom()) { const c0 = unIso(W / 2, H / 2); cam.z = minWorldZoom(); centerOn(c0.x, c0.y); }
     const c = unIso(W / 2, H / 2), x = clamp(c.x, WORLD.x0 + 4, WORLD.x1 - 4), y = clamp(c.y, WORLD.y0 + 4, WORLD.y1 - 4);
     if (x !== c.x || y !== c.y) centerOn(x, y);
   }
   function minWorldZoom() { return Math.max(0.06, W / ((WORLD.x1 - WORLD.x0 + WORLD.y1 - WORLD.y0) * 32) * 1.25); }
+  // The whole island fits the screen at the smallest zoom.
+  function minHomeZoom() { const R = islandRect(owner); return clamp(W * 1.05 / ((R.x1 - R.x0 + R.y1 - R.y0) * 32), 0.15, 1); }
   function zoomAt(px, py, z) {
     const [lo, hi] = ZOOM[mode === 'interior' ? 'interior' : 'world'];
-    z = clamp(z, mode === 'interior' ? lo : Math.max(lo, minWorldZoom()), hi);
+    // pinching out past the whole town opens the world map
+    if (mode === 'town' && z < cam.z && cam.z <= minWorldZoom() * 1.001 && z < minWorldZoom() * 0.96 && onWorldOut && performance.now() - worldOutAt > 1500) { worldOutAt = performance.now(); onWorldOut(); }
+    z = clamp(z, mode === 'interior' ? lo : mode === 'home' ? minHomeZoom() : Math.max(lo, minWorldZoom()), hi);
     const w = unIso(px, py);
     cam.z = z;
     cam.x = px - (w.x - w.y) * TW / 2 * z;
@@ -119,7 +136,7 @@ const Scene = (() => {
     W = r.width; H = r.height;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     mainCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (ow) [worldCam, ...Object.values(roomCams)].forEach(c => { c.x += (W - ow) / 2; c.y += (H - oh) / 2; });
+    if (ow) [worldCam, ...Object.values(roomCams), ...Object.values(homeCams)].forEach(c => { c.x += (W - ow) / 2; c.y += (H - oh) / 2; });
   }
   // World rectangle on screen, padded so tall things just below the edge still draw.
   function viewRect() {
@@ -324,6 +341,7 @@ const Scene = (() => {
       const pool = h.yard.find(it => it.k === 'pool');
       if (h.pondLv) return { x: AREA.pond.x + AREA.pond.w / 2, y: AREA.pond.y + AREA.pond.d / 2, swim: 'pond' };
       if (pool) { const [w, d] = itemSize('yard', pool); return { x: pool.x + w / 2, y: pool.y + d / 2, swim: 'pool' }; }
+      if (mode !== 'town') return { x: TUB.x, y: TUB.y, swim: 'tub' };   // at home (an island): an inflatable pool
       const [ox, oy] = origin(h.id);
       return { x: LAKE.x - ox, y: LAKE.y - oy, swim: 'lake' };
     }
@@ -362,9 +380,9 @@ const Scene = (() => {
     if (f) {
       for (let j = 0; j < LOT_D; j++) for (let i = 0; i < LW; i++) {
         const v = hash(i + ox, j + oy);
-        tile(ox + i, oy + j, (i + j) % 2 ? (v > 0.5 ? '#a8d981' : '#a5d67d') : (v > 0.5 ? '#a0d279' : '#9dcf76'));
+        tile(ox + i, oy + j, LAWN[((i + j) % 2) * 2 + (v > 0.5 ? 1 : 0)]);
       }
-    } else flatRect(ox, oy, LW, LOT_D, '#a2d47b');
+    } else flatRect(ox, oy, LW, LOT_D, PAL.lawn);
     flatRect(ox + AREA.drive.x + 0.1, oy + AREA.drive.y, AREA.drive.w - 0.2, AREA.drive.d, '#cfc8bb', 'rgba(0,0,0,.05)');
     const [, hfy, , hd] = HOUSES[h.house].fp;
     if (f) for (let j = hfy + hd; j < LOT_D; j++) for (const dv of [0.28, 0.72]) {
@@ -594,8 +612,8 @@ const Scene = (() => {
         }
       } });
     });
-    // the owner (friends wander; you are drawn separately)
-    if (h.id !== 'me') {
+    // the owner (friends wander; you are drawn separately); not while they're out walking in town
+    if (h.id !== 'me' && !(mode === 'town' && walkerOut(h.id))) {
       const e = ent('p:' + h.id, () => ({ x: DOOR_X + 0.8, y: fy + hd + 1.2 }));
       const live = seesLive(h) ? h.live.type : null;
       e.pose = live ? doLive(e, live, h, dt, ts) : null;
@@ -683,8 +701,8 @@ const Scene = (() => {
       if (thin && s.w > 0.6) continue;
       // from far away: round canopies with a light top, so the woods read as a forest, not dots
       objs.push({ d: s.x + s.y, f: lod ? () => {
-        const c = iso(s.x, s.y), r = (thin ? 22 : 15) * z, dark = s.w < 0.45 ? '#2f8050' : '#3f8c45';
-        circle(c.x, c.y - r * 1.3, r, dark); circle(c.x - r * 0.3, c.y - r * 1.6, r * 0.62, s.w < 0.45 ? '#4a9d63' : '#5aa552');
+        const c = iso(s.x, s.y), r = (thin ? 22 : 15) * z, L = PAL.leaf, pine = s.w < 0.45 && PAL.tree === 'round';
+        circle(c.x, c.y - r * 1.3, r, pine ? '#2f8050' : L[0]); circle(c.x - r * 0.3, c.y - r * 1.6, r * 0.62, pine ? '#4a9d63' : PAL.snow ? '#f4f8fa' : L[1]);
       } : () => drawWildTree(s.x, s.y, s.w, ts) });
     }
   }
@@ -779,11 +797,13 @@ const Scene = (() => {
   }
 
   function renderWorld(ts, dt) {
-    const z = cam.z, vr = viewRect(), focusId = mode === 'home' ? owner : null;
-    // ground: woods, the town, neighbourhood lawns, roads, landmarks
-    flatRect(WX0, WY0, WX1 - WX0, WY1 - WY0, '#8fc469');
-    flatRect(WORLD.x0, WORLD.y0, WORLD.x1 - WORLD.x0, WORLD.y1 - WORLD.y0, '#a6d47f');
-    Object.values(STREETS).forEach(st => { if (boxVisible(st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1, vr)) flatRect(st.x - 0.6, st.y - 0.6, st.n * PARCEL + 1.2, LOT_D + 0.6, NEIGHBORHOODS[st.nb].grass); });
+    if (mode === 'home') return renderHome(ts, dt);
+    const z = cam.z, vr = viewRect(), focusId = null, themed = PAL !== TOWN_THEMES.maple;
+    // ground: the country around town, woods, the town, neighbourhood lawns, roads, landmarks
+    outskirts(vr, ts);
+    flatRect(WX0, WY0, WX1 - WX0, WY1 - WY0, PAL.woods);
+    flatRect(WORLD.x0, WORLD.y0, WORLD.x1 - WORLD.x0, WORLD.y1 - WORLD.y0, PAL.town);
+    Object.values(STREETS).forEach(st => { if (boxVisible(st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1, vr)) flatRect(st.x - 0.6, st.y - 0.6, st.n * PARCEL + 1.2, LOT_D + 0.6, themed ? shade(PAL.town, st.nb === 'lake' ? -0.04 : st.nb === 'farm' ? 0.04 : 0) : NEIGHBORHOODS[st.nb].grass); });
     const objs = [], tops = [], out = { hall: null, shops: mode === 'town' ? [] : null }, lv = townLevel(rankTotal());
     river(vr);
     mountains(objs, vr);
@@ -798,7 +818,7 @@ const Scene = (() => {
     runs.forEach(r => {
       const st = STREETS[r.st], x = st.x + r.p * PARCEL, y = st.y, w = r.n * PARCEL;
       if (!boxVisible(x, y, x + w, y + LOT_D, vr)) return;
-      flatRect(x, y, w, LOT_D, '#c4dea0');
+      flatRect(x, y, w, LOT_D, PAL.vacant);
       if (z > 0.12) { ctx.save(); ctx.setLineDash([8 * z, 6 * z]); flatRect(x + 0.3, y + 0.3, w - 0.6, LOT_D - 0.6, null, 'rgba(255,255,255,.85)', 0, 2 * z); ctx.restore(); }
       const c = iso(x + w / 2, y + LOT_D / 2);
       if (z > 0.1) objs.push({ d: x + y + w / 2 + LOT_D / 2, f: () => {
@@ -822,6 +842,8 @@ const Scene = (() => {
     });
     // you, when swimming in the lake
     if (meInLake()) { const [ox, oy] = origin(me.lot); objs.push({ d: ox + oy + me.x + me.y, f: () => drawMe(ox, oy, ts, false) }); }
+    // people who are online right now, out walking: to the square, the park, the lake, and home again
+    if (z > 0.055) walkers(objs, dt, ts);
     if (edit && edit.scope === 'yard') { const [ox, oy] = origin('me'); yardSpots(homeW(S.me)).forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)')); }
     weatherGround(ts);
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
@@ -835,7 +857,12 @@ const Scene = (() => {
       const rk = ranking();
       // label sizes follow the zoom, so zoomed far out the names don't cover the town
       const fs = Math.round(clamp(7 + z * 40, 9, 13)), small = Math.round(clamp(6 + z * 30, 8.5, 11));
-      if (z < 0.17) AREA_LABELS.forEach(([key, x, y]) => { const c = iso(x, y); pill(t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs}px ${UI_FONT},${EMOJI_FONT}`, fs + 9); });
+      if (z < 0.17) AREA_LABELS.forEach(([key, x, y]) => { const c = iso(x, y); pill(key === 'area_maple' && VIEW_TOWN !== HOME_TOWN ? nm(COMMUNITIES[VIEW_TOWN]) : t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs}px ${UI_FONT},${EMOJI_FONT}`, fs + 9); });
+      // zoomed all the way out: the neighbouring villages, and a way on to the world map
+      if (z < 0.1) {
+        [[WX1 + 40, (WY0 + WY1) / 2 - 20, 'out_east'], [(WX0 + WX1) / 2 + 30, WY1 + 40, 'out_south'], [WX0 - 34, WY1 + 34, 'out_west']].forEach(([x, y, key]) => { const c = iso(x, y); pill(t(key), c.x, c.y, 'rgba(255,255,255,.82)', '#5d5448', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8); });
+        if (z <= minWorldZoom() * 1.02) hits.push({ kind: 'worldMap', pri: 2, ...pill(t('pinch_world'), W / 2, H - 70, 'rgba(59,49,37,.86)', '#fff', `800 13px ${UI_FONT},${EMOJI_FONT}`, 30) });
+      }
       tops.forEach(tp => {
         if (tp.land) { if (z > 0.11 && tp.land.n >= CORE_PARCELS) hits.push({ kind: 'land', st: tp.land.st, p: tp.land.p, n: tp.land.n, pri: 1, ...pill(`🏷️ ${t('land_lot', { n: tp.land.n * PARCEL })}`, tp.x, tp.y, 'rgba(255,246,226,.95)', '#a9773f', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8) }); return; }
         const top = tp.opt.houseTop;
@@ -846,12 +873,73 @@ const Scene = (() => {
         const label = S.calm ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode: names only
         hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 9) });
       });
-      if (out.hall) { const { x: px, y: py } = LANDMARKS.plaza; hits.push({ kind: 'plaza', pri: 1, ...pill(`🏛️ ${t('street_name')} Lv${lv}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) }); }
+      if (out.hall) { const { x: px, y: py } = LANDMARKS.plaza; hits.push({ kind: 'plaza', pri: 1, ...pill(VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) }); }
       return;
     }
-    const tp = tops.find(x => x.h && x.h.id === owner);
-    if (!tp) return;
-    const h = tp.h, [ox, oy] = [tp.ox, tp.oy], mine = owner === 'me';
+  }
+  // ---------- home: just this one home, big and close up (v0.9) ----------
+  // Tapping any home (yours or someone else's) shows only that home: its lot, the road in front and (yours) the
+  // parcel for sale next door. The lawn runs to the edges of the screen; nothing else is drawn, so there's room
+  // for more detail than in the town (grass, flowers, stepping stones).
+  function islandRect(id) {
+    const h = homeOf(id), [ox, oy] = origin(id), extra = id === 'me' && h && canExpand() ? PARCEL : 0;
+    return { ox, oy, x0: ox - 0.6, y0: oy - 0.6, x1: ox + (h ? homeW(h) : LOT_W) + 1 + extra + 0.3, y1: oy + GH + 0.2, extra };
+  }
+  function renderHome(ts, dt) {
+    const h = homeOf(owner);
+    if (!h) return;
+    const z = cam.z, R = islandRect(owner), ox = R.ox, oy = R.oy, mine = owner === 'me', vr = viewRect();
+    // lawn everywhere on screen, a little darker away from the home
+    ctx.fillStyle = shade(PAL.town, -0.04); ctx.fillRect(0, 0, W, H);
+    flatRect(R.x0 - 6, R.y0 - 6, R.x1 - R.x0 + 12, R.y1 - R.y0 + 12, shade(PAL.town, -0.02));
+    flatRect(R.x0, R.y0, R.x1 - R.x0, R.y1 - R.y0, PAL.town);
+    if (PAL.snow) { ctx.fillStyle = 'rgba(250,252,255,.45)'; ctx.fillRect(0, 0, W, H); }
+    // the road in front runs off both sides of the screen
+    const ry = oy + LOT_D, rx0 = Math.min(vr.x0, R.x0) - 4, rx1 = Math.max(vr.x1, R.x1) + 4;
+    flatRect(rx0, ry + 0.1, rx1 - rx0, 1.9, '#d9d2c3');
+    flatRect(rx0, ry + 0.3, rx1 - rx0, 1.5, '#8e959c');
+    if (z > 0.1) for (let x = Math.ceil(rx0) + 0.3; x < rx1; x += 1) { const a = iso(x, ry + 1.05), b = iso(x + 0.45, ry + 1.05); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.85)', 1.6 * z); }
+    if (R.extra) {
+      const sx = ox + homeW(h) + 1;
+      flatRect(sx, oy, PARCEL - 0.2, LOT_D, PAL.vacant);
+      ctx.save(); ctx.setLineDash([8 * z, 6 * z]); flatRect(sx + 0.3, oy + 0.3, PARCEL - 0.8, LOT_D - 0.6, null, 'rgba(255,255,255,.85)', 0, 2 * z); ctx.restore();
+    }
+    const objs = [], opt = { focus: true, mine, bubbles: [] };
+    lotGround(h, ox, oy, opt);
+    // close-up detail: tufts of grass, little flowers and clover across the lawn (not on paths, fields or buildings)
+    if (z > 0.5) {
+      const LW = homeW(h), FL = ['#f6d04d', '#ffffff', '#ef8fb0', '#b39ae0'];
+      for (let k = 0; k < 60 + LW * 3; k++) {
+        const x = hash(k, ox + 41) * LW, y = hash(k, oy + 43) * LOT_D;
+        if (yardReserved(Math.floor(x), Math.floor(y), LW)) continue;
+        const c = iso(ox + x, oy + y), v = hash(k, 47);
+        if (v < 0.55) { for (const dx of [-2, 0, 2]) line(c.x + dx * z, c.y, c.x + dx * 1.6 * z, c.y - (4 + v * 4) * z, shade(PAL.town, -0.18), 0.9 * z); }
+        else if (v < 0.8) { circle(c.x, c.y - 1.5 * z, 1.6 * z, FL[k % FL.length]); circle(c.x, c.y - 1.5 * z, 0.6 * z, '#f2a33a'); line(c.x, c.y, c.x, c.y - 1.5 * z, '#5a9a3e', 0.6 * z); }
+        else ellipse(c.x, c.y, 3 * z, 1.4 * z, shade(PAL.town, -0.1));
+      }
+    }
+    lotObjects(h, ox, oy, objs, ts, dt, opt);
+    // swimming with no pond or pool: an inflatable pool in the front yard
+    if ((mine ? S.live : seesLive(h) && h.live) && (mine ? S.live.type : h.live.type) === 'swim' && liveSpot('swim', h).swim === 'tub') objs.push({ d: ox + oy + TUB.x + TUB.y - 0.6, f: () => drawTub(ox + TUB.x, oy + TUB.y, ts) });
+    if (edit && edit.scope === 'yard') yardSpots(homeW(S.me)).forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)'));
+    const w = weatherNow().kind;
+    if (w === 'snow') { ctx.fillStyle = 'rgba(250,252,255,.35)'; ctx.fillRect(0, 0, W, H); }
+    else if (w === 'rain' || w === 'storm') { ctx.fillStyle = 'rgba(40,70,110,.08)'; ctx.fillRect(0, 0, W, H); }
+    objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
+    // a soft frame so your eye goes to the home
+    const g = ctx.createRadialGradient(W / 2, H * 0.48, Math.min(W, H) * 0.35, W / 2, H * 0.48, Math.max(W, H) * 0.75);
+    g.addColorStop(0, 'rgba(30,40,20,0)'); g.addColorStop(1, 'rgba(30,40,20,.22)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    weatherSky(ts, dt);
+    nightTint();
+    if (viewFade) { const k = 1 - (performance.now() - viewFade) / 380; if (k > 0) { ctx.fillStyle = `rgba(255,255,255,${k * 0.9})`; ctx.fillRect(0, 0, W, H); } else viewFade = 0; }
+    if (attract || S.onboarding) return;
+    if (edit && edit.scope === 'yard') { editOverlay(ts); return; }
+    const bob = Math.abs(Math.sin(ts / 380)) * 4;
+    homeOverlays({ h, opt, ox, oy }, ts, bob);
+  }
+  function homeOverlays(tp, ts, bob) {
+    const z = cam.z, h = tp.h, [ox, oy] = [tp.ox, tp.oy], mine = owner === 'me';
     tp.opt.bubbles.forEach(b => hits.push({ kind: 'bubble', what: b.kind, owner, id: b.id, i: b.i, pri: 2, ...bubble(b.ch, b.p.x, b.p.y, 1, bob) }));
     if (mine) {
       h.fields.forEach((fl, i) => {
@@ -877,6 +965,123 @@ const Scene = (() => {
       if (tp.opt.houseTop) pill(t('home_of', { name: homeName(h) }), tp.opt.houseTop.x, tp.opt.houseTop.y - 6, 'rgba(255,255,255,.94)', '#3b3125', `600 12px ${UI_FONT}`);
     }
   }
+  // ---------- people out walking (v0.9) ----------
+  // A virtual world: residents who are online leave their gate and walk the streets to somewhere (the town square,
+  // the park, the lake, a shop, a friend's gate), stay a while, and walk home. Simulated until the server exists;
+  // then these are real players. Roads: horizontal streets joined by two avenues (x 65.5 and x 113.5).
+  const HROADS = [{ y: 15, x0: -1, x1: 63, av: [65.5] }, { y: 15, x0: 116, x1: 171, av: [113.5] }, { y: 31.5, x0: -16, x1: 194, av: [65.5, 113.5] },
+    { y: 51, x0: -1, x1: 63, av: [65.5] }, { y: 67, x0: -16, x1: 111, av: [65.5] }];
+  const AV_Y = { 65.5: [-1, 69], 113.5: [-1, 35] };
+  const roadOf = (x, y) => HROADS.reduce((b, r) => (x >= r.x0 - 3 && x <= r.x1 + 3 && Math.abs(r.y - y) < Math.abs(b.y - y) ? r : b), HROADS[2]);
+  const gateOf = id => { const l = lotOf(id), [ox, oy] = origin(id); return [ox + 3.5, oy + LOT_D + (STREETS[l.st].y === 16 ? 1.5 : 1)]; };
+  const PLACES = [[89, 16.5], [90, 31.5], [128, 31.5], [72, 27], [102, 27], [40, 31.5], [150, 31.5]];
+  // A route along the roads from a to b: along a's road to an avenue (or the big avenue), across, along b's road.
+  function route(a, b) {
+    const ra = roadOf(a[0], a[1]), rb = roadOf(b[0], b[1]), pts = [[a[0], ra.y]];
+    if (ra !== rb) {
+      const av = ra.av.find(x => rb.av.includes(x));
+      if (av !== undefined) pts.push([av, ra.y], [av, rb.y]);
+      else { const mid = HROADS[2], a1 = ra.av[0], a2 = rb.av[0]; pts.push([a1, ra.y], [a1, mid.y], [a2, mid.y], [a2, rb.y]); }
+    }
+    pts.push([b[0], rb.y], b);
+    return pts;
+  }
+  let WALK = { town: null, list: [], next: 0 };
+  const walkerOut = id => WALK.town === VIEW_TOWN && WALK.list.some(w => w.id === id);
+  function walkers(objs, dt, ts) {
+    if (WALK.town !== VIEW_TOWN) WALK = { town: VIEW_TOWN, list: [], next: 0 };
+    const now2 = performance.now(), z = cam.z;
+    // someone new heads out every few seconds, up to 8 at a time
+    if (now2 > WALK.next && WALK.list.length < 8) {
+      WALK.next = now2 + 2500 + Math.random() * 4000;
+      const ids = allLots().map(l => l.id).filter(id => id !== 'me' && !WALK.list.some(w => w.id === id) && homeOf(id));
+      if (ids.length) {
+        const id = ids[Math.floor(Math.random() * ids.length)], g = gateOf(id);
+        const others = allLots().filter(l => l.id !== id && homeOf(l.id)), dest = Math.random() < 0.3 && others.length ? gateOf(others[Math.floor(Math.random() * others.length)].id) : PLACES[Math.floor(Math.random() * PLACES.length)];
+        WALK.list.push({ id, h: homeOf(id), x: g[0], y: g[1] - 1.2, path: [[g[0], g[1]], ...route(g, dest)], home: g, phase: 0, face: 1, moving: true, stay: 0, back: false, alpha: 0 });
+      }
+    }
+    WALK.list = WALK.list.filter(w => {
+      if (w.stay > 0) { w.stay -= dt; w.moving = false; if (w.stay <= 0) { w.path = route([w.x, w.y], w.home).concat([[w.home[0], w.home[1] - 1.2]]); w.going = true; } }
+      else if (w.path.length) {
+        const [tx, ty] = w.path[0], dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy), st = 1.6 * dt;
+        if (d <= st) { w.x = tx; w.y = ty; w.path.shift(); } else { w.x += dx / d * st; w.y += dy / d * st; }
+        faceTo(w, dx, dy); w.phase += dt * 9.5; w.moving = true;
+        if (!w.path.length) { if (w.going) return false; w.stay = 6 + Math.random() * 10; }
+      }
+      w.alpha = Math.min(1, w.alpha + dt * 2);
+      objs.push({ d: w.x + w.y, f: () => {
+        const p = iso(w.x, w.y);
+        ctx.save(); ctx.globalAlpha = w.alpha;
+        drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.moving ? w.view : null, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: !w.moving && Math.sin(ts / 900 + w.x) > 0.7 });
+        ctx.restore();
+        if (z > 0.3) pill(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z));
+        else if (z > 0.12) circle(p.x, p.y - 48 * z, Math.max(2, 3.5 * z), '#34c759', '#fff', 1);
+        if (z > 0.2) hits.push({ kind: 'lot', owner: w.id, pri: 2, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 46 * z, y1: p.y + 4 });
+      } });
+      return true;
+    });
+  }
+  // ---------- the country around town (v0.9): other villages, farms, woods and lakes, out to the horizon ----------
+  // Made up in 22-tile squares from a fixed seed; drawn simply (they're always far away). Mountains stay to the north and west.
+  const OUT = { x0: WX0 - 110, y0: WY0 - 110, x1: WX1 + 110, y1: WY1 + 110, ch: 22 };
+  let OUT_CHUNKS = null;
+  function outChunks() {
+    if (OUT_CHUNKS) return OUT_CHUNKS;
+    OUT_CHUNKS = [];
+    for (let y = OUT.y0; y < OUT.y1; y += OUT.ch) for (let x = OUT.x0; x < OUT.x1; x += OUT.ch) {
+      if (x + OUT.ch > WX0 - 2 && x < WX1 + 2 && y + OUT.ch > WY0 - 2 && y < WY1 + 2) continue;   // the town and its woods
+      if ((y + OUT.ch > WY0 - 24 && y < WY0 && x < WX1 + 30) || (x + OUT.ch > WX0 - 24 && x < WX0 && y < WY1 + 30)) { OUT_CHUNKS.push({ x, y, k: 'forest' }); continue; }   // under the mountains
+      const v = hash(x * 0.37 + 11, y * 0.61 + 7);
+      OUT_CHUNKS.push({ x, y, k: v < 0.34 ? 'village' : v < 0.68 ? 'farm' : v < 0.92 ? 'forest' : 'lake', v });
+    }
+    return OUT_CHUNKS;
+  }
+  const OUT_ROOF = ['#c0453a', '#3f6fb5', '#5a8a46', '#8a5a9a', '#d98a2e', '#6b5f50'];
+  function outskirts(vr, ts) {
+    const z = cam.z, S2 = OUT.ch;
+    if (vr.x0 > WX0 - 1 && vr.x1 < WX1 + 1 && vr.y0 > WY0 - 1 && vr.y1 < WY1 + 1) return;   // all of it is off screen
+    flatRect(OUT.x0, OUT.y0, OUT.x1 - OUT.x0, OUT.y1 - OUT.y0, shade(PAL.woods, 0.06));
+    // a ring road around the woods, and highways out to the four sides
+    const RR = 5, rw = 2.4, road = (x, y, w, d) => { flatRect(x, y, w, d, '#cfc8b8'); flatRect(x + (w > d ? 0 : 0.3), y + (w > d ? 0.3 : 0), w > d ? w : d - 0.6 > 0 ? w - 0.6 : w, w > d ? d - 0.6 : d, '#8e959c'); };
+    road(WX0 - RR - rw, WY0 - RR - rw, WX1 - WX0 + 2 * RR + 2 * rw, rw); road(WX0 - RR - rw, WY1 + RR, WX1 - WX0 + 2 * RR + 2 * rw, rw);
+    road(WX0 - RR - rw, WY0 - RR, rw, WY1 - WY0 + 2 * RR); road(WX1 + RR, WY0 - RR, rw, WY1 - WY0 + 2 * RR);
+    road(WX1 + RR, (WY0 + WY1) / 2, OUT.x1 - WX1 - RR, rw); road((WX0 + WX1) / 2, WY1 + RR, rw, OUT.y1 - WY1 - RR);
+    const things = [];   // houses and barns go on top of every square's ground, back to front
+    for (const c of outChunks()) {
+      if (c.x > vr.x1 || c.x + S2 < vr.x0 || c.y > vr.y1 || c.y + S2 < vr.y0) continue;
+      const r = (k, j) => hash(c.x + k * 3.1, c.y + j * 1.7);
+      if (c.k === 'farm') {
+        const cols = PAL.rows || ['#d9c46a', '#8cc95f', '#c9a36a', '#b3d77f', '#e2c06a'];
+        for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) flatRect(c.x + 1 + i * 10, c.y + 1 + j * 10, 9.2, 9.2, cols[Math.floor(r(i, j) * cols.length)]);
+        if (z > 0.08) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) for (let s = 1; s < 5; s++) { const a = iso(c.x + 1 + i * 10, c.y + 1 + j * 10 + s * 1.84), b = iso(c.x + 10.2 + i * 10, c.y + 1 + j * 10 + s * 1.84); line(a.x, a.y, b.x, b.y, 'rgba(70,50,20,.18)', 1.2 * z); }
+        things.push({ d: c.x + c.y + 21, f: () => { box(c.x + 17, c.y + 2, 2.4, 1.8, 18, '#c0453a'); gableX(c.x + 16.9, c.y + 1.9, 2.6, 2, 18, 9, '#7a3a30', '#c0453a'); } });   // a barn
+      } else if (c.k === 'lake') {
+        const m = iso(c.x + S2 / 2, c.y + S2 / 2);
+        ellipse(m.x, m.y, S2 * 18 * z, S2 * 8 * z, '#c9b88f'); ellipse(m.x, m.y, S2 * 16 * z, S2 * 7 * z, '#5aa7d6');
+      } else if (c.k === 'forest') {
+        flatRect(c.x, c.y, S2, S2, shade(PAL.woods, -0.06));
+        const L = PAL.leaf;
+        for (let k = 0; k < 9; k++) { const p = iso(c.x + 2 + r(k, 1) * (S2 - 4), c.y + 2 + r(k, 2) * (S2 - 4)), rr = (40 + r(k, 3) * 30) * z; circle(p.x, p.y - rr, rr, k % 2 ? L[0] : L[1]); }
+      } else {   // a village: two crossing streets and little houses
+        flatRect(c.x, c.y, S2, S2, shade(PAL.town, -0.02));
+        flatRect(c.x, c.y + 10, S2, 1.6, '#8e959c'); flatRect(c.x + 10, c.y, 1.6, S2, '#8e959c');
+        // real little houses (the same drawings as in town, kept as pictures so it stays fast), one per corner
+        [[1, 2], [12.4, 2], [1, 12.6], [12.4, 12.6]].forEach(([qx, qy], k) => {
+          if (r(k, 5) < 0.15) return;
+          const v = OUT_HOMES[Math.floor(r(k, 6) * OUT_HOMES.length)], [fx, fy, fw, fd] = HOUSES[v.house].fp, hx = c.x + qx - fx + (8 - fw) * 0.3, hy = c.y + qy - fy + (7 - fd) * 0.5;
+          things.push({ d: hx + hy + fx + fy + fw / 2 + fd / 2, f: () => drawHouseCached(v, hx, hy) });
+          const tr = { x: c.x + qx + 7.4, y: c.y + qy + 0.6 };
+          if (r(k, 7) < 0.6) things.push({ d: tr.x + tr.y, f: () => drawWildTree(tr.x, tr.y, 0.5 + r(k, 8) * 0.4, ts) });
+        });
+      }
+    }
+    things.sort((a, b) => a.d - b.d).forEach(o => o.f());
+  }
+  // A few house styles for the villages around town (a short list, so their pictures can be reused).
+  const OUT_HOMES = [[1, '#f4e7cc', '#c0453a'], [2, '#e8d6b8', '#3f6fb5'], [3, '#fbf3e4', '#5a8a46'], [1, '#f6e0c8', '#8a5a9a'], [4, '#efe6d6', '#d98a2e'],
+    [2, '#f4e7cc', '#6b5f50'], [6, '#fbf3e4', '#c0453a'], [3, '#e3d3bb', '#3f6fb5'], [5, '#f2ece2', '#4f7f9a'], [0, '#f4e7cc', '#c0453a']]
+    .map(([house, wall, roof], i) => ({ id: 'out' + i, house, wall, roof, extra: {}, ups: [], room: { wall: 0, floor: 0, items: [] }, yard: [], animals: [] }));
   // Big area names shown when zoomed out over the town.
   const AREA_LABELS = [['area_maple', 30, 10], ['area_center', 89, 1], ['area_lake', 144, 9], ['area_park', 90, 44], ['area_farm', 30, 47], ['area_fields', 55, 79], ['area_water', 146, 50]];
   // ---------- weather (real local weather, or the town's own) ----------
@@ -1261,13 +1466,25 @@ const Scene = (() => {
     a.x = nx; a.y = ny;
     if (k >= 1) tr.cur = null;
   }
+  // The look of the community on screen: the town you're looking at, or the town this home is in.
+  const LAWN_MAPLE = ['#9dcf76', '#a0d279', '#a5d67d', '#a8d981'];
+  let LAWN = LAWN_MAPLE, onWorldOut = null, worldOutAt = 0, viewFade = 0;
+  const TUB = { x: 11, y: 12.4 };
+  function setPal() {
+    const t = mode === 'town' ? VIEW_TOWN : townOf(owner), th = TOWN_THEMES[(COMMUNITIES[t] || COMMUNITIES[HOME_TOWN]).theme] || TOWN_THEMES.maple;
+    if (th === PAL) return;
+    PAL = th;
+    LAWN = th === TOWN_THEMES.maple ? LAWN_MAPLE : [-0.03, -0.015, 0.01, 0.025].map(k => shade(th.lawn, k));
+    HOUSE_SPR.clear();
+  }
   function render(ts) {
     if (!visible || !S || !W) return;
+    setPal();
     const dt = Math.min(0.05, Math.max(0, (ts - lastTs) / 1000));
     lastTs = ts;
     ctx = mainCtx;
     useCam();
-    if (!worldReady && mode !== 'interior') frameView(true);
+    if (!worldReady && mode === 'town') frameView(true);
     try { updateMe(dt, ts); } catch (e) { console.error(e); }
     stepCamera(dt);
     NIGHT = nightAmount(now());
@@ -1503,6 +1720,19 @@ const Scene = (() => {
       ellipse(c.x, c.y, 30 * z, 14 * z, '#b8dd8c');
       drawAnimal(k, o.stage === undefined ? 2 : o.stage, c.x, c.y, z * 1.25, { face: 1, ts: 0, seed: 1 });
     },
+    // A corner of a community, in its own look: lawn, a house and its kind of trees (for the world map).
+    commune(k, o, w, h) {
+      const saved = PAL, th = TOWN_THEMES[COMMUNITIES[k].theme];
+      PAL = th;
+      const [fx, fy, fw, fd] = HOUSES[1].fp, S2 = Math.max(fw, fd) + 2.4;
+      frameFoot(S2, S2, 70, w, h, 1.6);
+      flatRect(-0.2, -0.2, S2 + 0.4, S2 + 0.4, th.town);
+      if (th.snow) flatRect(-0.2, -0.2, S2 + 0.4, S2 + 0.4, 'rgba(250,252,255,.5)');
+      drawWildTree(0.4, S2 - 0.3, 0.9, 0); drawWildTree(S2 - 0.3, 0.5, 0.3, 0);
+      drawHouse({ id: 'x', house: 1, wall: '#f4e7cc', roof: { maple: '#c0453a', sakura: '#e88bb7', autumn: '#c9532a', palm: '#38a3e0', snow: '#3f6fb5', desert: '#d98a2e', lavender: '#8a6cc4', tulip: '#e5484d', bamboo: '#4f8c45', fjord: '#c0453a' }[COMMUNITIES[k].theme], extra: {}, ups: [], room: { items: [] } }, 1.2 - fx, 1 - fy, 0);
+      drawWildTree(S2 - 0.4, S2 - 0.2, 0.7, 0);
+      PAL = saved;
+    },
     // A pet, big and alive (the pet page draws this every frame), or a breed in the shop.
     pet(k, o, w, h) {
       cam = { x: 0, y: 0, z: 1 };
@@ -1645,13 +1875,16 @@ const Scene = (() => {
       return { x: p.x, y: p.y, r: Math.max(20, r) };
     },
     levelChanged() { meIn.lv = -1; meIn.anim = null; floorFade = performance.now(); },
+    // Pinching out past the whole town calls this (the app opens the world map).
+    onWorldOut(fn) { onWorldOut = fn; },
     // After moving your home to another street: stand at your new gate.
-    moveHome() { cancel(me); me.lot = 'me'; me.x = DOOR_X; me.y = 12.5; me.face = 1; },
+    moveHome() { cancel(me); me.lot = 'me'; me.x = DOOR_X; me.y = 12.5; me.face = 1; delete homeCams.me; },
     takeStairs,
     onStairs: () => !!meIn.anim,
     setView(m, o = 'me') {
       if (m === mode && o === owner) return;
       const wasInterior = mode === 'interior';
+      if ((m === 'home') !== (mode === 'home') && m !== 'interior' && !wasInterior) viewFade = performance.now();   // a soft flash between the town and a home
       mode = m; owner = o; edit = null;
       cv.style.background = m === 'interior' ? '#eadfcd' : '';
       if (m !== 'town' && m !== 'interior') moveToLot(o);

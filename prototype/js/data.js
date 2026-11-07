@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.8.0';
+const VERSION = '0.9.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -529,3 +529,45 @@ SHOP_SUBS.pets = [
   { id: 'gear', e: '🧺', zh: '用品', en: 'Supplies', keys: ['petbowl', 'litterbox', 'petbed', 'cattree'] },
 ];
 SHOP_SUBS.furn.find(s => s.id === 'decor').keys = SHOP_SUBS.furn.find(s => s.id === 'decor').keys.filter(k => k !== 'cattree');
+
+// ---------- the world (v0.9) ----------
+// Mirror Town is one community of many. Every community is a town like ours (same streets), with its own look,
+// its own residents, and its own land prices. You can look around any of them and move your whole home there.
+// The prototype makes the residents up; the real game fills them with real players (needs the server).
+const TOWN_THEMES = {
+  maple:    { woods: '#8fc469', town: '#a6d47f', lawn: '#a3d47c', vacant: '#c4dea0', leaf: ['#3f8c45', '#5aa552', '#74c169'], tree: 'round' },
+  sakura:   { woods: '#93c66f', town: '#acd585', lawn: '#a7d483', vacant: '#cfe2ab', leaf: ['#e58aae', '#f3aecb', '#fbd0e0'], tree: 'round', petals: true },
+  autumn:   { woods: '#a9bf6a', town: '#b8cf80', lawn: '#b2cd7c', vacant: '#d6dfa6', leaf: ['#c9532a', '#e88a2e', '#f2b544'], tree: 'round' },
+  palm:     { woods: '#9ccf6a', town: '#b6da88', lawn: '#addb82', vacant: '#e3e6b0', leaf: ['#3f9a4a', '#57b45a', '#7fcf6a'], tree: 'palm', sand: '#ecd9a6' },
+  snow:     { woods: '#e8eff3', town: '#f1f5f8', lawn: '#eef4f7', vacant: '#e2ebf0', leaf: ['#2f6b4f', '#3f7d5f', '#f8fbfc'], tree: 'pine', snow: true },
+  desert:   { woods: '#dfc28c', town: '#e8d3a6', lawn: '#e6d2a2', vacant: '#efe1bf', leaf: ['#5f9a4f', '#79b05e', '#93c46f'], tree: 'cactus' },
+  lavender: { woods: '#93c26e', town: '#a9d281', lawn: '#a5d17e', vacant: '#cfe1ad', leaf: ['#4f8c45', '#68a552', '#83bd66'], tree: 'round', rows: ['#9b7fd0', '#b39ae0', '#8a6cc4'] },
+  tulip:    { woods: '#90c46b', town: '#a8d480', lawn: '#a4d37d', vacant: '#cde2aa', leaf: ['#3f8c45', '#5aa552', '#74c169'], tree: 'round', rows: ['#e5484d', '#f2c230', '#ef7d9c', '#f28c28'] },
+  bamboo:   { woods: '#86c065', town: '#a2d07f', lawn: '#9fcf7b', vacant: '#c8e0a6', leaf: ['#5f9e3f', '#86c05a', '#a8d67a'], tree: 'bamboo' },
+  fjord:    { woods: '#7fb070', town: '#9cc985', lawn: '#98c781', vacant: '#c2dbaa', leaf: ['#2f5f43', '#3f7352', '#557f60'], tree: 'pine' },
+};
+const COMMUNITIES = {
+  wutong:  { zh: '梧桐镇', en: 'Maple Town', place: { zh: '美国 · 加州', en: 'California, USA' }, flag: '🇺🇸', lon: -120, lat: 37, theme: 'maple', price: 1, pop: 1280, region: 'na' },
+  palmbay: { zh: '椰林湾', en: 'Palm Bay', place: { zh: '美国 · 佛罗里达', en: 'Florida, USA' }, flag: '🇺🇸', lon: -81, lat: 26, theme: 'palm', price: 1.3, pop: 2140, region: 'na' },
+  cactus:  { zh: '仙人掌镇', en: 'Cactus Flats', place: { zh: '美国 · 亚利桑那', en: 'Arizona, USA' }, flag: '🇺🇸', lon: -111, lat: 33, theme: 'desert', price: 0.7, pop: 640, region: 'na' },
+  vermont: { zh: '红枫谷', en: 'Red Maple Vale', place: { zh: '美国 · 佛蒙特', en: 'Vermont, USA' }, flag: '🇺🇸', lon: -72.6, lat: 44, theme: 'autumn', price: 0.9, pop: 860, region: 'na' },
+  banff:   { zh: '松雪村', en: 'Pine Hollow', place: { zh: '加拿大 · 班夫', en: 'Banff, Canada' }, flag: '🇨🇦', lon: -115.6, lat: 51, theme: 'snow', price: 0.8, pop: 520, region: 'na' },
+  provence:{ zh: '薰衣草谷', en: 'Lavender Vale', place: { zh: '法国 · 普罗旺斯', en: 'Provence, France' }, flag: '🇫🇷', lon: 5.5, lat: 43.9, theme: 'lavender', price: 1.2, pop: 930, region: 'eu' },
+  holland: { zh: '风车村', en: 'Tulip Mill', place: { zh: '荷兰', en: 'Netherlands' }, flag: '🇳🇱', lon: 4.9, lat: 52.4, theme: 'tulip', price: 1.1, pop: 1010, region: 'eu' },
+  fjord:   { zh: '峡湾村', en: 'Fjord Haven', place: { zh: '挪威', en: 'Norway' }, flag: '🇳🇴', lon: 7, lat: 61, theme: 'fjord', price: 1, pop: 410, region: 'eu' },
+  kyoto:   { zh: '樱花町', en: 'Sakura Hill', place: { zh: '日本 · 京都', en: 'Kyoto, Japan' }, flag: '🇯🇵', lon: 135.8, lat: 35, theme: 'sakura', price: 1.4, pop: 1760, region: 'asia' },
+  hangzhou:{ zh: '竹林镇', en: 'Bamboo Grove', place: { zh: '中国 · 杭州', en: 'Hangzhou, China' }, flag: '🇨🇳', lon: 120.2, lat: 30.3, theme: 'bamboo', price: 1.1, pop: 2380, region: 'asia' },
+  sydney:  { zh: '桉树湾', en: 'Gum Tree Cove', place: { zh: '澳大利亚 · 悉尼', en: 'Sydney, Australia' }, flag: '🇦🇺', lon: 151.2, lat: -33.9, theme: 'palm', price: 1.2, pop: 1320, region: 'oc' },
+  andes:   { zh: '咖啡山', en: 'Coffee Hills', place: { zh: '哥伦比亚', en: 'Colombia' }, flag: '🇨🇴', lon: -75.6, lat: 5, theme: 'bamboo', price: 0.6, pop: 380, region: 'sa' },
+};
+Object.assign(COMMUNITIES, {
+  london:  { zh: '玫瑰镇', en: 'Rose Green', place: { zh: '英国 · 伦敦郊外', en: 'Near London, UK' }, flag: '🇬🇧', lon: -0.5, lat: 51.4, theme: 'tulip', price: 1.5, pop: 1640, region: 'eu' },
+  seoul:   { zh: '银杏村', en: 'Ginkgo Village', place: { zh: '韩国 · 首尔', en: 'Seoul, Korea' }, flag: '🇰🇷', lon: 127, lat: 37.5, theme: 'autumn', price: 1.3, pop: 1490, region: 'asia' },
+  rio:     { zh: '海风湾', en: 'Sea Breeze Bay', place: { zh: '巴西 · 里约', en: 'Rio, Brazil' }, flag: '🇧🇷', lon: -43.2, lat: -22.9, theme: 'palm', price: 0.8, pop: 1120, region: 'sa' },
+  capetown:{ zh: '好望角村', en: 'Cape Village', place: { zh: '南非 · 开普敦', en: 'Cape Town, South Africa' }, flag: '🇿🇦', lon: 18.4, lat: -33.9, theme: 'desert', price: 0.7, pop: 560, region: 'af' },
+});
+const REGIONS = {
+  na: { e: '🗽', zh: '北美', en: 'North America' }, sa: { e: '🦜', zh: '南美', en: 'South America' }, eu: { e: '🏰', zh: '欧洲', en: 'Europe' },
+  af: { e: '🦒', zh: '非洲', en: 'Africa' }, asia: { e: '🏯', zh: '亚洲', en: 'Asia' }, oc: { e: '🦘', zh: '大洋洲', en: 'Oceania' },
+};
+const HOME_TOWN = 'wutong';   // where everyone starts (and where your friends live in the prototype)

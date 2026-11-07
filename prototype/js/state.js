@@ -175,29 +175,46 @@ function residents() { return S.lots.map(l => homeOf(l.id)).filter(Boolean); }
 
 // ---------- the world: streets of parcels ----------
 let NPCS = [];   // other people living in town; generated on load, never saved
-function lotOf(id) { return (S && S.lots || []).find(l => l.id === id) || NPC_LOTS.find(l => l.id === id); }
+// ---------- communities (v0.9) ----------
+// Every community uses the same streets. A lot without .town is in HOME_TOWN (where you start and where your
+// friends live). VIEW_TOWN is the community the town view is showing. Other communities' residents are made up
+// (seeded, so they look the same every time) the first time you look at them; their ids are "town:n1".
+let VIEW_TOWN = HOME_TOWN;
+const townOfLot = l => (l && l.town) || HOME_TOWN;
+const npcId = (t, id) => (t === HOME_TOWN ? id : t + ':' + id);
+const NPC_LOTS_BY = {};
+function npcLots(t) { return NPC_LOTS_BY[t] || (NPC_LOTS_BY[t] = NPC_LOTS.map(s => ({ ...s, id: npcId(t, s.id), town: t }))); }
+function myTown() { return townOfLot(S && S.lots.find(l => l.id === 'me')); }
+function townOf(id) { const l = lotOf(id); return l ? townOfLot(l) : HOME_TOWN; }
+function setViewTown(t) { VIEW_TOWN = COMMUNITIES[t] ? t : HOME_TOWN; ensureNPCs(VIEW_TOWN); }
+function lotOf(id) {
+  const l = (S && S.lots || []).find(x => x.id === id);
+  if (l) return l;
+  const i = id ? id.indexOf(':') : -1;
+  return i < 0 ? npcLots(HOME_TOWN).find(x => x.id === id) : npcLots(id.slice(0, i)).find(x => x.id === id);
+}
 const slotOf = lotOf;
 // Where a home's lot starts in the world (world tiles), and how wide it is (16 + bought parcels × 4).
 function lotOrigin(id) { const l = lotOf(id); if (!l) return [0, 0]; const st = STREETS[l.st]; return [st.x + l.p * PARCEL, st.y]; }
 function lotW(id) { const l = lotOf(id); return l ? l.n * PARCEL : LOT_W; }
 const homeW = h => lotW(h.id);
-function allLots() { return [...(S ? S.lots : []), ...NPC_LOTS]; }
-function parcelOwner(st, p) { const l = allLots().find(x => x.st === st && p >= x.p && p < x.p + x.n); return l ? l.id : null; }
-// Runs of empty parcels on every street: [{ st, p, n }]. Cached until somebody's land changes.
+function allLots(t = VIEW_TOWN) { return [...(S ? S.lots.filter(l => townOfLot(l) === t) : []), ...npcLots(t)]; }
+function parcelOwner(st, p, t = VIEW_TOWN) { const l = allLots(t).find(x => x.st === st && p >= x.p && p < x.p + x.n); return l ? l.id : null; }
+// Runs of empty parcels on every street of a community: [{ st, p, n }]. Cached until somebody's land changes.
 let RUNS = { key: '', runs: [] };
-function vacantRuns() {
-  const key = S.lots.map(l => l.st + l.p + ',' + l.n).join('|');
-  if (RUNS.key !== key) RUNS = { key, runs: computeRuns() };
+function vacantRuns(t = VIEW_TOWN) {
+  const key = t + '|' + S.lots.map(l => townOfLot(l) + l.st + l.p + ',' + l.n).join('|');
+  if (RUNS.key !== key) RUNS = { key, runs: computeRuns(t) };
   return RUNS.runs;
 }
-function computeRuns() {
+function computeRuns(t) {
   const out = [];
   Object.entries(STREETS).forEach(([st, s]) => {
     let p = 0;
     while (p < s.n) {
-      if (parcelOwner(st, p)) { p++; continue; }
+      if (parcelOwner(st, p, t)) { p++; continue; }
       const p0 = p;
-      while (p < s.n && !parcelOwner(st, p)) p++;
+      while (p < s.n && !parcelOwner(st, p, t)) p++;
       out.push({ st, p: p0, n: p - p0 });
     }
   });
@@ -206,7 +223,7 @@ function computeRuns() {
 // First empty spot big enough for a home, on your own street first.
 // The land right next to your home stays free as long as possible, so you can keep buying it.
 function freeRun() {
-  const runs = vacantRuns().filter(r => r.n >= CORE_PARCELS), mine = lotOf('me');
+  const runs = vacantRuns(myTown()).filter(r => r.n >= CORE_PARCELS), mine = lotOf('me');
   const nextToMe = r => !!mine && r.st === mine.st && r.p === mine.p + mine.n;
   const dist = r => Math.abs(STREETS[r.st].y - (mine ? STREETS[mine.st].y : 0));
   runs.sort((a, b) => nextToMe(a) - nextToMe(b) || (STREETS[a.st].nb !== 'maple') - (STREETS[b.st].nb !== 'maple') || dist(a) - dist(b));
@@ -217,8 +234,10 @@ function freeRun() {
 const nbOf = id => NEIGHBORHOODS[STREETS[lotOf(id).st].nb];
 const round50 = v => Math.round(v / 50) * 50;
 // The next parcel to the right of your home: each one costs more than the last.
-function canExpand(id = 'me') { const l = lotOf(id), p = l.p + l.n; return p < STREETS[l.st].n && !parcelOwner(l.st, p); }
-function parcelCost(id = 'me') { const l = lotOf(id); return { coins: round50(LAND.parcel * Math.pow(LAND.grow, l.n - CORE_PARCELS) * nbOf(id).price) }; }
+function canExpand(id = 'me') { const l = lotOf(id), p = l.p + l.n; return p < STREETS[l.st].n && !parcelOwner(l.st, p, townOfLot(l)); }
+// Land costs more in some communities than others (COMMUNITIES[].price).
+const townPrice = t => (COMMUNITIES[t] || COMMUNITIES[HOME_TOWN]).price;
+function parcelCost(id = 'me') { const l = lotOf(id); return { coins: round50(LAND.parcel * Math.pow(LAND.grow, l.n - CORE_PARCELS) * nbOf(id).price * townPrice(townOfLot(l))) }; }
 function buyParcel() {
   if (!canExpand()) return 'max';
   const c = parcelCost();
@@ -230,23 +249,30 @@ function buyParcel() {
   return 'ok';
 }
 // Moving your whole home (house, farm, yard) to an empty spot on another street.
-function moveCost(st) { return { coins: round50(LAND.move * CORE_PARCELS * NEIGHBORHOODS[STREETS[st].nb].price) }; }
-function relocate(st, p) {
-  for (let k = 0; k < CORE_PARCELS; k++) if (p + k >= STREETS[st].n || parcelOwner(st, p + k)) return { r: 'taken' };
-  const c = moveCost(st);
+function moveCost(st, t = VIEW_TOWN) { return { coins: round50(LAND.move * CORE_PARCELS * NEIGHBORHOODS[STREETS[st].nb].price * townPrice(t)) }; }
+// Moving your home to empty land, in this community or another one (t).
+function relocate(st, p, t = VIEW_TOWN) {
+  for (let k = 0; k < CORE_PARCELS; k++) if (p + k >= STREETS[st].n || parcelOwner(st, p + k, t)) return { r: 'taken' };
+  const c = moveCost(st, t);
   if (!canAfford(c)) return { r: 'poor' };
   const l = lotOf('me'), refund = Math.round((l.paid || 0) * LAND.refund);
   pay(c);
   S.me.coins += refund;
   Object.assign(l, { st, p, n: CORE_PARCELS, paid: 0 });
+  if (t === HOME_TOWN) delete l.town; else l.town = t;
   fixLayout(S.me);
   return { r: 'ok', refund };
 }
 // A tiny seeded random generator, so strangers' homes look the same every time.
 function seeded(seed) { let s = seed % 2147483647 || 1; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
-function genNPCs() {
-  NPCS = NPC_LOTS.map((spec, i) => {
-    const r = seeded(9001 + i * 7919), pick = a => a[Math.floor(r() * a.length)], farm = STREETS[spec.st].nb === 'farm';
+function genNPCs() { NPCS = []; NPC_DONE = {}; ensureNPCs(HOME_TOWN); }
+let NPC_DONE = {};
+function ensureNPCs(t) {
+  if (NPC_DONE[t]) return;
+  NPC_DONE[t] = true;
+  const ti = Object.keys(COMMUNITIES).indexOf(t), off = t === HOME_TOWN ? 0 : 104729 * (ti + 1);
+  NPCS.push(...npcLots(t).map((spec, i) => {
+    const r = seeded(9001 + i * 7919 + off), pick = a => a[Math.floor(r() * a.length)], farm = STREETS[spec.st].nb === 'farm';
     const crops = Object.keys(CROPS).filter(k => !CROPS[k].rare), fieldLv = farm ? 3 : Math.floor(r() * 3);
     const nf = FIELD_LEVELS[fieldLv], pl = farm ? 3 : r() < 0.6 ? 1 + Math.floor(r() * 2) : 0;
     const beasts = ['chicken', 'duck', 'sheep', 'goat', 'pig', 'cow', 'alpaca'];
@@ -264,12 +290,14 @@ function genNPCs() {
     };
     p.trees = Array.from({ length: p.orchardLv ? ORCHARD[p.orchardLv].slots : 0 }, () => [pick(Object.keys(TREES)), 2]);
     if (r() < 0.4) p.animals.push(['dog', 2]);
+    if (t !== HOME_TOWN) { p.house = Math.floor(r() * HOUSES.length); p.name = NPC_NAMES[(i + ti * 3) % NPC_NAMES.length]; }
     const h = homeFromPreset(p);
-    h.npc = true;
+    h.npc = true; h.town = t;
     // the extra land of a bigger lot: a garden with trees, a pool or a swing set
     for (let k = 0; k < (spec.n - CORE_PARCELS) * 3; k++) autoPlace(h, 'yard', pick(['tree', 'pine', 'flowers', 'hedge', 'fountain', 'pool', 'picnic', 'trampoline', 'windmill']));
+    h.animals.filter(isPet).forEach(a => setupPet(a, null, h));
     return h;
-  });
+  }));
 }
 
 // ---------- resources ----------
@@ -1230,7 +1258,7 @@ function inviteJoin() {
   const run = freeRun();
   const next = FRIEND_POOL.find(f => !S.friends.some(x => x.id === f.id));
   if (!run || !next) return null;
-  S.lots.push({ id: next.id, st: run.st, p: run.p, n: CORE_PARCELS, paid: 0 });
+  S.lots.push({ id: next.id, st: run.st, p: run.p, n: CORE_PARCELS, paid: 0, ...(myTown() !== HOME_TOWN ? { town: myTown() } : {}) });   // friends move in next to you
   S.friends.push(homeFromPreset(next));
   return addFeed({ kind: 'join', from: next.id, gift: { type: 'wood', n: 5 } });
 }
