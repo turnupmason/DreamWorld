@@ -286,9 +286,16 @@ function trayHTML(ed) {
         <button class="btn small" data-act="trayStore">📦 ${t('store')}</button></div>`;
     }
   }
+  if (scope === 'yard' && UI.moveArea) return `<div class="tray-row"><div class="grow"><b>${t('area_tap_new', { name: t('area_' + UI.moveArea) })}</b></div>
+      <button class="btn small" data-act="areaCancel">✕ ${t('cancel')}</button></div>`;
   const tabs = `<div class="tray-tabs"><button class="chip ${UI.tray === 'items' ? 'on' : ''}" data-act="trayTab" data-arg="items">${t('tray_items')}</button>
     <button class="chip ${UI.tray === 'colors' ? 'on' : ''}" data-act="trayTab" data-arg="colors">${t('tray_colors')}</button>
+    ${scope === 'yard' ? `<button class="chip ${UI.tray === 'areas' ? 'on' : ''}" data-act="trayTab" data-arg="areas">${t('tray_areas')}</button>` : ''}
     <span class="muted">${t('tray_hint')}</span></div>`;
+  if (UI.tray === 'areas' && scope === 'yard') {   // v0.15: move the pasture, fields, orchard or pond
+    const E = { pasture: '🐄', fields: '🌱', orchard: '🌳', pond: '🐟' };
+    return tabs + `<div class="tray-areas">${MOVABLE.map(k => `<button class="btn small" data-act="areaPick" data-arg="${k}">${E[k]} ${t('area_' + k)}</button>`).join('')}</div><p class="muted small">${t('area_note')}</p>`;
+  }
   if (UI.tray === 'colors') {
     const sw = (list, cur, act) => list.map((c, i) => `<button class="swatch sm ${cur === i ? 'on' : ''}" style="background:${c.c1 || c}" data-act="${act}" data-arg="${i}"></button>`).join('');
     if (scope === 'room') return tabs + `<div class="color-row"><span>${t('wallpaper')}</span>${sw(ROOM_WALLS, curRoom(S.me).wall, 'setRoomWall')}</div>
@@ -1298,6 +1305,8 @@ const ACT = {
   design() { Scene.startEdit(UI.tab === 'home' && UI.inside ? 'room' : 'yard'); UI.tray = 'items'; },
   editDone() { Scene.stopEdit(); },
   trayTab(x) { UI.tray = x; },
+  areaPick(k) { UI.moveArea = k; Scene.select(null); },
+  areaCancel() { UI.moveArea = null; },
   holdNew(k) { const scope = edScope(); Scene.hold({ k, rot: 0, tint: itemDef(scope, k).tint ? rand(TINTS) : null }); },
   trayRotate() {
     const ed = Scene.getEdit();
@@ -1507,7 +1516,15 @@ function onSceneHit(h) {
     const ok = hd.id ? moveItem(ed.scope, hd.id, h.x, h.y, hd.rot) : placeFromStore(ed.scope, hd.k, h.x, h.y, hd.rot, hd.tint);
     if (ok) { Scene.hold(null); snack(t('snack_placed')); } else snack(t(PLACE_WHY === 'block' ? 'snack_blocks_way' : 'snack_noroom'));
   } else if (k === 'item') Scene.select(h.id);
-  else if (k === 'deselect') Scene.select(null);
+  else if (k === 'deselect') {
+    if (UI.moveArea && h.lx !== undefined) {   // v0.15: put the farm area here (its top-left corner)
+      const r = moveArea(UI.moveArea, Math.floor(h.lx), Math.floor(h.ly));
+      if (r === 'ok') { Sound.play('select'); snack(`✅ ${t('area_moved', { name: t('area_' + UI.moveArea) })}`); UI.moveArea = null; Scene.dropEnts(); }
+      else snack(t(r === 'block' ? 'snack_blocks_way' : 'area_no_room'));
+      return refresh();
+    }
+    Scene.select(null);
+  }
   refresh();
 }
 

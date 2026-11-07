@@ -479,7 +479,12 @@ function applyNative(d) {
 function cropProg(f) { return f ? Math.min(1, (now() - f.at) / (CROPS[f.crop].grow * MIN)) : 0; }
 function cropStage(f) { const p = cropProg(f); return p >= 1 ? 4 : p >= 0.65 ? 3 : p >= 0.35 ? 2 : p >= 0.1 ? 1 : 0; }
 function isRipe(f) { return !!f && cropProg(f) >= 1; }
-function fieldPos(i) { return [AREA.fields.x + i % 4, AREA.fields.y + Math.floor(i / 4)]; }
+// Farm areas can be moved around the yard (v0.15): each home keeps where its pasture, fields, orchard and pond are
+// (h.areaAt[key] = [x, y], the top-left tile); without that, the usual spot in AREA.
+const MOVABLE = ['pasture', 'fields', 'orchard', 'pond'];
+function areaOf(h, k) { const A = AREA[k], at = h && h.areaAt && h.areaAt[k]; return at ? { x: at[0], y: at[1], w: A.w, d: A.d } : A; }
+function fieldPos(i, h = S.me) { const A = areaOf(h, 'fields'); return [A.x + i % 4, A.y + Math.floor(i / 4)]; }
+function orchardSlot(h, i) { const A = areaOf(h, 'orchard'), o = AREA.orchard; return [ORCHARD_SLOTS[i][0] - o.x + A.x, ORCHARD_SLOTS[i][1] - o.y + A.y]; }
 
 function plant(i, crop) {
   const h = S.me;
@@ -604,7 +609,8 @@ function pastureCount(h = S.me) { return h.animals.filter(a => !ANIMALS[a.k].pet
 // Smaller pastures sit in the front-left corner of the pasture area, closest to the middle of the screen.
 function pastureRect(h) {
   const p = PASTURE[h.pastureLv];
-  return p ? { x: AREA.pasture.x, y: AREA.pasture.y + AREA.pasture.d - p.d, w: p.w, d: p.d } : null;
+  const A = areaOf(h, 'pasture');
+  return p ? { x: A.x, y: A.y + A.d - p.d, w: p.w, d: p.d } : null;
 }
 function collectAnimal(id, h = S.me) {
   const a = h.animals.find(x => x.id === id);
@@ -860,10 +866,10 @@ function itemSize(scope, it) { const d = itemDef(scope, it.k); return it.rot ? [
 function roomSize(h) { return HOUSES[h.house].room; }
 const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.d;
 const PORCH = { x: AREA.house.x, y: AREA.house.y + AREA.house.d, w: AREA.house.w, d: 1 }; // keep the front of the house clear
-function yardReserved(x, y, w = LOT_W) {
+function yardReserved(x, y, w = LOT_W, h = S.me) {
   if (x < 0 || y < 0 || x >= w || y >= LOT_D) return true;
   if (x === MAILBOX[0] && y === MAILBOX[1]) return true;
-  return ['house', 'pasture', 'fields', 'orchard', 'pond', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || inRect(PORCH, x, y);
+  return ['house', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || MOVABLE.some(k => inRect(areaOf(h, k), x, y)) || inRect(PORCH, x, y);
 }
 function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
   const def = itemDef(scope, k);
@@ -875,7 +881,7 @@ function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
     if (stairsTiles(h, lv).some(r => overlaps(r, x, y, w, d))) return false;
   } else {
     const lw = homeW(h);
-    for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) if (yardReserved(x + i, y + j, lw)) return false;
+    for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) if (yardReserved(x + i, y + j, lw, h)) return false;
   }
   const others = (list || scopeItems(h, scope, lv)).filter(it => it.id !== ignoreId);
   for (const it of others) {
@@ -903,18 +909,19 @@ function roomSpots(h, flat) {
   return out.sort((a, b) => edge(a) - edge(b) || (a[0] + a[1]) - (b[0] + b[1]));
 }
 let YARD_SPOTS = {};
-function yardSpots(w = LOT_W) {
-  if (!YARD_SPOTS[w]) {
+function yardSpots(w = LOT_W, h = S.me) {
+  const key = w + '|' + JSON.stringify((h && h.areaAt) || {});
+  if (!YARD_SPOTS[key]) {
     const out = [];
-    for (let y = 0; y < LOT_D; y++) for (let x = 0; x < w; x++) if (!yardReserved(x, y, w)) out.push([x, y]);
-    out.sort((a, b) => Math.hypot(a[0] - 6, a[1] - 6) - Math.hypot(b[0] - 6, b[1] - 6));
-    YARD_SPOTS[w] = out;
+    for (let y = 0; y < LOT_D; y++) for (let x = 0; x < w; x++) if (!yardReserved(x, y, w, h)) out.push([x, y]);
+    YARD_SPOTS[key] = out;
   }
-  return YARD_SPOTS[w];
+  return YARD_SPOTS[key];
 }
+
 function autoPlace(h, scope, k, tint, lv) {
   const def = itemDef(scope, k);
-  const spots = scope === 'room' ? roomSpots(h, def.flat) : yardSpots(homeW(h));
+  const spots = scope === 'room' ? roomSpots(h, def.flat) : yardSpots(homeW(h), h);
   // Against the left wall, turn things so their back touches the wall.
   for (const [x, y] of spots) for (const rot of (scope === 'room' && x === 0 && y > 0 ? [1, 0] : [0, 1])) {
     if (rot && def.w === def.d && !(scope === 'room' && x === 0 && y > 0)) continue;
@@ -1697,3 +1704,22 @@ function stealBaby(fid, aid) {
   return { r: 'ok', k: 'baby_' + a.k, n: 1 };
 }
 const babyStealable = (h, a) => isFriend(h.id) && !ANIMALS[a.k].pet && animalStage(a) === 0 && h.animals.filter(x => x.k === a.k).length >= 2 && !((S.today.babies || {})[h.id]);
+
+// ---------- moving a farm area (v0.15) ----------
+// It has to fit inside your yard, not cover the house, the drive, the path, another area or anything in the yard,
+// and everything must still be reachable afterwards.
+function moveArea(k, x, y, h = S.me) {
+  if (!MOVABLE.includes(k)) return 'no';
+  const A = AREA[k], LW = homeW(h);
+  if (x < 0 || y < 0 || x + A.w > LW || y + A.d > LOT_D) return 'space';
+  const r = { x, y, w: A.w, d: A.d }, over = q => x < q.x + q.w && q.x < x + A.w && y < q.y + q.d && q.y < y + A.d;
+  const [fx, fy, fw, fd] = HOUSES[h.house].fp;
+  if ([{ x: fx, y: fy, w: fw, d: fd }, AREA.drive, AREA.path, PORCH, { x: MAILBOX[0], y: MAILBOX[1], w: 1, d: 1 }].some(over)) return 'space';
+  if (MOVABLE.filter(o => o !== k).some(o => over(areaOf(h, o)))) return 'space';
+  if (h.yard.some(it => { const [w, d] = itemSize('yard', it); return over({ x: it.x, y: it.y, w, d }); })) return 'space';
+  const old = h.areaAt ? { ...h.areaAt } : null;
+  h.areaAt = { ...(h.areaAt || {}), [k]: [x, y] };
+  if (typeof yardKeepsWay === 'function' && !yardKeepsWay(h, h.yard)) { h.areaAt = old || undefined; if (!old) delete h.areaAt; return 'block'; }
+  YARD_SPOTS = {};
+  return 'ok';
+}

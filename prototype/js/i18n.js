@@ -738,3 +738,15 @@ Object.assign(STR.en, {
   sick_why_work: 'too many work days in a row', sick_why_sleep: 'poor sleep lately', sick_why_cold: 'caught a cold', sick_buy: 'Buy medicine (🪙{n})', sick_med_have: 'Medicine taken: lie in bed at home for {n} seconds.',
   sick_med_bought: 'Medicine taken: lie in bed at home for {n} seconds', sick_cured: 'All better!', snack_stole_baby: 'You sneaked off with a {e} for your pasture', snack_baby_few: 'They only have one of these; you can’t do it',
 });
+
+// ---------- v0.15: moving farm areas ----------
+Object.assign(STR.zh, {
+  tray_areas: '地块', area_pasture: '牧场', area_fields: '菜地', area_orchard: '果园', area_pond: '池塘',
+  area_note: '选一块地，再点院子里的新位置（它的左上角）。不能压住房子、车道、小路和别的东西，也不能挡路。',
+  area_tap_new: '点院子里的新位置，把{name}搬过去', area_moved: '{name}搬好了', area_no_room: '这里放不下（压住了房子、小路或别的东西）',
+});
+Object.assign(STR.en, {
+  tray_areas: 'Farm areas', area_pasture: 'Pasture', area_fields: 'Fields', area_orchard: 'Orchard', area_pond: 'Pond',
+  area_note: 'Pick an area, then tap its new spot in the yard (its top-left corner). It can’t cover the house, drive, path or anything else, or block the way.',
+  area_tap_new: 'Tap the new spot for the {name}', area_moved: '{name} moved', area_no_room: 'It doesn’t fit there (it would cover the house, the path or something else)',
+});

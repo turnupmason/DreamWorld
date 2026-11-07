@@ -657,3 +657,4 @@ body.dark .flood-note { background: #1f3342; color: #a9d2ec; }
 .pill.sick { background: #ffe1e1; }
 body.dark .pill.work { background: #3a2f1c; color: #f2c27a; }
 body.dark .pill.sick { background: #3a2222; }
+.tray-areas { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
