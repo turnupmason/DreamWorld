@@ -233,6 +233,7 @@ function drawProp(k, ts, B) {
 // so the townie walks towards you (or away) instead of sliding sideways.
 function drawPersonFront(sx, sy, s, o, pose) {
   const L = o.look, ts = o.ts || 0, seed = o.seed || 0, energy = o.energy || 'good', back = o.view === 'back';
+  const T = clamp(o.turn || 0, -1, 1), far = T >= 0 ? -1 : 1, nar = 1 - Math.abs(T) * 0.14;   // 3/4 turn: far side a bit narrower and behind
   const moving = pose !== 'stand', run = pose === 'run', ph = o.phase || 0, sw = moving ? Math.sin(ph) : 0;
   const tired = energy === 'tired' || energy === 'exhausted';
   const bounce = moving ? Math.abs(Math.cos(ph)) * (run ? 2 : tired ? 0.6 : 1.1) : (energy === 'great' && !o.wave ? Math.max(0, Math.sin(ts / 240 + seed)) * 2.5 : 0);
@@ -242,8 +243,8 @@ function drawPersonFront(sx, sy, s, o, pose) {
     ctx.translate(0, -bounce);
     // legs: the lifted one bends its knee
     [[-1, -sw], [1, sw]].forEach(([side, u]) => {
-      const lift = Math.max(0, u) * step, hip = [side * 2.1, -10], foot = [side * 2.3, -lift + bounce], knee = [side * 2.4, -5 - lift * 0.8 + bounce * 0.5];
-      const col = u > 0 ? shade(pants, -0.12) : pants;
+      const lift = Math.max(0, u) * step, hip = [side * 2.1 * nar + T * 0.5, -10], foot = [side * 2.3 * nar + T * 1.2, -lift + bounce], knee = [side * 2.4 * nar + T * 0.9, -5 - lift * 0.8 + bounce * 0.5];
+      const col = u > 0 || side === far ? shade(pants, -0.12) : pants;
       seg(hip, knee, 4.6, 3.8, col); seg(knee, [foot[0], foot[1] - 1.4], 3.8, 3.1, col); seg([foot[0], foot[1] - 2.4], [foot[0], foot[1] - 1.4], 3.4, 3.3, shade(col, -0.18));
       // a sneaker seen from the front (or the heel from behind)
       ellipse(foot[0], foot[1] - 1, 2.3, 1.7, '#3b3028'); rrect(foot[0] - 2.4, foot[1] - 0.7, 4.8, 1, 0.5, '#f4efe6');
@@ -251,15 +252,19 @@ function drawPersonFront(sx, sy, s, o, pose) {
     });
     // arms swing forward and back, opposite to the legs
     const arm = (side, u) => {
-      const sh = [side * 5, -20.6], hand = [side * (5.8 + Math.abs(u) * 0.4), -12.2 + u * (run ? 2.6 : 1.6)], el = [side * 5.9, -16.3 + u * 0.8];
+      const k = side === far ? nar * 0.9 : 1, sh = [side * 5 * k + T * 0.6, -20.6], hand = [side * (5.8 + Math.abs(u) * 0.4) * k + T * 1.4, -12.2 + u * (run ? 2.6 : 1.6)], el = [side * 5.9 * k + T, -16.3 + u * 0.8];
       seg(sh, el, 3.2, 2.8, skin); seg(el, hand, 2.8, 2.3, skin);
       seg(sh, mixPt(sh, el, 0.62), 4.2, 3.9, shade(shirt, -0.06));
       circle(hand[0], hand[1], 1.85, skin);
     };
     if (L.hair === 'long' && back) rrect(-5.6, -31, 11.2, 13, 4.5, L.hairCol);
-    // torso
+    if (T) arm(far, far < 0 ? sw : -sw);   // turned: the far arm is behind the body
+    // torso (narrower when turned, the far side in shadow)
+    ctx.save(); ctx.translate(T * 0.6, 0); ctx.scale(nar, 1);
     ctx.beginPath(); ctx.moveTo(-5.4, -9.5); ctx.lineTo(-5.6, -20.5); ctx.quadraticCurveTo(-5.6, -23.6, -2, -23.6); ctx.lineTo(2, -23.6); ctx.quadraticCurveTo(5.6, -23.6, 5.6, -20.5); ctx.lineTo(5.4, -9.5); ctx.closePath();
     ctx.fillStyle = shirt; ctx.fill();
+    if (T) { ctx.save(); ctx.clip(); rrect(far < 0 ? -6 : 3.6, -24, 2.6, 15, 1, shade(shirt, -0.12)); ctx.restore(); }
+    ctx.restore();
     rrect(-5.4, -11.6, 10.8, 2.6, 1, shade(pants, -0.08));
     if (back) line(0, -21.5, 0, -11.8, shade(shirt, -0.12), 0.8);
     else {
@@ -267,26 +272,28 @@ function drawPersonFront(sx, sy, s, o, pose) {
       rrect(-1.1, -11.5, 2.2, 2.3, 0.5, '#d9b44a');
       rrect(1.2, -19.4, 2.6, 2.4, 0.6, shade(shirt, -0.08));
     }
-    arm(-1, sw); arm(1, -sw);
+    if (T) arm(-far, far < 0 ? -sw : sw); else { arm(-1, sw); arm(1, -sw); }
     if (o.wave) { const w = Math.sin(ts / 140) * 2; line(5, -20.6, 7.5, -25, shirt, 3.2); line(7.5, -25, 8.5 + w, -31, skin, 2.5); circle(8.5 + w, -31, 1.7, skin); }
-    headFront(0, -30.2 + (energy === 'exhausted' ? 1.2 : 0), L, energy, ts, seed, back);
+    headFront(T * 0.9, -30.2 + (energy === 'exhausted' ? 1.2 : 0), L, energy, ts, seed, back, T);
   });
   sleepyZ(sx, sy, s, energy, ts, seed, 40 + bounce);
 }
-function headFront(cx, cy, L, energy, ts, seed, back) {
-  const r = 6.8, hc = L.hairCol, ink = '#2a2018';
+function headFront(cx, cy, L, energy, ts, seed, back, turn = 0) {
+  const r = 6.8, hc = L.hairCol, ink = '#2a2018', T = turn, sg = T > 0 ? 1 : -1, turned = Math.abs(T) > 0.3;
   if (back) {
     circle(cx, cy, r, L.skin);
     ctx.fillStyle = hc; ctx.beginPath(); ctx.arc(cx, cy, r + 0.5, Math.PI * 0.86, Math.PI * 2.14); ctx.closePath(); ctx.fill();
-    ellipse(cx, cy + 2.2, r * 0.86, r * 0.6, hc);
-    ellipse(cx - r + 0.4, cy + 0.8, 1.2, 1.8, shade(L.skin, -0.06)); ellipse(cx + r - 0.4, cy + 0.8, 1.2, 1.8, shade(L.skin, -0.06));
+    ellipse(cx - T * 0.8, cy + 2.2, r * 0.86, r * 0.6, hc);
+    if (turned) ellipse(cx + sg * (r - 0.6), cy + 0.8, 1.3, 1.9, shade(L.skin, -0.06));   // turned away: one ear and a bit of cheek
+    else { ellipse(cx - r + 0.4, cy + 0.8, 1.2, 1.8, shade(L.skin, -0.06)); ellipse(cx + r - 0.4, cy + 0.8, 1.2, 1.8, shade(L.skin, -0.06)); }
     if (L.hair === 'bun') { circle(cx, cy - r - 2.2, 3.4, hc); circle(cx, cy - r - 2.2, 1.2, shade(hc, 0.15)); }
     if (L.hair === 'curly') for (let k = 0; k <= 9; k++) { const a = Math.PI * 0.85 + k / 9 * Math.PI * 1.3; circle(cx + Math.cos(a) * (r + 0.4), cy + Math.sin(a) * (r + 0.4), 2.5, hc); }
     return;
   }
   if (L.hair === 'long') rrect(cx - r - 0.8, cy - 2, 2 * r + 1.6, 11, 3, hc);
   circle(cx, cy, r, L.skin);
-  ellipse(cx - r + 0.3, cy + 0.6, 1.2, 1.8, shade(L.skin, -0.06)); ellipse(cx + r - 0.3, cy + 0.6, 1.2, 1.8, shade(L.skin, -0.06));
+  if (turned) ellipse(cx - sg * (r - 0.5), cy + 0.6, 1.3, 1.9, shade(L.skin, -0.06));   // turned: only the far-side ear shows
+  else { ellipse(cx - r + 0.3, cy + 0.6, 1.2, 1.8, shade(L.skin, -0.06)); ellipse(cx + r - 0.3, cy + 0.6, 1.2, 1.8, shade(L.skin, -0.06)); }
   ctx.fillStyle = hc;
   ctx.beginPath(); ctx.arc(cx, cy, r + 0.5, Math.PI * 1.02, Math.PI * 1.98); ctx.closePath(); ctx.fill();
   if (L.hair === 'short') { ellipse(cx - 2.2, cy - 4.4, 3.6, 2.2, hc, null, 0, 0.25); ellipse(cx + 2.4, cy - 4.6, 3.4, 2, hc, null, 0, -0.25); }
@@ -294,27 +301,28 @@ function headFront(cx, cy, L, energy, ts, seed, back) {
   if (L.hair === 'bun') { circle(cx, cy - r - 2.4, 3.3, hc); ellipse(cx, cy - 4.6, 5.4, 2.2, hc); }
   if (L.hair === 'curly') for (let k = 0; k <= 7; k++) { const a = Math.PI + k / 7 * Math.PI; circle(cx + Math.cos(a) * (r + 0.4), cy + Math.sin(a) * (r + 0.4) - 0.4, 2.5, hc); }
   const blink = Math.sin(ts / 1700 + seed * 5) > 0.985, yawn = energy === 'tired' && Math.sin(ts / 2600 + seed) > 0.93;
-  const eyes = [-2.4, 2.4];
-  eyes.forEach(x => line(cx + x - 1.1, cy - 2.1 - (energy === 'tired' ? -0.3 : 0), cx + x + 1.1, cy - 2.3, shade(hc, 0.1), 0.8));   // eyebrows
-  ellipse(cx, cy + 1.6, 0.7, 0.5, shade(L.skin, -0.12));   // nose
+  const eyes = [-2.4, 2.4], fx = cx + T * 1.9;   // the face shifts towards where we're walking
+  const eyeW = x => (turned && Math.sign(x) !== sg ? 0.75 : 1);   // the far eye looks a little narrower
+  eyes.forEach(x => line(fx + x - 1.1, cy - 2.1 - (energy === 'tired' ? -0.3 : 0), fx + x + 1.1, cy - 2.3, shade(hc, 0.1), 0.8));   // eyebrows
+  ellipse(fx, cy + 1.6, 0.7, 0.5, shade(L.skin, -0.12));   // nose
   if (energy === 'exhausted') {
-    eyes.forEach(x => ellipse(cx + x, cy + 1.8, 1.6, 0.8, 'rgba(110,80,140,.35)'));
+    eyes.forEach(x => ellipse(fx + x, cy + 1.8, 1.6, 0.8, 'rgba(110,80,140,.35)'));
     ctx.strokeStyle = ink; ctx.lineWidth = 0.9; ctx.lineCap = 'round';
-    eyes.forEach(x => { ctx.beginPath(); ctx.arc(cx + x, cy - 0.2, 1.2, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); });
+    eyes.forEach(x => { ctx.beginPath(); ctx.arc(fx + x, cy - 0.2, 1.2, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); });
   } else if (energy === 'tired' || blink) {
-    eyes.forEach(x => { ellipse(cx + x, cy + 0.6, 1.05, 0.6, ink); line(cx + x - 1.4, cy + 0.1, cx + x + 1.4, cy + 0.1, shade(L.skin, -0.25), 0.8); });
+    eyes.forEach(x => { ellipse(fx + x, cy + 0.6, 1.05, 0.6, ink); line(fx + x - 1.4, cy + 0.1, fx + x + 1.4, cy + 0.1, shade(L.skin, -0.25), 0.8); });
   } else {
-    eyes.forEach(x => ellipse(cx + x, cy + 0.3, 0.95, 1.2, ink));
-    if (energy === 'great') eyes.forEach(x => circle(cx + x + 0.3, cy - 0.1, 0.35, '#fff'));
+    eyes.forEach(x => ellipse(fx + x, cy + 0.3, 0.95 * eyeW(x), 1.2, ink));
+    if (energy === 'great') eyes.forEach(x => circle(fx + x + 0.3, cy - 0.1, 0.35, '#fff'));
   }
-  if (energy === 'great' || energy === 'good') [-4.3, 4.3].forEach(x => ellipse(cx + x, cy + 2.8, 1.4, 0.85, 'rgba(240,120,120,.35)'));
+  if (energy === 'great' || energy === 'good') [-4.3, 4.3].forEach(x => ellipse(fx + x, cy + 2.8, 1.4, 0.85, 'rgba(240,120,120,.35)'));
   ctx.strokeStyle = '#8a4a3a'; ctx.lineWidth = 0.9; ctx.lineCap = 'round';
-  if (yawn) { ellipse(cx, cy + 3.6, 1.2, 1.5, '#7a3a2a'); return; }
+  if (yawn) { ellipse(fx, cy + 3.6, 1.2, 1.5, '#7a3a2a'); return; }
   ctx.beginPath();
-  if (energy === 'great') ctx.arc(cx, cy + 2.4, 2, 0.1 * Math.PI, 0.9 * Math.PI);
-  else if (energy === 'good') ctx.arc(cx, cy + 2.8, 1.3, 0.2 * Math.PI, 0.8 * Math.PI);
-  else if (energy === 'tired') { ctx.moveTo(cx - 0.9, cy + 4); ctx.lineTo(cx + 0.9, cy + 4); }
-  else ctx.arc(cx, cy + 5.2, 1.3, 1.2 * Math.PI, 1.8 * Math.PI);
+  if (energy === 'great') ctx.arc(fx, cy + 2.4, 2, 0.1 * Math.PI, 0.9 * Math.PI);
+  else if (energy === 'good') ctx.arc(fx, cy + 2.8, 1.3, 0.2 * Math.PI, 0.8 * Math.PI);
+  else if (energy === 'tired') { ctx.moveTo(fx - 0.9, cy + 4); ctx.lineTo(fx + 0.9, cy + 4); }
+  else ctx.arc(fx, cy + 5.2, 1.3, 1.2 * Math.PI, 1.8 * Math.PI);
   ctx.stroke();
 }
 // Lying in bed (o.dir: which way the head points on screen, in radians). Eyes closed, a few z's.

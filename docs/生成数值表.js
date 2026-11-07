@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -133,6 +133,15 @@ P('');
 P('## 专属（拿到奖杯才能买，' + D.EXCLUSIVES.length + ' 件）');
 P('');
 table(['专属', '类型', '价格'], D.EXCLUSIVES.map(([kind, k]) => { const d = kind === 'yard' ? D.YARD[k] : kind === 'car' ? D.CARS[k] : kind === 'pet' ? D.PET_BREEDS[k] : D.ANIMALS[k]; return [`${d.zh} (${d.en})`, { yard: '院子', car: '车', pet: '宠物', animal: '牲畜' }[kind], `🪙${kind === 'car' ? d.cost.coins : d.price}`]; }));
+
+P('## 在线、做客、显示上限（v0.11）');
+P('');
+table(['项目', '数值'], [
+  ['小镇里同时出门走路的人', `最多 ${D.SHOW_LIMITS.town} 个`], ['一个家的院子里画出的客人', `最多 ${D.SHOW_LIMITS.home} 个`], ['屋里画出的客人', `最多 ${D.SHOW_LIMITS.room} 个`],
+  ['在线（模拟）', `朋友 ${Math.round(D.ONLINE_SHARE.friend * 100)}%、其他人 ${Math.round(D.ONLINE_SHARE.other * 100)}% 的时间；当地 23:30–6:30 几乎不在线`],
+  ['在线的人去邻居家串门', `${Math.round(D.VISIT_SHARE * 100)}%（每 15 分钟换一次）`], ['问主人能不能坐（模拟）', `${Math.round(D.ASK_YES * 100)}% 答应，这次做客都有效`],
+]);
+table(['社区', '地方', '时区'], Object.values(D.COMMUNITIES).map(c => [`${c.zh} (${c.en})`, c.place.zh, c.tz || '—']));
 
 P('## 庭院（' + Object.keys(D.YARD).length + ' 件）');
 P('');

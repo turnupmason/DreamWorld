@@ -271,9 +271,9 @@ function drawGlows() {
   ctx.restore();
   GLOWS = [];
 }
-// How dark it is at this (simulated) time of day: 0 day, 1 night.
-function nightAmount(ms) {
-  const d = new Date(ms), h = d.getHours() + d.getMinutes() / 60;
+// How dark it is at this (simulated) time of day: 0 day, 1 night. With a community: its own local time.
+function nightAmount(ms, t) {
+  const d = new Date(ms), h = t ? localHour(t, ms) : d.getHours() + d.getMinutes() / 60;
   if (h >= 7 && h < 17.5) return 0;
   if (h >= 17.5 && h < 19.5) return (h - 17.5) / 2;
   if (h >= 5.5 && h < 7) return 1 - (h - 5.5) / 1.5;

@@ -56,10 +56,11 @@ const Scene = (() => {
   function frameView(instant) {
     if (mode === 'interior') {
       const [rw, rd] = roomSize(homeOf(owner));
-      cam.z = clamp(Math.min(W * 0.92 / ((rw + rd) * 32), H * 0.7 / ((rw + rd) * 16 + 100)), 0.5, 1.9);
-      centerOn(rw / 2, rd / 2, 0.63);
+      // the room fills the screen from side to side (its far corners just off the edges), sitting a bit low
+      cam.z = clamp(W * 1.12 / ((rw + rd) * 32), 0.5, 2.2);
+      centerOn(rw / 2, rd / 2, 0.6);
     } else if (mode === 'town') { const [cx, cy] = townCenter(); flyTo(cx, cy, townZoom(), instant); }
-    else if (mode === 'home') { const [ox, oy] = origin(owner), h = homeOf(owner); cam.z = clamp(W / 400, minHomeZoom(), 2.4); centerOn(ox + Math.min(homeW(h || S.me), LOT_W) / 2 - 1, oy + LOT_D / 2 - 0.5, 0.5); fly = null; return; }
+    else if (mode === 'home') { const [ox, oy] = origin(owner), h = homeOf(owner); cam.z = clamp(W / 460, minHomeZoom(), 2.4); centerOn(ox + 5, oy + 6.5, 0.5); cam.x -= Math.min(40, W * 0.08); fly = null; return; }   // house, fields and gate, a little left of the buttons
     else { const [cx, cy] = lotCenter(owner); flyTo(cx, cy, homeZoom(), instant); }
   }
   // Inside, and every home (it's its own little island), keeps its own camera; the town has one.
@@ -90,9 +91,10 @@ const Scene = (() => {
       centerOn(c.x + (tx - c.x) * k, c.y + (ty - c.y) * k);
     }
     // keep your townie on screen while it walks somewhere
-    if (!follow && !fly && !dragging && mode === 'home' && me.lot === owner && me.moving) {
+    if (me.arriving && !me.path.length) me.arriving = false;   // walking in from the gate: the view stays put
+    if (!follow && !fly && !dragging && mode === 'home' && me.lot === owner && me.moving && !me.arriving) {
       const [ox, oy] = origin(me.lot), p = iso(ox + me.x, oy + me.y);
-      const tx = clamp(p.x, 90, W - 90), ty = clamp(p.y, 180, H - 100);
+      const tx = clamp(p.x, 50, W - 50), ty = clamp(p.y, 150, H - 70);
       if (tx !== p.x || ty !== p.y) { const k = 1 - Math.exp(-dt * 3); cam.x += (tx - p.x) * k; cam.y += (ty - p.y) * k; }
     }
     if (!fly) return;
@@ -104,7 +106,11 @@ const Scene = (() => {
   }
   // The camera stays over the town (not out over the woods), and can't zoom out past the whole town filling the screen.
   function clampCam() {
-    if (mode === 'interior') return;
+    if (mode === 'interior') {   // the room stays on screen
+      const [rw, rd] = roomSize(homeOf(owner)), c = unIso(W / 2, H / 2), x = clamp(c.x, 0, rw), y = clamp(c.y, 0, rd);
+      if (x !== c.x || y !== c.y) centerOn(x, y);
+      return;
+    }
     if (mode === 'home') {   // the island stays on screen
       if (cam.z < minHomeZoom()) { const c0 = unIso(W / 2, H / 2); cam.z = minHomeZoom(); centerOn(c0.x, c0.y); }
       const R = islandRect(owner), c = unIso(W / 2, H / 2), x = clamp(c.x, R.x0 + 1, R.x1 - 1), y = clamp(c.y, R.y0 + 1, R.y1 - 1);
@@ -117,12 +123,14 @@ const Scene = (() => {
   }
   function minWorldZoom() { return Math.max(0.06, W / ((WORLD.x1 - WORLD.x0 + WORLD.y1 - WORLD.y0) * 32) * 1.25); }
   // The whole island fits the screen at the smallest zoom.
-  function minHomeZoom() { const R = islandRect(owner); return clamp(W * 1.05 / ((R.x1 - R.x0 + R.y1 - R.y0) * 32), 0.15, 1); }
+  function minHomeZoom() { const R = islandRect(owner); return clamp(W * 1.1 / ((R.x1 - R.x0 + R.y1 - R.y0) * 32), 0.25, 1); }
+  // Inside: the smallest zoom still fills the screen from side to side.
+  function minRoomZoom() { const [rw, rd] = roomSize(homeOf(owner)); return clamp(W * 0.95 / ((rw + rd) * 32), ZOOM.interior[0], 1.4); }
   function zoomAt(px, py, z) {
     const [lo, hi] = ZOOM[mode === 'interior' ? 'interior' : 'world'];
     // pinching out past the whole town opens the world map
     if (mode === 'town' && z < cam.z && cam.z <= minWorldZoom() * 1.001 && z < minWorldZoom() * 0.96 && onWorldOut && performance.now() - worldOutAt > 1500) { worldOutAt = performance.now(); onWorldOut(); }
-    z = clamp(z, mode === 'interior' ? lo : mode === 'home' ? minHomeZoom() : Math.max(lo, minWorldZoom()), hi);
+    z = clamp(z, mode === 'interior' ? minRoomZoom() : mode === 'home' ? minHomeZoom() : Math.max(lo, minWorldZoom()), hi);
     const w = unIso(px, py);
     cam.z = z;
     cam.x = px - (w.x - w.y) * TW / 2 * z;
@@ -159,6 +167,7 @@ const Scene = (() => {
     if (pr) { block(pr.x + pr.w - 2, pr.y, 2, 2); block(pr.x + 1, pr.y + pr.d - 1, 1, 1); block(pr.x, pr.y, 1, 1); }   // barn, water trough, hay
     if (h.pondLv) block(AREA.pond.x, AREA.pond.y, AREA.pond.w, AREA.pond.d);
     h.trees.forEach((t, i) => { if (t && i < orchardSlots(h)) block(ORCHARD_SLOTS[i][0], ORCHARD_SLOTS[i][1], 1, 1); });
+    h.fields.forEach((f, i) => { const [x, y] = fieldPos(i); block(x, y, 1, 1); });   // farmland is not for walking on
     h.yard.forEach(it => { const [w2, d2] = itemSize('yard', it); block(it.x, it.y, w2, d2); });
     if (h.car >= 0 && h.cars[h.car]) block(0, 9, 2, 2);
     block(MAILBOX[0], MAILBOX[1], 1, 1);
@@ -196,11 +205,17 @@ const Scene = (() => {
   }
   // Turn towards where we're going. Mostly up or down the screen: a full front / back view; otherwise the 3/4 view
   // facing left or right (back of the head when going up the screen).
+  // Walking towards the camera or away from it (that includes along the ground's diagonals, the usual way):
+  // a front or back 3/4 view, turned towards where we're going (a.turn −1…1). Only walking straight across the
+  // screen shows the side. (Screen pixels: x = sx · 32, y = sy · 16.)
   function faceTo(a, dx, dy) {
-    const sx = dx - dy, sy = dx + dy;
+    const sx = dx - dy, sy = dx + dy, px = sx * 2, py = sy;
     if (Math.abs(sx) > 0.02) a.face = sx > 0 ? 1 : -1;
     if (Math.abs(sy) > 0.02) a.back = sy < 0;
-    if (Math.abs(sx) + Math.abs(sy) > 0.02) a.view = Math.abs(sx) < Math.abs(sy) * 0.45 ? (sy > 0 ? 'front' : 'back') : null;
+    if (Math.abs(px) + Math.abs(py) > 0.02) {
+      if (Math.abs(py) > Math.abs(px) * 0.28) { a.view = py > 0 ? 'front' : 'back'; a.turn = clamp(px / (Math.abs(px) + Math.abs(py)), -1, 1); }
+      else { a.view = null; a.turn = 0; }
+    }
   }
   function bfsFrom(N, sx, sy) {
     const { g, gw, gh, wall } = N, prev = new Int32Array(gw * gh).fill(-1), start = sy * gw + sx;
@@ -613,15 +628,17 @@ const Scene = (() => {
       } });
     });
     // the owner (friends wander; you are drawn separately); not while they're out walking in town
-    if (h.id !== 'me' && !(mode === 'town' && walkerOut(h.id))) {
+    if (fine()) visitorObjs(h, ox, oy, objs, ts, dt, false, { nav: lotNav(h) }, focus);
+    if (h.id !== 'me' && !(mode === 'town' && walkerOut(h.id)) && !visitingNow(h.id)) {
       const e = ent('p:' + h.id, () => ({ x: DOOR_X + 0.8, y: fy + hd + 1.2 }));
       const live = seesLive(h) ? h.live.type : null;
       e.pose = live ? doLive(e, live, h, dt, ts) : null;
       if (!live) { if (e.y >= LOT_D && !e.path.length) e.path = planPath(e, lotNav(h), 3.5, 12.5, 2) || []; wander(e, dt, speedOf(h), en => randomWalk(en, lotNav(h))); }
       objs.push({ d: ox + oy + e.x + e.y, f: () => {
         const p = iso(ox + e.x, oy + e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && !e.wave, view: e.wave > performance.now() ? null : e.view, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && !e.wave, view: e.wave > performance.now() ? null : e.view, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() });
         if (live && f) liveBadge(p, h.live, false);
+        else if (focus && z > 0.55) nameTag(p, homeName(h), isOnline(h.id));
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
@@ -642,7 +659,7 @@ const Scene = (() => {
   }
   function drawMe(ox, oy, ts, focus) {
     const z = cam.z, p = iso(ox + me.x, oy + me.y), pose = mePose();
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() });
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, turn: me.turn, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() });
     if (S.live) liveBadge(p, S.live, true);
     if (focus) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
     if (mode === 'home' && !S.live && (me.jobs.length || me.cur)) {   // little marker on where you're heading
@@ -883,28 +900,119 @@ const Scene = (() => {
   // for more detail than in the town (grass, flowers, stepping stones).
   function islandRect(id) {
     const h = homeOf(id), [ox, oy] = origin(id), extra = id === 'me' && h && canExpand() ? PARCEL : 0;
-    return { ox, oy, x0: ox - 0.6, y0: oy - 0.6, x1: ox + (h ? homeW(h) : LOT_W) + 1 + extra + 0.3, y1: oy + GH + 0.2, extra };
+    return { ox, oy, x0: ox - 0.4, y0: oy - 0.4, x1: ox + (h ? homeW(h) : LOT_W) + extra + 0.4, y1: oy + LOT_D + 1.2, extra };
+  }
+  // ---------- the garden around one home (v0.11) ----------
+  // Looking at a home, the whole screen is that home: the yard, a garden around the fence (flower beds, low hedges,
+  // stepping stones from the gate, the end of the drive) and thick woods beyond. No road, no empty land.
+  const GARDEN = { back: 3.2, left: 3.2, right: 3.6, front: 7 };
+  const WOODS_PAT = new Map();
+  // The far woods are one repeating picture of tree tops (one fill, however many trees there are).
+  function woodsPattern() {
+    const key = PAL;
+    if (WOODS_PAT.has(key)) return WOODS_PAT.get(key);
+    const PW = 256, PH = 128, K = 2, c = document.createElement('canvas');
+    c.width = PW * K; c.height = PH * K;
+    const saved = ctx;
+    ctx = c.getContext('2d'); ctx.scale(K, K);
+    const L = PAL.leaf, kind = PAL.tree, desert = kind === 'cactus', pine = kind === 'pine';
+    ctx.fillStyle = shade(PAL.woods, desert ? -0.02 : -0.16); ctx.fillRect(0, 0, PW, PH);
+    const r = seeded(4242), T = [];
+    const n = desert ? 7 : 22;
+    for (let k = 0; k < n; k++) T.push({ x: r() * PW, y: r() * PH, s: 0.75 + r() * 0.5, v: r() });
+    const all = [];
+    T.forEach(t => [-1, 0, 1].forEach(i => [-1, 0, 1].forEach(j => all.push({ ...t, x: t.x + i * PW, y: t.y + j * PH }))));
+    all.sort((a, b) => a.y - b.y).forEach(t => {
+      const s = t.s;
+      if (desert) {   // sand, rocks and a few cacti
+        ellipse(t.x, t.y, 12 * s, 5 * s, 'rgba(0,0,0,.1)');
+        if (t.v < 0.5) { ellipse(t.x, t.y - 3 * s, 8 * s, 5 * s, '#b9a585'); ellipse(t.x - 2 * s, t.y - 5 * s, 4 * s, 2.5 * s, '#cdbb9c'); }
+        else { rrect(t.x - 3.5 * s, t.y - 30 * s, 7 * s, 30 * s, 3.5 * s, L[1]); rrect(t.x - 11 * s, t.y - 22 * s, 5 * s, 12 * s, 2.5 * s, L[0]); rrect(t.x - 11 * s, t.y - 13 * s, 9 * s, 4.5 * s, 2.2 * s, L[0]); }
+        return;
+      }
+      ellipse(t.x + 4 * s, t.y + 2 * s, 26 * s, 11 * s, 'rgba(0,0,0,.16)');
+      if (pine || PAL.snow) {
+        [[0, 30, 18], [14, 24, 14], [26, 16, 9]].forEach(([dy, h, w], i) => {
+          pg([[t.x - w * s, t.y - dy * s], [t.x + w * s, t.y - dy * s], [t.x, t.y - (dy + h) * s]], i === 1 ? L[1] : L[0]);
+          if (PAL.snow) pg([[t.x - w * 0.45 * s, t.y - (dy + h * 0.55) * s], [t.x + w * 0.45 * s, t.y - (dy + h * 0.55) * s], [t.x, t.y - (dy + h) * s]], '#f8fbfc');
+        });
+        return;
+      }
+      const R0 = 22 * s;
+      circle(t.x, t.y - R0 * 0.7, R0, t.v < 0.5 ? L[0] : shade(L[0], -0.06));
+      circle(t.x - R0 * 0.3, t.y - R0 * 0.95, R0 * 0.62, L[1]);
+      circle(t.x - R0 * 0.38, t.y - R0 * 1.12, R0 * 0.3, L[2]);
+    });
+    ctx = saved;
+    const p = ctx.createPattern(c, 'repeat'), o = { p, K };
+    WOODS_PAT.set(key, o);
+    return o;
+  }
+  // Fills the whole screen with the woods, lined up with the ground (it moves with the camera).
+  function woodsFill() {
+    const o = woodsPattern(), k = cam.z / o.K;
+    ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(k, k);
+    ctx.fillStyle = o.p; ctx.fillRect(-cam.x / k, -cam.y / k, W / k, H / k);
+    ctx.restore();
+  }
+  const onScreen = (x, y, m = 90) => { const p = iso(x, y), z = cam.z; return p.x > -m * z && p.x < W + m * z && p.y > -20 && p.y < H + m * 1.6 * z; };
+  // A flower bed: dark soil with little flowers in the theme's colours.
+  function flowerBed(x, y, w, d, k0) {
+    const z = cam.z;
+    flatRect(x, y, w, d, '#8d6b4b', 'rgba(0,0,0,.08)');
+    if (z < 0.42) return;
+    const FL = PAL.rows || ['#f6d04d', '#ef8fb0', '#ffffff', '#b39ae0', '#f28c28'];
+    for (let i = 0; i < w * d * 5; i++) {
+      const c = iso(x + 0.12 + hash(i, k0) * (w - 0.24), y + 0.12 + hash(k0, i + 0.5) * (d - 0.24));
+      circle(c.x - 1.6 * z, c.y - 2.5 * z, 1.8 * z, '#5a9a3e'); circle(c.x + 1.6 * z, c.y - 2 * z, 1.6 * z, '#4f8c38');
+      circle(c.x, c.y - 4.6 * z, 2.1 * z, FL[(i + k0) % FL.length]); circle(c.x, c.y - 4.6 * z, 0.8 * z, '#f2a33a');
+    }
+  }
+  function homeGarden(h, R, objs, ts) {
+    const z = cam.z, ox = R.ox, oy = R.oy, LW = homeW(h) + R.extra, f = fine(), FY = oy + LOT_D;
+    const gx0 = ox - GARDEN.left, gy0 = oy - GARDEN.back, gx1 = ox + LW + GARDEN.right, gy1 = FY + GARDEN.front;
+    woodsFill();
+    // the garden lawn, a soft darker edge where the woods begin, and mown stripes
+    flatRect(gx0 - 0.5, gy0 - 0.5, gx1 - gx0 + 1, gy1 - gy0 + 1, shade(PAL.town, -0.08));
+    flatRect(gx0, gy0, gx1 - gx0, gy1 - gy0, PAL.town);
+    if (f) for (let y = Math.ceil(gy0); y < gy1; y += 2) flatRect(gx0, y, gx1 - gx0, 1, 'rgba(255,255,255,.04)');
+    // out of the gate: the drive ends in a round gravel spot, and stepping stones go on into the woods
+    flatRect(ox + 0.1, FY, 1.8, 2.3, '#cfc8bb', 'rgba(0,0,0,.05)');
+    if (f) { const c = iso(ox + 1, FY + 2.3); ellipse(c.x, c.y, 30 * z, 15 * z, '#cfc8bb'); }
+    for (let y = FY + 0.28; y < gy1 + 2.5; y += 0.5) {
+      const c = iso(ox + 3.5 + (hash(y * 3, 3) - 0.5) * 0.22, y);
+      if (f) ellipse(c.x, c.y, 8 * z, 4 * z, '#e6dccb', 'rgba(0,0,0,.08)', 1); else ellipse(c.x, c.y, 6 * z, 3 * z, '#e6dccb');
+    }
+    // flower beds all around the fence
+    flowerBed(ox + 4.6, FY + 0.3, LW - 5, 0.75, 11);
+    flowerBed(ox + 0.4, oy - 1.05, LW - 0.8, 0.7, 12);
+    flowerBed(ox - 1.05, oy + 0.4, 0.7, LOT_D - 0.8, 13);
+    flowerBed(ox + LW + 0.35, oy + 0.4, 0.7, LOT_D - 0.8, 14);
+    // a low clipped hedge in front of the front bed, and round bushes here and there
+    if (f) for (let x = ox + 4.6; x < ox + LW - 0.5; x += 1) { const xx = x; objs.push({ d: xx + FY + 1.6, f: () => box(xx, FY + 1.3, 1.02, 0.5, 9, shade(PAL.leaf[0], 0.05), 0, { edge: 'rgba(0,0,0,.08)' }) }); }
+    const bush = (x, y, v) => { if (onScreen(x, y)) objs.push({ d: x + y, f: () => drawBushWild(x, y, v) }); };
+    const tree = (x, y, v) => { if (onScreen(x, y, 120)) objs.push({ d: x + y, f: () => drawWildTree(x, y, v, ts) }); };
+    const jit = (a, b) => (hash(a, b) - 0.5) * 0.5;
+    // trees behind and to the left (they can be tall: they stand behind the home)
+    for (let x = gx0 + 0.6; x < gx1 + 1; x += 1.6) { tree(x + jit(x, 1), gy0 + 1.1 + jit(x, 2), 0.5 + hash(x, 3) * 0.5); tree(x + 0.8 + jit(x, 4), gy0 - 0.2 + jit(x, 5), 0.6 + hash(x, 6) * 0.4); }
+    for (let y = gy0 + 2; y < gy1 - 1; y += 1.6) { tree(gx0 + 1.1 + jit(y, 7), y + jit(y, 8), 0.5 + hash(y, 9) * 0.5); tree(gx0 - 0.2 + jit(y, 10), y + 0.8 + jit(y, 11), 0.6 + hash(y, 12) * 0.4); }
+    // right and front: bushes near the fence, trees further out (so they don't hide the yard)
+    for (let y = oy + 0.5; y < gy1 - 1; y += 1.7) { bush(ox + LW + 1.6 + jit(y, 13), y + jit(y, 14), hash(y, 15)); tree(gx1 + 0.4 + jit(y, 16), y + 0.8 + jit(y, 17), 0.5 + hash(y, 18) * 0.5); }
+    for (let x = gx0 + 0.4; x < gx1 + 1; x += 1.7) { if (Math.abs(x - (ox + 3.5)) > 1.2) tree(x + jit(x, 19), gy1 + 0.4 + jit(x, 20), 0.5 + hash(x, 21) * 0.5); }
+    [[ox + 6, FY + 3.4], [ox + LW - 2, FY + 4.4], [ox - 1.6, FY + 2.6], [ox + 10, FY + 5.6], [ox - 1.8, oy - 1.6], [ox + LW + 1.4, oy - 1.4]].forEach(([x, y], k) => bush(x, y, hash(k, 22)));
+    if (f) [[ox + 8.3, FY + 4.2], [ox + 1.6, FY + 4.6], [ox + LW + 1.8, FY + 2.6]].forEach(([x, y], k) => { if (onScreen(x, y)) objs.push({ d: x + y, f: () => drawRock(x, y, 0.2 + hash(k, 23) * 0.4) }); });
   }
   function renderHome(ts, dt) {
     const h = homeOf(owner);
     if (!h) return;
-    const z = cam.z, R = islandRect(owner), ox = R.ox, oy = R.oy, mine = owner === 'me', vr = viewRect();
-    // lawn everywhere on screen, a little darker away from the home
-    ctx.fillStyle = shade(PAL.town, -0.04); ctx.fillRect(0, 0, W, H);
-    flatRect(R.x0 - 6, R.y0 - 6, R.x1 - R.x0 + 12, R.y1 - R.y0 + 12, shade(PAL.town, -0.02));
-    flatRect(R.x0, R.y0, R.x1 - R.x0, R.y1 - R.y0, PAL.town);
-    if (PAL.snow) { ctx.fillStyle = 'rgba(250,252,255,.45)'; ctx.fillRect(0, 0, W, H); }
-    // the road in front runs off both sides of the screen
-    const ry = oy + LOT_D, rx0 = Math.min(vr.x0, R.x0) - 4, rx1 = Math.max(vr.x1, R.x1) + 4;
-    flatRect(rx0, ry + 0.1, rx1 - rx0, 1.9, '#d9d2c3');
-    flatRect(rx0, ry + 0.3, rx1 - rx0, 1.5, '#8e959c');
-    if (z > 0.1) for (let x = Math.ceil(rx0) + 0.3; x < rx1; x += 1) { const a = iso(x, ry + 1.05), b = iso(x + 0.45, ry + 1.05); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.85)', 1.6 * z); }
+    const z = cam.z, R = islandRect(owner), ox = R.ox, oy = R.oy, mine = owner === 'me';
+    const objs = [], opt = { focus: true, mine, bubbles: [] };
+    homeGarden(h, R, objs, ts);
     if (R.extra) {
-      const sx = ox + homeW(h) + 1;
+      const sx = ox + homeW(h) + 0.2;
       flatRect(sx, oy, PARCEL - 0.2, LOT_D, PAL.vacant);
       ctx.save(); ctx.setLineDash([8 * z, 6 * z]); flatRect(sx + 0.3, oy + 0.3, PARCEL - 0.8, LOT_D - 0.6, null, 'rgba(255,255,255,.85)', 0, 2 * z); ctx.restore();
     }
-    const objs = [], opt = { focus: true, mine, bubbles: [] };
     lotGround(h, ox, oy, opt);
     // close-up detail: tufts of grass, little flowers and clover across the lawn (not on paths, fields or buildings)
     if (z > 0.5) {
@@ -927,8 +1035,8 @@ const Scene = (() => {
     else if (w === 'rain' || w === 'storm') { ctx.fillStyle = 'rgba(40,70,110,.08)'; ctx.fillRect(0, 0, W, H); }
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
     // a soft frame so your eye goes to the home
-    const g = ctx.createRadialGradient(W / 2, H * 0.48, Math.min(W, H) * 0.35, W / 2, H * 0.48, Math.max(W, H) * 0.75);
-    g.addColorStop(0, 'rgba(30,40,20,0)'); g.addColorStop(1, 'rgba(30,40,20,.22)');
+    const g = ctx.createRadialGradient(W / 2, H * 0.48, Math.min(W, H) * 0.45, W / 2, H * 0.48, Math.max(W, H) * 0.8);
+    g.addColorStop(0, 'rgba(30,40,20,0)'); g.addColorStop(1, 'rgba(30,40,20,.16)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     weatherSky(ts, dt);
     nightTint();
@@ -964,6 +1072,34 @@ const Scene = (() => {
       });
       if (tp.opt.houseTop) pill(t('home_of', { name: homeName(h) }), tp.opt.houseTop.x, tp.opt.houseTop.y - 6, 'rgba(255,255,255,.94)', '#3b3125', `600 12px ${UI_FONT}`);
     }
+    // more people here than we draw: say how many (by the gate)
+    const nv = visitorsAt(h.id).length, nc = crowdAt(h.id), more = nv + nc - Math.max(Math.min(nv, SHOW_LIMITS.home), Math.min(nc, SHOW_LIMITS.home));
+    if (more > 0) pill(t('more_here', { n: fmtNum(more) }), W / 2, H - 30, 'rgba(255,255,255,.95)', '#3b3125', `700 12px ${UI_FONT},${EMOJI_FONT}`, 24);
+  }
+  // A name over someone's head, with a dot: green when they're online.
+  function nameTag(p, name, on) {
+    const z = cam.z, y = p.y - 52 * z, fs = 10.5;
+    ctx.font = `700 ${fs}px ${UI_FONT}`;
+    const w = ctx.measureText(name).width + 20;
+    rrect(p.x - w / 2, y - 8.5, w, 17, 8.5, 'rgba(255,255,255,.93)');
+    circle(p.x - w / 2 + 8, y, 3.2, on ? '#3dbb62' : '#b9b2a6');
+    ctx.fillStyle = '#3b3125'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(name, p.x - w / 2 + 14, y + 0.5);
+  }
+  // People visiting a home (v0.11): they come in at the gate and look around the yard or the room.
+  // Only a few are drawn (SHOW_LIMITS); the rest is a "+N here" label.
+  function visitorObjs(h, ox, oy, objs, ts, dt, inside, N, focus) {
+    const z = cam.z, lim = inside ? SHOW_LIMITS.room : SHOW_LIMITS.home;
+    const list = visitorsAt(h.id).slice(0, lim).map(id => ({ vid: id, v: homeOf(id) })).filter(o => o.v);
+    for (let k = 0, n = Math.min(lim, crowdAt(h.id)); list.length < n; k++) list.push({ vid: 'crowd' + k, v: crowdPerson(h.id, k), crowd: true });
+    list.forEach(({ vid, v, crowd }, k) => {
+      const e = ent((inside ? 'vin:' : 'v:') + h.id + ':' + vid, () => (inside ? { x: 0.8 + k * 0.7, y: N.rd - 1.2 } : { x: DOOR_X, y: LOT_D + 0.9, path: [[DOOR_X, 12.4 - k * 0.6]] }));
+      wander(e, dt, speedOf(v) * 0.75, en => randomWalk(en, N.nav, 4, inside ? 99 : LOT_D));
+      objs.push({ d: ox + oy + e.x + e.y, f: () => {
+        const p = iso(ox + e.x, oy + e.y);
+        drawPerson(p.x, p.y, z, { look: v.look, face: e.face, back: e.back && e.moving, view: e.moving ? e.view : null, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(v), ts, seed: 5 + k, wave: e.wave > performance.now() });
+        if (focus) { if (z > 0.55) nameTag(p, nm(v.name), true); if (!crowd) hits.push({ kind: 'avatar', owner: vid, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z }); }
+      } });
+    });
   }
   // ---------- people out walking (v0.9) ----------
   // A virtual world: residents who are online leave their gate and walk the streets to somewhere (the town square,
@@ -992,7 +1128,7 @@ const Scene = (() => {
     if (WALK.town !== VIEW_TOWN) WALK = { town: VIEW_TOWN, list: [], next: 0 };
     const now2 = performance.now(), z = cam.z;
     // someone new heads out every few seconds, up to 8 at a time
-    if (now2 > WALK.next && WALK.list.length < 8) {
+    if (now2 > WALK.next && WALK.list.length < SHOW_LIMITS.town) {
       WALK.next = now2 + 2500 + Math.random() * 4000;
       const ids = allLots().map(l => l.id).filter(id => id !== 'me' && !WALK.list.some(w => w.id === id) && homeOf(id));
       if (ids.length) {
@@ -1013,7 +1149,7 @@ const Scene = (() => {
       objs.push({ d: w.x + w.y, f: () => {
         const p = iso(w.x, w.y);
         ctx.save(); ctx.globalAlpha = w.alpha;
-        drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.moving ? w.view : null, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: !w.moving && Math.sin(ts / 900 + w.x) > 0.7 });
+        drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.moving ? w.view : null, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: !w.moving && Math.sin(ts / 900 + w.x) > 0.7 });
         ctx.restore();
         if (z > 0.3) pill(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z));
         else if (z > 0.12) circle(p.x, p.y - 48 * z, Math.max(2, 3.5 * z), '#34c759', '#fff', 1);
@@ -1225,8 +1361,33 @@ const Scene = (() => {
     const h = homeOf(owner), [rw, rd] = roomSize(h), z = cam.z, WH = 92, lv = viewLv(h), room = roomAt(h, lv), top = floorsOf(h) - 1;
     const wallCol = ROOM_WALLS[room.wall] || ROOM_WALLS[0], fl = FLOORS[room.floor] || FLOORS[0];
     const A = iso(0, 0), B = iso(rw, 0), C = iso(rw, rd), D = iso(0, rd), dn = (p, k) => ({ x: p.x, y: p.y + k });
-    poly([D, C, dn(C, 12 * z), dn(D, 12 * z)], shade(fl.c2, -0.35));
-    poly([C, B, dn(B, 12 * z), dn(C, 12 * z)], shade(fl.c2, -0.45));
+    // v0.11: the room is a doll's house standing in its garden: woods and lawn all round, a stone base under the
+    // floor, flower beds in front, and the roof (seen from inside) over the walls. No empty space round it.
+    woodsFill();
+    flatRect(-3.4, -3.4, rw + 7, rd + 7.5, shade(PAL.town, -0.08));
+    flatRect(-3, -3, rw + 6.2, rd + 6.8, PAL.town);
+    flowerBed(0.2, rd + 0.55, rw - 0.4, 0.8, 21);
+    flowerBed(rw + 0.55, 0.2, 0.8, rd - 0.4, 22);
+    [[-1.4, rd + 1.6], [rw + 1.8, rd + 1.4], [rw + 1.6, -1.2], [-1.6, -1.4], [rw * 0.5, rd + 2.6]].forEach(([x, y], k) => drawBushWild(x, y, hash(k, 31)));
+    const RH = clamp(rd * 9 + 12, 40, 84), T = WH + 6, roofCol = h.roof || '#b5523b';
+    const rA = up(A, T * z), rB = up(B, T * z), rD = up(D, T * z), m0 = up(iso(0, rd / 2), (T + RH) * z), m1 = up(iso(rw, rd / 2), (T + RH) * z);
+    // the roof from inside: the back slope's boards and rafters, the gable over the left wall, the ridge beam
+    poly([rA, rB, m1, m0], '#c99f72');
+    for (let k = 1; k < 8; k++) { const a = lerp(rA, m0, k / 8), b = lerp(rB, m1, k / 8); line(a.x, a.y, b.x, b.y, 'rgba(90,55,25,.18)', 1 * z); }
+    poly([rA, rD, m0], shade(wallCol, -0.12));
+    const nR = Math.max(2, Math.round(rw / 1.6));
+    for (let k = 0; k <= nR; k++) { const a = lerp(rA, rB, k / nR), b = lerp(m0, m1, k / nR); line(a.x, a.y, b.x, b.y, '#8a5a36', 3.2 * z); }
+    line(lerp(rA, m0, 0.5).x, lerp(rA, m0, 0.5).y, lerp(rD, m0, 0.5).x, lerp(rD, m0, 0.5).y, '#8a5a36', 3 * z);
+    line(m0.x, m0.y, m1.x, m1.y, '#6b4428', 5 * z);
+    poly([m0, m1, up(m1, 7 * z), up(m0, 7 * z)], roofCol);
+    poly([m0, rD, up(rD, 7 * z), up(m0, 7 * z)], shade(roofCol, -0.1));
+    poly([m1, rB, up(rB, 7 * z), up(m1, 7 * z)], shade(roofCol, -0.18));
+    // the stone base under the floor
+    poly([D, C, dn(C, 16 * z), dn(D, 16 * z)], '#b8afa2');
+    poly([C, B, dn(B, 16 * z), dn(C, 16 * z)], '#a39a8d');
+    poly([D, C, dn(C, 5 * z), dn(D, 5 * z)], shade(fl.c2, -0.35));
+    poly([C, B, dn(B, 5 * z), dn(C, 5 * z)], shade(fl.c2, -0.45));
+    if (z > 0.6) for (let k = 1; k < rw + rd; k++) { const p = k < rd ? lerp(D, C, k / rd) : lerp(C, B, (k - rd) / rw); line(p.x, p.y + 5 * z, p.x, p.y + 16 * z, 'rgba(0,0,0,.12)', 1 * z); }
     poly([D, A, up(A, WH * z), up(D, WH * z)], shade(wallCol, -0.07));
     poly([A, B, up(B, WH * z), up(A, WH * z)], wallCol);
     poly([up(D, WH * z), up(A, WH * z), up(A, (WH + 6) * z), up(D, (WH + 6) * z)], shade(wallCol, -0.2));
@@ -1244,9 +1405,9 @@ const Scene = (() => {
       else { const p = wallPt(backW, 0, u - 0.03, 46); ellipse(p.x, p.y, 7 * z, 3 * z, 'rgba(255,255,255,.8)'); }
       wallLine(backW, 0, u, 36.5, u, 67.5, '#fffaf0', 1.5); wallLine(backW, 0, u - 0.085, 52, u + 0.085, 52, '#fffaf0', 1.5);
     }
-    const cp = wallPt(leftW, 0, 0.55, 64), d = new Date(now());
+    const cp = wallPt(leftW, 0, 0.55, 64), [hh, mm] = localHM(SCENE_TOWN);
     circle(cp.x, cp.y, 8 * z, '#fffaf0', '#7a4f2e', 1.6 * z);
-    const ha = (d.getHours() % 12 + d.getMinutes() / 60) / 12 * Math.PI * 2, ma = d.getMinutes() / 60 * Math.PI * 2;
+    const ha = (hh % 12 + mm / 60) / 12 * Math.PI * 2, ma = mm / 60 * Math.PI * 2;
     line(cp.x, cp.y, cp.x + Math.sin(ha) * 4 * z, cp.y - Math.cos(ha) * 4 * z, '#333', 1.4 * z);
     line(cp.x, cp.y, cp.x + Math.sin(ma) * 6 * z, cp.y - Math.cos(ma) * 6 * z, '#333', 1 * z);
     wallRect(leftW, 0, 0.22, 0.38, 40, 62, '#8a5a36'); wallRect(leftW, 0, 0.235, 0.365, 42.5, 59.5, '#9fd0e8');
@@ -1296,12 +1457,14 @@ const Scene = (() => {
         if (!edit) hits.push({ kind: 'pet', id: a.id, pri: 2, x0: p.x - 14 * z, x1: p.x + 14 * z, y0: p.y - 24 * z, y1: p.y + 4 * z });
       } });
     });
-    if (owner !== 'me') {
+    if (lv === 0) visitorObjs(h, 0, 0, objs, ts, dt, true, { nav: roomNav(h), rd }, !edit);
+    if (owner !== 'me' && !visitingNow(owner)) {
       const e = ent('in:' + h.id, () => ({ x: rw - 1.5, y: rd - 1.5 }));
       wander(e, dt, speedOf(h) * 0.7, en => randomWalk(en, roomNav(h), 4, 99));
       objs.push({ d: e.x + e.y, f: () => {
         const p = iso(e.x, e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && e.moving, view: e.moving ? e.view : null, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: 1, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && e.moving, view: e.moving ? e.view : null, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: 1, wave: e.wave > performance.now() });
+        if (!edit && z > 0.55) nameTag(p, homeName(h), isOnline(h.id));
         if (!edit) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
@@ -1326,7 +1489,7 @@ const Scene = (() => {
       // sitting: hips on the seat, feet on the floor; lying: on the mattress, then the quilt goes back over you
       const sitH = pose !== 'sit' ? 0 : trS ? trS.seatH : useK === 'sit' ? SEAT_H[useIt.k] || 9 : 0, lieH = pose === 'lie' && useIt ? LIE_H[useIt.k] || 10 : 0;
       const yOff = sitH ? 0 : lieH || meIn.seat || 0;
-      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: meIn.moving ? meIn.view : null, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
+      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: meIn.moving ? meIn.view : null, turn: meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
       if (pose === 'lie' && useIt) drawBedQuilt(useIt);
       ctx.restore();
       if (S.live) liveBadge(p, S.live, true);
@@ -1435,32 +1598,46 @@ const Scene = (() => {
   // then lie back and slide under the quilt). `back` remembers the way out for getting up again.
   function seatSteps(a, it, sp, use) {
     const [w, d] = itemSize('room', it), m = 0.2;
-    const ex = clamp(a.x, it.x + m, it.x + w - m), ey = clamp(a.y, it.y + m, it.y + d - m);
-    let ox = a.x - ex, oy = a.y - ey; const L = Math.hypot(ox, oy) || 1; ox /= L; oy /= L;
-    const F = [ex + ox * 0.42, ey + oy * 0.42], out = ox - oy >= 0 ? 1 : -1, walk = Math.hypot(F[0] - a.x, F[1] - a.y), steps = [];
-    if (walk > 0.05) steps.push({ pose: 'walk', x: F[0], y: F[1], dur: walk / 1.6 });
-    const seatH = use === 'sleep' ? (LIE_H[it.k] || 10) - 1 : SEAT_H[it.k] || 9;
     if (use === 'sleep') {
-      steps.push({ pose: 'sit', x: ex, y: ey, dur: 0.32, seatH, face: out });
-      steps.push({ pose: 'sit', dur: 0.28, seatH, face: out });
-      steps.push({ pose: 'lie', x: sp[0], y: sp[1], dur: 0.55 });
-    } else steps.push({ pose: 'sit', x: sp[0], y: sp[1], dur: 0.38, seatH, face: sp[2] });
-    return { steps, back: { id: it.id, use, ex, ey, F, seatH, out } };
+      // into bed: walk to the side of the bed by the pillow, sit on the edge facing out, then lie down under the quilt
+      // (a quick fade, so the body never slides through the mattress). A double bed: the pillow on your side.
+      const hy = (LIE_HEAD[it.k] || 0.35) + 0.27, along = it.rot ? 'x' : 'y';
+      const near = along === 'y' ? (a.x < it.x + w / 2 ? -1 : 1) : (a.y < it.y + d / 2 ? -1 : 1);
+      const L = along === 'y' ? [it.k === 'bed' ? (near < 0 ? it.x + 0.55 : it.x + w - 0.55) : it.x + w / 2, it.y + hy] : [it.x + hy, it.k === 'bed' ? (near < 0 ? it.y + 0.55 : it.y + d - 0.55) : it.y + d / 2];
+      const E = along === 'y' ? [near < 0 ? it.x + 0.22 : it.x + w - 0.22, L[1] + 0.15] : [L[0] + 0.15, near < 0 ? it.y + 0.22 : it.y + d - 0.22];
+      const F = along === 'y' ? [E[0] + near * 0.5, E[1]] : [E[0], E[1] + near * 0.5];
+      const out = (F[0] - E[0]) - (F[1] - E[1]) >= 0 ? 1 : -1, seatH = (LIE_H[it.k] || 10) - 1, walk = Math.hypot(F[0] - a.x, F[1] - a.y), steps = [];
+      if (walk > 0.05) steps.push({ pose: 'walk', x: F[0], y: F[1], dur: walk / 1.6 });
+      steps.push({ pose: 'sit', x: E[0], y: E[1], dur: 0.3, seatH, face: out });
+      steps.push({ pose: 'sit', dur: 0.3, seatH, face: out });
+      steps.push({ pose: 'sit', dur: 0.18, seatH, face: out, a0: 1, a1: 0 });
+      steps.push({ pose: 'lie', x: L[0], y: L[1], jump: true, dur: 0.32, a0: 0, a1: 1 });
+      return { steps, back: { id: it.id, use, E, F, L, seatH, out } };
+    }
+    const ex = clamp(a.x, it.x + m, it.x + w - m), ey = clamp(a.y, it.y + m, it.y + d - m);
+    let ox = a.x - ex, oy = a.y - ey; const len = Math.hypot(ox, oy) || 1; ox /= len; oy /= len;
+    const F = [ex + ox * 0.42, ey + oy * 0.42], walk = Math.hypot(F[0] - a.x, F[1] - a.y), steps = [];
+    if (walk > 0.05) steps.push({ pose: 'walk', x: F[0], y: F[1], dur: walk / 1.6 });
+    const seatH = SEAT_H[it.k] || 9;
+    steps.push({ pose: 'sit', x: sp[0], y: sp[1], dur: 0.38, seatH, face: sp[2] });
+    return { steps, back: { id: it.id, use, F, seatH } };
   }
   function exitSteps(b) {
-    if (b.use === 'sleep') return [{ pose: 'lie', x: b.ex, y: b.ey, dur: 0.4 }, { pose: 'sit', dur: 0.3, seatH: b.seatH, face: b.out }, { pose: 'walk', x: b.F[0], y: b.F[1], dur: 0.3 }];
+    if (b.use === 'sleep') return [{ pose: 'lie', dur: 0.2, a0: 1, a1: 0 }, { pose: 'sit', x: b.E[0], y: b.E[1], jump: true, dur: 0.22, seatH: b.seatH, face: b.out, a0: 0, a1: 1 },
+      { pose: 'sit', dur: 0.25, seatH: b.seatH, face: b.out }, { pose: 'walk', x: b.F[0], y: b.F[1], dur: 0.3 }];
     return [{ pose: 'sit', dur: 0.12, seatH: b.seatH }, { pose: 'walk', x: b.F[0], y: b.F[1], dur: 0.32 }];
   }
   function stepTr(a, dt) {
     const tr = a.tr;
     if (!tr.cur) {
       tr.cur = tr.steps.shift();
-      if (!tr.cur) { a.tr = null; a.moving = false; if (tr.done) tr.done(); return; }
+      if (!tr.cur) { a.tr = null; a.moving = false; a.alpha = 1; if (tr.done) tr.done(); return; }
       tr.t = 0; tr.from = [a.x, a.y];
     }
     const s = tr.cur, k = s.dur > 0 ? Math.min(1, (tr.t += dt) / s.dur) : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(2 - 2 * k, 2) / 2;
-    const tx = s.x ?? tr.from[0], ty = s.y ?? tr.from[1], u = s.pose === 'walk' ? k : e;
+    const tx = s.x ?? tr.from[0], ty = s.y ?? tr.from[1], u = s.jump ? 1 : s.pose === 'walk' ? k : e;
     const nx = tr.from[0] + (tx - tr.from[0]) * u, ny = tr.from[1] + (ty - tr.from[1]) * u;
+    a.alpha = s.a0 !== undefined ? s.a0 + (s.a1 - s.a0) * k : 1;
     if (s.pose === 'walk') { faceTo(a, nx - a.x, ny - a.y); a.phase += dt * 11; a.moving = true; }
     else { a.moving = false; a.view = null; a.back = false; if (s.face) a.face = s.face; }
     a.x = nx; a.y = ny;
@@ -1487,7 +1664,8 @@ const Scene = (() => {
     if (!worldReady && mode === 'town') frameView(true);
     try { updateMe(dt, ts); } catch (e) { console.error(e); }
     stepCamera(dt);
-    NIGHT = nightAmount(now());
+    SCENE_TOWN = mode === 'town' ? VIEW_TOWN : townOf(owner);
+    NIGHT = nightAmount(now(), SCENE_TOWN);
     GLOWS = [];
     ctx.clearRect(0, 0, W, H);
     hits = [];
@@ -1694,6 +1872,7 @@ const Scene = (() => {
     const h = homeOf(id);
     me.x = 3.5; me.y = LOT_D + 0.8; me.face = 1;
     me.path = planPath(me, lotNav(h), 3.5, 12.6, 2) || [];
+    me.arriving = true;
   }
 
   // ---------- thumbnails for the shop and sheets ----------
@@ -1886,7 +2065,7 @@ const Scene = (() => {
       const wasInterior = mode === 'interior';
       if ((m === 'home') !== (mode === 'home') && m !== 'interior' && !wasInterior) viewFade = performance.now();   // a soft flash between the town and a home
       mode = m; owner = o; edit = null;
-      cv.style.background = m === 'interior' ? '#eadfcd' : '';
+      cv.style.background = '';
       if (m !== 'town' && m !== 'interior') moveToLot(o);
       useCam();
       if (m === 'interior') { meIn.room = null; if (!wasInterior) frameView(true); }

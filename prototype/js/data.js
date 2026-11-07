@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.10.0';
+const VERSION = '0.11.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -566,6 +566,18 @@ Object.assign(COMMUNITIES, {
   rio:     { zh: '海风湾', en: 'Sea Breeze Bay', place: { zh: '巴西 · 里约', en: 'Rio, Brazil' }, flag: '🇧🇷', lon: -43.2, lat: -22.9, theme: 'palm', price: 0.8, pop: 1120, region: 'sa' },
   capetown:{ zh: '好望角村', en: 'Cape Village', place: { zh: '南非 · 开普敦', en: 'Cape Town, South Africa' }, flag: '🇿🇦', lon: 18.4, lat: -33.9, theme: 'desert', price: 0.7, pop: 560, region: 'af' },
 });
+// Real time zones (v0.11): day and night in each community follow its own local time.
+const COMMUNITY_TZ = { wutong: 'America/Los_Angeles', palmbay: 'America/New_York', cactus: 'America/Phoenix', vermont: 'America/New_York',
+  banff: 'America/Edmonton', provence: 'Europe/Paris', holland: 'Europe/Amsterdam', fjord: 'Europe/Oslo', kyoto: 'Asia/Tokyo',
+  hangzhou: 'Asia/Shanghai', sydney: 'Australia/Sydney', andes: 'America/Bogota', london: 'Europe/London', seoul: 'Asia/Seoul',
+  rio: 'America/Sao_Paulo', capetown: 'Africa/Johannesburg' };
+Object.entries(COMMUNITY_TZ).forEach(([k, tz]) => { COMMUNITIES[k].tz = tz; });
+// How many other people are drawn at once (v0.11). Thousands can be in a community and hundreds at a popular
+// home; we draw only a few and say "+N more".
+const SHOW_LIMITS = { town: 10, home: 4, room: 3 };
+const ONLINE_SHARE = { friend: 0.55, other: 0.4 };   // made-up online share until the server exists
+const VISIT_SHARE = 0.25;                             // of the people online, this many are round at a neighbour's
+const ASK_YES = 0.8;                                  // asking to sit down at someone's home: they usually say yes
 const REGIONS = {
   na: { e: '🗽', zh: '北美', en: 'North America' }, sa: { e: '🦜', zh: '南美', en: 'South America' }, eu: { e: '🏰', zh: '欧洲', en: 'Europe' },
   af: { e: '🦒', zh: '非洲', en: 'Africa' }, asia: { e: '🏯', zh: '亚洲', en: 'Asia' }, oc: { e: '🦘', zh: '大洋洲', en: 'Oceania' },

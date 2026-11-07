@@ -1334,3 +1334,81 @@ function inviteJoin() {
   S.friends.push(homeFromPreset(next));
   return addFeed({ kind: 'join', from: next.id, gift: { type: 'wood', n: 5 } });
 }
+
+// ---------- local time, who's online, who's visiting (v0.11) ----------
+// Every community has its own day and night. Your own community follows your phone's clock; the others follow
+// their real time zone (with summer time): Kyoto is asleep while California has lunch.
+let SCENE_TOWN = HOME_TOWN;   // the community on screen right now (the scene sets it every frame)
+const TZ_FMT = {};
+function localHM(t, ms = now()) {
+  const c = COMMUNITIES[t];
+  if (!c || !c.tz || (S && t === myTown())) { const d = new Date(ms); return [d.getHours(), d.getMinutes()]; }
+  const m = Math.floor(ms / MIN), o = TZ_FMT[c.tz] || (TZ_FMT[c.tz] = { m: -1, v: [12, 0], f: null });
+  if (o.m === m) return o.v;
+  try {
+    o.f = o.f || new Intl.DateTimeFormat('en-US', { timeZone: c.tz, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' });
+    const p = o.f.formatToParts(new Date(ms)), g = k => +((p.find(x => x.type === k) || {}).value) || 0;
+    o.v = [g('hour') % 24, g('minute')];
+  } catch (e) { o.v = [(new Date(ms).getUTCHours() + Math.round(c.lon / 15) + 24) % 24, new Date(ms).getUTCMinutes()]; }
+  o.m = m;
+  return o.v;
+}
+const localHour = (t, ms) => { const [h, m] = localHM(t, ms); return h + m / 60; };
+const localClock = (t, ms) => { const [h, m] = localHM(t, ms); return `${h}:${String(m).padStart(2, '0')}`; };
+const isNightIn = t => { const h = localHour(t); return h < 6 || h >= 19.5; };
+// A steady number for an id (for made-up but repeatable things).
+function idNum(id) { let n = 7; for (let i = 0; i < id.length; i++) n = (n * 31 + id.charCodeAt(i)) % 100003; return n; }
+// Online right now? Made up until the server exists (it changes every 20 minutes): friends about half the
+// time, other people a bit less, and hardly anyone in the middle of their night.
+function isOnline(id) {
+  if (id === 'me') return true;
+  const k = hash(idNum(id) * 0.013, Math.floor(now() / (20 * MIN))), hr = localHour(townOf(id));
+  if (hr < 6.5 || hr >= 23.5) return k < 0.05;
+  return k < (isFriend(id) ? ONLINE_SHARE.friend : ONLINE_SHARE.other);
+}
+// Who is visiting whom in a community right now (every 15 minutes some online people go round to a neighbour;
+// your friends like to come to you). { host: [visitor ids] } and the other way round.
+let VISITS = { key: '', by: {}, at: {} };
+function visitsIn(t) {
+  const slot = Math.floor(now() / (15 * MIN)), key = t + '|' + slot + '|' + S.lots.length + '|' + S.friends.length;
+  if (VISITS.key === key) return VISITS;
+  const by = {}, at = {}, r = seeded(slot * 131 + idNum(t)), mine = t === myTown();
+  const ids = allLots(t).map(l => l.id).filter(x => x !== 'me' && homeOf(x));
+  ids.forEach(id => {
+    const k = r(), k2 = r(), k3 = r();
+    if (!isOnline(id) || k > VISIT_SHARE) return;
+    const host = mine && isFriend(id) && k2 < 0.6 ? 'me' : ids[Math.floor(k3 * ids.length)];
+    if (!host || host === id || at[host] || by[id]) return;   // someone who has a visitor stays home
+    (by[host] = by[host] || []).push(id); at[id] = host;
+  });
+  VISITS = { key, by, at };
+  return VISITS;
+}
+const visitorsAt = id => visitsIn(townOf(id)).by[id] || [];
+const visitingNow = id => visitsIn(townOf(id)).at[id] || null;
+// Popular homes out in the world get crowds (far more than we could draw): only for other communities.
+function crowdAt(id) {
+  const t = townOf(id), hr = localHour(t);
+  if (id === 'me' || t === myTown() || hash(idNum(id) * 0.017, 5) < 0.75 || hr < 7 || hr >= 23.5) return 0;
+  const day = Math.sin((hr - 7) / 16.5 * Math.PI);   // busiest in their afternoon and evening
+  return Math.round((12 + hash(idNum(id) * 0.019, Math.floor(now() / (15 * MIN))) * 280) * day);
+}
+// House rules: in someone else's home you can't sit, lie down or eat unless they said yes (asked while they're
+// online and at home). A yes lasts for this visit.
+const HOST_OK = {};
+const canUseAt = id => id === 'me' || (HOST_OK[id] || 0) > Date.now();
+function askHost(id) {
+  if (!isOnline(id) || visitingNow(id)) return 'away';
+  const yes = hash(idNum(id) * 0.023, Math.floor(Date.now() / (10 * MIN))) < ASK_YES;
+  if (yes) HOST_OK[id] = Date.now() + 40 * MIN;
+  return yes ? 'yes' : 'no';
+}
+function leaveHost(id) { delete HOST_OK[id]; }
+// A made-up visitor in a popular home's crowd (no home of their own to tap through to).
+const CROWD = {};
+function crowdPerson(host, k) {
+  const key = host + ':' + k;
+  if (CROWD[key]) return CROWD[key];
+  const r = seeded(idNum(key) * 7 + 3), pick = a => a[Math.floor(r() * a.length)];
+  return (CROWD[key] = { id: 'crowd', name: pick(NPC_NAMES), look: { shirt: pick(COLORS), skin: pick(SKINS), hair: pick(HAIRS), hairCol: pick(HAIR_COLORS), mob: r() < 0.08 ? 'wheel' : 'walk' } });
+}

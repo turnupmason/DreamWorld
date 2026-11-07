@@ -608,3 +608,23 @@ function ago(ms) {
   if (m < 1440) return t('ago_h', { n: Math.floor(m / 60) });
   return t('ago_d', { n: Math.floor(m / 1440) });
 }
+
+// ---------- v0.11 ----------
+Object.assign(STR.zh, {
+  farm_pill: '🌱 今日农活 {n}', more_here: '👥 还有 {n} 人在这里',
+  ask_first: '这是别人家，要先问主人', host_home: '在线 · 在家', host_offline: '不在线', host_away: '在线 · 去{name}家串门了',
+  house_rules_title: '做客的规矩', house_rules_desc: '在别人家可以随便看看。想坐下、躺下，要先问问主人；主人在线才能问，答应了这次做客就都可以。',
+  host_ask: '问问能不能坐坐', host_ask_it: '问问能不能用{it}', host_thinking: '{name}正在回复…', host_yes: '{name}说：当然可以，随便坐！',
+  host_no: '{name}说：现在不太方便，下次吧。', host_cant_off: '{name}现在不在线，上线了再问吧。', host_cant_away: '{name}去别人家串门了，回家了再问吧。',
+  host_yes_snack: '{name}答应了，这次做客可以随便坐 😊', host_wave: '打招呼', host_waved: '{name}也朝你挥了挥手',
+  st_home: '在家', st_out: '出门了', st_off: '不在线', local_time: '当地 {t}',
+});
+Object.assign(STR.en, {
+  farm_pill: '🌱 Jobs {n}', more_here: '👥 {n} more here',
+  ask_first: 'This is someone else’s home: ask first', host_home: 'Online · at home', host_offline: 'Offline', host_away: 'Online · visiting {name}',
+  house_rules_title: 'House rules', house_rules_desc: 'You can look around someone’s home. To sit or lie down, ask the owner first; you can ask while they’re online, and a yes counts for this visit.',
+  host_ask: 'Ask if you can sit down', host_ask_it: 'Ask to use the {it}', host_thinking: '{name} is answering…', host_yes: '{name}: Of course, make yourself at home!',
+  host_no: '{name}: Not right now, maybe next time.', host_cant_off: '{name} is offline. Ask when they’re back online.', host_cant_away: '{name} is out visiting. Ask when they’re back home.',
+  host_yes_snack: '{name} said yes: sit anywhere this visit 😊', host_wave: 'Wave', host_waved: '{name} waved back',
+  st_home: 'at home', st_out: 'out', st_off: 'offline', local_time: 'local time {t}',
+});

@@ -1357,9 +1357,9 @@ function drawFurn2(it, x, y, w, d, rot, tint, ts) {
       const piv = wallPt(f, 0, 0.5, 34), sw = Math.sin(ts / 500) * 0.35;
       line(piv.x, piv.y, piv.x + Math.sin(sw) * 16 * z, piv.y + Math.cos(sw) * 16 * z, '#d4a82a', 0.8 * z);
       circle(piv.x + Math.sin(sw) * 16 * z, piv.y + Math.cos(sw) * 16 * z, 2.4 * z, '#d4a82a');
-      const cp = wallPt(f, 0, 0.5, 49), dd = new Date(now());
+      const cp = wallPt(f, 0, 0.5, 49), [hh, mm] = localHM(SCENE_TOWN);
       circle(cp.x, cp.y, 6 * z, '#fffaf0', '#d4a82a', 1 * z);
-      const ha = (dd.getHours() % 12 + dd.getMinutes() / 60) / 12 * Math.PI * 2, ma = dd.getMinutes() / 60 * Math.PI * 2;
+      const ha = (hh % 12 + mm / 60) / 12 * Math.PI * 2, ma = mm / 60 * Math.PI * 2;
       line(cp.x, cp.y, cp.x + Math.sin(ha) * 3 * z, cp.y - Math.cos(ha) * 3 * z, '#333', 1.2 * z);
       line(cp.x, cp.y, cp.x + Math.sin(ma) * 4.6 * z, cp.y - Math.cos(ma) * 4.6 * z, '#333', 0.8 * z);
       pyramid(x + 0.25, y + 0.25, 0.5, 0.5, 60, 6, DARKWOOD);

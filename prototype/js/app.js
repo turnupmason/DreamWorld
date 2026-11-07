@@ -112,8 +112,14 @@ function realWeather(loud) {
 }
 // A little label above the thing you tapped: picture, name and what it does.
 let tipTimer = null;
+// A little label over the thing you tapped. It goes away by itself, when you tap anywhere else,
+// or when you tap the same thing again.
+let tipKey = null, tipHidAt = 0;
+function hideTip() { const el = $('#tip'); if (el) el.hidden = true; tipKey = null; }
 function tip(kind, k, name, sub) {
-  const el = $('#tip'), p = Scene.tapAt();
+  const el = $('#tip'), p = Scene.tapAt(), key = kind + ':' + k + ':' + Math.round(p.x / 30) + ':' + Math.round(p.y / 30);
+  if (tipKey === key && (!el.hidden || Date.now() - tipHidAt < 500)) return hideTip();   // same thing again: close it
+  tipKey = key;
   el.innerHTML = `${kind ? thumbImg(kind, k, {}, 52, 44, 'thumb') : ''}<div><b>${esc(name)}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
   el.hidden = false;
   const w = el.offsetWidth, vw = el.parentElement.clientWidth;
@@ -121,8 +127,10 @@ function tip(kind, k, name, sub) {
   el.style.top = Math.max(8, p.y - el.offsetHeight - 26) + 'px';
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   clearTimeout(tipTimer);
-  tipTimer = setTimeout(() => { el.hidden = true; }, 2200);
+  tipTimer = setTimeout(hideTip, 2600);
 }
+// any touch hides the label (a tap on a thing shows its own label again right after)
+document.addEventListener('pointerdown', e => { const el = $('#tip'); if (el && !el.hidden && !e.target.closest('#tip')) { el.hidden = true; tipHidAt = Date.now(); } }, { passive: true, capture: true });
 let snackTimer = null;
 function snack(text) {
   const el = $('#snack');
@@ -165,11 +173,11 @@ function renderHUD() {
     <div class="row between">
       <button class="row me plain" data-act="energyInfo">${avatar(S.me.look, 'hud e-' + e, e)}<div><div class="me-name">${esc(S.me.name)}</div>
         <div class="energy">${ENERGY_EMOJI[e]} ${energyName(e)} · ${t('sleep_short', { n: S.sleep ? S.sleep.score : '–' })}</div></div></button>
-      <div class="row tight">${mail ? `<button class="pill mail" data-act="mailGo">✉️ ${mail}</button>` : ''}
-        <button class="pill farm ${actionsLeft() === 0 ? 'done' : ''}" data-act="capInfo" style="--p:${Math.round(actionsLeft() / ACTION_CAP * 100)}"><i class="ring"></i>🌱 ${actionsLeft()}</button></div>
+      <div class="row tight">${mail ? `<button class="pill mail" data-act="mailGo">✉️ ${mail}</button>` : ''}${weatherPill()}</div>
     </div>
     <div class="res row">
-      <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>${live}${weatherPill()}
+      <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>
+      <button class="pill farm ${actionsLeft() === 0 ? 'done' : ''}" data-act="capInfo" style="--p:${Math.round(actionsLeft() / ACTION_CAP * 100)}"><i class="ring"></i>${t('farm_pill', { n: actionsLeft() })}</button>${live}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
     </div>`;
 }
@@ -212,14 +220,16 @@ function renderOverlay() {
     }
   } else if (UI.visit) {
     const h = homeOf(UI.visit), fr = isFriend(h.id), street = STREETS[lotOf(h.id).st];
-    const sub = fr ? (S.calm ? '' : ` · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}`) : ` · ${nm(street)}`;
+    const tw = townOf(h.id), away = visitingNow(h.id), on = isOnline(h.id) && !away;
+    const sub = (fr ? (S.calm ? '' : ` · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}`) : ` · ${nm(street)}`)
+      + ` · <span class="${on ? 'online-dot' : 'off-dot'}"></span>${t(on ? 'st_home' : away ? 'st_out' : 'st_off')}` + (tw !== myTown() ? ` · ${isNightIn(tw) ? '🌙' : '☀️'} ${localClock(tw)}` : '');
     c = `<button class="btn small" data-act="backTown">← ${UI.tab === 'world' ? nm(COMMUNITIES[VIEW_TOWN]) : t('tab_town')}</button><div class="ctx-main">${t('home_of', { name: esc(homeName(h)) })}${sub}</div>${UI.visitInside ? floorChips(h) : ''}`;
     f = UI.visitInside ? b('goOut', '🌳', t('fab_exit'))
       : fr ? b('goIn', '🚪', t('fab_peek')) + b('trophies', '🏆', t('fab_trophies'), h.id) + b('like', '❤️', t('like'), h.id) + b('friendSheet', '🎁', t('fab_gift'), h.id) + b('compose', '✉️', t('fab_letter'), h.id) + b('goHome', '🏡', t('fab_home'))
         : b('goIn', '🚪', t('fab_peek')) + b('trophies', '🏆', t('fab_trophies'), h.id) + b('goHome', '🏡', t('fab_home'));
   } else if (UI.tab === 'world') {   // looking around a community somewhere in the world
     const cm = COMMUNITIES[VIEW_TOWN];
-    c = `<button class="btn small" data-act="worldMap">← 🌍</button><div class="ctx-main">${cm.flag} ${nm(cm)} · ${nm(cm.place)} · <span class="online-dot"></span>${t('online_n', { n: onlineIn(VIEW_TOWN) })}</div>`;
+    c = `<button class="btn small" data-act="worldMap">← 🌍</button><div class="ctx-main">${cm.flag} ${nm(cm)} · ${isNightIn(VIEW_TOWN) ? '🌙' : '☀️'} ${localClock(VIEW_TOWN)} · <span class="online-dot"></span>${t('online_n', { n: fmtNum(onlineIn(VIEW_TOWN)) })}</div>`;
     f = b('worldMap', '🗺️', t('fab_map')) + b('goHome', '🏡', t('fab_home'));
   } else {
     c = `<button class="ctx-main link" data-act="ranking">🏛️ ${t('ctx_town', { street: t('street_name'), lv: townLevel(), v: fmtCompact(townTotal()) })}</button>`;
@@ -593,7 +603,7 @@ function openSheet(type, arg) {
   if (type === 'trophyNew') { Sound.play('levelup'); setTimeout(() => Sound.play('coins'), 500); }
   UI.sheet = { type, arg };
   renderSheet();
-  const compact = ['friend', 'field', 'animal', 'car', 'tree'].includes(type);
+  const compact = ['friend', 'host', 'field', 'animal', 'car', 'tree'].includes(type);
   $('#sheet').className = 'sheet' + (compact ? ' compact' : '') + (type === 'pets' || type === 'trophies' ? ' tall' : '');
   $('#sheet').hidden = false;
   $('#backdrop').hidden = false;
@@ -702,6 +712,28 @@ const SHEETS = {
       ${mine ? `<div class="card gap-top"><h3>🎨 ${t('car_color')}</h3><div class="swatches left">${swatches}</div></div>
       ${others ? `<div class="card"><h3>🚗 ${t('car_switch')}</h3>${others}</div>` : ''}
       <button class="btn block" data-act="openShop" data-arg="cars">🛒 ${t('car_shop')}</button>` : ''}`;
+  },
+  // The owner of the home you're visiting: are they online, and may you sit down / lie down here?
+  host(id) {
+    const h = homeOf(id), on = isOnline(id), away = visitingNow(id), ok = canUseAt(id), fr = isFriend(id), name = esc(homeName(h));
+    const ans = UI.hostAns && UI.hostAns.id === id ? UI.hostAns.a : null, want = UI.hostWant && FURN[UI.hostWant];
+    const st = !on ? `<i class="off-dot"></i>${t('host_offline')}` : away ? `<i class="online-dot"></i>${t('host_away', { name: esc(homeName(homeOf(away))) })}`
+      : `<i class="online-dot"></i>${t('host_home')}`;
+    const tm = townOf(id) !== myTown() ? `<span>${isNightIn(townOf(id)) ? '🌙' : '☀️'} ${localClock(townOf(id))}</span>` : '';
+    let body;
+    if (ok) body = `<p class="host-say yes">😊 ${t('host_yes', { name })}</p>`;
+    else if (ans === 'wait') body = `<p class="host-say">💭 ${t('host_thinking', { name })}</p>`;
+    else if (ans === 'no') body = `<p class="host-say">🙏 ${t('host_no', { name })}</p>`;
+    else if (on && !away) body = `<button class="btn primary block" data-act="askHost" data-arg="${id}">🙏 ${want ? t('host_ask_it', { it: nm(want) }) : t('host_ask')}</button>`;
+    else body = `<p class="muted">${t(on ? 'host_cant_away' : 'host_cant_off', { name })}</p>`;
+    return `<div class="profile">${avatar(h.look, 'xxl', friendEnergy(h))}<div class="grow">
+        <div class="profile-name">${name}</div><div class="profile-tags"><span>${st}</span>${tm}</div></div></div>
+      <div class="card"><b>🏠 ${t('house_rules_title')}</b><p class="muted">${t('house_rules_desc')}</p></div>
+      ${body}
+      <div class="row gap-top">
+        <button class="btn grow" data-act="waveHost" data-arg="${id}">👋 ${t('host_wave')}</button>
+        ${fr ? `<button class="btn grow" data-act="compose" data-arg="${id}">✉️ ${t('write_letter')}</button><button class="btn grow" data-act="friendSheet" data-arg="${id}">⋯</button>` : ''}
+      </div>`;
   },
   friend(id) {
     const f = friendById(id), liked = S.today.liked[id];
@@ -1073,9 +1105,24 @@ const ACT = {
   },
   souvGo() { closeSheet(); UI.tab = 'home'; setLevel(0); UI.inside = true; syncView(); },
   recenter: () => Scene.recenter(),
-  goHome() { UI.visit = null; UI.visitInside = false; UI.wtown = null; setLevel(0); setTab('home'); },
-  backTown() { UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); },
-  visit(id) { closeSheet(); setLevel(0); if (id === 'me') { setTab('home'); return; } if (UI.tab !== 'world') UI.tab = 'town'; UI.visit = id; UI.visitInside = false; syncView(); },
+  goHome() { if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; UI.wtown = null; setLevel(0); setTab('home'); },
+  backTown() { if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); },
+  // House rules (v0.11): ask the owner; they think for a moment and (usually) say yes.
+  askHost(id) {
+    UI.hostAns = { id, a: 'wait' }; renderSheet();
+    setTimeout(() => {
+      const a = askHost(id);
+      UI.hostAns = { id, a };
+      if (a === 'yes') { Sound.play('chime'); Scene.wave(id); snack(`😊 ${t('host_yes_snack', { name: homeName(homeOf(id)) })}`); }
+      if (UI.sheet && UI.sheet.type === 'host') renderSheet();
+    }, 1100);
+  },
+  waveHost(id) {
+    Scene.wave(id);
+    const on = isOnline(id) && !visitingNow(id);
+    snack(on ? `👋 ${t('host_waved', { name: homeName(homeOf(id)) })}` : `💤 ${t('host_cant_off', { name: homeName(homeOf(id)) })}`);
+  },
+  visit(id) { closeSheet(); setLevel(0); if (UI.visit && UI.visit !== id) leaveHost(UI.visit); UI.hostAns = null; if (id === 'me') { setTab('home'); return; } if (UI.tab !== 'world') UI.tab = 'town'; UI.visit = id; UI.visitInside = false; syncView(); },
   ranking: () => openSheet('ranking'),
   barn: () => openSheet('barn'),
   friendSheet: id => openSheet('friend', id),
@@ -1324,6 +1371,7 @@ function onSceneHit(h) {
   if (k === 'avatar') {
     Scene.wave(h.owner);
     if (h.owner === 'me') snack(`${ENERGY_EMOJI[energyLevel()]} ${t('energy_desc_' + energyLevel())}`);
+    else if (h.owner === Scene.view().owner && Scene.view().mode !== 'town') openSheet('host', h.owner);   // the owner, at home
     else if (isFriend(h.owner)) openSheet('friend', h.owner);
     else snack(`👋 ${homeName(homeOf(h.owner))} · ${t('stranger')}`);
     return;
@@ -1335,7 +1383,9 @@ function onSceneHit(h) {
   if (k === 'furn') {
     const it = shownRoom(homeOf(Scene.view().owner)).items.find(x => x.id === h.id), d = FURN[h.k];
     const sub = d.souv ? `✨ ${t('souv_title')}` : d.use ? t('use_' + d.use) : '';
-    if (it && d.use && Scene.view().owner === 'me') Scene.go({ kind: 'furn', id: it.id });
+    const vo = Scene.view().owner;
+    if (it && d.use && canUseAt(vo)) Scene.go({ kind: 'furn', id: it.id });
+    else if (it && d.use) { tip('furn', h.k, nm(d), `🙏 ${t('ask_first')}`); UI.hostWant = h.k; return openSheet('host', vo); }   // house rules: ask first
     return tip('furn', h.k, nm(d), sub);
   }
   if (k === 'lot') { ACT.visit(h.owner); return refresh(); }
@@ -1773,6 +1823,16 @@ function drawWorldMap(cv) {
     g.fillStyle = '#fffaf0'; g.beginPath(); g.moveTo(x - 1, y + 1); g.lineTo(x - 1, y - 9); g.lineTo(x + 5, y + 1); g.closePath(); g.fill();
     g.fillStyle = i % 2 ? '#e5484d' : '#3f6fb5'; g.fillRect(x - 1, y - 11, 4, 2);
   });
+  // night where the sun is down right now (soft at the edge), and a little sun where it's noon
+  const nowD = new Date(), y0 = Date.UTC(nowD.getUTCFullYear(), 0, 0), doy = (nowD.getTime() - y0) / DAY, utcH = nowD.getUTCHours() + nowD.getUTCMinutes() / 60;
+  const dec = -23.44 * Math.cos(2 * Math.PI / 365 * (doy + 10)) * Math.PI / 180, subLon = (12 - utcH) * 15, rad = Math.PI / 180, cell = 6;
+  for (let x = 0; x < WMAP.w; x += cell) for (let y = 0; y < WMAP.h; y += cell) {
+    const lon = (x + cell / 2) / WMAP.w * 360 - 180, lat = WMAP.lat0 - (y + cell / 2) / WMAP.h * (WMAP.lat0 - WMAP.lat1);
+    const s = Math.sin(lat * rad) * Math.sin(dec) + Math.cos(lat * rad) * Math.cos(dec) * Math.cos((lon - subLon) * rad);
+    const a = Math.max(0, Math.min(1, (0.08 - s) / 0.16));
+    if (a > 0) { g.fillStyle = `rgba(12,20,60,${(a * (dark ? 0.3 : 0.26)).toFixed(3)})`; g.fillRect(x, y, cell, cell); }
+  }
+  { const sx = ((subLon + 540) % 360) / 360 * WMAP.w, [, sy] = P(0, dec / rad); g.font = `22px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('☀️', sx, sy); }
   const cxp = 44, cyp = WMAP.h - 44;   // compass rose
   g.fillStyle = dark ? 'rgba(38,34,30,.75)' : 'rgba(255,253,248,.85)'; g.beginPath(); g.arc(cxp, cyp, 26, 0, Math.PI * 2); g.fill();
   [[0, -1, '#e5484d'], [0, 1, '#8b8274'], [1, 0, '#8b8274'], [-1, 0, '#8b8274']].forEach(([dx, dy, col]) => {
@@ -1784,7 +1844,7 @@ function panelWorld() {
   const mine = myTown(), sel = COMMUNITIES[UI.wsel] ? UI.wsel : mine, cm = COMMUNITIES[sel], here = sel === mine;
   const friendsIn = id => S.friends.filter(f => townOf(f.id) === id).length;
   const reg = UI.wregion, inReg = id => !reg || COMMUNITIES[id].region === reg;
-  const chips = `<div class="sub-cats">${Object.entries(REGIONS).map(([r, R]) => `<button class="sub ${reg === r ? 'on' : ''}" data-act="worldRegion" data-arg="${r}">${R.e} ${nm(R)}</button>`).join('')}</div>`;
+  const chips = `<div class="sub-cats one-row">${Object.entries(REGIONS).map(([r, R]) => `<button class="sub ${reg === r ? 'on' : ''}" data-act="worldRegion" data-arg="${r}">${R.e} ${nm(R)}</button>`).join('')}</div>`;
   const pins = Object.entries(COMMUNITIES).map(([id, c]) => {
     const [x, y] = wmapXY(c.lon, c.lat);
     return `<button class="wpin ${id === sel ? 'on' : ''} ${id === mine ? 'home' : ''}" style="left:${x}px;top:${y}px" data-act="worldPick" data-arg="${id}">
@@ -1794,13 +1854,13 @@ function panelWorld() {
   const nf = friendsIn(sel), parcel = round50(LAND.parcel * NEIGHBORHOODS.maple.price * cm.price);
   const card = `<div class="card world-card"><div class="row">${thumbImg('commune', sel, {}, 96, 84, 'thumb sm')}
       <div class="grow"><div class="world-name">${cm.flag} ${nm(cm)} ${here ? `<span class="tag ok">${t('world_here')}</span>` : ''}</div>
-        <div class="muted">${nm(cm.place)} · ${THEME_E[cm.theme]} ${t('theme_' + cm.theme)}</div>
+        <div class="muted">${nm(cm.place)} · ${THEME_E[cm.theme]} ${t('theme_' + cm.theme)} · ${isNightIn(sel) ? '🌙' : '☀️'} ${t('local_time', { t: localClock(sel) })}</div>
         <div class="world-stats"><span>👥 ${t('world_pop', { n: fmtNum(cm.pop + (here ? 1 : 0)) })}</span><span>🏷️ ${t('world_parcel', { n: fmtNum(parcel) })}</span><span>🌱 ${t('world_free', { n: free(sel) })}</span>${nf ? `<span>💛 ${t('world_friends', { n: nf })}</span>` : ''}</div></div></div>
     <div class="row gap-top">${here ? `<button class="btn primary grow" data-act="worldVisit" data-arg="${sel}">🏘️ ${t('world_my_town')}</button>`
       : `<button class="btn grow" data-act="worldVisit" data-arg="${sel}">👀 ${t('world_visit')}</button><button class="btn primary grow" data-act="worldMove" data-arg="${sel}">🚚 ${t('world_move')}</button>`}</div></div>`;
   const list = Object.entries(COMMUNITIES).filter(([id]) => inReg(id)).sort((a, b) => (b[0] === mine) - (a[0] === mine) || b[1].pop - a[1].pop).map(([id, c]) =>
     `<button class="list-item world-row ${id === sel ? 'on' : ''}" data-act="worldPick" data-arg="${id}"><span class="big-emoji">${c.flag}</span>
-      <div class="grow"><b>${nm(c)}</b> ${id === mine ? '🏡' : ''}<div class="muted">${nm(c.place)} · ${THEME_E[c.theme]} · 👥 ${fmtNum(c.pop)} · <span class="online-dot"></span>${onlineIn(id)}</div></div><span class="muted">×${c.price}</span></button>`).join('');
+      <div class="grow"><b>${nm(c)}</b> ${id === mine ? '🏡' : ''}<div class="muted">${nm(c.place)} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)} · 👥 ${fmtNum(c.pop)} · <span class="online-dot"></span>${onlineIn(id)}</div></div><span class="muted">×${c.price}</span></button>`).join('');
   return `<div class="world-head"><h1 class="panel-title">🌍 ${t('world_title')}</h1><span class="muted"><span class="online-dot"></span>${t('online_world', { n: fmtNum(Object.keys(COMMUNITIES).reduce((a, id) => a + onlineIn(id), 0)) })}</span></div>
     <p class="muted note">${t('world_sub')}</p>${chips}
     <div class="wmap-scroll"><div class="wmap" style="width:${WMAP.w}px;height:${WMAP.h}px"><canvas id="worldCanvas" style="width:${WMAP.w}px;height:${WMAP.h}px"></canvas>${pins}</div></div>
@@ -1809,9 +1869,10 @@ function panelWorld() {
     <p class="muted center">${t('world_note')}</p>`;
 }
 // How many people are online in a community right now (made up for the prototype; slowly changes through the day).
+// Most people are online in their evening and hardly anyone in the middle of their night (local time).
 function onlineIn(id) {
-  const c = COMMUNITIES[id], i = Object.keys(COMMUNITIES).indexOf(id), hr = (Date.now() / 3600000) % 24;
-  return Math.max(3, Math.round(c.pop * (0.04 + 0.03 * Math.sin(hr / 24 * Math.PI * 2 + i))));
+  const c = COMMUNITIES[id], hr = localHour(id), day = hr >= 7 && hr < 23.5 ? Math.sin((hr - 7) / 16.5 * Math.PI) : 0;
+  return Math.max(3, Math.round(c.pop * (0.012 + 0.07 * day * (0.6 + 0.4 * Math.min(1, (hr - 7) / 12)))));
 }
 // After the world panel is drawn: paint the map and scroll to the community you picked (or keep where you were).
 function afterWorld(wx) {
