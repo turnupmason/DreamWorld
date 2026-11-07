@@ -436,3 +436,10 @@ body { letter-spacing: .01em; }
 .tip span { display: block; font-size: 12px; color: #8b8274; font-weight: 600; }
 .tip.show { animation: pop .22s ease-out; }
 .toast { border-radius: 18px; }
+
+/* ---------- v0.6: land, weather ---------- */
+.land-pic { display: flex; flex-direction: column; align-items: center; gap: 2px; background: linear-gradient(160deg, #e9f5d8, #d7ecbd); border-radius: 18px; padding: 14px; margin-bottom: 12px; }
+.land-pic span { font-size: 34px; }
+.land-pic b { font-size: 17px; font-weight: 800; }
+.land-pic i { font-style: normal; font-size: 12.5px; color: #6b7f55; font-weight: 700; }
+.pill.weather { cursor: pointer; background: #eef6ff; }

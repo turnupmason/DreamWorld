@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -25,12 +25,59 @@ const AREA = {
 const DOOR_X = 3.5;
 const MAILBOX = [4, 13];                 // every home has a mailbox by the gate
 
-// ---------- town layout ----------
-const SLOT_W = LOT_W + 1, SLOT_D = LOT_D + 2;
-const SLOTS = [[0, 0], [1, 0], [2, 0], [0, 1], [2, 1], [0, 2], [1, 2], [2, 2]];
-const PLAZA = [1, 1];
-const TOWN_W = 3 * SLOT_W, TOWN_D = 3 * SLOT_D;
+// ---------- the world ----------
+// A real little town instead of a 3 × 3 grid: neighbourhoods with streets of different lengths, roads of different
+// widths, a town centre, a park, a lake and farmland. Coordinates are world tiles (x to the lower right, y to the lower left).
+// Every street is a row of land parcels (PARCEL tiles wide, LOT_D deep) with its road in front (+y).
+// A home takes 4 parcels (the 16-tile core with house, farm and yard) plus any parcels bought next to it, to the right.
+const PARCEL = 4, CORE_PARCELS = LOT_W / PARCEL;
+const WORLD = { x0: -4, y0: -4, x1: 180, y1: 92 };            // the town; woods all around it
+const TOWN_W = WORLD.x1, TOWN_D = WORLD.y1;
 const TOWN_LEVELS = [0, 15000, 40000, 100000, 250000];
+const NEIGHBORHOODS = {
+  maple: { zh: '梧桐街社区', en: 'Maple', price: 1.0, grass: '#a6d47f' },
+  farm:  { zh: '田园', en: 'Farmland', price: 0.6, grass: '#b3d77f' },
+  lake:  { zh: '湖畔', en: 'Lakeside', price: 1.8, grass: '#9fd388' },
+};
+const STREETS = {
+  maple:     { nb: 'maple', zh: '梧桐街', en: 'Maple Street', x: 0,   y: 0,  n: 16 },
+  cherry:    { nb: 'maple', zh: '樱桃巷', en: 'Cherry Lane',  x: 0,   y: 16, n: 16 },
+  wheat:     { nb: 'farm',  zh: '麦田路', en: 'Wheat Road',   x: 0,   y: 36, n: 16 },
+  meadow:    { nb: 'farm',  zh: '草场路', en: 'Meadow Road',  x: 0,   y: 52, n: 16 },
+  lakeview:  { nb: 'lake',  zh: '望湖路', en: 'Lakeview Road', x: 116, y: 0, n: 14 },
+  shore:     { nb: 'lake',  zh: '湖滨大道', en: 'Shore Avenue', x: 116, y: 16, n: 14 },
+};
+// Roads: [x0, y0, x1, y1, kind]. street = 2 wide, avenue = 3 wide with a median line, dirt = country road.
+const ROADS = [
+  [-2, 14, 64, 16, 'street'], [115, 14, 172, 16, 'street'],
+  [-18, 30, 196, 33, 'avenue'],
+  [-2, 50, 64, 52, 'street'], [-18, 66, 112, 68, 'dirt'],
+  [64, -2, 67, 70, 'avenue'], [112, -2, 115, 36, 'avenue'],
+];
+// Places that aren't homes. The town hall plaza is 16 × 14 like a lot.
+const LANDMARKS = {
+  plaza:  { x: 82, y: 4 },
+  shops:  [['bakery', 69, 21], ['cafe', 76, 21], ['market', 99, 21], ['gym', 105, 21], ['library', 69, 4], ['post', 105, 4]],
+  park:   { x: 68, y: 35, w: 44, d: 30 },
+  lake:   { x: 146, y: 52, rx: 26, ry: 13 },
+  fields: { x: -2, y: 70, w: 114, d: 18 },
+};
+// Other people living in town (not your friends). Their homes are generated from these.
+const NPC_LOTS = [
+  { id: 'n1', st: 'cherry', p: 4, n: 5, house: 4 }, { id: 'n2', st: 'wheat', p: 0, n: 6, house: 2 },
+  { id: 'n3', st: 'wheat', p: 9, n: 5, house: 1 }, { id: 'n4', st: 'meadow', p: 0, n: 8, house: 5 },
+  { id: 'n5', st: 'meadow', p: 12, n: 4, house: 3 }, { id: 'n6', st: 'lakeview', p: 0, n: 5, house: 7 },
+  { id: 'n7', st: 'lakeview', p: 5, n: 5, house: 6 }, { id: 'n8', st: 'shore', p: 0, n: 6, house: 8 },
+  { id: 'n9', st: 'shore', p: 8, n: 6, house: 4 },
+];
+const NPC_NAMES = [
+  { zh: '老张', en: 'Sam' }, { zh: '王奶奶', en: 'Grandma Rose' }, { zh: '阿杰', en: 'Jake' }, { zh: '陈叔', en: 'Uncle Ben' },
+  { zh: '小美', en: 'Emma' }, { zh: '李医生', en: 'Dr. Lee' }, { zh: '周老师', en: 'Ms. Chow' }, { zh: '大熊', en: 'Big Al' }, { zh: '安娜', en: 'Anna' },
+];
+// Where you and your friends start, and where friends who accept an invite move in.
+const START_LOTS = { me: ['maple', 6], li: ['maple', 0, 5], wang: ['cherry', 0], mia: ['cherry', 11] };
+// Buying land: each parcel next to your home costs more than the last. Moving to another street costs its land.
+const LAND = { parcel: 600, grow: 1.35, move: 500, refund: 0.5 };
 
 // ---------- crops ----------
 // grow: minutes to ripen. seed: price. yield: units per plot. sell: per unit. n: plants per plot. rare: only from real-life goals.

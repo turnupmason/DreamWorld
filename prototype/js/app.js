@@ -91,11 +91,29 @@ function notify(item) {
   $('#toasts').prepend(el);
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, 4200);
 }
+// ---------- weather ----------
+function weatherPill() { const w = weatherNow(); return `<button class="pill weather" data-act="weatherInfo">${WEATHER_E[w.kind]} ${w.temp != null ? w.temp + '°' : ''}</button>`; }
+// Real weather where the player is: rough location (about 10 km) from the phone, weather from Open-Meteo (free, no account).
+// Only the weather result is kept; the location itself is never saved or sent anywhere else.
+let weatherBusy = false, weatherTried = 0;
+function realWeather(loud) {
+  if (!S.weatherReal || weatherBusy || !navigator.geolocation) { if (loud && !navigator.geolocation) snack(t('w_fail')); return; }
+  weatherBusy = true; weatherTried = Date.now();
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude.toFixed(1), lon = pos.coords.longitude.toFixed(1);
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`)
+      .then(r => r.json()).then(j => {
+        S.weather = { kind: codeKind(j.current.weather_code), temp: Math.round(j.current.temperature_2m), real: true, at: now() };
+        if (loud) snack(`${WEATHER_E[S.weather.kind]} ${t('w_' + S.weather.kind)} · ${S.weather.temp}°C`);
+        refresh();
+      }).catch(() => { if (loud) snack(t('w_fail')); }).finally(() => { weatherBusy = false; });
+  }, () => { weatherBusy = false; S.weatherReal = false; if (loud) snack(t('w_denied')); refresh(); }, { maximumAge: 3 * HOUR, timeout: 15000 });
+}
 // A little label above the thing you tapped: picture, name and what it does.
 let tipTimer = null;
 function tip(kind, k, name, sub) {
   const el = $('#tip'), p = Scene.tapAt();
-  el.innerHTML = `${thumbImg(kind, k, {}, 52, 44, 'thumb')}<div><b>${esc(name)}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
+  el.innerHTML = `${kind ? thumbImg(kind, k, {}, 52, 44, 'thumb') : ''}<div><b>${esc(name)}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
   el.hidden = false;
   const w = el.offsetWidth, vw = el.parentElement.clientWidth;
   el.style.left = clamp(p.x - w / 2, 8, vw - w - 8) + 'px';
@@ -141,7 +159,7 @@ function renderHUD() {
         <div class="cap ${actionsLeft() === 0 ? 'done' : ''}" title="${t('cap_title')}">🔨 ${S.today.actions}/${ACTION_CAP}</div></div>
     </div>
     <div class="res row">
-      <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>${live}
+      <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>${live}${weatherPill()}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
     </div>`;
 }
@@ -181,10 +199,12 @@ function renderOverlay() {
       f = b('goIn', '🚪', t('fab_enter')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn')) + b('recenter', '🎯', t('fab_center'));
     }
   } else if (UI.visit) {
-    const h = friendById(UI.visit);
-    c = `<button class="btn small" data-act="backTown">← ${t('tab_town')}</button><div class="ctx-main">${t('home_of', { name: esc(homeName(h)) })}${S.calm ? '' : ` · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}`}</div>${UI.visitInside ? floorChips(h) : ''}`;
+    const h = homeOf(UI.visit), fr = isFriend(h.id), street = STREETS[lotOf(h.id).st];
+    const sub = fr ? (S.calm ? '' : ` · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}`) : ` · ${nm(street)}`;
+    c = `<button class="btn small" data-act="backTown">← ${t('tab_town')}</button><div class="ctx-main">${t('home_of', { name: esc(homeName(h)) })}${sub}</div>${UI.visitInside ? floorChips(h) : ''}`;
     f = UI.visitInside ? b('goOut', '🌳', t('fab_exit'))
-      : b('goIn', '🚪', t('fab_peek')) + b('like', '❤️', t('like'), h.id) + b('friendSheet', '🎁', t('fab_gift'), h.id) + b('compose', '✉️', t('fab_letter'), h.id) + b('goHome', '🏡', t('fab_home'));
+      : fr ? b('goIn', '🚪', t('fab_peek')) + b('like', '❤️', t('like'), h.id) + b('friendSheet', '🎁', t('fab_gift'), h.id) + b('compose', '✉️', t('fab_letter'), h.id) + b('goHome', '🏡', t('fab_home'))
+        : b('goIn', '🚪', t('fab_peek')) + b('goHome', '🏡', t('fab_home'));
   } else {
     c = `<button class="ctx-main link" data-act="ranking">🏛️ ${t('ctx_town', { street: t('street_name'), lv: townLevel(), v: fmtCompact(townTotal()) })}</button>`;
     f = (S.calm ? '' : b('ranking', '🏆', t('fab_rank'))) + b('goHome', '🏡', t('fab_home'));
@@ -667,7 +687,7 @@ const SHEETS = {
         <div class="grow"><b>${esc(homeName(r.h))}</b><div class="muted">${nm(HOUSES[r.h.house])}${r.h.cars.length ? ' · ' + nm(CARS[r.h.cars[Math.max(0, r.h.car)].k]) : ''} · ${t('animals_n', { n: r.h.animals.length })}</div></div>
         <div class="right"><b>🪙${fmtNum(r.v)}</b>${me ? '' : `<button class="btn small" data-act="visit" data-arg="${r.h.id}">${t('visit')}</button>`}</div></div>`;
     }).join('');
-    const b = assetBreakdown(S.me), empty = S.slots.filter(s => !s.owner).length;
+    const b = assetBreakdown(S.me), empty = !!freeRun() && FRIEND_POOL.some(f => !S.friends.some(x => x.id === f.id));
     const parts = ['cash', 'house', 'land', 'items', 'cars', 'animals', 'goods'].map(k => `<div class="asset-row"><span>${t('a_' + k)}</span><b>🪙${fmtNum(b[k])}</b></div>`).join('');
     const list = S.calm ? `<div class="card"><p>😌 ${t('rank_calm')}</p><button class="btn small" data-act="calm">${t('rank_show')}</button></div>` : `<div class="card">${rows}</div>`;
     return `<h2>${S.calm ? '🏛️' : '🏆'} ${t(S.calm ? 'town_title' : 'rank_title', { street: t('street_name') })}</h2>
@@ -702,6 +722,36 @@ const SHEETS = {
       <p class="muted">${t('house_floors', { n, max: maxFloors(h) })}</p></div>
       <button class="btn primary block gap-top" data-act="buildFloorNow" ${canAfford(c) ? '' : 'disabled'}>${t('build_btn')} · ${costText(c)}</button>
       ${canAfford(c) ? '' : `<p class="muted center gap-top">${t('snack_poor')}</p>`}`;
+  },
+  // Empty land: next to your home → buy one more parcel; elsewhere → move your home there.
+  land(a) {
+    const st = STREETS[a.st], nb = NEIGHBORHOODS[st.nb], l = lotOf('me');
+    const next = l.st === a.st && a.p === l.p + l.n;
+    const shot = `<div class="land-pic"><span>🏷️</span><b>${nm(st)}</b><i>${nm(nb)}</i></div>`;
+    if (next) {
+      const c = parcelCost();
+      return `${shot}<h2>${t('land_buy_title')}</h2><p class="muted">${t('land_buy_desc', { w: PARCEL, d: LOT_D, now: homeW(S.me) })}</p>
+        <div class="card"><div class="asset-row"><span>${t('land_owned')}</span><b>${t('tiles_n', { w: homeW(S.me), d: LOT_D })}</b></div>
+          <div class="asset-row"><span>${t('land_after')}</span><b>${t('tiles_n', { w: homeW(S.me) + PARCEL, d: LOT_D })}</b></div>
+          <div class="asset-row"><span>${t('land_price')}</span><b>🪙${fmtNum(c.coins)}</b></div></div>
+        <button class="btn primary block" data-act="buyParcel" ${canAfford(c) ? '' : 'disabled'}>${t('land_buy_btn')} · 🪙${fmtNum(c.coins)}</button>
+        <p class="muted center gap-top">${t('land_grow_note')}</p>`;
+    }
+    const p0 = a.run != null ? a.run : a.p, fits = a.n >= CORE_PARCELS, c = moveCost(a.st), refund = Math.round((l.paid || 0) * LAND.refund);
+    return `${shot}<h2>${t('land_move_title', { street: nm(st) })}</h2><p class="muted">${t('land_move_desc', { w: a.n * PARCEL, d: LOT_D, nb: nm(nb) })}</p>
+      ${fits ? `<div class="card"><div class="asset-row"><span>${t('land_price')}</span><b>🪙${fmtNum(c.coins)}</b></div>
+        ${refund ? `<div class="asset-row"><span>${t('land_refund')}</span><b>+🪙${fmtNum(refund)}</b></div>` : ''}
+        <p class="muted">${t('land_move_note')}</p></div>
+        <button class="btn primary block" data-act="moveHere" data-arg="${a.st}|${p0}" ${canAfford(c) ? '' : 'disabled'}>🚚 ${t('land_move_btn')} · 🪙${fmtNum(c.coins)}</button>`
+        : `<div class="card"><p>${t('land_too_small')}</p></div>`}`;
+  },
+  weather() {
+    const w = weatherNow();
+    return `<div class="center"><div class="big-emoji xl">${WEATHER_E[w.kind]}</div><h2>${t('w_' + w.kind)}${w.temp != null ? ` · ${w.temp}°C` : ''}</h2>
+      <p class="muted">${w.real ? t('w_real_src') : t('w_sim_src')}</p></div>
+      <div class="card gap-top"><p>${t('w_effect_' + w.kind)}</p></div>
+      <div class="card privacy-card"><label class="row between toggle-row"><span>📍 ${t('w_real_toggle')}<small>${t('w_real_note')}</small></span>
+        <input type="checkbox" class="switch" data-act="weatherReal" ${S.weatherReal ? 'checked' : ''}></label></div>`;
   },
   cap() {
     return `<div class="center"><div class="big-emoji xl">🌙</div><h2>${t('cap_heading')}</h2>
@@ -778,6 +828,7 @@ function renderConsole() {
     <div class="con-group"><h4>🕒 ${t('con_time')}</h4>
       <div class="muted">${t('sim_time')}: <b id="conTime">${fmtDate(now())}</b></div>
       ${b('simTime', 10, t('ff_x', { d: fmtDur(10 * MIN) }))}${b('simTime', 60, t('ff_x', { d: fmtDur(HOUR) }))}${b('simTime', 360, t('ff_x', { d: fmtDur(6 * HOUR) }))}${b('simDay', '', t('next_day'))}</div>
+    <div class="con-group"><h4>🌦️ ${t('con_weather')}</h4>${['auto', 'clear', 'clouds', 'rain', 'snow', 'fog', 'storm'].map(k => b('simWeather', k, k === 'auto' ? t('w_auto') : `${WEATHER_E[k]} ${t('w_' + k)}`, (S.weather && S.weather.forced ? S.weather.kind : 'auto') === k ? 'on' : '')).join('')}</div>
     <div class="con-group"><h4>👥 ${t('con_friends')}</h4>
       ${b('simEvent', '', t('sim_friend_event'))}${b('simSteal', '', t('sim_steal'))}${b('simLetter', '', t('sim_letter'))}${b('simFriendLive', '', t('sim_friend_live'))}${b('simJoin', '', t('sim_join'))}</div>
     <div class="con-group"><h4>${t('con_demo')}</h4>${b('simMoney', '', t('demo_money'))}<p class="muted">${t('demo_note')}</p></div>
@@ -1056,6 +1107,20 @@ const ACT = {
     maybeReply(id, 'gift');
   },
   invite: () => openSheet('invite'),
+  buyParcel() {
+    result(buyParcel(), () => { closeSheet(); snack(t('snack_parcel', { w: homeW(S.me) })); UI.tab = 'home'; UI.inside = false; syncView(); Scene.recenter(); });
+  },
+  moveHere(arg) {
+    const [st, p] = arg.split('|'), r = relocate(st, +p);
+    if (r.r === 'poor') return snack(t('snack_poor'));
+    if (r.r !== 'ok') return snack(t('land_taken'));
+    closeSheet();
+    snack(t('snack_moved_street', { street: nm(STREETS[st]) }) + (r.refund ? ` +🪙${fmtNum(r.refund)}` : ''));
+    setLevel(0); UI.visit = null; UI.tab = 'home'; UI.inside = false; Scene.moveHome(); syncView(); Scene.recenter();
+  },
+  weatherInfo: () => openSheet('weather'),
+  weatherReal() { S.weatherReal = !S.weatherReal; if (S.weatherReal) realWeather(true); else snack(t('w_sim_src')); },
+  simWeather(k) { S.weather = k === 'auto' ? null : { kind: k, temp: simWeather().temp, forced: true }; snack(`${WEATHER_E[weatherNow().kind]} ${t('w_' + weatherNow().kind)}`); },
   giftScroll() { const el = $('#giftSec'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
   copyInvite() {
     const link = $('.invite-link').textContent;
@@ -1162,7 +1227,7 @@ function onSceneHit(h) {
   if (k === 'field') {
     const hm = homeOf(h.owner), f = hm.fields[h.i];
     if (mine && isRipe(f)) { const j = harvestJob(h.i); return walkDo(j.tg, j.o); }
-    if (!mine && stealable(hm, h.i)) return sneakDo({ kind: 'field', i: h.i }, () => stealResult(h.owner, steal(h.owner, h.i)));
+    if (!mine && isFriend(h.owner) && stealable(hm, h.i)) return sneakDo({ kind: 'field', i: h.i }, () => stealResult(h.owner, steal(h.owner, h.i)));
     return openSheet('field', { owner: h.owner, i: h.i });
   }
   if (k === 'animal') {
@@ -1191,9 +1256,13 @@ function onSceneHit(h) {
   if (k === 'avatar') {
     Scene.wave(h.owner);
     if (h.owner === 'me') snack(`${ENERGY_EMOJI[energyLevel()]} ${t('energy_desc_' + energyLevel())}`);
-    else openSheet('friend', h.owner);
+    else if (isFriend(h.owner)) openSheet('friend', h.owner);
+    else snack(`👋 ${homeName(homeOf(h.owner))} · ${t('stranger')}`);
     return;
   }
+  if (k === 'shop') { const L = SHOP_LOOK[h.k]; return tip(null, null, `${L.e} ${nm(L)}`, t('shop_soon')); }
+  if (k === 'land') return openSheet('land', { st: h.st, p: h.p, n: h.n, run: h.run });
+  if (k === 'buyParcel') return openSheet('land', { st: lotOf('me').st, p: lotOf('me').p + lotOf('me').n, n: 1, next: true });
   if (k === 'furn') {
     const it = shownRoom(homeOf(Scene.view().owner)).items.find(x => x.id === h.id), d = FURN[h.k];
     const sub = d.souv ? `✨ ${t('souv_title')}` : d.use ? t('use_' + d.use) : '';
@@ -1444,6 +1513,8 @@ setInterval(() => {
   if (overlaySig() !== UI.sig) { renderHUD(); renderOverlay(); renderTabbar(); UI.sig = overlaySig(); }
   if (UI.sheet && ['field', 'animal', 'tree'].includes(UI.sheet.type)) renderSheet();
   if (UI.tab === 'real' && S.live) renderPanel();
+  rainGrow(1000);
+  if (S.weatherReal && (!S.weather || !S.weather.real || now() - S.weather.at > 30 * MIN) && Date.now() - weatherTried > 5 * MIN) realWeather(false);
 }, 1000);
 // Friends stay active in the background, but rarely (no spam).
 setInterval(() => {

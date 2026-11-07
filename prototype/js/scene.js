@@ -17,10 +17,12 @@ const Scene = (() => {
   const ents = new Map();
   let edit = null, hover = null;
   let rankCache = { t: 0, total: 0 };
-  const WOODS = 16, WX0 = -WOODS, WY0 = -WOODS, WX1 = TOWN_W + WOODS, WY1 = TOWN_D + WOODS;
-  const LAKE = { x: -4.8, y: 37, rx: 3.2, ry: 4.4 };
-  const ZOOM = { world: [0.08, 2.4], interior: [0.5, 2.8] };
-  const GW = LOT_W + 1, GH = LOT_D + 2;     // a lot plus its side path and the road in front
+  const WOODS = 14, WX0 = WORLD.x0 - WOODS, WY0 = WORLD.y0 - WOODS, WX1 = WORLD.x1 + WOODS, WY1 = WORLD.y1 + WOODS;
+  const LAKE = { x: LANDMARKS.lake.x, y: LANDMARKS.lake.y, rx: LANDMARKS.lake.rx, ry: LANDMARKS.lake.ry };
+  const ZOOM = { world: [0.045, 2.4], interior: [0.5, 2.8] };
+  const GH = LOT_D + 2;                      // a lot plus the road in front
+  const gwOf = h => homeW(h) + 1;            // ... and the side path
+  const far = () => cam.z < 0.2;             // zoomed far out: simple houses, no animals or people
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const SEAT = { sofa: 7, armchair: 7, chair: 6, rocker: 6, beanbag: 3, bed: 9, sleepbag: 3, spinbike: 9, treadmill: 5 };
 
@@ -38,8 +40,9 @@ const Scene = (() => {
     cam.y = H * yFrac - (wx + wy) * TH / 2 * cam.z;
   }
   function homeZoom() { return clamp(W / 520, 0.6, 1.2); }
-  function townZoom() { return clamp(Math.min(W / ((TOWN_W + TOWN_D) * 32), H / ((TOWN_W + TOWN_D) * 16 + 160)) * 1.08, 0.08, 0.6); }
+  function townZoom() { return clamp(W / 2700, 0.1, 0.22); }
   function lotCenter(id) { const [ox, oy] = origin(id); return [ox + 5.5, oy + 9]; }
+  function townCenter() { const [ox, oy] = origin('me'); return [ox + 24, oy + 22]; }
   function flyTo(wx, wy, z, instant) {
     if (instant || !worldReady) { cam.z = z; centerOn(wx, wy); fly = null; worldReady = true; return; }
     fly = { wx, wy, z };
@@ -49,7 +52,7 @@ const Scene = (() => {
       const [rw, rd] = roomSize(homeOf(owner));
       cam.z = clamp(Math.min(W * 0.92 / ((rw + rd) * 32), H * 0.7 / ((rw + rd) * 16 + 100)), 0.5, 1.9);
       centerOn(rw / 2, rd / 2, 0.63);
-    } else if (mode === 'town') flyTo(TOWN_W / 2, TOWN_D / 2, townZoom(), instant);
+    } else if (mode === 'town') { const [cx, cy] = townCenter(); flyTo(cx, cy, townZoom(), instant); }
     else { const [cx, cy] = lotCenter(owner); flyTo(cx, cy, homeZoom(), instant); }
   }
   function useCam() {
@@ -63,7 +66,7 @@ const Scene = (() => {
     // the first screens: drift slowly over the street
     if (attract && !dragging) {
       const t = performance.now() / 1000;
-      const tx = TOWN_W / 2 + Math.sin(t / 9) * 13, ty = TOWN_D / 2 + Math.cos(t / 11) * 11;
+      const tx = 60 + Math.sin(t / 9) * 22, ty = 24 + Math.cos(t / 11) * 12;
       const c = unIso(W / 2, H / 2), k = 1 - Math.exp(-dt * 0.8);
       cam.z += (attract.z - cam.z) * k;
       centerOn(c.x + (tx - c.x) * k, c.y + (ty - c.y) * k);
@@ -115,15 +118,15 @@ const Scene = (() => {
     const pts = [unIso(0, 0), unIso(W, 0), unIso(0, H + 180 * cam.z), unIso(W, H + 180 * cam.z)];
     return { x0: Math.min(...pts.map(p => p.x)) - 1, x1: Math.max(...pts.map(p => p.x)) + 1, y0: Math.min(...pts.map(p => p.y)) - 1, y1: Math.max(...pts.map(p => p.y)) + 1 };
   }
-  function lotVisible(ox, oy) {
-    const a = iso(ox, oy), b = iso(ox + GW, oy), c = iso(ox + GW, oy + GH), d = iso(ox, oy + GH);
+  function lotVisible(ox, oy, gw = LOT_W + 1) {
+    const a = iso(ox, oy), b = iso(ox + gw, oy), c = iso(ox + gw, oy + GH), d = iso(ox, oy + GH);
     const x0 = Math.min(d.x, a.x), x1 = Math.max(b.x, c.x), y0 = a.y - 170 * cam.z, y1 = c.y;
     return x1 > 0 && x0 < W && y1 > 0 && y0 < H;
   }
 
   // ---------- walking ----------
   function lotNav(h) {
-    const g = new Uint8Array(GW * GH).fill(1);
+    const GW = gwOf(h), LW = homeW(h), g = new Uint8Array(GW * GH).fill(1);
     const block = (x, y, w, d) => { for (let j = Math.floor(y); j < y + d; j++) for (let i = Math.floor(x); i < x + w; i++) if (i >= 0 && j >= 0 && i < GW && j < GH) g[j * GW + i] = 0; };
     const [fx, fy, w, d] = HOUSES[h.house].fp;
     block(fx, fy, w, d);
@@ -136,7 +139,7 @@ const Scene = (() => {
     block(MAILBOX[0], MAILBOX[1], 1, 1);
     const wall = (ax, ay, bx, by) => {
       if (ax === bx && Math.min(ay, by) === LOT_D - 1 && Math.max(ay, by) === LOT_D) return !(ax <= 1 || ax === 3);   // front fence, open at drive and path
-      if (ay === by && Math.min(ax, bx) === LOT_W - 1 && Math.max(ax, bx) === LOT_W) return ay < LOT_D;                // side fence
+      if (ay === by && Math.min(ax, bx) === LW - 1 && Math.max(ax, bx) === LW) return ay < LOT_D;                      // side fence
       if (pr && inRect(pr, ax, ay) !== inRect(pr, bx, by)) {
         const gy = pr.y + pr.d - 1;
         return !(ay === gy && by === gy && Math.min(ax, bx) === pr.x - 1);                                              // pasture gate
@@ -297,7 +300,7 @@ const Scene = (() => {
   const SPEED = { chicken: 0.7, duck: 0.6, rabbit: 0.9, sheep: 0.45, goat: 0.55, pig: 0.45, cow: 0.35, alpaca: 0.4, dog: 1.3, cat: 0.9 };
 
   // ---------- live workouts ("mini me") ----------
-  const ROAD_LOOP = [[0.8, 14.7], [16.4, 14.7], [16.4, 15.4], [0.8, 15.4]];
+  const roadLoop = h => { const w = homeW(h) + 0.4; return [[0.8, 14.7], [w, 14.7], [w, 15.4], [0.8, 15.4]]; };
   function liveSpot(type, h) {
     if (type === 'swim') {
       const pool = h.yard.find(it => it.k === 'pool');
@@ -315,7 +318,7 @@ const Scene = (() => {
     if (ROAD_TYPES[type]) {
       if (!a.path.length) {
         if (a.y < LOT_D) { const p = planPath(a, lotNav(h), 3.5, 14.7, 2); a.path = p && p.length ? p : [[3.5, 14.7]]; a.loopI = 0; }
-        else { a.loopI = ((a.loopI || 0) + 1) % ROAD_LOOP.length; a.path = [ROAD_LOOP[a.loopI]]; }
+        else { const L = roadLoop(h); a.loopI = ((a.loopI || 0) + 1) % L.length; a.path = [L[a.loopI]]; }
       }
       stepAlong(a, dt, ROAD_SPEED[type] * (h.id === 'me' ? energyMult() : 1));
       return ROAD_TYPES[type];
@@ -337,13 +340,13 @@ const Scene = (() => {
 
   // ---------- one lot ----------
   function lotGround(h, ox, oy, opt) {
-    const z = cam.z, f = fine();
+    const z = cam.z, f = fine(), LW = homeW(h);
     if (f) {
-      for (let j = 0; j < LOT_D; j++) for (let i = 0; i < LOT_W; i++) {
+      for (let j = 0; j < LOT_D; j++) for (let i = 0; i < LW; i++) {
         const v = hash(i + ox, j + oy);
         tile(ox + i, oy + j, (i + j) % 2 ? (v > 0.5 ? '#a8d981' : '#a5d67d') : (v > 0.5 ? '#a0d279' : '#9dcf76'));
       }
-    } else flatRect(ox, oy, LOT_W, LOT_D, '#a2d47b');
+    } else flatRect(ox, oy, LW, LOT_D, '#a2d47b');
     flatRect(ox + AREA.drive.x + 0.1, oy + AREA.drive.y, AREA.drive.w - 0.2, AREA.drive.d, '#cfc8bb', 'rgba(0,0,0,.05)');
     const [, hfy, , hd] = HOUSES[h.house].fp;
     if (f) for (let j = hfy + hd; j < LOT_D; j++) for (const dv of [0.28, 0.72]) {
@@ -372,9 +375,9 @@ const Scene = (() => {
       } else tile(ox + x, oy + y, '#9a6a44');
     }
     if (opt.mine && f && h.fieldLv < FIELD_LEVELS.length - 1) dashed(AREA.fields.x, AREA.fields.y + h.fields.length / 4, 4, 1);
-    if (f) for (let k = 0; k < 18; k++) {
-      const x = Math.floor(hash(k, 1 + ox) * LOT_W), y = Math.floor(hash(k, 2 + oy) * LOT_D);
-      if (yardReserved(x, y)) continue;
+    if (f) for (let k = 0; k < 18 + (LW - LOT_W); k++) {
+      const x = Math.floor(hash(k, 1 + ox) * LW), y = Math.floor(hash(k, 2 + oy) * LOT_D);
+      if (yardReserved(x, y, LW)) continue;
       const c = iso(ox + x + 0.5, oy + y + 0.5);
       for (const dx of [-3, 0, 3]) line(c.x + dx * z, c.y, c.x + dx * 1.4 * z, c.y - 5 * z, '#86bf5f', 1 * z);
     }
@@ -393,7 +396,8 @@ const Scene = (() => {
     flatRect(it.x + 0.08, it.y + 0.1, w - 0.1, d - 0.1, 'rgba(70,40,15,.1)');
   }
   function fenceObjs(h, ox, oy, objs) {
-    const pr = pastureRect(h), f = fine();
+    const pr = pastureRect(h), f = fine(), LOT_W = homeW(h);
+    if (far()) return;
     const onPasture = (ax, ay, bx, by) => pr && ((ay === by && (ay === pr.y || ay === pr.y + pr.d) && ax >= pr.x && bx <= pr.x + pr.w) ||
       (ax === bx && (ax === pr.x || ax === pr.x + pr.w) && ay >= pr.y && by <= pr.y + pr.d));
     const seg = (ax, ay, bx, by, kind) => objs.push({ d: ox + oy + (ax + bx) / 2 + (ay + by) / 2 + 0.01, f: () => (kind === 'rail' ? rail : picket)(ox + ax, oy + ay, ox + bx, oy + by) });
@@ -415,6 +419,10 @@ const Scene = (() => {
   function lotObjects(h, ox, oy, objs, ts, dt, opt) {
     const z = cam.z, f = fine(), focus = opt.focus;
     const [fx, fy, hw, hd] = HOUSES[h.house].fp;
+    if (far()) {   // seen from far away: just the house and the crops as colour
+      objs.push({ d: ox + oy + fx + fy + (hw + hd) / 2, f: () => { const r = drawHouseFar(h, ox, oy); opt.houseTop = { x: iso(ox + fx + hw / 2, oy + fy + hd / 2).x, y: r }; } });
+      return;
+    }
     objs.push({ d: ox + oy + fx + fy + (hw + hd) / 2, f: () => {
       const r = drawHouse(h, ox, oy, ts);
       if (focus) hits.push({ kind: 'house', owner: h.id, ...r });
@@ -451,7 +459,7 @@ const Scene = (() => {
         drawFruitTree(t, p.x, p.y, z, ts, i * 2.1 + ox);
         if (focus) {
           hits.push({ kind: 'tree', owner: h.id, i, x0: p.x - 18 * z, x1: p.x + 18 * z, y0: p.y - 50 * z, y1: p.y + 6 * z });
-          if (treeReady(t)) opt.bubbles.push({ kind: 'tree', i, p: { x: p.x, y: p.y - 40 * z }, ch: opt.mine ? GOODS[TREES[t.k].fruit].e : '🖐️', ok: opt.mine || ((t.stolen || 0) < Math.floor(TREES[t.k].n / 2) && !(t.thieves || []).includes('me')) });
+          if (treeReady(t) && (opt.mine || isFriend(h.id))) opt.bubbles.push({ kind: 'tree', i, p: { x: p.x, y: p.y - 40 * z }, ch: opt.mine ? GOODS[TREES[t.k].fruit].e : '🖐️', ok: opt.mine || ((t.stolen || 0) < Math.floor(TREES[t.k].n / 2) && !(t.thieves || []).includes('me')) });
         }
       } });
     });
@@ -516,7 +524,7 @@ const Scene = (() => {
           if (animalReady(a)) {
             const d = ANIMALS[a.k], baby = nextIsBaby(a);
             if (opt.mine) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 26 * z }, ch: baby ? '🍼' : GOODS[d.prod].e, ok: true });
-            else if (!baby && d.prod && (a.stolen || 0) < d.n - 1 && !(a.thieves || []).includes('me')) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 26 * z }, ch: '🖐️', ok: true });
+            else if (isFriend(h.id) && !baby && d.prod && (a.stolen || 0) < d.n - 1 && !(a.thieves || []).includes('me')) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 26 * z }, ch: '🖐️', ok: true });
           }
         }
       } });
@@ -561,86 +569,161 @@ const Scene = (() => {
   }
 
   // ---------- the world ----------
-  function road(x0, y, x1) {
-    const z = cam.z;
-    flatRect(x0, y + 0.15, x1 - x0, 1.7, '#8e959c');
-    flatRect(x0, y + 0.05, x1 - x0, 0.12, '#d9d2c3'); flatRect(x0, y + 1.83, x1 - x0, 0.12, '#d9d2c3');
-    if (z > 0.2) for (let x = Math.ceil(x0) + 0.3; x < x1; x += 1) { const a = iso(x, y + 1), b = iso(x + 0.45, y + 1); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.85)', 1.6 * z); }
+  // Roads: street (2 wide, dashed centre line), avenue (3 wide, double yellow line), dirt (country road).
+  function drawRoad(r, vr) {
+    const [x0, y0, x1, y1, kind] = r, z = cam.z, horiz = x1 - x0 >= y1 - y0;
+    if (x1 < vr.x0 || x0 > vr.x1 || y1 < vr.y0 || y0 > vr.y1) return;
+    const R = (a, b, c, d, col) => (horiz ? flatRect(a, b, c, d, col) : flatRect(b, a, d, c, col));
+    const [a0, a1, b0, b1] = horiz ? [x0, x1, y0, y1] : [y0, y1, x0, x1], w = b1 - b0;
+    if (kind === 'dirt') { R(a0, b0, a1 - a0, w, '#c9ad80'); R(a0, b0 + 0.35, a1 - a0, w - 0.7, '#d6bf95'); return; }
+    R(a0, b0, a1 - a0, w, '#d9d2c3');                                     // sidewalk edges
+    R(a0, b0 + 0.14, a1 - a0, w - 0.28, kind === 'avenue' ? '#80878f' : '#8e959c');
+    if (z < 0.1) return;
+    const m = (b0 + b1) / 2, lo = Math.max(a0, Math.floor(horiz ? vr.x0 : vr.y0)), hi = Math.min(a1, horiz ? vr.x1 : vr.y1);
+    const seg = (p, q, off, col, lw) => { const A = horiz ? iso(p, m + off) : iso(m + off, p), B = horiz ? iso(q, m + off) : iso(m + off, q); line(A.x, A.y, B.x, B.y, col, lw * z); };
+    if (kind === 'avenue') { seg(lo, hi, -0.06, '#f2c230', 1.3); seg(lo, hi, 0.06, '#f2c230', 1.3); }
+    else for (let p = Math.ceil(lo) + 0.3; p < hi; p += 1) seg(p, p + 0.45, 0, 'rgba(255,255,255,.85)', 1.6);
   }
-  const inTown = (x, y) => x >= -1.5 && x < TOWN_W + 0.5 && y >= -1.5 && y < TOWN_D + 0.5;
-  const onMainRoad = y => y >= 2 * SLOT_D + LOT_D - 0.5 && y < 2 * SLOT_D + LOT_D + 2.5;
+  const inRectXY = (x, y, x0, y0, x1, y1) => x >= x0 && x < x1 && y >= y0 && y < y1;
   const inLake = (x, y) => ((x - LAKE.x) / (LAKE.rx + 1)) ** 2 + ((y - LAKE.y) / (LAKE.ry + 1)) ** 2 < 1;
-  function woods(objs, vr, ts) {
-    const z = cam.z, lod = z < 0.22;
-    for (let j = Math.max(WY0, Math.floor(vr.y0)); j < Math.min(WY1, vr.y1); j++) {
-      for (let i = Math.max(WX0, Math.floor(vr.x0)); i < Math.min(WX1, vr.x1); i++) {
-        if (inTown(i, j) || onMainRoad(j) || inLake(i, j)) continue;
-        const v = hash(i * 1.37 + 0.2, j * 2.11 + 0.7);
-        const edge = Math.min(Math.abs(i + 1.5), Math.abs(i - TOWN_W - 0.5), Math.abs(j + 1.5), Math.abs(j - TOWN_D - 0.5));
-        const dens = edge < 1.5 ? 0.12 : 0.42;
-        if (v > dens + 0.1) continue;
-        const x = i + 0.3 + hash(i, j * 3) * 0.4, y = j + 0.3 + hash(i * 3, j) * 0.4, w = hash(i + 7, j + 3);
-        if (v < dens) objs.push({ d: x + y, f: lod ? () => { const c = iso(x, y); circle(c.x, c.y - 20 * z, 14 * z, w < 0.45 ? '#38905a' : '#4f9a4b'); } : () => drawWildTree(x, y, w, ts) });
-        else if (!lod) objs.push({ d: x + y, f: w < 0.5 ? () => drawRock(x, y, w) : () => drawBushWild(x, y, w) });
-      }
+  // Something built is here (no wild trees): streets and their lots, roads, the town centre, the park, the lake, the fields.
+  function occupied(x, y) {
+    for (const st of Object.values(STREETS)) if (inRectXY(x, y, st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1)) return true;
+    for (const r of ROADS) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
+    const P = LANDMARKS.park, F = LANDMARKS.fields;
+    if (inRectXY(x, y, 66, -3, 113, 31) || inRectXY(x, y, P.x - 1, P.y - 1, P.x + P.w + 1, P.y + P.d + 1) || inRectXY(x, y, F.x - 1, F.y - 1, F.x + F.w + 1, F.y + F.d + 1)) return true;
+    return ((x - LAKE.x) / (LAKE.rx + 3)) ** 2 + ((y - LAKE.y) / (LAKE.ry + 3)) ** 2 < 1;
+  }
+  // Wild trees, rocks and bushes: thick woods around the town, a few trees on the open grass inside it. Computed once.
+  let SCENERY = null;
+  function scenery() {
+    if (SCENERY) return SCENERY;
+    SCENERY = [];
+    for (let j = WY0; j < WY1; j++) for (let i = WX0; i < WX1; i++) {
+      if (occupied(i, j)) continue;
+      const inside = inRectXY(i, j, WORLD.x0, WORLD.y0, WORLD.x1, WORLD.y1);
+      const edge = Math.min(Math.abs(i - WORLD.x0), Math.abs(i - WORLD.x1), Math.abs(j - WORLD.y0), Math.abs(j - WORLD.y1));
+      const v = hash(i * 1.37 + 0.2, j * 2.11 + 0.7), dens = inside ? 0.14 : edge < 1.5 ? 0.12 : 0.42;
+      if (v > dens + 0.08) continue;
+      SCENERY.push({ x: i + 0.3 + hash(i, j * 3) * 0.4, y: j + 0.3 + hash(i * 3, j) * 0.4, w: hash(i + 7, j + 3), tree: v < dens });
     }
+    return SCENERY;
+  }
+  function woods(objs, vr, ts) {
+    const z = cam.z, lod = z < 0.22, thin = z < 0.09;
+    for (const s of scenery()) {
+      if (s.x < vr.x0 || s.x > vr.x1 || s.y < vr.y0 || s.y > vr.y1) continue;
+      if (!s.tree) { if (!lod) objs.push({ d: s.x + s.y, f: s.w < 0.5 ? () => drawRock(s.x, s.y, s.w) : () => drawBushWild(s.x, s.y, s.w) }); continue; }
+      if (thin && s.w > 0.55) continue;
+      objs.push({ d: s.x + s.y, f: lod ? () => { const c = iso(s.x, s.y); circle(c.x, c.y - 20 * z, (thin ? 20 : 14) * z, s.w < 0.45 ? '#38905a' : '#4f9a4b'); } : () => drawWildTree(s.x, s.y, s.w, ts) });
+    }
+  }
+  const boxVisible = (x0, y0, x1, y1, vr) => !(x1 < vr.x0 || x0 > vr.x1 || y1 < vr.y0 || y0 > vr.y1);
+  // Town centre: paved square, the town hall plaza, shops along the avenue.
+  function townCentre(objs, vr, ts, lv, out) {
+    if (!boxVisible(66, -3, 113, 31, vr)) return;
+    flatRect(66.5, -2, 46, 32, '#e8e0cf');
+    if (cam.z > 0.14) for (let k = 0; k < 9; k++) flatRect(67 + k * 5, -2, 0.08, 32, 'rgba(160,140,110,.12)');
+    const { x: px, y: py } = LANDMARKS.plaza;
+    plazaGround(px, py);
+    objs.push({ d: px + py + 10, f: () => { out.hall = drawTownHall(px, py, lv, ts); } });
+    if (lv >= 2) objs.push({ d: px + py + 6 + 8 + 2, f: () => drawYardItem({ k: 'fountain' }, px + 6, py + 7, ts) });
+    const deco = [['tree', 1, 8], ['tree', 12, 8], ['pine', 1, 1], ['pine', 12, 1], ['bench', 4, 11], ['bench', 10, 11], ['lamp', 2, 12], ['lamp', 13, 12]];
+    if (lv >= 3) deco.push(['flowers', 3, 7], ['flowers', 10, 7], ['lamp', 5, 10], ['lamp', 9, 10]);
+    if (lv >= 5) deco.push(['flowers', 2, 10], ['flowers', 11, 10], ['tree', 6, 13], ['tree', 8, 13]);
+    deco.forEach(([k, x, y]) => objs.push({ d: px + py + x + y + 1, f: () => drawYardItem({ k }, px + x, py + y, ts) }));
+    LANDMARKS.shops.forEach(([k, x, y]) => objs.push({ d: x + y + 5.5, f: () => { const r = drawShop(k, x, y, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
+    [[68, 28], [74, 28], [81, 28], [97, 28], [104, 28], [110, 28], [68, 12], [110, 12]].forEach(([x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }));
+  }
+  // The park: lawns, crossing paths, a duck pond, a sports field, a playground, trees and benches.
+  function park(objs, vr, ts) {
+    const P = LANDMARKS.park;
+    if (!boxVisible(P.x, P.y, P.x + P.w, P.y + P.d, vr)) return;
+    flatRect(P.x, P.y, P.w, P.d, '#9bd176');
+    flatRect(P.x, P.y + 14, P.w, 1.4, '#e6dccb'); flatRect(P.x + 20, P.y, 1.4, P.d, '#e6dccb');
+    drawPond(P.x + 4, P.y + 3, 10, 7, 6, ts);
+    const f = { x: P.x + 25, y: P.y + 18, w: 16, d: 10 };
+    flatRect(f.x, f.y, f.w, f.d, '#76bb54');
+    for (let k = 0; k < 8; k++) if (k % 2) flatRect(f.x + k * 2, f.y, 2, f.d, 'rgba(255,255,255,.08)');
+    flatRect(f.x + 0.4, f.y + 0.4, f.w - 0.8, f.d - 0.8, null, 'rgba(255,255,255,.9)', 0, 1.6 * cam.z);
+    flatRect(f.x + f.w / 2 - 0.04, f.y + 0.4, 0.08, f.d - 0.8, 'rgba(255,255,255,.9)');
+    const items = [['slide', P.x + 25, P.y + 4], ['swing', P.x + 29, P.y + 4], ['trampoline', P.x + 33, P.y + 4], ['bench', P.x + 16, P.y + 12], ['bench', P.x + 23, P.y + 12],
+      ['bench', P.x + 8, P.y + 16], ['lamp', P.x + 19, P.y + 13], ['lamp', P.x + 22, P.y + 16], ['flowers', P.x + 15, P.y + 4], ['flowers', P.x + 16, P.y + 4], ['picnic', P.x + 6, P.y + 20], ['picnic', P.x + 11, P.y + 22]];
+    for (let k = 0; k < 16; k++) items.push([k % 3 ? 'tree' : 'pine', P.x + 1 + (k * 7.3) % (P.w - 2), P.y + (k < 8 ? 0.4 : P.d - 1.4)]);
+    [[P.x + 3, P.y + 24], [P.x + 9, P.y + 26], [P.x + 15, P.y + 25], [P.x + 2, P.y + 17]].forEach(([x, y]) => items.push(['tree', x, y]));
+    items.forEach(([k, x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k, rot: 0, placed: 0 }, x, y, ts) }));
+  }
+  // The big lake, with a wooden dock and a little boat.
+  function lakeSide(objs, vr, ts) {
+    if (!boxVisible(LAKE.x - LAKE.rx - 2, LAKE.y - LAKE.ry - 2, LAKE.x + LAKE.rx + 2, LAKE.y + LAKE.ry + 2, vr)) return;
+    drawLake(LAKE.x, LAKE.y, LAKE.rx, LAKE.ry, ts);
+    const dx = LAKE.x - 6, dy = LAKE.y - LAKE.ry - 0.6;
+    objs.push({ d: dx + dy + 3, f: () => { box(dx, dy, 1.4, 5, 2, '#a5774c', 0); for (let k = 0; k < 5; k++) flatRect(dx, dy + k + 0.95, 1.4, 0.05, 'rgba(60,40,20,.35)', null, 2); } });
+    const bob = Math.sin(ts / 900) * 1.2, bx = LAKE.x + 4, by = LAKE.y - 3;
+    objs.push({ d: bx + by, f: () => { const c = iso(bx, by), z = cam.z; ellipse(c.x, c.y + 2 * z, 22 * z, 7 * z, 'rgba(0,40,80,.15)'); pg([[c.x - 20 * z, c.y - 4 * z + bob * z], [c.x + 20 * z, c.y - 4 * z + bob * z], [c.x + 13 * z, c.y + 4 * z + bob * z], [c.x - 13 * z, c.y + 4 * z + bob * z]], '#c0453a'); line(c.x, c.y - 4 * z + bob * z, c.x, c.y - 30 * z + bob * z, '#8a5a36', 1.4 * z); pg([[c.x + 1 * z, c.y - 29 * z + bob * z], [c.x + 15 * z, c.y - 8 * z + bob * z], [c.x + 1 * z, c.y - 8 * z + bob * z]], '#fffaf0'); } });
+  }
+  // Farmland south of town: big striped crop fields, barns and a windmill.
+  const FIELD_COLS = ['#e9c46a', '#8ab85a', '#c98a4b', '#b5d36b', '#f0d48a', '#7fae4f'];
+  function farmland(objs, vr, ts) {
+    const F = LANDMARKS.fields;
+    if (!boxVisible(F.x, F.y, F.x + F.w, F.y + F.d, vr)) return;
+    flatRect(F.x, F.y, F.w, F.d, '#b9d88a');
+    for (let i = 0; i < 12; i++) for (let j = 0; j < 2; j++) {
+      const x = F.x + 0.5 + i * 9.5, y = F.y + 0.5 + j * 9, col = FIELD_COLS[(i * 3 + j * 5) % FIELD_COLS.length];
+      if (!boxVisible(x, y, x + 8.5, y + 8, vr)) continue;
+      flatRect(x, y, 8.5, 8, '#9a6a44');
+      if (cam.z > 0.08) for (let k = 0; k < 8; k++) flatRect(x + 0.3, y + 0.35 + k, 7.9, 0.55, col); else flatRect(x + 0.2, y + 0.2, 8.1, 7.6, col);
+    }
+    [[F.x + 30, F.y + 8.2], [F.x + 76, F.y + 8.2]].forEach(([x, y]) => objs.push({ d: x + y + 2, f: () => drawBarn(x, y) }));
+    [[F.x + 52, F.y + 8.4], [F.x + 98, F.y + 8.4]].forEach(([x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'windmill', placed: 0 }, x, y, ts) }));
   }
 
   function renderWorld(ts, dt) {
     const z = cam.z, vr = viewRect(), focusId = mode === 'home' ? owner : null;
-    // ground: woods, town, roads, lake
+    // ground: woods, the town, neighbourhood lawns, roads, landmarks
     flatRect(WX0, WY0, WX1 - WX0, WY1 - WY0, '#8fc469');
-    flatRect(-1.5, -1.5, TOWN_W + 2, TOWN_D + 2, '#a6d47f');
-    for (let r = 0; r < 3; r++) road(r === 2 ? WX0 : -1.5, r * SLOT_D + LOT_D, r === 2 ? WX1 : TOWN_W + 0.5);
-    for (let c = 0; c < 3; c++) flatRect(c * SLOT_W + LOT_W + 0.1, -1.5, 0.8, TOWN_D + 1.5, '#d9d2c3');
-    flatRect(-1.4, -1.5, 0.8, TOWN_D + 1.5, '#d9d2c3');
-    drawLake(LAKE.x, LAKE.y, LAKE.rx, LAKE.ry, ts);
-    const objs = [], tops = [];
+    flatRect(WORLD.x0, WORLD.y0, WORLD.x1 - WORLD.x0, WORLD.y1 - WORLD.y0, '#a6d47f');
+    Object.values(STREETS).forEach(st => { if (boxVisible(st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1, vr)) flatRect(st.x - 0.6, st.y - 0.6, st.n * PARCEL + 1.2, LOT_D + 0.6, NEIGHBORHOODS[st.nb].grass); });
+    const objs = [], tops = [], out = { hall: null, shops: mode === 'town' ? [] : null }, lv = townLevel(rankTotal());
+    lakeSide(objs, vr, ts);
+    park(objs, vr, ts);
+    farmland(objs, vr, ts);
+    ROADS.forEach(r => drawRoad(r, vr));
+    townCentre(objs, vr, ts, lv, out);
     woods(objs, vr, ts);
-    // lots
-    S.slots.forEach(s => {
-      const ox = s.c * SLOT_W, oy = s.r * SLOT_D;
-      if (!lotVisible(ox, oy)) return;
-      if (!s.owner) {
-        flatRect(ox, oy, LOT_W, LOT_D, '#c9dfa6');
-        ctx.save(); ctx.setLineDash([8 * z, 6 * z]); flatRect(ox + 0.3, oy + 0.3, LOT_W - 0.6, LOT_D - 0.6, null, 'rgba(255,255,255,.9)', 0, 2 * z); ctx.restore();
-        const c = iso(ox + LOT_W / 2, oy + LOT_D / 2);
-        objs.push({ d: ox + oy + 13, f: () => {
-          line(c.x, c.y, c.x, c.y - 40 * z, '#8a5a36', 4 * z);
-          rrect(c.x - 34 * z, c.y - 66 * z, 68 * z, 30 * z, 5 * z, '#f3e3c3', '#a9773f', 2 * z);
-          ctx.fillStyle = '#a9773f'; ctx.font = `bold ${22 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText('+', c.x, c.y - 51 * z);
-        } });
-        tops.push({ slot: s, x: c.x, y: c.y - 70 * z, empty: true });
-        return;
-      }
-      const h = homeOf(s.owner), focus = s.owner === focusId;
-      const opt = { focus, mine: s.owner === 'me', bubbles: [] };
+    // land for sale: light grass with a dashed outline and a sign
+    const runs = vacantRuns();
+    runs.forEach(r => {
+      const st = STREETS[r.st], x = st.x + r.p * PARCEL, y = st.y, w = r.n * PARCEL;
+      if (!boxVisible(x, y, x + w, y + LOT_D, vr)) return;
+      flatRect(x, y, w, LOT_D, '#c4dea0');
+      if (z > 0.12) { ctx.save(); ctx.setLineDash([8 * z, 6 * z]); flatRect(x + 0.3, y + 0.3, w - 0.6, LOT_D - 0.6, null, 'rgba(255,255,255,.85)', 0, 2 * z); ctx.restore(); }
+      const c = iso(x + w / 2, y + LOT_D / 2);
+      if (z > 0.1) objs.push({ d: x + y + w / 2 + LOT_D / 2, f: () => {
+        line(c.x, c.y, c.x, c.y - 34 * z, '#8a5a36', 3 * z);
+        rrect(c.x - 26 * z, c.y - 56 * z, 52 * z, 24 * z, 5 * z, '#fff6e2', '#c9893a', 1.6 * z);
+        ctx.fillStyle = '#b5641e'; ctx.font = `bold ${13 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(t('for_sale'), c.x, c.y - 44 * z);
+      } });
+      tops.push({ land: r, x: c.x, y: c.y - 62 * z });
+    });
+    // homes: yours, your friends', and everybody else in town
+    allLots().forEach(l => {
+      const h = homeOf(l.id);
+      if (!h) return;
+      const [ox, oy] = origin(l.id);
+      if (!lotVisible(ox, oy, l.n * PARCEL + 1)) return;
+      const focus = l.id === focusId, opt = { focus, mine: l.id === 'me', bubbles: [] };
       lotGround(h, ox, oy, opt);
       lotObjects(h, ox, oy, objs, ts, dt, opt);
-      tops.push({ slot: s, h, opt, ox, oy });
+      tops.push({ h, opt, ox, oy, npc: !!h.npc });
     });
-    // plaza
-    const [pc, prr] = PLAZA, px = pc * SLOT_W, py = prr * SLOT_D, lv = townLevel(rankTotal());
-    let hallTop = null;
-    if (lotVisible(px, py)) {
-      plazaGround(px, py);
-      objs.push({ d: px + py + 10, f: () => { hallTop = drawTownHall(px, py, lv, ts); } });
-      if (lv >= 2) objs.push({ d: px + py + 6 + 8 + 2, f: () => drawYardItem({ k: 'fountain' }, px + 6, py + 7, ts) });
-      const deco = [['tree', 1, 8], ['tree', 12, 8], ['pine', 1, 1], ['pine', 12, 1]];
-      if (lv >= 3) deco.push(['bench', 4, 9], ['bench', 10, 9], ['flowers', 3, 7], ['flowers', 10, 7], ['lamp', 5, 10], ['lamp', 9, 10]);
-      if (lv >= 5) deco.push(['flowers', 2, 10], ['flowers', 11, 10], ['tree', 6, 11], ['tree', 8, 11]);
-      deco.forEach(([k, x, y]) => objs.push({ d: px + py + x + y + 1, f: () => drawYardItem({ k }, px + x, py + y, ts) }));
-    }
-    for (let c = 0; c < 3; c++) for (let y = 1; y < TOWN_D; y += 4) {   // street trees
-      const x = c * SLOT_W + LOT_W;
-      if (y % SLOT_D >= LOT_D || y < vr.y0 - 2 || y > vr.y1 || x < vr.x0 - 2 || x > vr.x1) continue;
-      objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) });
-    }
     // you, when swimming in the lake
     if (meInLake()) { const [ox, oy] = origin(me.lot); objs.push({ d: ox + oy + me.x + me.y, f: () => drawMe(ox, oy, ts, false) }); }
-    if (edit && edit.scope === 'yard') { const [ox, oy] = origin('me'); yardSpots().forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)')); }
+    if (edit && edit.scope === 'yard') { const [ox, oy] = origin('me'); yardSpots(homeW(S.me)).forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)')); }
+    weatherGround(ts);
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
+    weatherSky(ts, dt);
     nightTint();
     if (attract || S.onboarding) return;   // first screens: just the living street, no labels
     // overlays
@@ -648,15 +731,17 @@ const Scene = (() => {
     if (edit && edit.scope === 'yard') { editOverlay(ts); return; }
     if (mode === 'town') {
       const rk = ranking();
+      if (z < 0.17) AREA_LABELS.forEach(([key, x, y]) => { const c = iso(x, y); pill(t(key), c.x, c.y, 'rgba(59,49,37,.82)', '#fff', `800 ${z < 0.09 ? 12 : 14}px ${UI_FONT},${EMOJI_FONT}`, z < 0.09 ? 22 : 26); });
       tops.forEach(tp => {
-        if (tp.empty) { hits.push({ kind: 'emptyLot', pri: 1, ...pill(t('empty_lot'), tp.x, tp.y, 'rgba(255,248,232,.95)', '#a9773f', `600 11px ${UI_FONT}`, 20) }); return; }
+        if (tp.land) { if (z > 0.1 && tp.land.n >= CORE_PARCELS) hits.push({ kind: 'land', st: tp.land.st, p: tp.land.p, n: tp.land.n, pri: 1, ...pill(`🏷️ ${t('land_lot', { n: tp.land.n * PARCEL })}`, tp.x, tp.y, 'rgba(255,246,226,.95)', '#a9773f', `700 11px ${UI_FONT},${EMOJI_FONT}`, 20) }); return; }
         const top = tp.opt.houseTop;
         if (!top) return;
+        if (tp.npc) { if (z > 0.1) hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(homeName(tp.h), top.x, top.y - 4, 'rgba(255,255,255,.78)', '#6b5f50', `600 10.5px ${UI_FONT}`, 19) }); return; }
         const i = rk.findIndex(r => r.h.id === tp.h.id), medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`, mine = tp.h.id === 'me';
         const label = S.calm ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode: names only
-        hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.94)', mine ? '#fff' : '#3b3125', `600 11px ${UI_FONT},${EMOJI_FONT}`, 21) });
+        hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 11px ${UI_FONT},${EMOJI_FONT}`, 21) });
       });
-      if (hallTop) hits.push({ kind: 'plaza', pri: 1, ...pill(`🏛️ ${t('street_name')} Lv${lv}`, iso(px + 7, py + 3).x, hallTop.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) });
+      if (out.hall) { const { x: px, y: py } = LANDMARKS.plaza; hits.push({ kind: 'plaza', pri: 1, ...pill(`🏛️ ${t('street_name')} Lv${lv}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) }); }
       return;
     }
     const tp = tops.find(x => x.h && x.h.id === owner);
@@ -675,15 +760,63 @@ const Scene = (() => {
         if (!h.pastureLv) tag('buyLand', `🐄 ${t('build_pasture')}`, AREA.pasture.x + 2, AREA.pasture.y + 4);
         if (!h.orchardLv) tag('buyLand', `🌳 ${t('build_orchard')}`, AREA.orchard.x + 3, AREA.orchard.y + 1.5);
         if (!h.pondLv) tag('buyLand', `🐟 ${t('build_pond')}`, AREA.pond.x + 2, AREA.pond.y + 1.5);
+        if (canExpand()) { const c = iso(ox + homeW(h) + PARCEL / 2, oy + LOT_D / 2); hits.push({ kind: 'buyParcel', pri: 2, ...pill(`🏷️ ${t('buy_parcel')} · 🪙${fmtNum(parcelCost().coins)}`, c.x, c.y - 40 * z, '#fff6e2', '#b5641e', `800 12px ${UI_FONT},${EMOJI_FONT}`, 24) }); }
       }
       if (S.pending.length && tp.opt.houseTop) hits.push({ kind: 'pending', pri: 3, ...pill(`📦 ${S.pending.length}`, tp.opt.houseTop.x, tp.opt.houseTop.y - 6 - bob, '#ef7d3c', '#fff', `bold 14px ${UI_FONT},${EMOJI_FONT}`) });
     } else {
-      h.fields.forEach((fl, i) => {
+      if (isFriend(h.id)) h.fields.forEach((fl, i) => {
         if (!stealable(h, i)) return;
         const [x, y] = fieldPos(i), c = iso(ox + x + 0.5, oy + y + 0.5);
         hits.push({ kind: 'bubble', what: 'field', owner, i, pri: 2, ...bubble('🖐️', c.x, c.y - 18 * z, 0.9, bob) });
       });
       if (tp.opt.houseTop) pill(t('home_of', { name: homeName(h) }), tp.opt.houseTop.x, tp.opt.houseTop.y - 6, 'rgba(255,255,255,.94)', '#3b3125', `600 12px ${UI_FONT}`);
+    }
+  }
+  // Big area names shown when zoomed out over the town.
+  const AREA_LABELS = [['area_maple', 30, 10], ['area_center', 89, 1], ['area_lake', 144, 9], ['area_park', 90, 44], ['area_farm', 30, 47], ['area_fields', 55, 79], ['area_water', 146, 50]];
+  // ---------- weather (real local weather, or the town's own) ----------
+  // On the ground: snow cover, a wet tint for rain, cloud shadows drifting over town.
+  function weatherGround(ts) {
+    const w = weatherNow().kind, z = cam.z;
+    if (w === 'snow') flatRect(WX0, WY0, WX1 - WX0, WY1 - WY0, 'rgba(250,252,255,.6)');
+    else if (w === 'rain' || w === 'storm') flatRect(WX0, WY0, WX1 - WX0, WY1 - WY0, 'rgba(40,70,110,.1)');
+    if (w === 'clouds' || w === 'rain' || w === 'storm') for (let k = 0; k < 9; k++) {
+      const x = ((k * 37 + ts / 1000 * 0.5) % 230) - 25, y = (k * 23) % 100 - 5, c = iso(x, y);
+      ellipse(c.x, c.y, 300 * z, 150 * z, 'rgba(30,40,60,.07)');
+    }
+  }
+  // In the air: rain streaks, snowflakes, fog, lightning. Screen-space particles.
+  let drops = [], flash = 0;
+  function weatherSky(ts, dt) {
+    const w = weatherNow().kind;
+    if (w === 'clear') { drops = []; return; }
+    if (w === 'clouds') { ctx.fillStyle = 'rgba(90,100,120,.07)'; ctx.fillRect(0, 0, W, H); return; }
+    if (w === 'fog') {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, 'rgba(235,238,240,.62)'); g.addColorStop(1, 'rgba(235,238,240,.22)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); return;
+    }
+    const snow = w === 'snow', n = snow ? 140 : w === 'storm' ? 240 : 150;
+    if (drops.length !== n || drops.snow !== snow) { drops = Array.from({ length: n }, () => ({ x: Math.random() * W, y: Math.random() * H, s: 0.6 + Math.random() * 0.8 })); drops.snow = snow; }
+    if (!snow) { ctx.fillStyle = w === 'storm' ? 'rgba(40,50,70,.16)' : 'rgba(70,90,120,.1)'; ctx.fillRect(0, 0, W, H); }
+    ctx.save();
+    ctx.lineCap = 'round';
+    drops.forEach((p, i) => {
+      if (snow) {
+        p.y += 34 * p.s * dt; p.x += Math.sin(ts / 900 + i) * 12 * dt;
+        circle(p.x, p.y, 1.4 + p.s * 1.4, 'rgba(255,255,255,.92)');
+      } else {
+        const vx = -110 * p.s, vy = 620 * p.s;
+        p.x += vx * dt; p.y += vy * dt;
+        line(p.x, p.y, p.x - vx * 0.025, p.y - vy * 0.025, 'rgba(225,235,250,.75)', 1.3);
+      }
+      if (p.y > H + 10) { p.y = -10; p.x = Math.random() * (W + 60); }
+      if (p.x < -20) p.x = W + 10;
+    });
+    ctx.restore();
+    if (w === 'storm') {
+      if (flash <= 0 && Math.random() < dt * 0.15) flash = 1;
+      if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.5})`; ctx.fillRect(0, 0, W, H); flash -= dt * 3; }
     }
   }
   function rankTotal() {
@@ -783,7 +916,8 @@ const Scene = (() => {
     poly([up(A, WH * z), up(B, WH * z), up(B, (WH + 6) * z), up(A, (WH + 6) * z)], shade(wallCol, -0.12));
     const leftW = [D, A], backW = [A, B];
     wallRect(leftW, 0, 0, 1, 0, 5, shade(wallCol, -0.3)); wallRect(backW, 0, 0, 1, 0, 5, shade(wallCol, -0.25));
-    const sky = NIGHT > 0.5 ? '#26345f' : NIGHT > 0.1 ? '#e9a27a' : '#bfe6f7';
+    const wk = weatherNow().kind;
+    const sky = NIGHT > 0.5 ? '#26345f' : NIGHT > 0.1 ? '#e9a27a' : wk === 'rain' || wk === 'storm' ? '#9fb0c0' : wk === 'snow' ? '#e9eef3' : wk === 'fog' ? '#d9dee2' : wk === 'clouds' ? '#cad7e0' : '#bfe6f7';
     const nW = Math.max(1, Math.floor(rw / 3));
     for (let i = 0; i < nW; i++) {
       const u = (i + 0.5) / nW;
@@ -999,16 +1133,24 @@ const Scene = (() => {
       if (w.x >= 0 && w.y >= 0 && w.x < rw && w.y < rd) onHit({ kind: 'floor', x: w.x, y: w.y });
       return;
     }
+    // what's under the tap in the world: a home, empty land for sale, the plaza
     const tx = Math.floor(w.x), ty = Math.floor(w.y);
-    const slot = S.slots.find(sl => tx >= sl.c * SLOT_W && tx < sl.c * SLOT_W + LOT_W && ty >= sl.r * SLOT_D && ty < sl.r * SLOT_D + LOT_D);
-    const inPlaza = tx >= PLAZA[0] * SLOT_W && tx < PLAZA[0] * SLOT_W + LOT_W && ty >= PLAZA[1] * SLOT_D && ty < PLAZA[1] * SLOT_D + LOT_D;
+    const lotHit = allLots().find(l => { const [ox0, oy0] = origin(l.id); return tx >= ox0 && tx < ox0 + l.n * PARCEL && ty >= oy0 && ty < oy0 + LOT_D; });
+    let landHit = null;
+    for (const [st, s] of Object.entries(STREETS)) {
+      if (ty < s.y || ty >= s.y + LOT_D || tx < s.x || tx >= s.x + s.n * PARCEL) continue;
+      const p = Math.floor((tx - s.x) / PARCEL);
+      if (!parcelOwner(st, p)) { const run = vacantRuns().find(r => r.st === st && p >= r.p && p < r.p + r.n); landHit = { kind: 'land', st, p, n: run ? run.n : 1, run: run && run.p }; }
+    }
+    const { x: px, y: py } = LANDMARKS.plaza, inPlaza = tx >= px && tx < px + LOT_W && ty >= py && ty < py + LOT_D;
     if (mode === 'town') {
-      if (slot) return onHit(slot.owner ? { kind: 'lot', owner: slot.owner } : { kind: 'emptyLot' });
+      if (lotHit) return onHit({ kind: 'lot', owner: lotHit.id });
+      if (landHit) return onHit(landHit);
       if (inPlaza) onHit({ kind: 'plaza' });
       return;
     }
     const [ox, oy] = origin(owner), lx = w.x - ox, ly = w.y - oy, h = homeOf(owner);
-    const small = [...hits].reverse().find(x => ['animal', 'avatar', 'mailbox', 'tree', 'yard'].includes(x.kind) && inside(x, sx, sy));
+    const small = [...hits].reverse().find(x => ['animal', 'avatar', 'mailbox', 'tree', 'yard', 'shop'].includes(x.kind) && inside(x, sx, sy));
     if (small) return onHit(small);
     const fx = Math.floor(lx) - AREA.fields.x, fy = Math.floor(ly) - AREA.fields.y;
     if (fx >= 0 && fx < 4 && fy >= 0 && fy < 4) {
@@ -1023,8 +1165,9 @@ const Scene = (() => {
       if (!h.orchardLv && inRect(AREA.orchard, Math.floor(lx), Math.floor(ly))) return onHit({ kind: 'buyLand' });
       if (!h.pondLv && inRect(AREA.pond, Math.floor(lx), Math.floor(ly))) return onHit({ kind: 'buyLand' });
     }
-    if (lx >= 0 && ly >= 0 && lx < GW && ly < GH) return onHit({ kind: 'ground', x: lx, y: ly });
-    if (slot && slot.owner) return onHit({ kind: 'lot', owner: slot.owner });
+    if (lx >= 0 && ly >= 0 && lx < gwOf(h) && ly < GH) return onHit({ kind: 'ground', x: lx, y: ly });
+    if (landHit) return onHit(landHit);
+    if (lotHit) return onHit({ kind: 'lot', owner: lotHit.id });
     if (inPlaza) onHit({ kind: 'plaza' });
   }
   function bindInput() {
@@ -1290,7 +1433,7 @@ const Scene = (() => {
       attract = z ? { z } : false;
       if (!z || was) return;
       useCam(); fly = null; follow = false; worldReady = true;
-      if (W) { cam.z = z; const t = performance.now() / 1000; centerOn(TOWN_W / 2 + Math.sin(t / 9) * 13, TOWN_D / 2 + Math.cos(t / 11) * 11); }
+      if (W) { cam.z = z; const t = performance.now() / 1000; centerOn(60 + Math.sin(t / 9) * 22, 24 + Math.cos(t / 11) * 12); }
     },
     // Close-up on your townie (character creation): townie at yFrac of the screen height.
     focusMe(z, yFrac = 0.42) {
@@ -1314,6 +1457,8 @@ const Scene = (() => {
       return { x: p.x, y: p.y, r: Math.max(20, r) };
     },
     levelChanged() { meIn.lv = -1; meIn.anim = null; floorFade = performance.now(); },
+    // After moving your home to another street: stand at your new gate.
+    moveHome() { cancel(me); me.lot = 'me'; me.x = DOOR_X; me.y = 12.5; me.face = 1; },
     takeStairs,
     onStairs: () => !!meIn.anim,
     setView(m, o = 'me') {

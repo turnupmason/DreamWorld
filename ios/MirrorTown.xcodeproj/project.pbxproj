@@ -212,6 +212,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "镜像小镇";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "镜像小镇会读取你的步数、睡眠、活动圆环、体能训练、正念和心率，把它们变成小镇里的金币、木材和小人的精力。数据只留在你的手机上。";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "打开「真实天气」后，镜像小镇用你的大概位置（约 10 公里）查当地天气，让小镇里也下雨下雪。位置不保存，也不给任何人。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDarkContent;
@@ -220,7 +221,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.0;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mirrortown.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -241,6 +242,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "镜像小镇";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "镜像小镇会读取你的步数、睡眠、活动圆环、体能训练、正念和心率，把它们变成小镇里的金币、木材和小人的精力。数据只留在你的手机上。";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "打开「真实天气」后，镜像小镇用你的大概位置（约 10 公里）查当地天气，让小镇里也下雨下雪。位置不保存，也不给任何人。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDarkContent;
@@ -249,7 +251,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.0;
+				MARKETING_VERSION = 0.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mirrortown.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

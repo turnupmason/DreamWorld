@@ -180,23 +180,27 @@ function drawHay(x, y) {
   [b.left, b.right].forEach(f => { wallLine(f, 0, 0, 3.5, 1, 3.5, '#c99a3a', 0.8); wallLine(f, 0, 0, 7, 1, 7, '#c99a3a', 0.8); });
 }
 // White picket fence along one straight edge.
+// White picket fence. Everything goes into a few paths (it's drawn hundreds of times a frame).
 function picket(ax, ay, bx, by) {
   const z = cam.z, a = iso(ax, ay), b = iso(bx, by);
-  for (const hh of [4, 9]) {
-    line(a.x, a.y - hh * z + 1, b.x, b.y - hh * z + 1, 'rgba(120,90,50,.25)', 3 * z);
-    line(a.x, a.y - hh * z, b.x, b.y - hh * z, '#fffaf0', 2 * z);
-  }
-  const n = Math.max(1, Math.round(Math.hypot(bx - ax, by - ay) * 4));
-  for (let k = 0; k <= n; k++) {
-    const q = lerp(a, b, k / n);
-    rrect(q.x - 1.5 * z, q.y - 12 * z, 3 * z, 12 * z, 1.4 * z, '#fffaf0', 'rgba(120,90,50,.35)', 0.8);
-  }
+  ctx.lineCap = 'round';
+  ctx.beginPath(); for (const hh of [4, 9]) { ctx.moveTo(a.x, a.y - hh * z + 1); ctx.lineTo(b.x, b.y - hh * z + 1); }
+  ctx.strokeStyle = 'rgba(120,90,50,.25)'; ctx.lineWidth = 3 * z; ctx.stroke();
+  ctx.beginPath(); for (const hh of [4, 9]) { ctx.moveTo(a.x, a.y - hh * z); ctx.lineTo(b.x, b.y - hh * z); }
+  ctx.strokeStyle = '#fffaf0'; ctx.lineWidth = 2 * z; ctx.stroke();
+  const n = Math.max(1, Math.round(Math.hypot(bx - ax, by - ay) * (z < 0.5 ? 2 : 4)));
+  ctx.beginPath();
+  for (let k = 0; k <= n; k++) { const q = lerp(a, b, k / n); ctx.roundRect(q.x - 1.5 * z, q.y - 12 * z, 3 * z, 12 * z, 1.4 * z); }
+  ctx.fillStyle = '#fffaf0'; ctx.fill();
+  ctx.strokeStyle = 'rgba(120,90,50,.35)'; ctx.lineWidth = 0.8; ctx.stroke();
 }
 // Wooden ranch fence for the pasture.
 function rail(ax, ay, bx, by) {
   const z = cam.z, a = iso(ax, ay), b = iso(bx, by);
-  for (const hh of [5, 11]) line(a.x, a.y - hh * z, b.x, b.y - hh * z, '#a0703f', 2.2 * z);
-  [a, b].forEach(q => rrect(q.x - 1.8 * z, q.y - 14 * z, 3.6 * z, 14 * z, 1 * z, '#8a5a36'));
+  ctx.beginPath(); for (const hh of [5, 11]) { ctx.moveTo(a.x, a.y - hh * z); ctx.lineTo(b.x, b.y - hh * z); }
+  ctx.strokeStyle = '#a0703f'; ctx.lineWidth = 2.2 * z; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.beginPath(); [a, b].forEach(q => ctx.roundRect(q.x - 1.8 * z, q.y - 14 * z, 3.6 * z, 14 * z, 1 * z));
+  ctx.fillStyle = '#8a5a36'; ctx.fill();
 }
 
 // ---------- vehicles (front faces the road, +y) ----------
@@ -682,6 +686,42 @@ function drawYardItem(it, x, y, ts) {
     }
     default: drawYard2(it, x, y, ts);
   }
+}
+
+// ---------- town centre shops ----------
+const SHOP_LOOK = {
+  bakery:  { e: '🥐', wall: '#f6e2c4', awn: '#e5675f', zh: '面包店', en: 'Bakery' },
+  cafe:    { e: '☕', wall: '#eadcc8', awn: '#4f8a5a', zh: '咖啡馆', en: 'Café' },
+  market:  { e: '🛒', wall: '#f1f0ea', awn: '#3e7cc9', zh: '超市', en: 'Market' },
+  gym:     { e: '🏋️', wall: '#e0e5eb', awn: '#ef7d3c', zh: '健身房', en: 'Gym' },
+  library: { e: '📚', wall: '#efe3cf', awn: '#8a5a36', zh: '图书馆', en: 'Library' },
+  post:    { e: '📮', wall: '#f3ead8', awn: '#2f6fb2', zh: '邮局', en: 'Post office' },
+};
+// A little shop facing +y: shop window, door, striped awning, a sign on the roof. Returns its tap box.
+function drawShop(k, x, y, ts) {
+  const L = SHOP_LOOK[k], z = cam.z, w = 6, d = 5.5, wh = 34;
+  const c = iso(x + w / 2, y + d / 2);
+  ellipse(c.x, c.y + 6 * z, 100 * z, 50 * z, 'rgba(0,0,0,.07)');
+  const b = box(x, y, w, d, wh, L.wall);
+  wallRect(b.left, 0, 0, 1, 0, 3, shade(L.wall, -0.3)); wallRect(b.right, 0, 0, 1, 0, 3, shade(L.wall, -0.25));
+  wallRect(b.left, 0, 0.08, 0.62, 5, 21, NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5', '#fffaf0', 1.4);
+  wallLine(b.left, 0, 0.35, 5, 0.35, 21, '#fffaf0', 1);
+  if (NIGHT > 0.3) { const p = wallPt(b.left, 0, 0.35, 13); glow(p.x, p.y, 50 * z, 0.9); }
+  doorFace(b.left, 0.8, 0.07, 19, shade(L.awn, -0.25));
+  for (let i = 0; i < 10; i++) wallRect(b.left, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : L.awn);
+  [0.3, 0.7].forEach(u => winFace(b.right, u, 0.09, 10, 24));
+  box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(L.wall, -0.12), wh);
+  const s = up(iso(x + w / 2, y + d / 2), (wh + 5) * z);
+  if (z > 0.12) pill(`${L.e} ${nm(L)}`, s.x, s.y, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
+  return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 24 * z, y1: iso(x + w, y + d).y };
+}
+// A house seen from far away: walls and a roof in its colours, as many storeys tall as it has. Returns its top.
+function drawHouseFar(h, ox, oy) {
+  const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, x = ox + fx, y = oy + fy, z = cam.z;
+  const wh = H.id === 'tent' ? 0 : 12 + floorsOf(h) * 22 + (H.id === 'castle' ? 18 : 0);
+  if (wh) box(x, y, w, d, wh, H.id === 'castle' ? '#bfb8ac' : h.wall, 0, { edge: null });
+  hipRoof(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, H.id === 'tent' ? 40 : 22, H.id === 'chinese' ? '#7a8796' : h.roof);
+  return iso(x + w / 2, y + d / 2).y - (wh + 28) * z;
 }
 
 // ---------- town plaza ----------

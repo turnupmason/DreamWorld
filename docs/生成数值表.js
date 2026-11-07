@@ -5,7 +5,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'prototype', 'js', 'data.
 const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FIELD_LEVELS, FIELD_COST, PASTURE, ORCHARD, POND, FISH_KINDS, FISH_EVERY,
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
-  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS})`);
+  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -31,6 +31,19 @@ table(['项目', '数值'], [
 P('家园地内区域（格子坐标，x 向右下，y 向左下）：');
 P('');
 table(['区域', '位置'], Object.entries(D.AREA).map(([k, a]) => [k, `x ${a.x}–${a.x + a.w}，y ${a.y}–${a.y + a.d}`]).concat([['mailbox（邮箱）', `x ${D.MAILBOX[0]}，y ${D.MAILBOX[1]}`]]));
+
+P('## 小镇和土地');
+P('');
+P(`每条街分成 ${D.PARCEL} 格宽、${D.LOT_D} 格深的一块块地。一个家占 4 块（16 格宽的核心：房子、农场、院子），可以买下右边的空地扩建。`);
+P('');
+table(['街道', '社区', '位置（左上角）', '块数', '地价倍数'], Object.values(D.STREETS).map(st => [`${st.zh} (${st.en})`, D.NEIGHBORHOODS[st.nb].zh, `x ${st.x}，y ${st.y}`, st.n, `×${D.NEIGHBORHOODS[st.nb].price}`]));
+const pc = (n, f) => Math.round(D.LAND.parcel * Math.pow(D.LAND.grow, n) * f / 50) * 50;
+table(['买地', '价格（梧桐街；其他社区乘地价倍数）'], [
+  ['第 1 块（20 格宽）', `🪙${pc(0, 1)}`], ['第 2 块（24 格宽）', `🪙${pc(1, 1)}`], ['第 3 块（28 格宽）', `🪙${pc(2, 1)}`], ['第 4 块（32 格宽）', `🪙${pc(3, 1)}`],
+  ['每多一块', `×${D.LAND.grow}`], ['搬家（买下 16 格宽的新地）', `🪙${D.LAND.move * 4} × 地价倍数；之前买的地退 ${Math.round(D.LAND.refund * 100)}%`],
+]);
+P(`镇上另外住着 ${D.NPC_LOTS.length} 户居民，地从 ${Math.min(...D.NPC_LOTS.map(l => l.n)) * D.PARCEL} 到 ${Math.max(...D.NPC_LOTS.map(l => l.n)) * D.PARCEL} 格宽。`);
+P('');
 
 P('## 作物（' + Object.keys(D.CROPS).length + ' 种）');
 P('');

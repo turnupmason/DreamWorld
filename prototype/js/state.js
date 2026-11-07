@@ -26,7 +26,7 @@ function freshDay() {
 function load() {
   try { S = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { S = null; }
   if (!S || S.v !== 3) S = null;
-  if (S) { migrate(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); }
+  if (S) { migrate(); genNPCs(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); }
   return S;
 }
 // Saves from v0.3 get the v0.4 fields (floors, privacy, souvenirs, personal goal). Old players skip the tutorial.
@@ -42,6 +42,16 @@ function migrate() {
     if (h.shareLive === undefined) h.shareLive = !!h.shareGoal;
     if (h.shareMood === undefined) h.shareMood = h.id !== 'me' && !!h.shareGoal;
   });
+  if (!S.lots) {   // v0.6: the 3 × 3 grid becomes streets of parcels; everyone keeps their home, on a street
+    const ids = (S.slots || []).filter(s => s.owner).map(s => s.owner);
+    S.lots = [];
+    ids.forEach(id => {
+      const st = START_LOTS[id];
+      if (st) S.lots.push({ id, st: st[0], p: st[1], n: st[2] || CORE_PARCELS, paid: 0 });
+    });
+    ids.filter(id => !START_LOTS[id]).forEach(id => { const r = freeRun(); if (r) S.lots.push({ id, st: r.st, p: r.p, n: CORE_PARCELS, paid: 0 }); });
+    delete S.slots;
+  }
   if (S.layoutV !== 2) {   // v0.5: furniture must be reachable; re-arrange the simulated friends' rooms once
     S.friends.forEach(h => { for (let lv = 0; lv < floorsOf(h); lv++) relayoutRoom(h, lv); });
     S.layoutV = 2;
@@ -123,8 +133,9 @@ function newGame(o) {
   autoPlace(me, 'room', 'sleepbag', TINTS[4]);
   autoPlace(me, 'room', 'lamp');
   autoPlace(me, 'yard', 'flowers');
+  S.lots = Object.entries(START_LOTS).map(([id, [st, p, n]]) => ({ id, st, p, n: n || CORE_PARCELS, paid: 0 }));
   S.friends = FRIEND_PRESETS.map(homeFromPreset);
-  S.slots = SLOTS.map((p, i) => ({ c: p[0], r: p[1], owner: i === 6 ? 'me' : (FRIEND_PRESETS.find(f => f.slot === i) || {}).id || null }));
+  genNPCs();
   simSleep(78);
   S.pending.push({ id: uid(), src: 'welcome', reward: { coins: 100, wood: 10, seeds: { tomato: 2 } }, info: {} });
   save();
@@ -151,12 +162,110 @@ function checkDay() {
 
 const homeName = h => (h.id === 'me' ? S.me.name : nm(h.name));
 function friendById(id) { return S.friends.find(f => f.id === id); }
-function homeOf(id) { return id === 'me' ? S.me : friendById(id); }
-function slotOf(id) { return S.slots.find(s => s.owner === id); }
-function friendIds() { return S.slots.filter(s => s.owner && s.owner !== 'me').map(s => s.owner); }
-function residents() { return S.slots.filter(s => s.owner).map(s => homeOf(s.owner)); }
-// Where a home's lot starts in the town (world tiles).
-function lotOrigin(id) { const s = slotOf(id); return s ? [s.c * SLOT_W, s.r * SLOT_D] : [0, 0]; }
+function homeOf(id) { return id === 'me' ? S.me : friendById(id) || NPCS.find(n => n.id === id); }
+const isFriend = id => !!friendById(id);
+function friendIds() { return S.lots.filter(l => l.id !== 'me' && friendById(l.id)).map(l => l.id); }
+// Your street community: you and your friends (ranking and the town level only count these, not strangers).
+function residents() { return S.lots.map(l => homeOf(l.id)).filter(Boolean); }
+
+// ---------- the world: streets of parcels ----------
+let NPCS = [];   // other people living in town; generated on load, never saved
+function lotOf(id) { return (S && S.lots || []).find(l => l.id === id) || NPC_LOTS.find(l => l.id === id); }
+const slotOf = lotOf;
+// Where a home's lot starts in the world (world tiles), and how wide it is (16 + bought parcels × 4).
+function lotOrigin(id) { const l = lotOf(id); if (!l) return [0, 0]; const st = STREETS[l.st]; return [st.x + l.p * PARCEL, st.y]; }
+function lotW(id) { const l = lotOf(id); return l ? l.n * PARCEL : LOT_W; }
+const homeW = h => lotW(h.id);
+function allLots() { return [...(S ? S.lots : []), ...NPC_LOTS]; }
+function parcelOwner(st, p) { const l = allLots().find(x => x.st === st && p >= x.p && p < x.p + x.n); return l ? l.id : null; }
+// Runs of empty parcels on every street: [{ st, p, n }]. Cached until somebody's land changes.
+let RUNS = { key: '', runs: [] };
+function vacantRuns() {
+  const key = S.lots.map(l => l.st + l.p + ',' + l.n).join('|');
+  if (RUNS.key !== key) RUNS = { key, runs: computeRuns() };
+  return RUNS.runs;
+}
+function computeRuns() {
+  const out = [];
+  Object.entries(STREETS).forEach(([st, s]) => {
+    let p = 0;
+    while (p < s.n) {
+      if (parcelOwner(st, p)) { p++; continue; }
+      const p0 = p;
+      while (p < s.n && !parcelOwner(st, p)) p++;
+      out.push({ st, p: p0, n: p - p0 });
+    }
+  });
+  return out;
+}
+// First empty spot big enough for a home, on your own street first.
+// The land right next to your home stays free as long as possible, so you can keep buying it.
+function freeRun() {
+  const runs = vacantRuns().filter(r => r.n >= CORE_PARCELS), mine = lotOf('me');
+  const nextToMe = r => !!mine && r.st === mine.st && r.p === mine.p + mine.n;
+  const dist = r => Math.abs(STREETS[r.st].y - (mine ? STREETS[mine.st].y : 0));
+  runs.sort((a, b) => nextToMe(a) - nextToMe(b) || (STREETS[a.st].nb !== 'maple') - (STREETS[b.st].nb !== 'maple') || dist(a) - dist(b));
+  const r = runs[0];
+  if (!r) return null;
+  return nextToMe(r) ? { st: r.st, p: r.p + r.n - CORE_PARCELS, n: CORE_PARCELS } : r;
+}
+const nbOf = id => NEIGHBORHOODS[STREETS[lotOf(id).st].nb];
+const round50 = v => Math.round(v / 50) * 50;
+// The next parcel to the right of your home: each one costs more than the last.
+function canExpand(id = 'me') { const l = lotOf(id), p = l.p + l.n; return p < STREETS[l.st].n && !parcelOwner(l.st, p); }
+function parcelCost(id = 'me') { const l = lotOf(id); return { coins: round50(LAND.parcel * Math.pow(LAND.grow, l.n - CORE_PARCELS) * nbOf(id).price) }; }
+function buyParcel() {
+  if (!canExpand()) return 'max';
+  const c = parcelCost();
+  if (!canAfford(c)) return 'poor';
+  pay(c);
+  const l = lotOf('me');
+  l.n++; l.paid = (l.paid || 0) + c.coins;
+  YARD_SPOTS = {};
+  return 'ok';
+}
+// Moving your whole home (house, farm, yard) to an empty spot on another street.
+function moveCost(st) { return { coins: round50(LAND.move * CORE_PARCELS * NEIGHBORHOODS[STREETS[st].nb].price) }; }
+function relocate(st, p) {
+  for (let k = 0; k < CORE_PARCELS; k++) if (p + k >= STREETS[st].n || parcelOwner(st, p + k)) return { r: 'taken' };
+  const c = moveCost(st);
+  if (!canAfford(c)) return { r: 'poor' };
+  const l = lotOf('me'), refund = Math.round((l.paid || 0) * LAND.refund);
+  pay(c);
+  S.me.coins += refund;
+  Object.assign(l, { st, p, n: CORE_PARCELS, paid: 0 });
+  fixLayout(S.me);
+  return { r: 'ok', refund };
+}
+// A tiny seeded random generator, so strangers' homes look the same every time.
+function seeded(seed) { let s = seed % 2147483647 || 1; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
+function genNPCs() {
+  NPCS = NPC_LOTS.map((spec, i) => {
+    const r = seeded(9001 + i * 7919), pick = a => a[Math.floor(r() * a.length)], farm = STREETS[spec.st].nb === 'farm';
+    const crops = Object.keys(CROPS).filter(k => !CROPS[k].rare), fieldLv = farm ? 3 : Math.floor(r() * 3);
+    const nf = FIELD_LEVELS[fieldLv], pl = farm ? 3 : r() < 0.6 ? 1 + Math.floor(r() * 2) : 0;
+    const beasts = ['chicken', 'duck', 'sheep', 'goat', 'pig', 'cow', 'alpaca'];
+    const p = {
+      id: spec.id, name: NPC_NAMES[i % NPC_NAMES.length],
+      look: { shirt: pick(COLORS), skin: pick(SKINS), hair: pick(HAIRS), hairCol: pick(HAIR_COLORS), mob: r() < 0.1 ? 'wheel' : 'walk' },
+      house: spec.house, wall: pick(WALL_COLORS), roof: pick(ROOF_COLORS), floor: Math.floor(r() * FLOORS.length), roomWall: Math.floor(r() * ROOM_WALLS.length),
+      fieldLv, crops: Array.from({ length: nf }, () => (r() < 0.85 ? pick(crops) : null)), ripe: Array.from({ length: nf }, (_, k) => k).filter(() => r() < 0.3),
+      pastureLv: pl, animals: pl ? Array.from({ length: Math.min(PASTURE[pl].cap, 2 + Math.floor(r() * 5)) }, () => [pick(beasts), 2]) : [],
+      orchardLv: r() < 0.5 || farm ? 1 + Math.floor(r() * 3) : 0, trees: [], pondLv: r() < 0.35 ? 1 : 0,
+      cars: r() < 0.85 ? [[pick(Object.keys(CARS).filter(k => k !== 'tractor' || farm)), pick(CAR_COLORS)]] : [],
+      furn: ['bed', 'sofa', 'table', 'chair', 'lamp', 'tv', 'fridge', 'plant'].filter(() => r() < 0.8),
+      yard: ['flowers', 'tree', 'bench', 'lamp', 'hedge', 'birdbath', 'pine', 'swing'].filter(() => r() < 0.5),
+      coins: 0, wood: 0, likes: Math.floor(r() * 30), shareGoal: false, earn: 0,
+    };
+    p.trees = Array.from({ length: p.orchardLv ? ORCHARD[p.orchardLv].slots : 0 }, () => [pick(Object.keys(TREES)), 2]);
+    if (r() < 0.4) p.animals.push(['dog', 2]);
+    const h = homeFromPreset(p);
+    h.npc = true;
+    // the extra land of a bigger lot: a garden with trees, a pool or a swing set
+    for (let k = 0; k < (spec.n - CORE_PARCELS) * 3; k++) autoPlace(h, 'yard', pick(['tree', 'pine', 'flowers', 'hedge', 'fountain', 'pool', 'picnic', 'trampoline', 'windmill']));
+    return h;
+  });
+}
 
 // ---------- resources ----------
 function canAfford(c, h = S.me) { return h.coins >= (c.coins || 0) && h.wood >= (c.wood || 0); }
@@ -535,6 +644,39 @@ function sellBarn(k, n) {
 function barnValue(h = S.me) { return Object.entries(h.barn).reduce((s, [k, n]) => s + n * barnInfo(k).sell, 0); }
 function sellAllBarn() { return Object.keys(S.me.barn).reduce((s, k) => s + sellBarn(k, S.me.barn[k]), 0); }
 
+// ---------- weather ----------
+// Real local weather when the player turns it on (the app fetches it), otherwise the town's own weather,
+// which changes every 3 hours. Snow only in the colder months.
+const WEATHER_E = { clear: '☀️', clouds: '⛅', rain: '🌧️', snow: '❄️', fog: '🌫️', storm: '⛈️' };
+function simWeather(t = now()) {
+  const d = new Date(t), m = d.getMonth(), v = hash(d.getFullYear() * 400 + m * 32 + d.getDate(), Math.floor(d.getHours() / 3));
+  const cold = m >= 10 || m <= 1;
+  const kind = v < 0.48 ? 'clear' : v < 0.72 ? 'clouds' : v < 0.86 ? (cold && v > 0.8 ? 'snow' : 'rain') : v < 0.93 ? 'fog' : cold ? 'snow' : 'storm';
+  const base = [3, 6, 11, 16, 21, 26, 29, 28, 23, 16, 9, 4][m];
+  return { kind, temp: Math.round(base + (v - 0.5) * 6 - (kind === 'rain' || kind === 'snow' ? 3 : 0)), real: false };
+}
+function weatherNow() {
+  const w = S && S.weather;
+  if (w && w.forced) return w;
+  if (w && w.real && S.weatherReal && now() - w.at < 3 * HOUR) return w;
+  return simWeather();
+}
+// Open-Meteo weather codes → our kinds.
+function codeKind(c) {
+  if (c <= 1) return 'clear';
+  if (c <= 3) return 'clouds';
+  if (c === 45 || c === 48) return 'fog';
+  if ((c >= 71 && c <= 77) || c === 85 || c === 86) return 'snow';
+  if (c >= 95) return 'storm';
+  return 'rain';
+}
+// Rain waters the crops: while it rains, everything in the fields grows a quarter faster.
+function rainGrow(ms) {
+  const w = weatherNow().kind;
+  if (w !== 'rain' && w !== 'storm') return;
+  [S.me, ...S.friends].forEach(h => h.fields.forEach(f => { if (f && !isRipe(f)) f.at -= ms * 0.25; }));
+}
+
 // ---------- storeys ----------
 // Every storey is its own room (wallpaper, floor, furniture). LEVEL is the storey you're looking at inside
 // (0 = ground floor); outside it's always 0, so things you buy go downstairs.
@@ -620,14 +762,15 @@ function fitRooms(h) {
 function allRoomItems(h) { return [h.room, ...(h.ups || []).slice(0, floorsOf(h) - 1)].flatMap(r => r.items); }
 
 // ---------- placing furniture and yard items ----------
+// The yard covers the whole lot, including bought land to the right of the 16-tile core.
 const itemDef = (scope, k) => (scope === 'room' ? FURN[k] : YARD[k]);
 const scopeItems = (h, scope, lv) => (scope === 'room' ? curRoom(h, lv).items : h.yard);
 function itemSize(scope, it) { const d = itemDef(scope, it.k); return it.rot ? [d.d, d.w] : [d.w, d.d]; }
 function roomSize(h) { return HOUSES[h.house].room; }
 const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.d;
 const PORCH = { x: AREA.house.x, y: AREA.house.y + AREA.house.d, w: AREA.house.w, d: 1 }; // keep the front of the house clear
-function yardReserved(x, y) {
-  if (x < 0 || y < 0 || x >= LOT_W || y >= LOT_D) return true;
+function yardReserved(x, y, w = LOT_W) {
+  if (x < 0 || y < 0 || x >= w || y >= LOT_D) return true;
   if (x === MAILBOX[0] && y === MAILBOX[1]) return true;
   return ['house', 'pasture', 'fields', 'orchard', 'pond', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || inRect(PORCH, x, y);
 }
@@ -640,7 +783,8 @@ function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
     if (x < 0 || y < 0 || x + w > rw || y + d > rd) return false;
     if (stairsRects(h, lv).some(r => overlaps(r, x, y, w, d))) return false;
   } else {
-    for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) if (yardReserved(x + i, y + j)) return false;
+    const lw = homeW(h);
+    for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) if (yardReserved(x + i, y + j, lw)) return false;
   }
   const others = (list || scopeItems(h, scope, lv)).filter(it => it.id !== ignoreId);
   for (const it of others) {
@@ -666,18 +810,19 @@ function roomSpots(h, flat) {
   const edge = ([x, y]) => Math.min(x, y, rw - 1 - x, rd - 1 - y);
   return out.sort((a, b) => edge(a) - edge(b) || (a[0] + a[1]) - (b[0] + b[1]));
 }
-let YARD_SPOTS = null;
-function yardSpots() {
-  if (!YARD_SPOTS) {
-    YARD_SPOTS = [];
-    for (let y = 0; y < LOT_D; y++) for (let x = 0; x < LOT_W; x++) if (!yardReserved(x, y)) YARD_SPOTS.push([x, y]);
-    YARD_SPOTS.sort((a, b) => Math.hypot(a[0] - 6, a[1] - 6) - Math.hypot(b[0] - 6, b[1] - 6));
+let YARD_SPOTS = {};
+function yardSpots(w = LOT_W) {
+  if (!YARD_SPOTS[w]) {
+    const out = [];
+    for (let y = 0; y < LOT_D; y++) for (let x = 0; x < w; x++) if (!yardReserved(x, y, w)) out.push([x, y]);
+    out.sort((a, b) => Math.hypot(a[0] - 6, a[1] - 6) - Math.hypot(b[0] - 6, b[1] - 6));
+    YARD_SPOTS[w] = out;
   }
-  return YARD_SPOTS;
+  return YARD_SPOTS[w];
 }
 function autoPlace(h, scope, k, tint, lv) {
   const def = itemDef(scope, k);
-  const spots = scope === 'room' ? roomSpots(h, def.flat) : yardSpots();
+  const spots = scope === 'room' ? roomSpots(h, def.flat) : yardSpots(homeW(h));
   // Against the left wall, turn things so their back touches the wall.
   for (const [x, y] of spots) for (const rot of (scope === 'room' && x === 0 && y > 0 ? [1, 0] : [0, 1])) {
     if (rot && def.w === def.d && !(scope === 'room' && x === 0 && y > 0)) continue;
@@ -840,7 +985,7 @@ function townLevel(total = townTotal()) {
 function simFriends() {
   const t = now(), STEP = 5 * MIN;
   S.friends.forEach(h => {
-    if (!slotOf(h.id)) return;
+    if (!lotOf(h.id)) return;
     if (!h.simAt) h.simAt = t;
     let n = Math.floor((t - h.simAt) / STEP);
     if (n <= 0) return;
@@ -965,10 +1110,10 @@ function randomFriendEvent() {
 }
 // Invite reward goes to both sides.
 function inviteJoin() {
-  const slot = S.slots.find(s => !s.owner);
+  const run = freeRun();
   const next = FRIEND_POOL.find(f => !S.friends.some(x => x.id === f.id));
-  if (!slot || !next) return null;
+  if (!run || !next) return null;
+  S.lots.push({ id: next.id, st: run.st, p: run.p, n: CORE_PARCELS, paid: 0 });
   S.friends.push(homeFromPreset(next));
-  slot.owner = next.id;
   return addFeed({ kind: 'join', from: next.id, gift: { type: 'wood', n: 5 } });
 }

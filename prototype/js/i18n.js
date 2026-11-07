@@ -392,6 +392,44 @@ Object.assign(STR.en, {
   snack_blocks_way: 'That would block the way; your townie could not get through',
 });
 
+// ---------- v0.6: the world, land, weather ----------
+Object.assign(STR.zh, {
+  for_sale: '出售', land_lot: '空地 {n} 格宽', buy_parcel: '买下旁边的地',
+  area_maple: '🏡 梧桐街社区', area_center: '🏛️ 镇中心', area_lake: '⛵ 湖畔', area_park: '🌳 森林公园', area_farm: '🌾 田园', area_fields: '🌾 麦田', area_water: '💧 镜湖',
+  stranger: '镇上的居民', shop_soon: '以后可以进去逛',
+  land_buy_title: '买下旁边这块地', land_buy_desc: '在你家右边，{w} × {d} 格。买下后院子变大，可以摆更多东西；可以一直往右买，一块比一块贵。',
+  land_owned: '现在', land_after: '买下后', land_price: '价格', tiles_n: '{w} × {d} 格',
+  land_buy_btn: '买下', land_grow_note: '每多买一块，下一块贵 35%。湖畔的地更贵，田园的地便宜。',
+  land_move_title: '搬到{street}', land_move_desc: '这里有一块 {w} × {d} 格的空地（{nb}）。搬过来后，房子、菜地、牲畜、院子都跟着你走。',
+  land_refund: '退回你买的地（一半）', land_move_note: '你原来那块地会空出来。好友还是好友，随时可以串门。',
+  land_move_btn: '搬过来', land_too_small: '这块地太小了，至少要 16 格宽才能安家。可以等它旁边的地也空出来。', land_taken: '这块地已经有人了',
+  snack_parcel: '地买好了！你家现在 {w} 格宽', snack_moved_street: '搬到{street}了，欢迎新邻居！',
+  w_clear: '晴天', w_clouds: '多云', w_rain: '下雨', w_snow: '下雪', w_fog: '有雾', w_storm: '雷雨', w_auto: '自动',
+  w_real_src: '你所在地区现在的真实天气', w_sim_src: '小镇自己的天气（每 3 小时变一次）',
+  w_effect_clear: '阳光正好，适合出门走走。', w_effect_clouds: '云在天上慢慢飘。', w_effect_rain: '🌧️ 下雨了：雨水会浇菜，菜长得快 25%。',
+  w_effect_snow: '❄️ 下雪了：整个小镇白茫茫的。', w_effect_fog: '雾蒙蒙的，远处看不太清。', w_effect_storm: '⛈️ 雷雨天：菜长得快，但记得待在屋里。',
+  w_real_toggle: '用我所在地区的真实天气', w_real_note: '只用大概位置（约 10 公里）查天气，位置不保存、不给别人。',
+  w_fail: '暂时拿不到天气，先用小镇的天气', w_denied: '没有位置权限，先用小镇的天气', con_weather: '天气',
+});
+Object.assign(STR.en, {
+  for_sale: 'For sale', land_lot: 'Land {n} tiles wide', buy_parcel: 'Buy the land next door',
+  area_maple: '🏡 Maple', area_center: '🏛️ Town centre', area_lake: '⛵ Lakeside', area_park: '🌳 Woodland Park', area_farm: '🌾 Farmland', area_fields: '🌾 Wheat fields', area_water: '💧 Mirror Lake',
+  stranger: 'lives in town', shop_soon: 'You’ll be able to go in later',
+  land_buy_title: 'Buy the land next door', land_buy_desc: 'To the right of your home, {w} × {d} tiles. Your yard gets bigger for more things; keep buying to the right, each piece costs more.',
+  land_owned: 'Now', land_after: 'After', land_price: 'Price', tiles_n: '{w} × {d} tiles',
+  land_buy_btn: 'Buy', land_grow_note: 'Each piece costs 35% more than the last. Lakeside land is pricier, farmland cheaper.',
+  land_move_title: 'Move to {street}', land_move_desc: 'There is {w} × {d} tiles of empty land here ({nb}). Your house, fields, animals and yard all move with you.',
+  land_refund: 'Back for the land you bought (half)', land_move_note: 'Your old spot becomes empty. Friends stay friends and can visit any time.',
+  land_move_btn: 'Move here', land_too_small: 'Too small: a home needs at least 16 tiles. Wait until the land next to it is free too.', land_taken: 'Somebody already lives here',
+  snack_parcel: 'Land bought! Your home is now {w} tiles wide', snack_moved_street: 'Moved to {street}. Hello, new neighbours!',
+  w_clear: 'Sunny', w_clouds: 'Cloudy', w_rain: 'Rain', w_snow: 'Snow', w_fog: 'Fog', w_storm: 'Thunderstorm', w_auto: 'Auto',
+  w_real_src: 'Real weather where you are', w_sim_src: 'The town’s own weather (changes every 3 hours)',
+  w_effect_clear: 'Lovely sunshine, a good day for a walk.', w_effect_clouds: 'Clouds drift slowly by.', w_effect_rain: '🌧️ Raining: the rain waters your crops, they grow 25% faster.',
+  w_effect_snow: '❄️ Snowing: the whole town turns white.', w_effect_fog: 'Foggy, hard to see far.', w_effect_storm: '⛈️ Thunderstorm: crops grow faster, stay inside.',
+  w_real_toggle: 'Use the real weather where I am', w_real_note: 'Only a rough location (about 10 km) is used to look up the weather. It is never saved or shared.',
+  w_fail: 'No weather right now, using the town’s', w_denied: 'No location permission, using the town’s weather', con_weather: 'Weather',
+});
+
 const LETTER_TPL = {
   zh: {
     friend: ['今天在湖边散步，看到一群小鸭子。你那边天气好吗？', '你家的菜长得真好，教教我怎么种！', '周末一起去湖边散步吗？', '我昨晚睡得特别好，今天精神满满！',

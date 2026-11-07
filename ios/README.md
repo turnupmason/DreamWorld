@@ -54,6 +54,11 @@ ios/
 
 网页端的处理在 `prototype/js/app.js`（`window.onNativeHealth` / `onNativeWorkout`）和 `prototype/js/state.js`（`applyNative`、`startLive`）。
 
+## 位置权限（真实天气，v0.6.0）
+
+- 工程里加了 `NSLocationWhenInUseUsageDescription`（在 Build Settings 的 `INFOPLIST_KEY_NSLocationWhenInUseUsageDescription`）。只有玩家在游戏里打开「用我所在地区的真实天气」时，网页才会请求位置（`navigator.geolocation`），坐标取一位小数（约 10 公里）后向 Open-Meteo 查天气，位置不保存。
+- 如果 App 里的网页拿不到位置（WKWebView 对本地文件页面的定位支持不确定），游戏会自动用小镇自己的天气，不会出错。真机上要是一直拿不到，以后改成 Swift 用 CoreLocation 读大概位置，再传给网页（`window.onNativeLocation`）。**等 Mason 在真机上试一下。**
+
 ## 还没做的
 
 - **实时「迷你的你」**：iPhone 拿不到别的 App 正在进行的训练。要做一个我们自己的 Apple Watch 小 App，在手表上开始训练，用 iOS 17 的「训练镜像」实时传给手机（`HealthBridge` 里已经在监听 `workoutSessionMirroringStartHandler`）。现在训练结束后会自动同步这次训练、发奖励。
