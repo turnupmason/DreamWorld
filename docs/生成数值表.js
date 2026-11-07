@@ -4,7 +4,8 @@ const path = require('path');
 const src = fs.readFileSync(path.join(__dirname, '..', 'prototype', 'js', 'data.js'), 'utf8');
 const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FIELD_LEVELS, FIELD_COST, PASTURE, ORCHARD, POND, FISH_KINDS, FISH_EVERY,
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
-  WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS})`);
+  WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
+  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -21,7 +22,10 @@ P('');
 P('## 基础规则');
 P('');
 table(['项目', '数值'], [
-  ['每天农活上限（种菜、偷菜）', D.ACTION_CAP], ['每天偷菜上限', D.STEAL_CAP], ['每日步数目标', D.STEP_GOAL.toLocaleString()],
+  ['每天农活上限（种菜、偷菜）', D.ACTION_CAP], ['每天偷菜上限', D.STEAL_CAP],
+  ['每日步数目标', `开始是 ${D.STEP_GOAL.toLocaleString()}；之后 = 最近 7 天平均 × 1.1，取整到 500，在 ${D.STEP_GOAL_RANGE.map(n => n.toLocaleString()).join('–')} 之间`],
+  ['步数奖励', `每走到目标的 1/6 发一次，最多 ${D.STEP_BLOCKS_MAX} 次（目标的 150%）`],
+  ['运动奖励', `每天最多算 ${D.WORKOUT_PAY_MAX} 分钟`],
   ['每块家园地大小', `${D.LOT_W} × ${D.LOT_D} 格，前面是马路`], ['小镇等级门槛（全镇总家产）', D.TOWN_LEVELS.map((v, i) => `Lv${i + 1} ${v.toLocaleString()}`).join('，')],
 ]);
 P('家园地内区域（格子坐标，x 向右下，y 向左下）：');
@@ -67,13 +71,32 @@ P('');
 
 P('## 房子（' + D.HOUSES.length + ' 种）');
 P('');
-table(['房子', '占地', '室内', '价格'], D.HOUSES.map(h => [`${h.zh} (${h.en})`, `${h.fp[2]}×${h.fp[3]}`, `${h.room[0]}×${h.room[1]}`, cost(h.cost)]));
+table(['房子', '占地', '每层室内', '自带层数', '最多层数', '价格'], D.HOUSES.map(h => [`${h.zh} (${h.en})`, `${h.fp[2]}×${h.fp[3]}`, `${h.room[0]}×${h.room[1]}`, h.floors[0], h.floors[1], cost(h.cost)]));
+P(`### 加盖楼层`);
+P('');
+P(`每加盖一层：🪙 = 室内格数 × ${D.FLOOR_BUILD.coinsPerTile}（取整到 50），🪵 = 室内格数 × ${D.FLOOR_BUILD.woodPerTile}；每多一层再 ×${D.FLOOR_BUILD.grow}。外面看房子每层高 ${D.FLOOR_H} 像素（中式庭院加盖是楼阁的一层）。每层是独立房间：自己的墙纸、地板、家具。`);
+P('');
+const fc = (h, n) => { const k = Math.pow(D.FLOOR_BUILD.grow, n - h.floors[0] - 1), a = h.room[0] * h.room[1]; return cost({ coins: Math.round(a * D.FLOOR_BUILD.coinsPerTile * k / 50) * 50, wood: Math.round(a * D.FLOOR_BUILD.woodPerTile * k) }); };
+table(['房子', '可以加盖', '每层价格'], D.HOUSES.filter(h => h.floors[1] > h.floors[0]).map(h => {
+  const ns = []; for (let n = h.floors[0] + 1; n <= h.floors[1]; n++) ns.push(`${n} 层 ${fc(h, n)}`);
+  return [h.zh, `${h.floors[0]} → ${h.floors[1]} 层`, ns.join('；')];
+}));
+P(`墙纸 ${D.ROOM_WALLS.length} 种，地板 ${D.FLOORS.length} 种。`);
+P('');
 
 const USE = { sit: '坐 / 躺', run: '跑步', bike: '骑车', lift: '举铁', box: '打沙袋', yoga: '瑜伽' };
 P('## 家具（' + Object.keys(D.FURN).length + ' 件）');
 P('');
-table(['家具', '占地', '价格', '可换颜色', '能用来'], Object.values(D.FURN).map(f => [
+table(['家具', '占地', '价格', '可换颜色', '能用来'], Object.values(D.FURN).filter(f => !f.souv).map(f => [
   `${f.zh} (${f.en})`, `${f.w}×${f.d}` + (f.flat ? '（铺地上）' : ''), `🪙${f.price}`, f.tint ? '✓' : '', f.use ? USE[f.use] : '']));
+
+const NEED = { days: '来小镇 {n} 天（休息日也算）', goalDays: '{n} 天走到自己的步数目标', sleepStreak: '连续 {n} 晚睡眠 80 分以上',
+  ringsAll: '合上一次三个圆环', focus120: '一次离开分心 App 2 小时', mindful: '正念累计 {n} 分钟', workouts: '{n} 次 10 分钟以上的运动' };
+P('## 纪念品（' + D.SOUVENIRS.length + ' 件，买不到，只能在现实里做到）');
+P('');
+table(['纪念品', '怎么得到'], D.SOUVENIRS.map(s => [`${D.FURN[s.k].zh} (${D.FURN[s.k].en})`, NEED[s.need].replace('{n}', s.n)]));
+P('得到后自动摆进一楼（放不下就进仓库），不计入家产。');
+P('');
 
 P('## 庭院（' + Object.keys(D.YARD).length + ' 件）');
 P('');
@@ -93,13 +116,13 @@ table(['精力', '最低分', '运动奖励倍率'], D.ENERGY_LEVELS.map(e => [E
 P('### 奖励（倍率 ×1.0 时）');
 P('');
 table(['现实里做到', '奖励', '受精力倍率影响'], [
-  ['每 1,000 步（或轮椅推动）', cost(D.STEP_REWARD), '是'],
-  [`当天 ${D.STEP_GOAL.toLocaleString()} 步`, cost(D.GOAL_REWARD) + ' + 南瓜种子', '是'],
+  [`每走到自己目标的 1/6（目标 ${D.STEP_GOAL.toLocaleString()} 时 = 1,000 步；轮椅推动也算），最多 ${D.STEP_BLOCKS_MAX} 次`, cost(D.STEP_REWARD), '是'],
+  ['走到自己的步数目标', cost(D.GOAL_REWARD) + ' + 南瓜种子', '是'],
   [`合上活动环（${D.RINGS.move} 千卡）`, cost(D.RING_REWARD.move), '是'],
   [`合上锻炼环（${D.RINGS.exercise} 分钟）`, cost(D.RING_REWARD.exercise), '是'],
   [`合上站立环（${D.RINGS.stand} 小时）`, cost(D.RING_REWARD.stand), '是'],
   ['三环全合上（额外）', cost(D.RING_REWARD.all) + ' + 玫瑰种子', '是'],
-  ['每次 10 分钟以上体能训练', '每分钟 🪙1.2，每 10 分钟 🪵1', '是'],
+  ['每次 10 分钟以上体能训练', `每分钟 🪙1.2，每 10 分钟 🪵1（每天最多算 ${D.WORKOUT_PAY_MAX} 分钟）`, '是'],
   ['正念 / 呼吸练习', `每分钟 🪙${D.MINDFUL_REWARD}（每天最多 10 分钟），精力 +1`, '否'],
   ['睡眠分 80+', cost(D.SLEEP_REWARD) + ' + 郁金香种子', '否'],
   ...Object.entries(D.FOCUS_REWARD).map(([m, r]) => [`离线 ${m} 分钟`, cost(r) + (r.seeds ? ' + 向日葵种子' : ''), '否']),

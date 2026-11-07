@@ -26,8 +26,22 @@ function freshDay() {
 function load() {
   try { S = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { S = null; }
   if (!S || S.v !== 3) S = null;
-  if (S) [S.me, ...S.friends].forEach(fixLayout);
+  if (S) { migrate(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); }
   return S;
+}
+// Saves from v0.3 get the v0.4 fields (floors, privacy, souvenirs, personal goal). Old players skip the tutorial.
+function migrate() {
+  if (S.tut === undefined) S.tut = -1;
+  if (S.calm === undefined) S.calm = false;
+  S.stats = Object.assign({ days: 1, goalDays: 0, sleepStreak: 0, ringsAll: 0, focus120: 0, mindful: 0, workouts: 0 }, S.stats || {});
+  S.souv = S.souv || [];
+  S.stepGoal = S.stepGoal || STEP_GOAL;
+  S.hist = S.hist || [];
+  [S.me, ...S.friends].forEach(h => {
+    h.extra = h.extra || {}; h.ups = h.ups || [];
+    if (h.shareLive === undefined) h.shareLive = !!h.shareGoal;
+    if (h.shareMood === undefined) h.shareMood = h.id !== 'me' && !!h.shareGoal;
+  });
 }
 function save() { if (S) localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); }
 
@@ -36,7 +50,8 @@ function emptyHome(id) {
   return {
     id, name: '', look: null, coins: 0, wood: 0,
     house: 0, houses: [0], wall: WALL_COLORS[0], roof: ROOF_COLORS[0],
-    room: { wall: 0, floor: 0, items: [] },
+    room: { wall: 0, floor: 0, items: [] },    // ground floor
+    ups: [], extra: {},                        // upper floors; storeys built, per house index
     yard: [], store: {},                       // store: bought but not placed, keyed "room:sofa" / "yard:bench"
     fieldLv: 0, fields: [null, null, null, null],
     pastureLv: 0, animals: [],
@@ -44,7 +59,8 @@ function emptyHome(id) {
     pondLv: 0, pond: { fish: 0, at: 0 },
     cars: [], car: -1,
     seeds: {}, barn: {},
-    likes: 0, shareGoal: false, goalToday: false, energy: 75, live: null,
+    // what friends may see: goal done, working out right now, energy face. All off by default.
+    likes: 0, shareGoal: false, shareLive: false, shareMood: false, goalToday: false, energy: 75, live: null,
   };
 }
 
@@ -52,7 +68,7 @@ function homeFromPreset(p) {
   const h = emptyHome(p.id), t = now();
   Object.assign(h, {
     name: clone(p.name), look: clone(p.look), coins: p.coins, wood: p.wood, house: p.house, houses: [p.house], wall: p.wall, roof: p.roof,
-    likes: p.likes, shareGoal: p.shareGoal, earn: p.earn, simAt: t, energy: 60 + Math.round(Math.random() * 35),
+    likes: p.likes, shareGoal: p.shareGoal, shareLive: !!p.shareLive, shareMood: !!p.shareMood, earn: p.earn, simAt: t, energy: 60 + Math.round(Math.random() * 35),
   });
   h.room.wall = p.roomWall; h.room.floor = p.floor;
   h.fieldLv = p.fieldLv;
@@ -70,23 +86,31 @@ function homeFromPreset(p) {
   h.pond = { fish: h.pondLv ? 3 : 0, at: t };
   p.cars.forEach(([k, color]) => h.cars.push({ k, color }));
   h.car = h.cars.length - 1;
-  p.furn.forEach(f => { const [k, tint] = Array.isArray(f) ? f : [f]; autoPlace(h, 'room', k, tint); });
+  p.furn.forEach(f => { const [k, tint] = Array.isArray(f) ? f : [f]; autoPlace(h, 'room', k, tint, 0); });
+  if (p.furn2 && floorsOf(h) > 1) {
+    const up2 = roomAt(h, 1);
+    if (p.up2) { up2.wall = p.up2[0]; up2.floor = p.up2[1]; }
+    p.furn2.forEach(f => { const [k, tint] = Array.isArray(f) ? f : [f]; autoPlace(h, 'room', k, tint, 1); });
+  }
   p.yard.forEach(k => autoPlace(h, 'yard', k));
   return h;
 }
 
+// The game is made before onboarding (o.preview) so the first screens can show the real town behind them.
 function newGame(o) {
   S = {
     v: 3, lang: o.lang, apps: o.apps, limitMin: o.limitMin, timeOffset: 0,
     created: Date.now(), seenHint: false, welcomed: false, pending: [], feed: [],
     mail: { inbox: [], sent: [] }, sleep: null, vitals: { resp: 14.5, rhr: 61, hrv: 48 }, live: null, native: false,
+    onboarding: !!o.preview, tut: 0, calm: false, souv: [], stepGoal: STEP_GOAL, hist: [],
+    stats: { days: 1, goalDays: 0, sleepStreak: 0, ringsAll: 0, focus120: 0, mindful: 0, workouts: 0 },
   };
   S.today = freshDay();
   const me = emptyHome('me');
   Object.assign(me, { name: o.name, look: o.look, coins: 300, wood: 20, roof: o.look.shirt });
   me.seeds = { wheat: 4, carrot: 3, potato: 2 };
-  // A head start so the first minute already shows things growing.
-  me.fields[0] = { crop: 'wheat', at: now() - CROPS.wheat.grow * MIN * 0.85, left: CROPS.wheat.yield, thieves: [] };
+  // A head start: the wheat is ripe for the tutorial, the carrots are growing.
+  me.fields[0] = { crop: 'wheat', at: now() - CROPS.wheat.grow * MIN * 1.05, left: CROPS.wheat.yield, thieves: [] };
   me.fields[1] = { crop: 'carrot', at: now() - CROPS.carrot.grow * MIN * 0.3, left: CROPS.carrot.yield, thieves: [] };
   me.pastureLv = 1;
   me.animals = [newAnimal('chicken', 2), newAnimal('chicken', 0)];
@@ -98,6 +122,7 @@ function newGame(o) {
   S.friends = FRIEND_PRESETS.map(homeFromPreset);
   S.slots = SLOTS.map((p, i) => ({ c: p[0], r: p[1], owner: i === 6 ? 'me' : (FRIEND_PRESETS.find(f => f.slot === i) || {}).id || null }));
   simSleep(78);
+  S.pending.push({ id: uid(), src: 'welcome', reward: { coins: 100, wood: 10, seeds: { tomato: 2 } }, info: {} });
   save();
 }
 
@@ -105,6 +130,15 @@ function newGame(o) {
 function checkDay() {
   const k = dayKey(now());
   if (S.today.date === k) return false;
+  // remember yesterday: your step goal follows your own last 7 days (D28)
+  const y = S.today, st = S.stats;
+  S.hist = [...S.hist, y.steps + y.pushes].slice(-7);
+  if (S.hist.length >= 3) {
+    const avg = S.hist.reduce((a, b) => a + b, 0) / S.hist.length;
+    S.stepGoal = clamp(Math.round(avg * 1.1 / 500) * 500, STEP_GOAL_RANGE[0], STEP_GOAL_RANGE[1]);
+  }
+  if (!y.paid.sleep) st.sleepStreak = 0;
+  st.days++;
   S.today = freshDay();
   S.friends.forEach(f => { f.goalToday = false; f.energy = 55 + Math.round(Math.random() * 40); });
   if (!S.native) simSleep(rand([92, 84, 78, 70, 61]));   // the prototype invents last night's sleep
@@ -174,7 +208,14 @@ function energyMult() {
   const m = ENERGY_LEVELS.find(e => e.id === energyLevel()).mult;
   return S.today.restDay ? Math.max(1, m) : m;   // on a rest / sick day nothing is discounted
 }
-function friendEnergy(h) { return h.energy != null ? energyLevel(h.energy + (h.goalToday ? 8 : 0)) : 'good'; }
+// A friend's face only shows their energy if they chose to share it (and you're not in calm mode).
+function friendEnergy(h) {
+  if (!h.shareMood || S.calm) return 'good';
+  return h.energy != null ? energyLevel(h.energy + (h.goalToday ? 8 : 0)) : 'good';
+}
+// What you see of friends' fitness: nothing in calm mode, otherwise only what they share.
+const seesGoal = h => !S.calm && !!h.shareGoal;
+const seesLive = h => !S.calm && !!h.shareLive && !!h.live;
 
 // ---------- real-life inputs ----------
 function addPending(src, reward, info) {
@@ -192,24 +233,33 @@ function processHealth() {
     if (r.seeds) o.seeds = clone(r.seeds);
     return o;
   };
-  const steps = d.steps + d.pushes;
-  const blocks = Math.floor(steps / 1000) - p.stepBlocks;
-  if (blocks > 0) { p.stepBlocks += blocks; addPending('steps', scale({ coins: STEP_REWARD.coins * blocks, wood: STEP_REWARD.wood * blocks }), { steps: blocks * 1000, mult }); }
-  if (steps >= STEP_GOAL && !p.goal) { p.goal = true; addPending('goal', scale(GOAL_REWARD), { mult }); }
+  // Steps pay per sixth of YOUR goal, up to 150 %: a beginner and a marathoner earn about the same for a good day.
+  const steps = d.steps + d.pushes, goal = stepGoal(), blk = stepBlock();
+  const blocks = Math.min(STEP_BLOCKS_MAX, Math.floor(steps / blk)) - p.stepBlocks;
+  if (blocks > 0) { p.stepBlocks += blocks; addPending('steps', scale({ coins: STEP_REWARD.coins * blocks, wood: STEP_REWARD.wood * blocks }), { steps: blocks * blk, mult }); }
+  if (steps >= goal && !p.goal) { p.goal = true; S.stats.goalDays++; addPending('goal', scale(GOAL_REWARD), { mult, goal }); }
   [['move', d.kcal, RINGS.move], ['exercise', d.exMin, RINGS.exercise], ['stand', d.standH, RINGS.stand]].forEach(([ring, val, goal]) => {
     if (val >= goal && !p.rings[ring]) { p.rings[ring] = true; addPending('ring', scale(RING_REWARD[ring]), { ring, mult }); }
   });
-  if (p.rings.move && p.rings.exercise && p.rings.stand && !p.rings.all) { p.rings.all = true; addPending('rings', scale(RING_REWARD.all), { mult }); }
+  if (p.rings.move && p.rings.exercise && p.rings.stand && !p.rings.all) { p.rings.all = true; S.stats.ringsAll++; addPending('rings', scale(RING_REWARD.all), { mult }); }
   d.workouts.forEach(w => {
-    if (w.min >= 10 && !p.workouts[w.id]) { p.workouts[w.id] = true; addPending('workout', scale({ coins: Math.round(w.min * 1.2), wood: Math.floor(w.min / 10) }), { type: w.type, min: w.min, mult }); }
+    if (w.min < 10 || p.workouts[w.id] !== undefined) return;
+    const paid = Object.values(p.workouts).reduce((a, b) => a + (typeof b === 'number' ? b : 0), 0);
+    const min = Math.max(0, Math.min(w.min, WORKOUT_PAY_MAX - paid));   // only the first 90 minutes a day pay
+    p.workouts[w.id] = min; S.stats.workouts++;
+    if (min > 0) addPending('workout', scale({ coins: Math.round(min * 1.2), wood: Math.floor(min / 10) }), { type: w.type, min: w.min, mult });
   });
   const mind = Math.min(10, Math.floor(d.mindful)) - p.mindful;
-  if (mind > 0) { p.mindful += mind; addPending('mindful', { coins: mind * MINDFUL_REWARD }, { min: mind }); }
-  if (S.sleep && S.sleep.score >= 80 && !p.sleep) { p.sleep = true; addPending('sleep', clone(SLEEP_REWARD), { score: S.sleep.score }); }
+  if (mind > 0) { p.mindful += mind; S.stats.mindful += mind; addPending('mindful', { coins: mind * MINDFUL_REWARD }, { min: mind }); }
+  if (S.sleep && S.sleep.score >= 80 && !p.sleep) { p.sleep = true; S.stats.sleepStreak++; addPending('sleep', clone(SLEEP_REWARD), { score: S.sleep.score }); }
 }
+// Your own step goal (follows your last 7 days) and how many steps one paid block is.
+function stepGoal() { return (S && S.stepGoal) || STEP_GOAL; }
+function stepBlock() { return Math.max(250, Math.round(stepGoal() / 6 / 50) * 50); }
 function recordSteps(n) { S.today.steps += n; processHealth(); }
 function recordFocus(min) {
   S.today.focusMin += min;
+  if (min >= 120) S.stats.focus120++;
   addPending('focus', clone(FOCUS_REWARD[min]), { min });
 }
 function recordDistract(min) { S.today.distractMin += min; } // no penalty, ever
@@ -481,9 +531,59 @@ function sellBarn(k, n) {
 function barnValue(h = S.me) { return Object.entries(h.barn).reduce((s, [k, n]) => s + n * barnInfo(k).sell, 0); }
 function sellAllBarn() { return Object.keys(S.me.barn).reduce((s, k) => s + sellBarn(k, S.me.barn[k]), 0); }
 
+// ---------- storeys ----------
+// Every storey is its own room (wallpaper, floor, furniture). LEVEL is the storey you're looking at inside
+// (0 = ground floor); outside it's always 0, so things you buy go downstairs.
+let LEVEL = 0;
+function setLevel(lv) { LEVEL = Math.max(0, lv | 0); }
+function floorsOf(h) { const H = HOUSES[h.house]; return H.floors[0] + ((h.extra || {})[h.house] || 0); }
+function maxFloors(h) { return HOUSES[h.house].floors[1]; }
+function ensureUps(h) {
+  h.ups = h.ups || [];
+  while (h.ups.length < floorsOf(h) - 1) h.ups.push({ wall: h.room.wall, floor: h.room.floor, items: [] });
+}
+function roomAt(h, lv) { if (!lv) return h.room; ensureUps(h); return h.ups[lv - 1] || h.room; }
+const lvOf = (h, lv) => Math.min(lv === undefined ? (h === S.me ? LEVEL : 0) : lv, floorsOf(h) - 1);
+function curRoom(h, lv) { return roomAt(h, lvOf(h, lv)); }
+// The staircase sits in the back-right corner of every storey once there is more than one.
+function stairsRect(h) { const [rw] = roomSize(h); return { x: rw - 2, y: 0, w: 2, d: 1 }; }
+const hasStairs = h => floorsOf(h) > 1;
+function floorCost(h, n = floorsOf(h) + 1) {
+  const [rw, rd] = roomSize(h), H = HOUSES[h.house], k = Math.pow(FLOOR_BUILD.grow, n - H.floors[0] - 1);
+  return { coins: Math.round(rw * rd * FLOOR_BUILD.coinsPerTile * k / 50) * 50, wood: Math.round(rw * rd * FLOOR_BUILD.woodPerTile * k) };
+}
+function buyFloor(h = S.me) {
+  if (floorsOf(h) >= maxFloors(h)) return 'max';
+  const c = floorCost(h);
+  if (!canAfford(c, h)) return 'poor';
+  pay(c, h);
+  h.extra = h.extra || {};
+  h.extra[h.house] = (h.extra[h.house] || 0) + 1;
+  ensureUps(h);
+  fitRooms(h);
+  return 'ok';
+}
+// After moving house or building a storey: anything that no longer fits (smaller room, stairs, storeys you don't
+// have in this house) goes to storage. Returns how many things moved.
+function fitRooms(h) {
+  ensureUps(h);
+  let n = 0;
+  [h.room, ...h.ups].forEach((r, lv) => {
+    const keep = [];
+    r.items.forEach(it => {
+      const ok = lv < floorsOf(h) && canPlace(h, 'room', it.k, it.x, it.y, it.rot, it.id, lv, keep);
+      if (ok) keep.push(it);
+      else { const key = 'room:' + it.k; h.store[key] = (h.store[key] || 0) + 1; n++; }
+    });
+    r.items = keep;
+  });
+  return n;
+}
+function allRoomItems(h) { return [h.room, ...(h.ups || []).slice(0, floorsOf(h) - 1)].flatMap(r => r.items); }
+
 // ---------- placing furniture and yard items ----------
 const itemDef = (scope, k) => (scope === 'room' ? FURN[k] : YARD[k]);
-const scopeItems = (h, scope) => (scope === 'room' ? h.room.items : h.yard);
+const scopeItems = (h, scope, lv) => (scope === 'room' ? curRoom(h, lv).items : h.yard);
 function itemSize(scope, it) { const d = itemDef(scope, it.k); return it.rot ? [d.d, d.w] : [d.w, d.d]; }
 function roomSize(h) { return HOUSES[h.house].room; }
 const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.d;
@@ -493,16 +593,17 @@ function yardReserved(x, y) {
   if (x === MAILBOX[0] && y === MAILBOX[1]) return true;
   return ['house', 'pasture', 'fields', 'orchard', 'pond', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || inRect(PORCH, x, y);
 }
-function canPlace(h, scope, k, x, y, rot, ignoreId) {
+function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
   const def = itemDef(scope, k);
   const [w, d] = rot ? [def.d, def.w] : [def.w, def.d];
   if (scope === 'room') {
     const [rw, rd] = roomSize(h);
     if (x < 0 || y < 0 || x + w > rw || y + d > rd) return false;
+    if (hasStairs(h)) { const s = stairsRect(h); if (x < s.x + s.w && x + w > s.x && y < s.y + s.d && y + d > s.y) return false; }
   } else {
     for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) if (yardReserved(x + i, y + j)) return false;
   }
-  for (const it of scopeItems(h, scope)) {
+  for (const it of list || scopeItems(h, scope, lv)) {
     if (it.id === ignoreId) continue;
     if (scope === 'room' && !!itemDef(scope, it.k).flat !== !!def.flat) continue; // rugs can sit under furniture
     const [iw, id] = itemSize(scope, it);
@@ -526,15 +627,15 @@ function yardSpots() {
   }
   return YARD_SPOTS;
 }
-function autoPlace(h, scope, k, tint) {
+function autoPlace(h, scope, k, tint, lv) {
   const def = itemDef(scope, k);
   const spots = scope === 'room' ? roomSpots(h, def.flat) : yardSpots();
   // Against the left wall, turn things so their back touches the wall.
   for (const [x, y] of spots) for (const rot of (scope === 'room' && x === 0 && y > 0 ? [1, 0] : [0, 1])) {
     if (rot && def.w === def.d && !(scope === 'room' && x === 0 && y > 0)) continue;
-    if (canPlace(h, scope, k, x, y, rot)) {
+    if (canPlace(h, scope, k, x, y, rot, null, lv)) {
       const it = { id: uid(), k, x, y, rot, tint: def.tint ? (tint || rand(TINTS)) : null, placed: now() };
-      scopeItems(h, scope).push(it);
+      scopeItems(h, scope, lv).push(it);
       return it;
     }
   }
@@ -633,9 +734,24 @@ function buyHouse(i, h = S.me) {
   pay(c, h);
   h.houses.push(i);
   h.house = i;
+  fitRooms(h);
   return 'ok';
 }
-function moveHouse(i, h = S.me) { if (!h.houses.includes(i)) return false; h.house = i; return true; }
+function moveHouse(i, h = S.me) { if (!h.houses.includes(i)) return false; h.house = i; return fitRooms(h) + 1; }
+
+// ---------- souvenirs: earned in real life, never sold ----------
+function souvProgress(sv) { return Math.min(sv.n, S.stats[sv.need] || 0); }
+// Gives any souvenir you just earned; it goes straight into your ground floor (or storage if there's no room).
+function awardSouvenirs() {
+  const got = [];
+  SOUVENIRS.forEach(sv => {
+    if (S.souv.includes(sv.k) || souvProgress(sv) < sv.n) return;
+    S.souv.push(sv.k);
+    autoPlace(S.me, 'room', sv.k, null, 0);
+    got.push(sv.k);
+  });
+  return got;
+}
 
 // ---------- assets & ranking ----------
 const costValue = c => (c.coins || 0) + (c.wood || 0) * 5; // wood only comes from real life, so it counts extra
@@ -646,7 +762,11 @@ function assetBreakdown(h) {
   for (let i = 1; i <= h.pastureLv; i++) b.land += costValue(PASTURE[i].cost);
   for (let i = 1; i <= h.orchardLv; i++) b.land += costValue(ORCHARD[i].cost);
   for (let i = 1; i <= h.pondLv; i++) b.land += costValue(POND[i].cost);
-  h.room.items.forEach(it => { b.items += FURN[it.k].price; });
+  allRoomItems(h).forEach(it => { b.items += FURN[it.k].price; });
+  Object.entries(h.extra || {}).forEach(([hi, n]) => {
+    const hh = { house: +hi };
+    for (let k = 1; k <= n; k++) b.house += costValue(floorCost(hh, HOUSES[+hi].floors[0] + k));
+  });
   h.yard.forEach(it => { b.items += YARD[it.k].price; });
   Object.entries(h.store).forEach(([key, n]) => { const [sc, k] = key.split(':'); b.items += itemDef(sc, k).price * n; });
   h.cars.forEach(c => { b.cars += costValue(CARS[c.k].cost); });

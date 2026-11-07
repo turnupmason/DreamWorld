@@ -7,7 +7,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const UI = { tab: 'home', inside: false, visit: null, visitInside: false, sheet: null, welcome: false, shop: 'seeds', tray: 'items', sig: '' };
 let OB = null; // onboarding draft
 const ENERGY_EMOJI = { great: '🤩', good: '🙂', tired: '🥱', exhausted: '😴' };
-const SRC_EMOJI = { steps: '🚶', focus: '📵', goal: '⭐', rest: '🌙', ring: '⭕', rings: '🏅', workout: '💪', mindful: '🧘', sleep: '😴' };
+const SRC_EMOJI = { steps: '🚶', focus: '📵', goal: '⭐', rest: '🌙', ring: '⭕', rings: '🏅', workout: '💪', mindful: '🧘', sleep: '😴', welcome: '🎁' };
 const RING_COL = { move: '#fa114f', exercise: '#92e82a', stand: '#1eeaef' };
 
 // ---------- formatting ----------
@@ -49,7 +49,8 @@ function pendingTitle(p) {
   const i = p.info || {};
   if (p.src === 'steps') return t('p_steps', { n: fmtNum(i.steps) });
   if (p.src === 'focus') return t('p_focus', { d: fmtDur(i.min * MIN) });
-  if (p.src === 'goal') return t('p_goal', { n: fmtNum(STEP_GOAL) });
+  if (p.src === 'goal') return t('p_goal', { n: fmtNum(i.goal || stepGoal()) });
+  if (p.src === 'welcome') return t('p_welcome');
   if (p.src === 'ring') return t('p_ring_' + i.ring);
   if (p.src === 'rings') return t('p_rings');
   if (p.src === 'workout') return t('p_workout', { e: WORKOUTS[i.type].e, name: nm(WORKOUTS[i.type]), n: i.min });
@@ -59,7 +60,10 @@ function pendingTitle(p) {
 }
 const thumbImg = (kind, k, o, w = 120, h = 96, cls = 'thumb') => `<img class="${cls}" alt="" src="${Scene.thumb(kind, k, o, w, h)}">`;
 const avatar = (look, cls = '') => `<span class="ava ${cls}" style="background-image:url(${Scene.thumb('person', 'a', { look }, 90, 90)})"></span>`;
-const unreadCount = () => S.feed.filter(i => !i.read || (i.gift && !i.claimed)).length;
+// In calm mode friends' fitness posts are hidden everywhere (feed, badges, counts).
+const feedVisible = it => !(S.calm && it.kind === 'goal');
+const unreadCount = () => S.feed.filter(i => feedVisible(i) && (!i.read || (i.gift && !i.claimed))).length;
+const shownRoom = h => roomAt(h, Math.min(LEVEL, floorsOf(h) - 1));
 const stageName = a => t(['stage_baby', 'stage_young', 'stage_adult'][animalStage(a)]);
 const energyName = (e = energyLevel()) => t('energy_' + e);
 const multText = m => (m > 1 ? `×${m} ${t('mult_bonus')}` : m < 1 ? `×${m} ${t('mult_tired')}` : '×1');
@@ -104,6 +108,7 @@ function syncView() {
 function setTab(tab) {
   if (Scene.getEdit()) Scene.stopEdit();
   UI.tab = tab;
+  tutDone('tab:' + tab);
   if (tab === 'feed') S.feed.forEach(i => { i.read = true; });
   if (tab === 'real') postNative({ type: 'refresh' });
   syncView();
@@ -136,7 +141,6 @@ function renderPanel() {
   const el = $('#panel'), onScene = UI.tab === 'home' || UI.tab === 'town';
   el.hidden = onScene;
   document.querySelectorAll('[data-i18n]').forEach(n => { n.textContent = t(n.dataset.i18n); });
-  $('#hint').hidden = !(UI.tab === 'home' && !UI.inside && !S.seenHint);
   const top = el.scrollTop;
   if (UI.tab === 'shop') el.innerHTML = panelShop();
   else if (UI.tab === 'real') el.innerHTML = panelReal();
@@ -155,20 +159,21 @@ function renderOverlay() {
     c = `<div class="ctx-main">✏️ ${t(ed.scope === 'room' ? 'ctx_edit_room' : 'ctx_edit_yard')}</div><button class="btn small primary" data-act="editDone">${t('done')}</button>`;
   } else if (UI.tab === 'home') {
     if (UI.inside) {
-      c = `<div class="ctx-main">🛋️ ${t('ctx_inside', { house: nm(HOUSES[S.me.house]) })}</div>`;
+      c = `<div class="ctx-main">🛋️ ${nm(HOUSES[S.me.house])}</div>${floorChips(S.me)}`;
       f = b('goOut', '🌳', t('fab_exit')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn'));
     } else {
-      c = `<button class="ctx-main link" data-act="ranking">🏆 ${t('ctx_rank', { n: rankOf('me'), v: fmtNum(assetValue(S.me)) })}</button>`;
+      c = S.calm ? `<button class="ctx-main link" data-act="ranking">${t('ctx_town_calm', { street: t('street_name'), lv: townLevel() })}</button>`
+        : `<button class="ctx-main link" data-act="ranking">🏆 ${t('ctx_rank', { n: rankOf('me'), v: fmtNum(assetValue(S.me)) })}</button>`;
       f = b('goIn', '🚪', t('fab_enter')) + b('design', '✏️', t('fab_design')) + b('barn', '🧺', t('fab_barn')) + b('recenter', '🎯', t('fab_center'));
     }
   } else if (UI.visit) {
     const h = friendById(UI.visit);
-    c = `<button class="btn small" data-act="backTown">← ${t('tab_town')}</button><div class="ctx-main">${t('home_of', { name: esc(homeName(h)) })} · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}</div>`;
+    c = `<button class="btn small" data-act="backTown">← ${t('tab_town')}</button><div class="ctx-main">${t('home_of', { name: esc(homeName(h)) })}${S.calm ? '' : ` · 🏆 ${rankOf(h.id)} · 🪙${fmtCompact(assetValue(h))}`}</div>${UI.visitInside ? floorChips(h) : ''}`;
     f = UI.visitInside ? b('goOut', '🌳', t('fab_exit'))
       : b('goIn', '🚪', t('fab_peek')) + b('like', '❤️', t('like'), h.id) + b('friendSheet', '🎁', t('fab_gift'), h.id) + b('compose', '✉️', t('fab_letter'), h.id) + b('goHome', '🏡', t('fab_home'));
   } else {
     c = `<button class="ctx-main link" data-act="ranking">🏛️ ${t('ctx_town', { street: t('street_name'), lv: townLevel(), v: fmtCompact(townTotal()) })}</button>`;
-    f = b('ranking', '🏆', t('fab_rank')) + b('goHome', '🏡', t('fab_home'));
+    f = (S.calm ? '' : b('ranking', '🏆', t('fab_rank'))) + b('goHome', '🏡', t('fab_home'));
   }
   ctxEl.innerHTML = c; ctxEl.hidden = !c;
   fab.innerHTML = f; fab.hidden = !f;
@@ -187,7 +192,14 @@ function renderOverlay() {
   }
 }
 function overlaySig() {
-  return [UI.tab, UI.inside, UI.visit, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length].join('|');
+  return [UI.tab, UI.inside, UI.visit, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL].join('|');
+}
+// 1F 2F 3F … chips inside a house, plus ＋ to build another storey in your own.
+function floorChips(h) {
+  const n = floorsOf(h), mine = h === S.me, lv = Math.min(LEVEL, n - 1);
+  if (n < 2 && !(mine && maxFloors(h) > 1)) return '';
+  return `<div class="floors">${Array.from({ length: n }, (_, i) => `<button class="fl ${i === lv ? 'on' : ''}" data-act="floor" data-arg="${i}">${i + 1}F</button>`).join('')}
+    ${mine && n < maxFloors(h) ? `<button class="fl add" data-act="buildFloor" title="${t('build_floor')}">＋</button>` : ''}</div>`;
 }
 
 function trayHTML(ed) {
@@ -214,8 +226,8 @@ function trayHTML(ed) {
     <span class="muted">${t('tray_hint')}</span></div>`;
   if (UI.tray === 'colors') {
     const sw = (list, cur, act) => list.map((c, i) => `<button class="swatch sm ${cur === i ? 'on' : ''}" style="background:${c.c1 || c}" data-act="${act}" data-arg="${i}"></button>`).join('');
-    if (scope === 'room') return tabs + `<div class="color-row"><span>${t('wallpaper')}</span>${sw(ROOM_WALLS, S.me.room.wall, 'setRoomWall')}</div>
-      <div class="color-row"><span>${t('floor')}</span>${sw(FLOORS, S.me.room.floor, 'setFloor')}</div>`;
+    if (scope === 'room') return tabs + `<div class="color-row"><span>${t('wallpaper')}</span>${sw(ROOM_WALLS, curRoom(S.me).wall, 'setRoomWall')}</div>
+      <div class="color-row"><span>${t('floor')}</span>${sw(FLOORS, curRoom(S.me).floor, 'setFloor')}</div>`;
     return tabs + `<div class="color-row"><span>${t('wall_color')}</span>${sw(WALL_COLORS, WALL_COLORS.indexOf(S.me.wall), 'setWall')}</div>
       <div class="color-row"><span>${t('roof_color')}</span>${sw(ROOF_COLORS, ROOF_COLORS.indexOf(S.me.roof), 'setRoof')}</div>`;
   }
@@ -283,13 +295,15 @@ function panelShop() {
     note = t('note_land');
   } else if (cat === 'furn' || cat === 'yard') {
     const scope = cat === 'furn' ? 'room' : 'yard', list = cat === 'furn' ? FURN : YARD;
-    body = Object.entries(list).map(([k, d]) => {
-      const n = scopeItems(h, scope).filter(i => i.k === k).length + (h.store[scope + ':' + k] || 0);
+    const owned = k => (scope === 'room' ? allRoomItems(h) : h.yard).filter(i => i.k === k).length + (h.store[scope + ':' + k] || 0);
+    body = Object.entries(list).filter(([, d]) => !d.souv).map(([k, d]) => {
+      const n = owned(k);
       const use = d.use ? ` · ${t('use_' + d.use)}` : d.prod ? ` · ${t('makes', { e: GOODS[d.prod].e, d: fmtDur(d.every * MIN) })}` : '';
       return shopCard(thumbImg(cat, k), nm(d), t('furn_sub', { w: d.w, d: d.d }) + use + (n ? ` · ${t('owned_n', { n })}` : ''),
         buyBtn('buyItem', scope + '|' + k, `🪙${fmtNum(d.price)}`, h.coins >= d.price));
     }).join('');
     note = t(cat === 'furn' ? 'note_furn' : 'note_yard');
+    if (cat === 'furn') note = souvCard() + note;
   } else if (cat === 'cars') {
     body = Object.entries(CARS).map(([k, c]) => {
       const i = h.cars.findIndex(x => x.k === k), color = i >= 0 ? h.cars[i].color : CAR_COLORS[0];
@@ -306,9 +320,11 @@ function panelShop() {
       if (i === h.house) btn = `<span class="tag ok">${t('house_current')}</span>`;
       else if (h.houses.includes(i)) btn = buyBtn('moveHouse', i, t('house_move'), true, '');
       else btn = buyBtn('buyHouse', i, costText(H.cost), canAfford(H.cost));
-      return shopCard(thumbImg('house', i, { wall: h.wall, roof: h.roof }), nm(H), t('house_room', { w: H.room[0], d: H.room[1] }), btn);
+      const ex = (h.extra || {})[i] || 0;
+      return shopCard(thumbImg('house', i, { wall: h.wall, roof: h.roof, extra: ex }), nm(H),
+        `${t('house_room', { w: H.room[0], d: H.room[1] })} · ${t('house_floors', { n: H.floors[0] + ex, max: H.floors[1] })}`, btn);
     }).join('');
-    note = t('note_houses');
+    note = floorCard() + t('note_houses');
   } else {
     const keys = Object.keys(h.barn);
     note = keys.length ? `<button class="btn small primary" data-act="sellAll">${t('sell_all', { n: fmtNum(barnValue()) })}</button>` : '';
@@ -326,6 +342,25 @@ function panelShop() {
     <div class="shop-cats">${chips}</div>
     ${note ? `<div class="shop-note">${note}</div>` : ''}
     <div class="item-grid">${body}</div>`;
+}
+
+// Build another storey on the house you live in.
+function floorCard() {
+  const h = S.me, n = floorsOf(h), mx = maxFloors(h), H = HOUSES[h.house];
+  if (mx < 2) return `<div class="floor-card muted">🏗️ ${t('floor_none', { name: nm(H) })}</div>`;
+  if (n >= mx) return `<div class="floor-card">🏗️ ${t('floor_max', { name: nm(H), n: mx })}</div>`;
+  const c = floorCost(h);
+  return `<div class="floor-card row">${thumbImg('house', h.house, { wall: h.wall, roof: h.roof, extra: n - H.floors[0] + 1 }, 84, 84, 'thumb sm')}
+    <div class="grow"><b>🏗️ ${t('build_floor_title', { n: n + 1 })}</b><div class="muted">${t('build_floor_desc')}</div></div>
+    ${buyBtn('buildFloorNow', '', costText(c), canAfford(c))}</div>`;
+}
+// Souvenirs: earned in real life, never sold.
+function souvCard() {
+  return `<div class="souv-card"><b>✨ ${t('souv_title')}</b><div class="muted">${t('souv_desc')}</div><div class="souv-grid">${SOUVENIRS.map(sv => {
+    const got = S.souv.includes(sv.k);
+    return `<div class="souv ${got ? 'got' : ''}">${thumbImg('furn', sv.k, {}, 64, 56, 'thumb xs')}<b>${nm(FURN[sv.k])}</b>
+      <span>${got ? '✅' : `${souvProgress(sv)}/${sv.n}`}</span><i>${t('souv_need_' + sv.need, { n: sv.n })}</i></div>`;
+  }).join('')}</div></div>`;
 }
 
 // ---------- real life (Apple Health and screen time) ----------
@@ -348,7 +383,7 @@ function sleepBar(s) {
 }
 function panelReal() {
   const d = S.today, e = energyLevel(), score = energyScore(), m = energyMult(), s = S.sleep || { score: 0, asleep: 0, deep: 0, rem: 0, core: 0, awake: 0 };
-  const steps = d.steps + d.pushes, stepPct = Math.min(100, steps / STEP_GOAL * 100), disPct = Math.min(100, d.distractMin / S.limitMin * 100);
+  const goal = stepGoal(), steps = d.steps + d.pushes, stepPct = Math.min(100, steps / goal * 100), disPct = Math.min(100, d.distractMin / S.limitMin * 100);
   const apps = S.apps.map(id => { const a = APPS.find(x => x.id === id); return `<span class="chip static">${a.emoji} ${a.name || t('app_games')}</span>`; }).join('');
   const src = S.native ? t('src_health') : t('src_sim');
   let goalRow;
@@ -363,7 +398,7 @@ function panelReal() {
       <span class="muted">${w.min >= 10 ? '✅' : t('wk_short')}</span></div>`).join('') : `<p class="muted">${t('wk_none')}</p>`;
   return `
     <h1 class="panel-title">${t('tab_real')}</h1>
-    <p class="muted note">${t('real_note')} <b>${src}</b></p>
+    <p class="muted note">${t('real_private')} ${t('real_note')} <b>${src}</b></p>
     <div class="card energy-card e-${e}">
       <div class="row"><div class="face">${ENERGY_EMOJI[e]}</div><div class="grow"><h3>${t('energy_title')} · ${energyName(e)}</h3>
         <div class="muted">${t('energy_score', { n: score })} · ${t('today_mult')} <b>${multText(m)}</b></div></div></div>
@@ -383,12 +418,12 @@ function panelReal() {
         </div></div>
       <p class="muted">${t('rings_rule')}</p></div>
     <div class="card"><h3>🚶 ${t('steps_today')}</h3>
-      <div class="big-num">${fmtNum(steps)} <small>/ ${fmtNum(STEP_GOAL)}</small></div>
+      <div class="big-num">${fmtNum(steps)} <small>/ ${fmtNum(goal)} · ${t('my_goal')}</small></div>
       <div class="bar"><i style="width:${stepPct}%"></i></div>
-      <p class="muted">${t('steps_rule')}</p>
+      <p class="muted">${t('steps_rule2', { n: fmtNum(stepBlock()) })} ${t('goal_auto')}</p>
       <div class="row between gap-top">${goalRow}</div>
       <p class="muted">${t('inclusive_note')}</p></div>
-    <div class="card"><h3>💪 ${t('workouts_title')}</h3>${wks}<p class="muted">${t('workouts_rule')}</p></div>
+    <div class="card"><h3>💪 ${t('workouts_title')}</h3>${wks}<p class="muted">${t('workouts_rule')} ${t('wk_cap', { n: WORKOUT_PAY_MAX })}</p></div>
     <div class="card"><h3>🧘 ${t('mind_title')}</h3>
       <div class="vitals">
         <div><span>${t('mindful')}</span><b>${Math.round(d.mindful)} ${t('minutes')}</b></div>
@@ -406,31 +441,43 @@ function panelReal() {
     <div class="card earn"><h3>💰 ${t('earned_today')}</h3>
       <div class="big-num">🪙${fmtNum(d.earned.coins)} <small>🪵${d.earned.wood}</small></div>
       <p class="muted">${t('money_rule')}</p></div>
+    ${souvCard()}
     <div class="card"><h3>⌚ ${t('devices_title')}</h3><p class="muted">${t('devices_text')}</p></div>
-    <div class="card"><h3>🔒 ${t('privacy_title')}</h3>
-      <label class="row between toggle-row"><span>${t('share_goal')}</span>
-        <input type="checkbox" class="switch" data-act="share" ${S.me.shareGoal ? 'checked' : ''}></label>
-      <p class="muted">${t('privacy_note')}</p></div>
+    ${privacyCard()}
     <div class="card"><h3>⚙️ ${t('settings')}</h3>
       <div class="row between"><span>${t('language')}</span><span>
         <button class="chip ${S.lang === 'zh' ? 'on' : ''}" data-act="lang" data-arg="zh">中文</button>
         <button class="chip ${S.lang === 'en' ? 'on' : ''}" data-act="lang" data-arg="en">English</button></span></div></div>`;
 }
 
+// Privacy and pressure: what friends can see of you, and calm mode (no ranking, no friends' fitness).
+function privacyCard() {
+  const sw = (act, arg, on, label, sub = '') => `<label class="row between toggle-row"><span>${label}${sub ? `<small>${sub}</small>` : ''}</span>
+    <input type="checkbox" class="switch" data-act="${act}" data-arg="${arg}" ${on ? 'checked' : ''}></label>`;
+  return `<div class="card privacy-card"><h3>🔒 ${t('privacy_title')}</h3>
+    ${sw('calm', '', S.calm, `😌 ${t('calm_title')}`, t('calm_desc'))}
+    <div class="sub-title">${t('privacy_see')}</div>
+    ${sw('priv', 'shareGoal', S.me.shareGoal, t('share_goal2'))}
+    ${sw('priv', 'shareLive', S.me.shareLive, t('share_live'))}
+    ${sw('priv', 'shareMood', S.me.shareMood, t('share_mood'))}
+    <p class="muted">${t('privacy_note2')}</p></div>`;
+}
 function panelFeed() {
   const n = unreadMail();
   const mail = `<div class="card mail-card"><div class="row between"><h3>📮 ${t('mailbox')}</h3>
       <div class="row tight"><button class="btn small" data-act="mailOpen">${n ? t('mail_unread', { n }) : t('mail_open')}</button>
       <button class="btn small primary" data-act="compose">✉️ ${t('write_letter')}</button></div></div></div>`;
-  if (!S.feed.length) return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<p class="muted center gap-top">${t('feed_empty')}</p>`;
-  const items = [...S.feed].reverse().map(it => {
+  const feed = S.feed.filter(feedVisible);
+  const calm = `<button class="chip ${S.calm ? 'on' : ''}" data-act="calm">😌 ${t('calm_title')}${S.calm ? ' ✓' : ''}</button>`;
+  if (!feed.length) return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<p class="muted center gap-top">${t('feed_empty')}</p>`;
+  const items = [...feed].reverse().map(it => {
     const f = homeOf(it.from);
     const btn = it.gift ? (it.claimed ? `<span class="muted">${t('claimed')}</span>` : `<button class="btn small primary" data-act="claim" data-arg="${it.id}">${t('claim')}</button>`)
       : it.kind === 'stole' || it.kind === 'caught' ? `<button class="btn small" data-act="visit" data-arg="${it.from}">${t('visit_back')}</button>`
       : it.kind === 'letter' ? `<button class="btn small" data-act="mailOpen">${t('read')}</button>` : '';
     return `<div class="list-item">${f ? avatar(f.look) : ''}<div class="grow"><div>${feedText(it)}</div><div class="muted">${ago(it.t)}</div></div>${btn}</div>`;
   }).join('');
-  return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<p class="muted note">${t('feed_note')}</p><div class="card">${items}</div>`;
+  return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<div class="row between note"><p class="muted">${t('feed_note')}</p>${calm}</div><div class="card">${items}</div>`;
 }
 
 // ---------- sheets ----------
@@ -443,7 +490,10 @@ function openSheet(type, arg) {
   $('#backdrop').hidden = false;
   $('#backdrop').classList.toggle('light', compact);
 }
-function closeSheet() { UI.sheet = null; $('#sheet').hidden = true; $('#backdrop').hidden = true; UI.welcome = false; }
+function closeSheet() {
+  UI.sheet = null; $('#sheet').hidden = true; $('#backdrop').hidden = true; UI.welcome = false;
+  if (UI.souvQ && UI.souvQ.length) setTimeout(() => { if (!UI.sheet && UI.souvQ.length) { openSheet('souvenir', UI.souvQ.shift()); refresh(); } }, 350);
+}
 function stagesRow(kind, k, n, cur, names, w = 72) {
   return `<div class="stages">${names.map((nmS, s) => `<div class="${s === cur ? 'on' : ''}">${thumbImg(kind, k, { stage: s }, w, 60, 'thumb xs')}<span>${nmS}</span></div>`).join('')}</div>`;
 }
@@ -545,11 +595,11 @@ const SHEETS = {
   },
   friend(id) {
     const f = friendById(id), liked = S.today.liked[id];
-    const status = f.shareGoal ? (f.goalToday ? `✅ ${t('f_goal_done')}` : `⏳ ${t('f_goal_not_yet')}`) : `🔒 ${t('f_private')}`;
-    const live = f.live && f.shareGoal ? `<p>${WORKOUTS[f.live.type].e} ${t('f_live', { name: nm(WORKOUTS[f.live.type]) })}</p>` : '';
+    const status = S.calm ? `😌 ${t('f_calm')}` : seesGoal(f) ? (f.goalToday ? `✅ ${t('f_goal_done')}` : `⏳ ${t('f_goal_not_yet')}`) : `🔒 ${t('f_private')}`;
+    const live = seesLive(f) ? `<p>${WORKOUTS[f.live.type].e} ${t('f_live', { name: nm(WORKOUTS[f.live.type]) })}</p>` : '';
     const gifts = giftOptions();
     return `<div class="row">${avatar(f.look, 'xl')}<div><h2>${t('home_of', { name: esc(homeName(f)) })}</h2>
-        <div class="muted">${nm(HOUSES[f.house])} · ❤️ ${f.likes} · 🏆 ${rankOf(f.id)} · ${ENERGY_EMOJI[friendEnergy(f)]}</div></div></div>
+        <div class="muted">${nm(HOUSES[f.house])} · ❤️ ${f.likes}${S.calm ? '' : ` · 🏆 ${rankOf(f.id)}`}${f.shareMood && !S.calm ? ` · ${ENERGY_EMOJI[friendEnergy(f)]}` : ''}</div></div></div>
       <div class="card gap-top"><div>${status}</div>${live}<p class="muted">${t('goal_privacy_hint')}</p></div>
       <div class="card"><div class="row between"><h3>❤️ ${t('like_home')}</h3>
         <button class="btn small ${liked ? '' : 'primary'}" data-act="like" data-arg="${id}" ${liked ? 'disabled' : ''}>${liked ? t('liked') : t('like')}</button></div></div>
@@ -570,12 +620,13 @@ const SHEETS = {
     }).join('');
     const b = assetBreakdown(S.me), empty = S.slots.filter(s => !s.owner).length;
     const parts = ['cash', 'house', 'land', 'items', 'cars', 'animals', 'goods'].map(k => `<div class="asset-row"><span>${t('a_' + k)}</span><b>🪙${fmtNum(b[k])}</b></div>`).join('');
-    return `<h2>🏆 ${t('rank_title', { street: t('street_name') })}</h2>
+    const list = S.calm ? `<div class="card"><p>😌 ${t('rank_calm')}</p><button class="btn small" data-act="calm">${t('rank_show')}</button></div>` : `<div class="card">${rows}</div>`;
+    return `<h2>${S.calm ? '🏛️' : '🏆'} ${t(S.calm ? 'town_title' : 'rank_title', { street: t('street_name') })}</h2>
       <div class="card town-card"><div class="row between"><b>🏛️ ${t('town_total')}</b><b>🪙${fmtNum(total)}</b></div>
         <div class="bar"><i style="width:${pct}%"></i></div>
         <div class="muted">Lv${lv} · ${next ? t('town_next', { n: fmtNum(next - total), lv: lv + 1 }) : t('town_max')}</div>
         <p class="muted">${t('town_note')}</p></div>
-      <div class="card">${rows}</div>
+      ${list}
       <div class="card"><h3>📊 ${t('my_assets')}</h3>${parts}<div class="asset-row total"><span>${t('a_total')}</span><b>🪙${fmtNum(b.total)}</b></div></div>
       ${empty ? `<button class="btn primary block" data-act="invite">✉️ ${t('invite_btn')}</button><p class="muted center gap-top">${t('invite_reward_note')}</p>` : ''}
       <p class="muted center gap-top">${t('rank_privacy')}</p>`;
@@ -586,6 +637,22 @@ const SHEETS = {
       <div class="invite-link">https://mirror.town/join/${code}</div>
       <button class="btn primary block" data-act="copyInvite">${t('copy_link')}</button>
       <p class="muted gap-top">${t('invite_note')}</p>`;
+  },
+  souvenir(k) {
+    const sv = SOUVENIRS.find(x => x.k === k);
+    return `<div class="center souv-sheet"><div class="souv-new">✨ ${t('souv_new')}</div>${thumbImg('furn', k, {}, 150, 130, 'thumb')}
+      <h2>${nm(FURN[k])}</h2><p class="muted">${t('souv_need_' + sv.need, { n: sv.n })}</p><p>${t('souv_placed')}</p>
+      <div class="row gap-top"><button class="btn grow" data-act="close">${t('souv_ok')}</button><button class="btn primary grow" data-act="souvGo">🛋️ ${t('souv_go')}</button></div></div>`;
+  },
+  floor() {
+    const h = S.me, n = floorsOf(h), H = HOUSES[h.house];
+    if (n >= maxFloors(h)) return `<h2>🏗️ ${t('build_floor')}</h2><p>${t('floor_max', { name: nm(H), n })}</p>`;
+    const c = floorCost(h);
+    return `<div class="center">${thumbImg('house', h.house, { wall: h.wall, roof: h.roof, extra: n - H.floors[0] + 1 }, 170, 150, 'thumb')}
+      <h2>🏗️ ${t('build_floor_title', { n: n + 1 })}</h2><p class="muted">${t('build_floor_desc')}</p>
+      <p class="muted">${t('house_floors', { n, max: maxFloors(h) })}</p></div>
+      <button class="btn primary block gap-top" data-act="buildFloorNow" ${canAfford(c) ? '' : 'disabled'}>${t('build_btn')} · ${costText(c)}</button>
+      ${canAfford(c) ? '' : `<p class="muted center gap-top">${t('snack_poor')}</p>`}`;
   },
   cap() {
     return `<div class="center"><div class="big-emoji xl">🌙</div><h2>${t('cap_heading')}</h2>
@@ -719,6 +786,7 @@ function plantJob(i, crop) {
 function harvestField(i) {
   const r = harvest(i);
   if (!r) return;
+  tutDone('harvest');
   Scene.floatField(i, `+${r.n} ${CROPS[r.crop].e}`);
   snack(t('snack_harvest', { n: r.n, e: CROPS[r.crop].e }));
 }
@@ -790,8 +858,9 @@ function afterTimeJump(events) {
     if (Math.random() < 0.5) notify(friendEvent());
   }
 }
-function goInside() { if (UI.tab === 'home') UI.inside = true; else UI.visitInside = true; syncView(); refresh(); }
-function goOutside() { if (UI.tab === 'home') UI.inside = false; else UI.visitInside = false; syncView(); refresh(); }
+function goInside() { setLevel(0); if (UI.tab === 'home') UI.inside = true; else UI.visitInside = true; syncView(); refresh(); }
+function goOutside() { setLevel(0); if (UI.tab === 'home') UI.inside = false; else UI.visitInside = false; syncView(); refresh(); }
+function switchFloor(lv) { setLevel(lv); Scene.levelChanged(); refresh(); }
 function newDraft(to) { UI.draft = { to: to || (UI.visit || friendIds()[0] || null), paper: PAPERS[0].id, text: '', gift: -1 }; }
 
 const ACT = {
@@ -805,6 +874,7 @@ const ACT = {
     const r = sumRewards(S.pending);
     addReward(r); S.pending = [];
     closeSheet();
+    tutDone('collect');
     if (UI.tab === 'home' && !UI.inside) Scene.floatHouse(rewardText(r)); else snack(rewardText(r));
   },
   close: () => closeSheet(),
@@ -816,12 +886,30 @@ const ACT = {
     if (S.live || !Scene.go({ kind: 'door' }, { done: goInside })) goInside();
   },
   goOut() {
-    if (!Scene.go({ kind: 'exit' }, { done: goOutside })) goOutside();
+    if (LEVEL > 0 || !Scene.go({ kind: 'exit' }, { done: goOutside })) goOutside();
   },
+  // Storeys: your townie walks to the stairs first (in your own home), then you're on the other floor.
+  floor(i) {
+    i = +i;
+    if (i === LEVEL) return;
+    const mine = UI.tab === 'home';
+    if (!mine || S.live || !Scene.go({ kind: 'stairs' }, { done: () => switchFloor(i) })) switchFloor(i);
+  },
+  buildFloor() { openSheet('floor'); },
+  buildFloorNow() {
+    result(buyFloor(), () => {
+      const n = floorsOf(S.me);
+      closeSheet();
+      snack(t('snack_floor', { n }));
+      if (UI.tab === 'home' && UI.inside) switchFloor(n - 1);
+      else { UI.tab = 'home'; UI.inside = false; syncView(); setTimeout(() => Scene.floatHouse('🏗️🎉'), 300); }
+    });
+  },
+  souvGo() { closeSheet(); UI.tab = 'home'; setLevel(0); UI.inside = true; syncView(); },
   recenter: () => Scene.recenter(),
-  goHome() { UI.visit = null; UI.visitInside = false; setTab('home'); },
-  backTown() { UI.visit = null; UI.visitInside = false; syncView(); },
-  visit(id) { closeSheet(); if (id === 'me') { setTab('home'); return; } UI.tab = 'town'; UI.visit = id; UI.visitInside = false; syncView(); },
+  goHome() { UI.visit = null; UI.visitInside = false; setLevel(0); setTab('home'); },
+  backTown() { UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); },
+  visit(id) { closeSheet(); setLevel(0); if (id === 'me') { setTab('home'); return; } UI.tab = 'town'; UI.visit = id; UI.visitInside = false; syncView(); },
   ranking: () => openSheet('ranking'),
   barn: () => openSheet('barn'),
   friendSheet: id => openSheet('friend', id),
@@ -836,11 +924,13 @@ const ACT = {
   plant(c) {
     const i = UI.sheet.arg.i;
     closeSheet();
+    tutDone('plant');
     const j = plantJob(i, c);
     walkDo(j.tg, j.o);
   },
   plantAll(c) {
     closeSheet();
+    tutDone('plant');
     const empty = S.me.fields.map((f, i) => (f ? -1 : i)).filter(i => i >= 0).slice(0, Math.min(S.me.seeds[c] || 0, actionsLeft()));
     const n = Scene.goMany(empty.map(i => plantJob(i, c)));
     if (n) snack(t('snack_going_plant', { n, e: CROPS[c].e }));
@@ -874,7 +964,12 @@ const ACT = {
       setTimeout(() => Scene.floatHouse('🎉'), 300);
     });
   },
-  moveHouse(i) { if (moveHouse(+i)) { snack(t('snack_moved', { name: nm(HOUSES[+i]) })); UI.tab = 'home'; UI.inside = false; syncView(); } },
+  moveHouse(i) {
+    const r = moveHouse(+i);
+    if (!r) return;
+    snack(r > 1 ? t('snack_moved_stored', { name: nm(HOUSES[+i]), n: r - 1 }) : t('snack_moved', { name: nm(HOUSES[+i]) }));
+    setLevel(0); UI.tab = 'home'; UI.inside = false; syncView();
+  },
   sell(arg) { const [k, n] = arg.split('|'), v = sellBarn(k, +n); if (v) snack(`+🪙${v}`); },
   sellAll() { const v = sellAllBarn(); if (v) snack(t('snack_sold', { n: v })); },
   release(k) { if (releaseBaby(k)) snack(t('snack_baby', { name: nm(ANIMALS[k].baby) })); },
@@ -892,8 +987,8 @@ const ACT = {
   trayMove() { const ed = Scene.getEdit(), it = findItem(ed.scope, ed.sel); if (it) Scene.hold({ k: it.k, rot: it.rot, tint: it.tint, id: it.id }); },
   trayStore() { const ed = Scene.getEdit(); storeItem(ed.scope, ed.sel); Scene.select(null); snack(t('snack_to_store')); },
   trayCancel() { Scene.hold(null); },
-  setRoomWall(i) { S.me.room.wall = +i; },
-  setFloor(i) { S.me.room.floor = +i; },
+  setRoomWall(i) { curRoom(S.me).wall = +i; },
+  setFloor(i) { curRoom(S.me).floor = +i; },
   setWall(i) { S.me.wall = WALL_COLORS[+i]; },
   setRoof(i) { S.me.roof = ROOF_COLORS[+i]; },
   // social
@@ -913,7 +1008,8 @@ const ACT = {
   },
   claim(id) { const g = claimGift(id); if (g) snack(t('snack_claimed', { gift: giftText(g) })); },
   restDay() { if (setRestDay()) snack(t('snack_rest')); },
-  share() { S.me.shareGoal = !S.me.shareGoal; },
+  priv(k) { if (['shareGoal', 'shareLive', 'shareMood'].includes(k)) S.me[k] = !S.me[k]; },
+  calm() { S.calm = !S.calm; snack(t(S.calm ? 'snack_calm_on' : 'snack_calm_off')); if (UI.sheet && UI.sheet.type === 'ranking') renderSheet(); },
   lang(l) { S.lang = l; document.documentElement.lang = l; },
   reset() { if (confirm(t('reset_confirm'))) { localStorage.removeItem(STORAGE_KEY); location.reload(); } },
   // mail
@@ -979,7 +1075,8 @@ const ACT = {
   simMoney() { S.me.coins += 1000; S.me.wood += 50; snack('+🪙1000 +🪵50'); },
   consoleToggle() { $('#console').classList.toggle('open'); },
   consoleClose() { $('#console').classList.remove('open'); },
-  hintOk() { S.seenHint = true; },
+  tutSkip() { endTutorial(); },
+  tutEnd() { endTutorial(); setTab('home'); },
 };
 
 // Taps on the scene.
@@ -987,7 +1084,12 @@ function onSceneHit(h) {
   const k = h.kind, mine = h.owner === 'me';
   if (k === 'pending') return openSheet('collect');
   if (k === 'buyLand') { ACT.openShop('land'); return refresh(); }
-  if (k === 'ground') { if (S.live) return snack(t('snack_live_busy')); Scene.go({ kind: 'ground', x: h.x, y: h.y }); return refreshSoon(); }
+  if (k === 'ground') { if (S.live) return snack(t('snack_live_busy')); Scene.go({ kind: 'ground', x: h.x, y: h.y }); tutDone('walk'); return refreshSoon(); }
+  if (k === 'stairs') {
+    const hm = homeOf(Scene.view().owner), top = floorsOf(hm) - 1, lv = Math.min(LEVEL, top);
+    ACT.floor(lv < top ? lv + 1 : lv - 1);
+    return refresh();
+  }
   if (k === 'floor') { Scene.go({ kind: 'floor', x: h.x, y: h.y }); return; }
   if (k === 'bubble') {
     if (h.what === 'field') return sneakDo({ kind: 'field', i: h.i }, () => stealResult(h.owner, steal(h.owner, h.i)));
@@ -1038,7 +1140,7 @@ function onSceneHit(h) {
     return;
   }
   if (k === 'furn') {
-    const it = homeOf(Scene.view().owner).room.items.find(x => x.id === h.id);
+    const it = shownRoom(homeOf(Scene.view().owner)).items.find(x => x.id === h.id);
     if (it && FURN[it.k].use && Scene.view().owner === 'me') { Scene.go({ kind: 'furn', id: it.id }); return snack(`${nm(FURN[it.k])} · ${t('use_' + FURN[it.k].use)}`); }
     return snack(nm(FURN[h.k]));
   }
@@ -1061,6 +1163,10 @@ function refreshSoon() { clearTimeout(refreshTimer); refreshTimer = setTimeout(r
 function refresh() {
   if (!S) return;
   if (UI.tab === 'feed') S.feed.forEach(i => { i.read = true; });
+  if (!S.onboarding) {
+    const got = awardSouvenirs();
+    if (got.length) { UI.souvQ = [...(UI.souvQ || []), ...got]; if (!UI.sheet) setTimeout(() => { if (!UI.sheet && UI.souvQ.length) { openSheet('souvenir', UI.souvQ.shift()); refresh(); } }, 500); }
+  }
   save();
   renderHUD(); renderTabbar(); renderPanel(); renderOverlay(); renderConsole(); renderSheet();
   UI.sig = overlaySig();
@@ -1084,68 +1190,160 @@ window.onNativeWorkout = d => {
   refresh();
 };
 
-// ---------- onboarding ----------
+// ---------- onboarding: few words, big pictures, and the real town already alive behind it ----------
+// The game is created first (newGame preview), so these screens float over your actual street.
 let obAnim = null;
+function obLook() { S.me.look = { ...OB.look }; S.me.roof = OB.look.shirt; }
 function renderOnboarding() {
-  const el = $('#onboard');
+  const el = $('#onboard'), st = OB.step;
   cancelAnimationFrame(obAnim);
+  document.body.classList.add('ob-mode');
+  el.className = 'onboard ob-s' + st;
+  const dots = `<div class="ob-dots">${[1, 2, 3, 4, 5].map(i => `<i class="${i === st ? 'on' : ''}"></i>`).join('')}</div>`;
   const langs = `<div class="ob-lang"><button class="chip ${OB.lang === 'zh' ? 'on' : ''}" data-act="obLang" data-arg="zh">中文</button>
     <button class="chip ${OB.lang === 'en' ? 'on' : ''}" data-act="obLang" data-arg="en">English</button></div>`;
-  const dots = `<div class="ob-dots">${[0, 1, 2].map(i => `<i class="${i === OB.step ? 'on' : ''}"></i>`).join('')}</div>`;
-  if (OB.step === 0) {
-    el.innerHTML = `${langs}<div class="ob-body"><div class="ob-hero">🏡</div><h1>${t('app_name')}</h1>
-      <p class="ob-tag">${t('tagline')}</p>
-      <ul class="ob-points"><li>😴 ${t('ob_p0')}</li><li>🏃 ${t('ob_p1')}</li><li>📵 ${t('ob_p2')}</li><li>🏘️ ${t('ob_p3')}</li></ul></div>
-      ${dots}<button class="btn primary block" data-act="obNext">${t('ob_start')}</button>`;
-  } else if (OB.step === 1) {
-    const L = OB.look;
-    const sw = (list, cur, act) => list.map(c => `<button class="swatch sm ${c === cur ? 'on' : ''}" style="background:${c}" data-act="${act}" data-arg="${c}"></button>`).join('');
-    el.innerHTML = `<div class="ob-body"><h2>${t('ob_you')}</h2>
-      <canvas id="obCanvas" class="ob-canvas"></canvas>
-      <input id="obName" class="input" maxlength="12" placeholder="${t('ob_name_ph')}" value="${esc(OB.name)}">
-      <div class="look-row"><span>${t('ob_shirt')}</span><div class="swatches left">${sw(COLORS, L.shirt, 'obShirt')}</div></div>
-      <div class="look-row"><span>${t('ob_skin')}</span><div class="swatches left">${sw(SKINS, L.skin, 'obSkin')}</div></div>
-      <div class="look-row"><span>${t('ob_hair')}</span><div>${HAIRS.map(hs => `<button class="chip ${L.hair === hs ? 'on' : ''}" data-act="obHair" data-arg="${hs}">${t('hair_' + hs)}</button>`).join('')}</div></div>
-      <div class="look-row"><span>${t('ob_hair_col')}</span><div class="swatches left">${sw(HAIR_COLORS, L.hairCol, 'obHairCol')}</div></div>
-      <div class="look-row"><span>${t('ob_mob')}</span><div><button class="chip ${L.mob === 'walk' ? 'on' : ''}" data-act="obMob" data-arg="walk">🚶 ${t('mob_walk')}</button>
-        <button class="chip ${L.mob === 'wheel' ? 'on' : ''}" data-act="obMob" data-arg="wheel">🦽 ${t('mob_wheel')}</button></div></div>
-      <p class="muted center">${t('ob_look_note')}</p></div>
-      ${dots}<button class="btn primary block" data-act="obNext">${t('next')}</button>`;
+  if (st <= 3) { Scene.setView('town', 'me'); Scene.attract(0.42); }
+  if (st === 0) {
+    el.innerHTML = `<div class="ob-top">${langs}</div>
+      <div class="ob-logo"><div class="ob-icon">🏡</div><h1>${t('app_name')}</h1><p>${t('ob_slogan')}</p></div>
+      <div class="ob-card ob-start"><button class="btn primary big block" data-act="obNext">${t('ob_start')}</button>
+        <p class="muted center">${t('ob_start_note')}</p></div>`;
+  } else if (st <= 3) {
+    const k = st - 1;
+    el.innerHTML = `<div class="ob-top"><button class="ob-skip" data-act="obGo" data-arg="4">${t('ob_skip')}</button></div>
+      <div class="ob-card"><canvas id="obCanvas" class="ob-story"></canvas>
+        <h2>${t('story' + k + '_t')}</h2><p class="ob-sub">${t('story' + k + '_s')}</p>${dots}
+        <button class="btn primary big block" data-act="obNext">${t('next')}</button></div>`;
     const cvs = $('#obCanvas');
     const loop = ts => {
-      Scene.thumb('person', 'ob', { look: OB.look, canvas: cvs, live: true, ts, moving: true, phase: ts / 100, energy: 'great' }, 140, 130);
+      Scene.thumb('story', k, { canvas: cvs, live: true, ts, look: OB.look }, cvs.clientWidth || 320, cvs.clientHeight || 170);
       obAnim = requestAnimationFrame(loop);
     };
     obAnim = requestAnimationFrame(loop);
+  } else if (st === 4) {
+    Scene.attract(false); Scene.setView('home', 'me'); Scene.focusMe(2.3, 0.3);
+    const L = OB.look;
+    const sw = (list, cur, act) => list.map(c => `<button class="swatch sm ${c === cur ? 'on' : ''}" style="background:${c}" data-act="${act}" data-arg="${c}"></button>`).join('');
+    el.innerHTML = `<div class="ob-top"></div><div class="ob-card ob-look"><h2>${t('ob_you2')}</h2>
+      <input id="obName" class="input" maxlength="12" placeholder="${t('ob_name_ph')}" value="${esc(OB.name)}">
+      <div class="look-row"><span>👕</span><div class="swatches left">${sw(COLORS, L.shirt, 'obShirt')}</div></div>
+      <div class="look-row"><span>✋</span><div class="swatches left">${sw(SKINS, L.skin, 'obSkin')}</div></div>
+      <div class="look-row"><span>💇</span><div>${HAIRS.map(hs => `<button class="chip ${L.hair === hs ? 'on' : ''}" data-act="obHair" data-arg="${hs}">${t('hair_' + hs)}</button>`).join('')}</div></div>
+      <div class="look-row"><span>🎨</span><div class="swatches left">${sw(HAIR_COLORS, L.hairCol, 'obHairCol')}</div></div>
+      <div class="look-row"><span>🚶</span><div><button class="chip ${L.mob === 'walk' ? 'on' : ''}" data-act="obMob" data-arg="walk">${t('mob_walk')}</button>
+        <button class="chip ${L.mob === 'wheel' ? 'on' : ''}" data-act="obMob" data-arg="wheel">🦽 ${t('mob_wheel')}</button></div></div>
+      <p class="muted center small">${t('ob_look_short')}</p>${dots}
+      <button class="btn primary big block" data-act="obNext">${t('next')}</button></div>`;
   } else {
-    el.innerHTML = `<div class="ob-body"><h2>${t('ob_apps')}</h2><p class="muted">${t('ob_apps_desc')}</p>
+    Scene.attract(false); Scene.setView('home', 'me'); Scene.focusMe(1.15, 0.24);
+    el.innerHTML = `<div class="ob-top"></div><div class="ob-card ob-apps"><h2>${t('ob_apps2')}</h2><p class="ob-sub">${t('ob_apps_short')}</p>
       <div class="app-grid">${APPS.map(a => `<button class="app-pick ${OB.apps.includes(a.id) ? 'on' : ''}" data-act="obApp" data-arg="${a.id}">
         <span>${a.emoji}</span>${a.name || t('app_games')}</button>`).join('')}</div>
-      <h3 class="gap-top">${t('ob_limit')}</h3>
-      <div>${[30, 60, 90, 120].map(m => `<button class="chip ${OB.limit === m ? 'on' : ''}" data-act="obLimit" data-arg="${m}">${fmtDur(m * MIN)}</button>`).join('')}</div>
-      <p class="muted gap-top">❤️ ${t('ob_health')}</p>
-      <p class="muted">🔒 ${t('ob_privacy')}</p></div>
-      ${dots}<button class="btn primary block" data-act="obDone" ${OB.apps.length ? '' : 'disabled'}>${t('ob_move_in')}</button>`;
+      <div class="ob-limit"><span>⏱️ ${t('ob_limit')}</span><div>${[30, 60, 90, 120].map(m => `<button class="chip ${OB.limit === m ? 'on' : ''}" data-act="obLimit" data-arg="${m}">${fmtDur(m * MIN)}</button>`).join('')}</div></div>
+      <div class="ob-promise"><div>❤️ ${t('ob_health_short')}</div><div>🔒 ${t('ob_privacy_short')}</div></div>${dots}
+      <button class="btn primary big block" data-act="obDone" ${OB.apps.length ? '' : 'disabled'}>🏡 ${t('ob_move_in')}</button></div>`;
   }
 }
 Object.assign(ACT, {
-  obLang(l) { OB.lang = l; document.documentElement.lang = l; renderOnboarding(); renderConsole(); },
-  obNext() { OB.step++; renderOnboarding(); },
-  obShirt(c) { OB.look.shirt = c; renderOnboarding(); },
-  obSkin(c) { OB.look.skin = c; renderOnboarding(); },
-  obHair(h) { OB.look.hair = h; renderOnboarding(); },
-  obHairCol(c) { OB.look.hairCol = c; renderOnboarding(); },
-  obMob(m) { OB.look.mob = m; renderOnboarding(); },
+  obLang(l) { OB.lang = l; S.lang = l; document.documentElement.lang = l; renderOnboarding(); renderConsole(); },
+  obNext() { OB.step = Math.min(5, OB.step + 1); renderOnboarding(); },
+  obGo(n) { OB.step = +n; renderOnboarding(); },
+  obShirt(c) { OB.look.shirt = c; obLook(); renderOnboarding(); },
+  obSkin(c) { OB.look.skin = c; obLook(); renderOnboarding(); },
+  obHair(h) { OB.look.hair = h; obLook(); renderOnboarding(); },
+  obHairCol(c) { OB.look.hairCol = c; obLook(); renderOnboarding(); },
+  obMob(m) { OB.look.mob = m; obLook(); renderOnboarding(); },
   obApp(id) { OB.apps = OB.apps.includes(id) ? OB.apps.filter(x => x !== id) : [...OB.apps, id]; renderOnboarding(); },
   obLimit(m) { OB.limit = +m; renderOnboarding(); },
   obDone() {
     cancelAnimationFrame(obAnim);
-    newGame({ lang: OB.lang, name: OB.name.trim() || t('default_name'), look: OB.look, apps: OB.apps, limitMin: OB.limit });
+    Object.assign(S, { lang: OB.lang, apps: OB.apps, limitMin: OB.limit, onboarding: false, tut: 0 });
+    S.me.name = OB.name.trim() || t('default_name');
+    obLook();
     OB = null;
     $('#onboard').hidden = true;
+    document.body.classList.remove('ob-mode');
+    Scene.attract(false);
     start();
+    Scene.recenter();
+    setTimeout(() => Scene.floatHouse('🎉'), 500);
   },
 });
+
+// ---------- first-minute tutorial: a pointer and one short line at a time ----------
+// Each step ends when you actually do the thing (tutDone is called from the action), or is skipped if it can't apply.
+const TUT = [
+  { id: 'walk', at: () => sceneAt('ground', [7.2, 9.6]) },
+  { id: 'harvest', at: () => sceneAt('field', S.me.fields.findIndex(isRipe)), skip: () => !S.me.fields.some(isRipe) },
+  { id: 'collect', at: () => domAt('#hud .pill.pending'), skip: () => !S.pending.length },
+  { id: 'plant', at: () => sceneAt('field', S.me.fields.findIndex(f => !f)), skip: () => !S.me.fields.some(f => !f) || !seedCount() },
+  { id: 'tab:town', at: () => domAt('.tab[data-arg="town"]') },
+  { id: 'tab:real', at: () => domAt('.tab[data-arg="real"]') },
+  { id: 'done' },
+];
+let coachRAF = 0;
+function tutStep() { return S && !S.onboarding && S.tut >= 0 && S.tut < TUT.length ? TUT[S.tut] : null; }
+function tutDone(id) {
+  const st = tutStep();
+  if (!st || st.id !== id) return;
+  S.tut++; save(); runCoach();
+}
+function endTutorial() {
+  if (!S || S.tut === -1) return;
+  S.tut = -1; save();
+  $('#coach').hidden = true;
+  welcomeGifts();
+}
+// Two friends say hello once you've settled in: a gift and a letter.
+function welcomeGifts() {
+  if (S.welcomed) return;
+  S.welcomed = true;
+  setTimeout(() => {
+    notify(addFeed({ kind: 'gift', from: 'wang', msgKey: 'welcome', gift: { type: 'seed', k: 'tomato', n: 2 } }));
+    receiveLetter('li', LETTER_TPL[curLang()].welcome, 'rose', { type: 'barn', k: 'apple', n: 3 });
+    refresh();
+  }, 2500);
+}
+function screenRect() { return $('.screen').getBoundingClientRect(); }
+function domAt(sel) {
+  const el = $(sel);
+  if (!el || !el.offsetParent) return null;
+  const r = el.getBoundingClientRect(), s = screenRect();
+  return { x: r.left + r.width / 2 - s.left, y: r.top + r.height / 2 - s.top, r: Math.max(r.width, r.height) / 2 + 6 };
+}
+function sceneAt(kind, arg) {
+  if (UI.tab !== 'home' || UI.inside || arg === -1) return null;
+  const p = Scene.where(kind, arg);
+  if (!p) return null;
+  const c = $('#town').getBoundingClientRect(), s = screenRect();
+  return { x: p.x + c.left - s.left, y: p.y + c.top - s.top, r: p.r };
+}
+function runCoach() { if (!coachRAF) coachRAF = requestAnimationFrame(coachLoop); }
+function coachLoop() {
+  coachRAF = 0;
+  const el = $('#coach'), st = tutStep();
+  if (!st) { el.hidden = true; return; }
+  coachRAF = requestAnimationFrame(coachLoop);
+  if (st.skip && st.skip()) { S.tut++; save(); return; }
+  if (UI.sheet || Scene.getEdit()) { el.hidden = true; return; }
+  el.hidden = false;
+  const done = st.id === 'done', bub = el.querySelector('.coach-bubble');
+  if (el.dataset.step !== st.id + curLang()) {
+    el.dataset.step = st.id + curLang();
+    bub.innerHTML = `${avatar(S.me.look)}<div><p>${t('tut_' + st.id.replace('tab:', ''))}</p>
+      ${done ? `<button class="btn primary small" data-act="tutEnd">${t('tut_ok')}</button>` : `<button class="link" data-act="tutSkip">${t('tut_skip')}</button>`}</div>`;
+  }
+  const pos = st.at ? st.at() : null, ring = el.querySelector('.coach-ring'), hand = el.querySelector('.coach-hand'), H = el.clientHeight;
+  ring.hidden = hand.hidden = !pos;
+  el.classList.toggle('dim', done);
+  if (pos) {
+    Object.assign(ring.style, { left: pos.x - pos.r + 'px', top: pos.y - pos.r + 'px', width: pos.r * 2 + 'px', height: pos.r * 2 + 'px' });
+    Object.assign(hand.style, { left: pos.x - 6 + 'px', top: pos.y + pos.r * 0.35 + 'px' });
+    const below = pos.y < H * 0.5;
+    bub.style.top = below ? pos.y + pos.r + 44 + 'px' : '';
+    bub.style.bottom = below ? '' : H - pos.y + pos.r + 14 + 'px';
+  } else { bub.style.top = done ? '36%' : '128px'; bub.style.bottom = ''; }
+}
 
 // ---------- boot ----------
 function start() {
@@ -1155,14 +1353,10 @@ function start() {
   setTab('home');
   refresh();
   postNative({ type: 'ready' });
-  if (S.pending.length) { UI.welcome = true; openSheet('collect'); }
-  if (!S.welcomed) {
-    S.welcomed = true;
-    setTimeout(() => {
-      notify(addFeed({ kind: 'gift', from: 'wang', msgKey: 'welcome', gift: { type: 'seed', k: 'tomato', n: 2 } }));
-      receiveLetter('li', LETTER_TPL[curLang()].welcome, 'rose', { type: 'barn', k: 'apple', n: 3 });
-      refresh();
-    }, 2500);
+  if (tutStep()) runCoach();
+  else {
+    if (S.pending.length) { UI.welcome = true; openSheet('collect'); }
+    welcomeGifts();
   }
 }
 
@@ -1175,7 +1369,7 @@ document.addEventListener('click', e => {
   const ta = $('#draftText');
   if (ta && UI.draft) UI.draft.text = ta.value;
   fn(el.dataset.arg);
-  if (S && !el.dataset.act.startsWith('ob')) refresh();
+  if (S && !S.onboarding && !el.dataset.act.startsWith('ob')) refresh();
 });
 document.addEventListener('input', e => {
   if (e.target.id === 'obName') OB.name = e.target.value;
@@ -1185,25 +1379,30 @@ document.addEventListener('input', e => {
 Scene.init($('#town'), onSceneHit);
 setInterval(() => {
   if (!S) return;
-  if (checkDay()) { snack(t('snack_new_day')); refresh(); }
+  if (checkDay() && !S.onboarding) { snack(t('snack_new_day')); refresh(); }
   simFriends();
   const clock = $('#clock'); if (clock) clock.textContent = fmtClock(now());
   const ct = $('#conTime'); if (ct) ct.textContent = fmtDate(now());
   renderWidget();
+  if (S.onboarding) return;
   if (overlaySig() !== UI.sig) { renderHUD(); renderOverlay(); renderTabbar(); UI.sig = overlaySig(); }
   if (UI.sheet && ['field', 'animal', 'tree'].includes(UI.sheet.type)) renderSheet();
   if (UI.tab === 'real' && S.live) renderPanel();
 }, 1000);
 // Friends stay active in the background, but rarely (no spam).
 setInterval(() => {
-  if (!S || document.hidden || Math.random() > 0.5) return;
+  if (!S || S.onboarding || document.hidden || Math.random() > 0.5) return;
   notify(friendEvent()); refresh();
 }, 45000);
 
-if (load()) start();
+if (load() && !S.onboarding) start();
 else {
-  OB = { step: 0, name: '', look: { shirt: COLORS[4], skin: SKINS[0], hair: 'short', hairCol: HAIR_COLORS[0], mob: 'walk' },
-         apps: ['tiktok', 'instagram'], limit: 60, lang: (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en' };
+  if (!S) {
+    const lang = (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    newGame({ preview: true, lang, name: '', apps: ['tiktok', 'instagram'], limitMin: 60,
+      look: { shirt: COLORS[4], skin: SKINS[0], hair: 'short', hairCol: HAIR_COLORS[0], mob: 'walk' } });
+  }
+  OB = { step: 0, name: S.me.name || '', look: { ...S.me.look }, apps: [...S.apps], limit: S.limitMin, lang: S.lang };
   document.documentElement.lang = OB.lang;
   $('#onboard').hidden = false;
   renderOnboarding(); renderConsole();

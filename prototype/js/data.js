@@ -2,12 +2,12 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
 const STEAL_CAP = 8;                    // sneaks per day
-const STEP_GOAL = 6000;
+const STEP_GOAL = 6000;                  // starting step goal; it then follows your own last 7 days (see stepGoal())
 const STORAGE_KEY = 'mirror-town-proto-v3';
 
 // ---------- home lot layout (tiles) ----------
@@ -126,24 +126,29 @@ const FISH_EVERY = 6;   // minutes for a new fish to show up
 const FISH_KINDS = [['fish', 0.7], ['shrimp', 0.2], ['koi', 0.1]];
 
 // ---------- houses ----------
-// fp: footprint [x, y, w, d] inside the lot. room: interior floor size. You can own several and pick which to live in.
+// fp: footprint [x, y, w, d] inside the lot. room: floor size of every storey inside.
+// floors: [storeys that come with the house, most storeys you can build]. You can own several houses and pick which to live in.
 const HOUSES = [
-  { id: 'tent',     zh: '帐篷',     en: 'Tent',             fp: [2, 2, 3, 3], room: [4, 4],  cost: {} },
-  { id: 'cabin',    zh: '小木屋',   en: 'Log cabin',        fp: [2, 2, 4, 3], room: [5, 4],  cost: { coins: 300, wood: 15 } },
-  { id: 'cottage',  zh: '小平房',   en: 'Cottage',          fp: [2, 1, 4, 4], room: [6, 5],  cost: { coins: 900, wood: 30 } },
-  { id: 'twostory', zh: '两层小楼', en: 'Two-story house',  fp: [1, 1, 5, 4], room: [7, 6],  cost: { coins: 2200, wood: 60 } },
-  { id: 'modern',   zh: '现代别墅', en: 'Modern villa',     fp: [1, 1, 6, 4], room: [8, 6],  cost: { coins: 3800, wood: 80 } },
-  { id: 'villa',    zh: '花园别墅', en: 'Garden villa',     fp: [1, 1, 6, 4], room: [8, 7],  cost: { coins: 5000, wood: 100 } },
-  { id: 'chinese',  zh: '中式庭院', en: 'Courtyard house',  fp: [1, 1, 6, 4], room: [8, 7],  cost: { coins: 7500, wood: 140 } },
-  { id: 'mansion',  zh: '豪宅',     en: 'Mansion',          fp: [1, 1, 6, 4], room: [10, 8], cost: { coins: 12000, wood: 180 } },
-  { id: 'castle',   zh: '城堡',     en: 'Castle',           fp: [1, 1, 6, 4], room: [11, 9], cost: { coins: 25000, wood: 300 } },
+  { id: 'tent',     zh: '帐篷',     en: 'Tent',             fp: [2, 2, 3, 3], room: [4, 4],  floors: [1, 1], cost: {} },
+  { id: 'cabin',    zh: '小木屋',   en: 'Log cabin',        fp: [2, 2, 4, 3], room: [5, 4],  floors: [1, 2], cost: { coins: 300, wood: 15 } },
+  { id: 'cottage',  zh: '小平房',   en: 'Cottage',          fp: [2, 1, 4, 4], room: [6, 5],  floors: [1, 3], cost: { coins: 900, wood: 30 } },
+  { id: 'twostory', zh: '两层小楼', en: 'Two-story house',  fp: [1, 1, 5, 4], room: [7, 6],  floors: [2, 4], cost: { coins: 2200, wood: 60 } },
+  { id: 'modern',   zh: '现代别墅', en: 'Modern villa',     fp: [1, 1, 6, 4], room: [8, 6],  floors: [2, 5], cost: { coins: 3800, wood: 80 } },
+  { id: 'villa',    zh: '花园别墅', en: 'Garden villa',     fp: [1, 1, 6, 4], room: [8, 7],  floors: [2, 4], cost: { coins: 5000, wood: 100 } },
+  { id: 'chinese',  zh: '中式庭院', en: 'Courtyard house',  fp: [1, 1, 6, 4], room: [8, 7],  floors: [1, 3], cost: { coins: 7500, wood: 140 } },
+  { id: 'mansion',  zh: '豪宅',     en: 'Mansion',          fp: [1, 1, 6, 4], room: [10, 8], floors: [2, 5], cost: { coins: 12000, wood: 180 } },
+  { id: 'castle',   zh: '城堡',     en: 'Castle',           fp: [1, 1, 6, 4], room: [11, 9], floors: [2, 6], cost: { coins: 25000, wood: 300 } },
 ];
+// Building another storey: price per floor tile of the room, growing ×1.5 with every storey. A late-game money sink.
+const FLOOR_BUILD = { coinsPerTile: 40, woodPerTile: 0.8, grow: 1.5 };
+const FLOOR_H = 28;                      // how much taller the house gets outside per storey you build (px)
 const WALL_COLORS = ['#f4e7cc', '#fbe3c8', '#fff8ec', '#dfe9f3', '#e6efdc', '#f3d9d6', '#c99a6b', '#9aa3ad'];
 const ROOF_COLORS = ['#d9534f', '#ef7d3c', '#e0aa2a', '#4f9a4b', '#3e7cc9', '#6b5bd0', '#8a5a36', '#5b6470'];
-const ROOM_WALLS = ['#f3e6d3', '#dbe9f4', '#e3eed8', '#f6dede', '#ece0f4', '#fff3d1', '#d9d2c5', '#5e6b7d'];
+const ROOM_WALLS = ['#f3e6d3', '#dbe9f4', '#e3eed8', '#f6dede', '#ece0f4', '#fff3d1', '#d9d2c5', '#5e6b7d', '#cfe3e0', '#f2d7b6', '#3f4f46', '#ffffff'];
 const FLOORS = [
   { c1: '#c89466', c2: '#b9855a' }, { c1: '#ebe6dc', c2: '#dcd5c8' }, { c1: '#9fb4c8', c2: '#94a9bd' },
-  { c1: '#7a5a44', c2: '#6d503c' }, { c1: '#d9c7a7', c2: '#cfbc9b' },
+  { c1: '#7a5a44', c2: '#6d503c' }, { c1: '#d9c7a7', c2: '#cfbc9b' }, { c1: '#f4f3ef', c2: '#d6d8dd' },
+  { c1: '#b7d7c4', c2: '#b0d0bd' }, { c1: '#e8d9a8', c2: '#dccb97' },
 ];
 const TINTS = ['#e5675f', '#f2a33a', '#f3d36b', '#6cbf73', '#5aa2e0', '#8b7fe0', '#e88bb7', '#8d99a6'];
 
@@ -187,7 +192,26 @@ const FURN = {
   aquarium:  { zh: '鱼缸',       en: 'Aquarium',         w: 2, d: 1, price: 400 },
   fireplace: { zh: '壁炉',       en: 'Fireplace',        w: 2, d: 1, price: 600 },
   piano:     { zh: '钢琴',       en: 'Piano',            w: 2, d: 1, price: 900 },
+  // souvenirs: can't be bought, only earned in real life (see SOUVENIRS)
+  shoerack:  { zh: '跑鞋架',     en: 'Sneaker rack',     w: 1, d: 1, price: 0, souv: true },
+  moonlamp:  { zh: '月亮夜灯',   en: 'Moon lamp',        w: 1, d: 1, price: 0, souv: true },
+  medal:     { zh: '三环奖牌',   en: 'Rings medal',      w: 1, d: 1, price: 0, souv: true },
+  books:     { zh: '读书角',     en: 'Reading nook',     w: 1, d: 1, price: 0, souv: true },
+  bonsai:    { zh: '小盆景',     en: 'Bonsai',           w: 1, d: 1, price: 0, souv: true },
+  trophy:    { zh: '运动奖杯',   en: 'Trophy',           w: 1, d: 1, price: 0, souv: true },
+  calendar:  { zh: '一周日历',   en: 'Week calendar',    w: 1, d: 1, price: 0, souv: true },
 };
+// Souvenirs: the only things money can't buy. Each comes once, from something you did in real life.
+// need: which counter in S.stats, n: how much. Your home slowly becomes a diary of your real life.
+const SOUVENIRS = [
+  { k: 'calendar', need: 'days',        n: 7 },    // came back on 7 different days (rest days count)
+  { k: 'shoerack', need: 'goalDays',    n: 3 },    // reached your own step goal on 3 days
+  { k: 'moonlamp', need: 'sleepStreak', n: 3 },    // slept 80+ three nights in a row
+  { k: 'medal',    need: 'ringsAll',    n: 1 },    // closed all three rings once
+  { k: 'books',    need: 'focus120',    n: 1 },    // stayed off distracting apps for 2 hours once
+  { k: 'bonsai',   need: 'mindful',     n: 30 },   // 30 mindful minutes in total
+  { k: 'trophy',   need: 'workouts',    n: 10 },   // 10 workouts of 10+ minutes
+];
 
 // ---------- yard (outside) ----------
 const YARD = {
@@ -256,7 +280,10 @@ const ENERGY_LEVELS = [ // highest first
   { id: 'tired',     min: 50, mult: 0.75 },
   { id: 'exhausted', min: 0,  mult: 0.5 },
 ];
-const STEP_REWARD = { coins: 10, wood: 1 };   // per 1,000 steps (or wheelchair pushes)
+const STEP_REWARD = { coins: 10, wood: 1 };   // per sixth of YOUR step goal (1,000 steps at a 6,000 goal), wheelchair pushes count
+const STEP_BLOCKS_MAX = 9;                     // paid up to 150 % of your goal, so a marathoner doesn't out-earn a beginner
+const STEP_GOAL_RANGE = [3000, 12000];         // your goal = 110 % of your last 7 days' average, rounded to 500
+const WORKOUT_PAY_MAX = 90;                    // workout minutes paid per day
 const GOAL_REWARD = { coins: 20, wood: 3, seeds: { pumpkin: 1 } };
 const RINGS = { move: 500, exercise: 30, stand: 12 };          // kcal, minutes, hours
 const RING_REWARD = {
@@ -298,9 +325,10 @@ const FRIEND_PRESETS = [
     pastureLv: 2, animals: [['chicken', 2], ['chicken', 2], ['duck', 2], ['sheep', 2], ['cow', 1], ['dog', 2]],
     orchardLv: 1, trees: [['apple', 2], ['cherry', 1]], pondLv: 1,
     cars: [['mini', '#e5484d']],
-    furn: [['bed', '#e88bb7'], 'nightstand', 'shelf', ['sofa', '#5aa2e0'], 'tv', ['rug', '#f3d36b'], 'monstera', 'lamp', 'piano', 'fridge', 'kitchen'],
+    furn: [['sofa', '#5aa2e0'], 'tv', ['rug', '#f3d36b'], 'monstera', 'lamp', 'piano', 'fridge', 'kitchen', 'table', 'chair'],
+    furn2: [['bed', '#e88bb7'], 'nightstand', 'shelf', 'wardrobe', ['yogamat', '#e88bb7'], 'plant', 'moonlamp'], up2: [4, 1],
     yard: ['flowers', 'flowers', 'tree', 'lamp', 'bench', 'beehive'],
-    coins: 2400, wood: 40, likes: 20, shareGoal: true, earn: 30 },
+    coins: 2400, wood: 40, likes: 20, shareGoal: true, shareLive: true, shareMood: true, earn: 30 },
   { id: 'wang', name: { zh: '小王', en: 'Leo' }, slot: 7,
     look: { shirt: '#4f8ef7', skin: SKINS[2], hair: 'short', hairCol: '#1d1a17', mob: 'walk' },
     house: 2, wall: '#f4e7cc', roof: '#3e7cc9', floor: 1, roomWall: 1,
@@ -310,7 +338,7 @@ const FRIEND_PRESETS = [
     cars: [['motorcycle', '#2d2d2d']],
     furn: [['bed', '#5aa2e0'], 'table', 'chair', 'chair', 'shelf', 'stove', 'treadmill', 'dumbbells'],
     yard: ['pine', 'bbq', 'doghouse'],
-    coins: 900, wood: 20, likes: 12, shareGoal: true, earn: 22 },
+    coins: 900, wood: 20, likes: 12, shareGoal: true, shareLive: true, shareMood: false, earn: 22 },
   { id: 'mia', name: { zh: 'Mia', en: 'Mia' }, slot: 4,
     look: { shirt: '#f2a33a', skin: SKINS[1], hair: 'bun', hairCol: '#b5462e', mob: 'wheel' },
     house: 1, wall: '#c99a6b', roof: '#4f9a4b', floor: 4, roomWall: 2,
@@ -318,14 +346,14 @@ const FRIEND_PRESETS = [
     pastureLv: 0, animals: [['cat', 2]], orchardLv: 0, trees: [], pondLv: 0, cars: [['scooter', '#34b27b']],
     furn: [['sleepbag', '#6cbf73'], 'plant', 'monstera', ['yogamat', '#8b7fe0'], 'lamp', 'easel', 'record'],
     yard: ['flowers', 'flowers', 'flowers', 'gnome', 'hedge', 'birdbath', 'arch'],
-    coins: 380, wood: 12, likes: 5, shareGoal: false, earn: 18 },
+    coins: 380, wood: 12, likes: 5, shareGoal: false, shareLive: false, shareMood: false, earn: 18 },
 ];
 const POOL_BASE = { house: 0, wall: '#f4e7cc', floor: 0, roomWall: 0, fieldLv: 0, crops: [], ripe: [], pastureLv: 0, animals: [],
   orchardLv: 0, trees: [], pondLv: 0, cars: [], yard: [], coins: 120, wood: 5, likes: 0, earn: 20 };
 const FRIEND_POOL = [
-  { ...POOL_BASE, id: 'chen', name: { zh: '阿晨', en: 'Noah' }, look: { shirt: '#2fb67c', skin: SKINS[3], hair: 'curly', hairCol: '#1d1a17', mob: 'walk' }, roof: '#2fb67c', furn: [['sleepbag', '#5aa2e0']], shareGoal: true },
+  { ...POOL_BASE, id: 'chen', name: { zh: '阿晨', en: 'Noah' }, look: { shirt: '#2fb67c', skin: SKINS[3], hair: 'curly', hairCol: '#1d1a17', mob: 'walk' }, roof: '#2fb67c', furn: [['sleepbag', '#5aa2e0']], shareGoal: true, shareLive: true },
   { ...POOL_BASE, id: 'yu', name: { zh: '小雨', en: 'Zoe' }, look: { shirt: '#8b6cf0', skin: SKINS[0], hair: 'long', hairCol: '#6b4226', mob: 'walk' }, roof: '#8b6cf0', furn: [['sleepbag', '#e88bb7']], shareGoal: false },
-  { ...POOL_BASE, id: 'kai', name: { zh: '阿凯', en: 'Kai' }, look: { shirt: '#e5484d', skin: SKINS[1], hair: 'short', hairCol: '#c98a3c', mob: 'walk' }, roof: '#e5484d', furn: [['sleepbag', '#f2a33a']], shareGoal: true },
+  { ...POOL_BASE, id: 'kai', name: { zh: '阿凯', en: 'Kai' }, look: { shirt: '#e5484d', skin: SKINS[1], hair: 'short', hairCol: '#c98a3c', mob: 'walk' }, roof: '#e5484d', furn: [['sleepbag', '#f2a33a']], shareGoal: true, shareLive: true, shareMood: true },
   { ...POOL_BASE, id: 'lin', name: { zh: '林林', en: 'Lily' }, look: { shirt: '#38a3e0', skin: SKINS[2], hair: 'bun', hairCol: '#2b1d14', mob: 'walk' }, roof: '#38a3e0', furn: [['sleepbag', '#6cbf73']], shareGoal: false },
 ];
 

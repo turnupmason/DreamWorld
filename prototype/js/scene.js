@@ -10,7 +10,7 @@ const Scene = (() => {
   let cv, mainCtx, W = 0, H = 0;
   let mode = 'home', owner = 'me';
   const worldCam = { x: 0, y: 0, z: 1 }, roomCams = {};
-  let fly = null, follow = false, visible = true, lastTs = 0, liveKey = null, worldReady = false, dragging = false;
+  let fly = null, follow = false, visible = true, lastTs = 0, liveKey = null, worldReady = false, dragging = false, attract = false;
   let onHit = () => {};
   let hits = [];
   const floats = [];
@@ -60,6 +60,15 @@ const Scene = (() => {
   }
   function stepCamera(dt) {
     if (mode === 'interior') return;
+    // the first screens: drift slowly over the street
+    if (attract && !dragging) {
+      const t = performance.now() / 1000;
+      const tx = TOWN_W / 2 + Math.sin(t / 9) * 13, ty = TOWN_D / 2 + Math.cos(t / 11) * 11;
+      const c = unIso(W / 2, H / 2), k = 1 - Math.exp(-dt * 0.8);
+      cam.z += (attract.z - cam.z) * k;
+      centerOn(c.x + (tx - c.x) * k, c.y + (ty - c.y) * k);
+      return;
+    }
     if (follow && mode === 'home' && !fly) {
       const [ox, oy] = origin(me.lot), c = unIso(W / 2, H / 2), k = 1 - Math.exp(-dt * 3);
       const tx = ox + me.x, ty = oy + me.y;
@@ -138,13 +147,20 @@ const Scene = (() => {
   }
   function roomNav(h) {
     const [rw, rd] = roomSize(h), g = new Uint8Array(rw * rd).fill(1);
-    h.room.items.forEach(it => {
+    const block = (x, y, w, d) => { for (let j = y; j < y + d; j++) for (let i = x; i < x + w; i++) if (i < rw && j < rd) g[j * rw + i] = 0; };
+    viewRoom(h).items.forEach(it => {
       if (FURN[it.k].flat) return;
       const [w, d] = itemSize('room', it);
-      for (let j = it.y; j < it.y + d; j++) for (let i = it.x; i < it.x + w; i++) if (i < rw && j < rd) g[j * rw + i] = 0;
+      block(it.x, it.y, w, d);
     });
+    if (hasStairs(h)) { const s = stairsRect(h); block(s.x, s.y, s.w, s.d); }
     return { g, gw: rw, gh: rd, wall: () => false };
   }
+  // The storey being shown inside (the same LEVEL for your home and a friend's).
+  const viewLv = h => Math.min(LEVEL, floorsOf(h) - 1);
+  const viewRoom = h => roomAt(h, viewLv(h));
+  // Where you stand to take the stairs (in front of their foot).
+  function stairsSpot(h) { const s = stairsRect(h); return [s.x + 0.45, s.y + s.d + 0.4, -1]; }
   function bfsFrom(N, sx, sy) {
     const { g, gw, gh, wall } = N, prev = new Int32Array(gw * gh).fill(-1), start = sy * gw + sx;
     prev[start] = start;
@@ -488,7 +504,7 @@ const Scene = (() => {
     // the owner (friends wander; you are drawn separately)
     if (h.id !== 'me') {
       const e = ent('p:' + h.id, () => ({ x: DOOR_X + 0.8, y: fy + hd + 1.2 }));
-      const live = h.live && h.shareGoal ? h.live.type : null;
+      const live = seesLive(h) ? h.live.type : null;
       e.pose = live ? doLive(e, live, h, dt, ts) : null;
       if (!live) { if (e.y >= LOT_D && !e.path.length) e.path = planPath(e, lotNav(h), 3.5, 12.5, 2) || []; wander(e, dt, speedOf(h), en => randomWalk(en, lotNav(h))); }
       objs.push({ d: ox + oy + e.x + e.y, f: () => {
@@ -606,6 +622,7 @@ const Scene = (() => {
     if (edit && edit.scope === 'yard') { const [ox, oy] = origin('me'); yardSpots().forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)')); }
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
     nightTint();
+    if (attract || S.onboarding) return;   // first screens: just the living street, no labels
     // overlays
     const bob = Math.abs(Math.sin(ts / 380)) * 4;
     if (edit && edit.scope === 'yard') { editOverlay(ts); return; }
@@ -616,7 +633,8 @@ const Scene = (() => {
         const top = tp.opt.houseTop;
         if (!top) return;
         const i = rk.findIndex(r => r.h.id === tp.h.id), medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`, mine = tp.h.id === 'me';
-        hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(`${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.94)', mine ? '#fff' : '#3b3125', `600 11px ${UI_FONT},${EMOJI_FONT}`, 21) });
+        const label = S.calm ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode: names only
+        hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.94)', mine ? '#fff' : '#3b3125', `600 11px ${UI_FONT},${EMOJI_FONT}`, 21) });
       });
       if (hallTop) hits.push({ kind: 'plaza', pri: 1, ...pill(`🏛️ ${t('street_name')} Lv${lv}`, iso(px + 7, py + 3).x, hallTop.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) });
       return;
@@ -659,9 +677,32 @@ const Scene = (() => {
   }
 
   // ---------- inside ----------
+  // Staircase in the back-right corner: steps going up, or on the top storey the opening with a railing.
+  function drawStairs(h, lv, goesUp, ts) {
+    const s = stairsRect(h), z = cam.z, wood = '#b07a4a', n = 7, stepH = 84 / n;
+    if (goesUp) {
+      for (let k = 0; k < n; k++) {
+        const bx = s.x + k * s.w / n;
+        box(bx, s.y, s.w / n + 0.01, s.d, (k + 1) * stepH, k % 2 ? shade(wood, 0.06) : wood, 0, { edge: 'rgba(0,0,0,.12)' });
+      }
+      // railing along the open side
+      const a = up(iso(s.x + 0.05, s.y + s.d), 26 * z), b = up(iso(s.x + s.w, s.y + s.d), (84 + 22) * z);
+      for (let k = 0; k <= 3; k++) { const p = lerp(up(iso(s.x + 0.05, s.y + s.d), stepH * z), up(iso(s.x + s.w, s.y + s.d), 84 * z), k / 3); line(p.x, p.y, p.x, p.y - 22 * z, '#7a4f2e', 1.4 * z); }
+      line(a.x, a.y, b.x, b.y, '#7a4f2e', 2.2 * z);
+    } else {
+      flatRect(s.x, s.y, s.w, s.d, '#4a3a2e');
+      for (let k = 1; k < 4; k++) flatRect(s.x + k * s.w / 4 - 0.02, s.y + 0.05, 0.04, s.d - 0.1, 'rgba(255,255,255,.18)');
+      const rail = (ax, ay, bx, by) => { const p = up(iso(ax, ay), 18 * z), q = up(iso(bx, by), 18 * z); line(p.x, p.y, q.x, q.y, '#7a4f2e', 2 * z); };
+      [[s.x, s.y + s.d], [s.x + s.w * 0.5, s.y + s.d], [s.x + s.w, s.y + s.d]].forEach(([px, py]) => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 18 * z, '#7a4f2e', 1.4 * z); });
+      rail(s.x, s.y + s.d, s.x + s.w, s.y + s.d); rail(s.x, s.y, s.x, s.y + s.d);
+    }
+    const c = iso(s.x + s.w / 2, s.y + s.d / 2);
+    if (!edit) hits.push({ kind: 'stairs', pri: 1, x0: c.x - 40 * z, x1: c.x + 40 * z, y0: c.y - (goesUp ? 90 : 30) * z, y1: c.y + 16 * z });
+    pill(goesUp ? `⬆ ${lv + 2}F` : `⬇ ${lv}F`, c.x, c.y - (goesUp ? 92 : 24) * z, 'rgba(255,253,248,.92)', '#7a4f2e', `bold ${Math.max(10, 11 * z)}px ${UI_FONT}`, Math.max(16, 18 * z));
+  }
   function renderInterior(ts, dt) {
-    const h = homeOf(owner), [rw, rd] = roomSize(h), z = cam.z, WH = 92;
-    const wallCol = ROOM_WALLS[h.room.wall], fl = FLOORS[h.room.floor];
+    const h = homeOf(owner), [rw, rd] = roomSize(h), z = cam.z, WH = 92, lv = viewLv(h), room = roomAt(h, lv), top = floorsOf(h) - 1;
+    const wallCol = ROOM_WALLS[room.wall] || ROOM_WALLS[0], fl = FLOORS[room.floor] || FLOORS[0];
     const A = iso(0, 0), B = iso(rw, 0), C = iso(rw, rd), D = iso(0, rd), dn = (p, k) => ({ x: p.x, y: p.y + k });
     poly([D, C, dn(C, 12 * z), dn(D, 12 * z)], shade(fl.c2, -0.35));
     poly([C, B, dn(B, 12 * z), dn(C, 12 * z)], shade(fl.c2, -0.45));
@@ -689,18 +730,26 @@ const Scene = (() => {
     wallRect(leftW, 0, 0.22, 0.38, 40, 62, '#8a5a36'); wallRect(leftW, 0, 0.235, 0.365, 42.5, 59.5, '#9fd0e8');
     const mp = wallPt(leftW, 0, 0.3, 46); pg([[mp.x - 6 * z, mp.y], [mp.x, mp.y - 9 * z], [mp.x + 6 * z, mp.y]], '#6cae5a');
     const du = 0.1;
-    wallRect(leftW, 0, du - 0.07, du + 0.07, 0, 52, '#fffaf0');
-    wallRect(leftW, 0, du - 0.06, du + 0.06, 0, 49, '#8a5a36');
-    const kp = wallPt(leftW, 0, du + 0.035, 24); circle(kp.x, kp.y, 1.4 * z, '#f2c230');
-    const da = wallPt(leftW, 0, du - 0.07, 0), db = wallPt(leftW, 0, du + 0.07, 54);
-    hits.push({ kind: 'exit', pri: 1, x0: Math.min(da.x, db.x) - 4, x1: Math.max(da.x, db.x) + 4, y0: db.y - 4, y1: da.y + 4 });
+    if (lv === 0) {   // the front door is downstairs; upstairs gets a window there instead
+      wallRect(leftW, 0, du - 0.07, du + 0.07, 0, 52, '#fffaf0');
+      wallRect(leftW, 0, du - 0.06, du + 0.06, 0, 49, '#8a5a36');
+      const kp = wallPt(leftW, 0, du + 0.035, 24); circle(kp.x, kp.y, 1.4 * z, '#f2c230');
+      const da = wallPt(leftW, 0, du - 0.07, 0), db = wallPt(leftW, 0, du + 0.07, 54);
+      hits.push({ kind: 'exit', pri: 1, x0: Math.min(da.x, db.x) - 4, x1: Math.max(da.x, db.x) + 4, y0: db.y - 4, y1: da.y + 4 });
+    } else {
+      wallRect(leftW, 0, du - 0.07, du + 0.07, 30, 66, '#fffaf0');
+      wallRect(leftW, 0, du - 0.055, du + 0.055, 32.5, 63.5, sky);
+      wallLine(leftW, 0, du, 32.5, du, 63.5, '#fffaf0', 1.5);
+    }
     for (let j = 0; j < rd; j++) for (let i = 0; i < rw; i++) {
       tile(i, j, (i + j) % 2 ? fl.c1 : fl.c2);
-      if (h.room.floor === 0 || h.room.floor === 3) { const a = iso(i, j + 0.5), b = iso(i + 1, j + 0.5); line(a.x, a.y, b.x, b.y, 'rgba(0,0,0,.08)', 1 * z); }
+      if (room.floor === 0 || room.floor === 3) { const a = iso(i, j + 0.5), b = iso(i + 1, j + 0.5); line(a.x, a.y, b.x, b.y, 'rgba(0,0,0,.08)', 1 * z); }
     }
+    if (lv > 0 || top > 0) pill(`${lv + 1}F`, iso(0.4, 0.4).x, iso(0.4, 0.4).y - (WH - 10) * z, 'rgba(59,49,37,.78)', '#fff', `bold ${Math.max(10, 12 * z)}px ${UI_FONT}`, Math.max(16, 20 * z));
     if (edit && edit.scope === 'room') for (let j = 0; j < rd; j++) for (let i = 0; i < rw; i++) tile(i, j, null, 'rgba(255,255,255,.45)');
     const objs = [];
-    h.room.items.forEach(it => {
+    if (hasStairs(h)) { const s = stairsRect(h); objs.push({ d: s.x + s.y + (s.w + s.d) / 2 - 0.2, f: () => drawStairs(h, lv, lv < top, ts) }); }
+    room.items.forEach(it => {
       if (edit && edit.hold && edit.hold.id === it.id) return;
       const [w, dd] = itemSize('room', it), flat = FURN[it.k].flat;
       const fn = () => {
@@ -719,10 +768,11 @@ const Scene = (() => {
         if (!edit) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
-    if (meIn.room !== owner) { cancel(meIn); meIn.room = owner; meIn.x = 0.6; meIn.y = rd * 0.9; meIn.face = 1; }
+    if (meIn.room !== owner) { cancel(meIn); meIn.room = owner; meIn.lv = lv; meIn.x = 0.6; meIn.y = rd * 0.9; meIn.face = 1; }
+    if (meIn.lv !== lv) { cancel(meIn); meIn.lv = lv; meIn.seat = 0; meIn.useId = null; [meIn.x, meIn.y, meIn.face] = stairsSpot(h); }
     objs.push({ d: meIn.x + meIn.y + (meIn.seat ? 0.7 : 0), f: () => {
       const p = iso(meIn.x, meIn.y), pose = meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
-      const it = meIn.useId && h.room.items.find(x => x.id === meIn.useId);
+      const it = meIn.useId && room.items.find(x => x.id === meIn.useId);
       drawPerson(p.x, p.y - (meIn.seat || 0) * z, z, { look: S.me.look, face: meIn.face, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint });
       if (S.live) liveBadge(p, S.live, true);
       if (!edit) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
@@ -803,7 +853,7 @@ const Scene = (() => {
   // Inside: use the matching machine if you have one, otherwise do it on the spot.
   function indoorLive(dt, ts) {
     const h = homeOf(owner), use = { run: 'run', cycle: 'bike', strength: 'lift', yoga: 'yoga', hiit: 'box' }[S.live.type];
-    const it = use && h.room.items.find(x => FURN[x.k].use === use);
+    const it = use && viewRoom(h).items.find(x => FURN[x.k].use === use);
     if (it && meIn.useId !== it.id) { const sp = useSpot(it); meIn.x = sp[0]; meIn.y = sp[1]; meIn.face = sp[2]; meIn.seat = SEAT[it.k] || 0; meIn.useId = it.id; }
     if (S.live.type === 'swim') return 'stand';
     return it && FURN[it.k].use === 'box' ? 'box' : WORKOUT_POSE[S.live.type];
@@ -852,6 +902,7 @@ const Scene = (() => {
     const w = unIso(sx, sy);
     if (mode === 'interior') {
       const h = [...hits].reverse().find(x => x.kind === 'avatar' && inside(x, sx, sy))
+        || [...hits].reverse().find(x => x.kind === 'stairs' && inside(x, sx, sy))
         || [...hits].reverse().find(x => x.kind === 'furn' && !x.flat && inside(x, sx, sy))
         || [...hits].reverse().find(x => x.kind === 'furn' && inside(x, sx, sy));
       if (h) return onHit(h);
@@ -951,7 +1002,7 @@ const Scene = (() => {
   }
   function go(tg, o = {}) {
     if (S.live) return false;
-    if (tg.kind === 'furn' || tg.kind === 'floor' || tg.kind === 'exit') return goInside(tg, o);
+    if (tg.kind === 'furn' || tg.kind === 'floor' || tg.kind === 'exit' || tg.kind === 'stairs') return goInside(tg, o);
     const spot = spotFor(tg);
     if (!spot) return false;
     const key = tg.kind + ':' + (tg.i ?? tg.id ?? '');
@@ -972,8 +1023,9 @@ const Scene = (() => {
     let spot, pose = o.pose, dur = o.dur || 0, start = null;
     if (tg.kind === 'floor') spot = () => [tg.x, tg.y, 0];
     else if (tg.kind === 'exit') spot = () => [0.5, roomSize(h)[1] * 0.9, -1];
+    else if (tg.kind === 'stairs') { const sp = stairsSpot(h); spot = () => sp; }
     else {
-      const it = h.room.items.find(x => x.id === tg.id);
+      const it = viewRoom(h).items.find(x => x.id === tg.id);
       if (!it) return false;
       const use = FURN[it.k].use, sp = useSpot(it);
       spot = () => sp;
@@ -1055,9 +1107,38 @@ const Scene = (() => {
     },
     car(k, o, w, h) { if (CARS[k].kind === 'two') frameFoot(1, 1.6, 30, w, h, 2.8); else frameFoot(1.1, 2.5, 34, w, h, 2); drawCar({ k, color: o.color || CAR_COLORS[0] }, 0, 0, 0); },
     house(k, o, w, h) {
-      const H = HOUSES[k], [fx, fy, fw, fd] = H.fp;
-      frameFoot(fw + 0.6, fd + 0.6, HOUSE_H[H.id], w, h, 1.6);
-      drawHouse({ house: k, wall: o.wall || WALL_COLORS[H.id === 'cabin' ? 6 : 1], roof: o.roof || ROOF_COLORS[0] }, -fx + 0.2, -fy + 0.1, 0);
+      const H = HOUSES[k], [fx, fy, fw, fd] = H.fp, ex = o.extra || 0;
+      frameFoot(fw + 0.6, fd + 0.6, HOUSE_H[H.id] + ex * (H.id === 'chinese' ? 38 : FLOOR_H), w, h, 1.6);
+      drawHouse({ house: k, wall: o.wall || WALL_COLORS[H.id === 'cabin' ? 6 : 1], roof: o.roof || ROOF_COLORS[0], extra: { [k]: ex } }, -fx + 0.2, -fy + 0.1, 0);
+    },
+    // Pictures for the first screens (onboarding): 0 sleep → energy, 1 moving → coins, 2 home and friends.
+    story(k, o, w, h) {
+      const ts = o.ts || 0, s = h / 75;
+      cam = { x: 0, y: 0, z: 1 };
+      ellipse(w / 2, h * 0.86, w * 0.42, h * 0.1, 'rgba(120,170,80,.35)');
+      if (k == 0) {
+        drawPerson(w * 0.27, h * 0.84, s * 1.25, { look: o.look, face: 1, energy: 'exhausted', ts, seed: 1, pose: 'sit' });
+        drawPerson(w * 0.73, h * 0.84, s * 1.25, { look: o.look, face: -1, energy: 'great', ts, seed: 2, pose: 'jacks' });
+        ctx.font = `bold ${22 * s}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ef7d3c'; ctx.fillText('→', w / 2, h * 0.55);
+        emoji('😴', w * 0.18, h * 0.3, 20 * s, 0.5 + Math.sin(ts / 500) * 0.3); emoji('✨', w * 0.85, h * 0.28, 18 * s, 0.6 + Math.sin(ts / 300) * 0.4);
+      } else if (k == 1) {
+        drawPerson(w * 0.36, h * 0.86, s * 1.3, { look: o.look, face: 1, energy: 'great', ts, seed: 1, moving: true, phase: ts / 90, pose: 'run' });
+        ['🪙', '🪵', '🪙', '🌱'].forEach((e, i) => {
+          const u = ((ts / 1600) + i / 4) % 1;
+          emoji(e, w * (0.6 + i % 2 * 0.17), h * (0.8 - u * 0.55), (13 + i % 2 * 3) * s, Math.min(1, (1 - u * u * u) * 1.4));
+        });
+      } else {
+        const z = Math.min(w * 0.95 / (13.2 * 32), h * 0.92 / (13.2 * 16 + 80));
+        cam = { x: 0, y: 0, z };
+        const c = iso(3.6, 2.6); cam.x = w * 0.5 - c.x; cam.y = h * 0.66 - c.y;
+        flatRect(-0.3, -0.3, 7.6, 5.6, '#b8dd8c');
+        drawHouse({ house: 2, wall: WALL_COLORS[1], roof: ROOF_COLORS[0] }, -1.5, -0.8, ts);
+        [0, 1, 2].forEach(i => drawCropTile(4.2 + i, 3.6, fakeField(['carrot', 'wheat', 'tomato'][i], 4), ts, i));
+        const a = iso(1.2, 4.4), b = iso(6.6, 2.2);
+        drawPerson(a.x, a.y, z * 1.1, { look: o.look, face: 1, energy: 'good', ts, seed: 1, wave: true });
+        drawPerson(b.x, b.y, z * 1.1, { look: { shirt: '#ec6aa8', skin: SKINS[0], hair: 'long', hairCol: '#2b1d14', mob: 'walk' }, face: -1, energy: 'good', ts, seed: 2, wave: true });
+      }
     },
     person(k, o, w, h) {
       cam = { x: 0, y: 0, z: 1 };
@@ -1107,6 +1188,36 @@ const Scene = (() => {
       requestAnimationFrame(frame);
     },
     setVisible(v) { visible = v; if (v) resize(); },
+    // First screens: drift over the street at zoom z (false to stop).
+    attract(z) {
+      const was = attract;
+      attract = z ? { z } : false;
+      if (!z || was) return;
+      useCam(); fly = null; follow = false; worldReady = true;
+      if (W) { cam.z = z; const t = performance.now() / 1000; centerOn(TOWN_W / 2 + Math.sin(t / 9) * 13, TOWN_D / 2 + Math.cos(t / 11) * 11); }
+    },
+    // Close-up on your townie (character creation): townie at yFrac of the screen height.
+    focusMe(z, yFrac = 0.42) {
+      attract = false; useCam(); cancel(me);
+      const [, fy, , fd] = HOUSES[S.me.house].fp;
+      me.lot = 'me'; me.x = DOOR_X; me.y = fy + fd + 1.3; me.face = 1;   // stand on the path in front of the door
+      const [ox, oy] = origin('me');
+      cam.z = z; centerOn(ox + me.x - 0.5, oy + me.y - 0.5, yFrac); fly = null; follow = false; worldReady = true;
+    },
+    // Screen position of things on your own lot, for the tutorial pointer (null when not visible).
+    where(kind, arg) {
+      if (mode !== 'home' || owner !== 'me' || !W) return null;
+      useCam();
+      const [ox, oy] = origin('me'), z = cam.z;
+      let p, r = 24 * z;
+      if (kind === 'field') { const [x, y] = fieldPos(arg); p = iso(ox + x + 0.5, oy + y + 0.5); p.y -= 8 * z; r = 30 * z; }
+      else if (kind === 'ground') p = iso(ox + arg[0], oy + arg[1]);
+      else if (kind === 'house') { const [fx, fy, w, d] = HOUSES[S.me.house].fp; p = iso(ox + fx + w / 2, oy + fy + d / 2); p.y -= 26 * z; r = 56 * z; }
+      else if (kind === 'me') { p = iso(ox + me.x, oy + me.y); p.y -= 20 * z; }
+      if (!p || p.x < 0 || p.y < 0 || p.x > W || p.y > H) return null;
+      return { x: p.x, y: p.y, r: Math.max(20, r) };
+    },
+    levelChanged() { meIn.lv = -1; },
     setView(m, o = 'me') {
       if (m === mode && o === owner) return;
       const wasInterior = mode === 'interior';

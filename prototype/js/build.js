@@ -38,12 +38,24 @@ function chimney(x, y, base, h, col = '#b4603e') {
   return b;
 }
 
+// Storeys you built on top: a thin band and a row of windows for each one, starting at height `from`.
+function storyRows(b, from, n, o = {}) {
+  for (let k = 0; k < n; k++) {
+    const h0 = from + k * FLOOR_H;
+    if (o.band) { wallRect(b.left, 0, 0, 1, h0, h0 + 2, o.band); wallRect(b.right, 0, 0, 1, h0, h0 + 2, o.band); }
+    (o.left || [0.2, 0.5, 0.8]).forEach(u => winFace(b.left, u, o.uw || 0.06, h0 + 7, h0 + 21, o.win));
+    (o.right || [0.3, 0.7]).forEach(u => winFace(b.right, u, o.uwR || 0.08, h0 + 7, h0 + 21, o.win));
+  }
+}
+
 // Draws a home's house at lot origin (ox, oy). Returns the screen box for tapping.
+// Built storeys (h.extra) make the walls taller; the roof sits on top of the last one.
 function drawHouse(h, ox, oy, ts) {
   const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, x = ox + fx, y = oy + fy, z = cam.z;
   const c = iso(x + w / 2, y + d / 2);
   ellipse(c.x, c.y + 6 * z, (w + d) * 17 * z, (w + d) * 8.5 * z, 'rgba(0,0,0,.08)');
   const du = (DOOR_X - fx) / w, wall = h.wall, roof = h.roof, id = H.id;
+  const n = Math.max(0, floorsOf(h) - H.floors[0]), ex = n * FLOOR_H;
   let top = c.y;
   if (id === 'tent') {
     const g = gableY(x + 0.1, y + 0.1, w - 0.2, d - 0.2, 0, 46, roof, shade(roof, 0.22));
@@ -55,19 +67,20 @@ function drawHouse(h, ox, oy, ts) {
     if (NIGHT > 0.3) glow(mid(a, b).x, mid(a, b).y - 8 * z, 30 * z);
     top = g.R1.y;
   } else if (id === 'cabin') {
-    const log = '#b0703f', wh = 28;
+    const log = '#b0703f', wh = 28 + ex;
     const b = box(x, y, w, d, wh, log);
-    for (let k = 1; k < 5; k++) {
+    for (let k = 1; k * 5.6 < wh - 1; k++) {
       wallLine(b.left, 0, 0, k * 5.6, 1, k * 5.6, shade(log, -0.32), 0.8);
       wallLine(b.right, 0, 0, k * 5.6, 1, k * 5.6, shade(log, -0.25), 0.8);
     }
     winFace(b.left, 0.8, 0.09, 9, 21, { frame: '#f3e3c3' });
     doorFace(b.left, du, 0.085, 19, '#6b3f22');
     winFace(b.right, 0.5, 0.12, 9, 21, { frame: '#f3e3c3' });
+    storyRows(b, 28, n, { left: [0.3, 0.75], right: [0.5], uw: 0.08, uwR: 0.12, win: { frame: '#f3e3c3' } });
     const g = gableX(x - 0.15, y - 0.12, w + 0.3, d + 0.24, wh, 24, roof, log, () => chimney(x + w - 0.8, y + 0.4, wh - 4, 34, '#9a948a'));
     top = g.R1.y - 12 * z;
   } else if (id === 'cottage') {
-    const wh = 32, b = box(x, y, w, d, wh, wall);
+    const wh = 32 + ex, b = box(x, y, w, d, wh, wall);
     wallRect(b.left, 0, 0, 1, 0, 3.2, shade(wall, -0.35)); wallRect(b.right, 0, 0, 1, 0, 3.2, shade(wall, -0.3));
     const sh = shade(roof, -0.1);
     winFace(b.left, 0.13, 0.065, 11, 24, { shutters: sh, box: true });
@@ -76,15 +89,17 @@ function drawHouse(h, ox, oy, ts) {
     wallRect(b.left, 0, du - 0.12, du + 0.12, 24, 26.5, sh);
     winFace(b.right, 0.28, 0.08, 11, 24, { shutters: sh });
     winFace(b.right, 0.72, 0.08, 11, 24, { shutters: sh });
+    storyRows(b, 31, n, { left: [0.13, 0.5, 0.78], uw: 0.065, band: shade(wall, -0.12), win: { shutters: sh, box: true } });
     const g = gableX(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, 30, roof, wall, () => chimney(x + w - 0.9, y + 0.5, wh, 40));
     top = g.R1.y - 12 * z;
   } else if (id === 'twostory') {
-    const wh = 62, b = box(x, y, w, d, wh, wall);
+    const wh = 62 + ex, b = box(x, y, w, d, wh, wall);
     wallRect(b.left, 0, 0, 1, 0, 3.2, shade(wall, -0.35)); wallRect(b.right, 0, 0, 1, 0, 3.2, shade(wall, -0.3));
     wallRect(b.left, 0, 0, 1, 30, 32, shade(wall, -0.12)); wallRect(b.right, 0, 0, 1, 30, 32, shade(wall, -0.1));
     [0.17, 0.83].forEach(u => winFace(b.left, u, 0.06, 10, 23, { box: true }));
     [0.17, 0.5, 0.83].forEach(u => winFace(b.left, u, 0.06, 38, 53));
     [0.3, 0.7].forEach(u => { winFace(b.right, u, 0.08, 10, 23); winFace(b.right, u, 0.08, 38, 53); });
+    storyRows(b, 58, n, { left: [0.17, 0.5, 0.83], band: shade(wall, -0.12) });
     doorFace(b.left, du, 0.065, 21);
     // balcony over the door
     box(DOOR_X - 0.65 + ox, y + d, 1.3, 0.4, 2.5, '#fffaf0', 31);
@@ -92,13 +107,13 @@ function drawHouse(h, ox, oy, ts) {
     const g = gableX(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, 30, roof, wall, () => chimney(x + w - 1, y + 0.5, wh, 42));
     top = g.R1.y - 12 * z;
   } else if (id === 'modern') {
-    top = drawModern(x, y, w, d, du, wall, roof, ts);
+    top = drawModern(x, y, w, d, du, wall, roof, ts, n);
   } else if (id === 'chinese') {
-    top = drawChinese(x, y, w, d, du, wall, ts);
+    top = drawChinese(x, y, w, d, du, wall, ts, n);
   } else if (id === 'castle') {
-    top = drawCastle(x, y, w, d, du, roof, ts);
+    top = drawCastle(x, y, w, d, du, roof, ts, n);
   } else if (id === 'villa') {
-    const wh = 62, mw = 4;
+    const wh = 62 + ex, mw = 4;
     const m = box(x, y, mw, d, wh, wall);
     wallRect(m.left, 0, 0, 1, 0, 3.2, shade(wall, -0.35));
     wallRect(m.left, 0, 0, 1, 30, 32, shade(wall, -0.12));
@@ -106,6 +121,7 @@ function drawHouse(h, ox, oy, ts) {
     [0.2].forEach(u => winFace(m.left, u, 0.09, 8, 25));
     [0.2, mdu, 0.9].forEach(u => winFace(m.left, u, 0.07, 37, 55));
     winFace(m.right, 0.86, 0.07, 37, 55);
+    storyRows(m, 60, n, { left: [0.2, mdu, 0.9], right: [0.5, 0.86], uw: 0.07, uwR: 0.07, band: shade(wall, -0.12) });
     doorFace(m.left, mdu, 0.08, 23, '#5a3a22');
     hipRoof(x - 0.18, y - 0.18, mw + 0.36, d + 0.36, wh, 34, roof);
     const wb = box(x + mw, y + 1, 2, 3, 34, wall);
@@ -122,13 +138,14 @@ function drawHouse(h, ox, oy, ts) {
     flatRect(ox + DOOR_X - 0.6, y + d, 1.2, 0.5, '#e6dccb', null, 1);
     top = iso(x + mw / 2, y + d / 2).y - (wh + 34) * z;
   } else {
-    const wh = 72, b = box(x, y, w, d, wh, wall);
+    const wh = 72 + ex, b = box(x, y, w, d, wh, wall);
     wallRect(b.left, 0, 0, 1, 0, 4, shade(wall, -0.35)); wallRect(b.right, 0, 0, 1, 0, 4, shade(wall, -0.3));
     wallRect(b.left, 0, 0, 1, 34, 36, shade(wall, -0.12)); wallRect(b.right, 0, 0, 1, 34, 36, shade(wall, -0.1));
-    wallRect(b.left, 0, 0, 1, 67, 72, shade(wall, 0.25)); wallRect(b.right, 0, 0, 1, 67, 72, shade(wall, 0.2));
+    wallRect(b.left, 0, 0, 1, wh - 5, wh, shade(wall, 0.25)); wallRect(b.right, 0, 0, 1, wh - 5, wh, shade(wall, 0.2));
     [0.22, 0.62, 0.8].forEach(u => winFace(b.left, u, 0.045, 10, 28));
     [0.22, du, 0.62, 0.8].forEach(u => winFace(b.left, u, 0.045, 42, 60));
     [0.25, 0.5, 0.75].forEach(u => { winFace(b.right, u, 0.07, 10, 28); winFace(b.right, u, 0.07, 42, 60); });
+    storyRows(b, 64, n, { left: [0.22, du, 0.62, 0.8], right: [0.25, 0.5, 0.75], uw: 0.045, uwR: 0.07, band: shade(wall, -0.12) });
     doorFace(b.left, du, 0.05, 26, '#5a3a22');
     hipRoof(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, 32, roof);
     chimney(x + 0.6, y + 0.6, wh + 6, 34); chimney(x + w - 1, y + 0.6, wh + 6, 34);
@@ -694,7 +711,7 @@ function drawTownHall(x, y, lv, ts) {
 }
 
 // ---------- newer houses ----------
-function drawModern(x, y, w, d, du, wall, roof, ts) {
+function drawModern(x, y, w, d, du, wall, roof, ts, n = 0) {
   const z = cam.z, glass = NIGHT > 0.3 ? '#ffe39a' : '#9fd3ee', dark = '#3d434c', slab = '#ecebe6';
   const b = box(x, y, w, d, 30, wall);
   wallRect(b.left, 0, 0, 1, 0, 3, dark); wallRect(b.right, 0, 0, 1, 0, 3, dark);
@@ -710,15 +727,20 @@ function drawModern(x, y, w, d, du, wall, roof, ts) {
   box(x + 0.1, y + d - 0.35, 1.8, 0.05, 8, 'rgba(180,220,240,.5)', 33, { left: 'rgba(170,215,240,.45)', right: 'rgba(170,215,240,.45)', top: 'rgba(255,255,255,.5)', edge: 'rgba(255,255,255,.75)' });
   const pp = up(iso(x + 0.6, y + 1.2), 33 * z);
   rrect(pp.x - 4 * z, pp.y - 6 * z, 8 * z, 6 * z, 1.5 * z, '#c8754a'); circle(pp.x, pp.y - 10 * z, 5 * z, '#5fae55');
-  // upper floor, set back, clad in wood
-  const ub = box(x + 2, y, w - 2, d - 1.2, 26, '#b9875a', 33);
-  for (let k = 1; k < 12; k++) { wallLine(ub.left, 33, k / 12, 0, k / 12, 26, 'rgba(90,55,25,.25)', 0.7); wallLine(ub.right, 33, k / 12, 0, k / 12, 26, 'rgba(90,55,25,.25)', 0.7); }
-  wallRect(ub.left, 33, 0.08, 0.62, 5, 22, glass, dark, 1.2);
-  wallRect(ub.right, 33, 0.25, 0.75, 5, 22, glass, dark, 1.2);
-  box(x + 1.85, y - 0.12, w - 1.7, d - 0.9, 3, slab, 59);
-  flatRect(x + 2.4, y + 0.3, 1.6, 1.3, '#2f4b7c', '#9fb4d6', 62.5, 0.8);   // solar panels
-  flatRect(x + 4.2, y + 0.3, 1.2, 1.3, '#2f4b7c', '#9fb4d6', 62.5, 0.8);
-  return iso(x + 2, y).y - 64 * z;
+  // upper floors, set back, clad in wood (white render on every other storey you build)
+  let lv = 33;
+  for (let k = 0; k <= n; k++) {
+    const clad = k % 2 ? '#ece6dc' : '#b9875a', ub = box(x + 2, y, w - 2, d - 1.2, 26, clad, lv);
+    if (!(k % 2)) for (let j = 1; j < 12; j++) { wallLine(ub.left, lv, j / 12, 0, j / 12, 26, 'rgba(90,55,25,.25)', 0.7); wallLine(ub.right, lv, j / 12, 0, j / 12, 26, 'rgba(90,55,25,.25)', 0.7); }
+    wallRect(ub.left, lv, k % 2 ? 0.38 : 0.08, k % 2 ? 0.92 : 0.62, 5, 22, glass, dark, 1.2);
+    wallRect(ub.right, lv, 0.25, 0.75, 5, 22, glass, dark, 1.2);
+    if (NIGHT > 0.3) { const p = wallPt(ub.left, lv, 0.4, 13); glow(p.x, p.y, 34 * z, 0.7); }
+    box(x + 1.85, y - 0.12, w - 1.7, d - 0.9, 3, slab, lv + 26);
+    lv += 29;
+  }
+  flatRect(x + 2.4, y + 0.3, 1.6, 1.3, '#2f4b7c', '#9fb4d6', lv + 0.5, 0.8);   // solar panels
+  flatRect(x + 4.2, y + 0.3, 1.2, 1.3, '#2f4b7c', '#9fb4d6', lv + 0.5, 0.8);
+  return iso(x + 2, y).y - (lv + 2) * z;
 }
 function latticeWin(face, base, u, uw, h0, h1, red) {
   const lit = NIGHT > 0.3;
@@ -728,7 +750,8 @@ function latticeWin(face, base, u, uw, h0, h1, red) {
   for (let k = 1; k < 3; k++) wallLine(face, base, u - uw * 0.8, h0 + 1.5 + k * (h1 - h0 - 3) / 3, u + uw * 0.8, h0 + 1.5 + k * (h1 - h0 - 3) / 3, red, 0.6);
   if (lit) { const p = wallPt(face, base, u, (h0 + h1) / 2); glow(p.x, p.y, 26 * cam.z, 0.7); }
 }
-function drawChinese(x, y, w, d, du, wall, ts) {
+// Built storeys on the courtyard house become pagoda tiers, each with its own eaves.
+function drawChinese(x, y, w, d, du, wall, ts, n = 0) {
   const z = cam.z, red = '#b8322a', tileCol = '#7a8796', wh = 36, base = 4;
   box(x - 0.25, y - 0.25, w + 0.5, d + 0.75, base, '#aaa49a');
   const b = box(x, y, w, d, wh, wall, base);
@@ -748,6 +771,22 @@ function drawChinese(x, y, w, d, du, wall, ts) {
     ctx.lineWidth = 3 * z; ctx.lineCap = 'round'; ctx.strokeStyle = shade(tileCol, -0.25); ctx.stroke();
   };
   eave(x - 0.3, y + d + 0.6, -1); eave(x + w + 0.3, y + d + 0.6, 1); eave(x + w + 0.3, y - 0.3, 1);
+  let roofTop = wh + base + 24;
+  for (let k = 1; k <= n; k++) {
+    const ix = x + 0.7 * k, iy = y + 0.45 * k, iw = w - 1.4 * k, idd = d - 0.9 * k, tb = wh + base + 8 + (k - 1) * 38;
+    const t = box(ix, iy, iw, idd, 26, wall, tb);
+    [0.25, 0.75].forEach(u => latticeWin(t.left, tb, u, 0.1, 6, 20, red));
+    latticeWin(t.right, tb, 0.5, 0.16, 6, 20, red);
+    for (let i = 0; i <= 3; i++) box(ix + 0.05 + i * (iw - 0.2) / 3, iy + idd + 0.15, 0.1, 0.1, 26, red, tb);
+    hipRoof(ix - 0.3, iy - 0.3, iw + 0.6, idd + 0.75, tb + 26, 18, tileCol);
+    const ev = (px, py, dir) => {
+      const p = up(iso(px, py), (tb + 26) * z);
+      ctx.beginPath(); ctx.moveTo(p.x - dir * 7 * z, p.y + 2 * z); ctx.quadraticCurveTo(p.x, p.y + 2 * z, p.x + dir * 3 * z, p.y - 7 * z);
+      ctx.lineWidth = 2.6 * z; ctx.lineCap = 'round'; ctx.strokeStyle = shade(tileCol, -0.25); ctx.stroke();
+    };
+    ev(ix - 0.3, iy + idd + 0.45, -1); ev(ix + iw + 0.3, iy + idd + 0.45, 1);
+    roofTop = tb + 26 + 18;
+  }
   [0.12, 0.88].forEach(u => {
     const p = up(iso(x + u * w, y + d + 0.45), (wh - 2) * z);
     line(p.x, p.y - 5 * z, p.x, p.y, '#555', 0.6 * z);
@@ -756,7 +795,7 @@ function drawChinese(x, y, w, d, du, wall, ts) {
     line(p.x, p.y + 9 * z, p.x, p.y + 13 * z, '#f2c230', 0.8 * z);
     glow(p.x, p.y + 4 * z, 30 * z, 1);
   });
-  return iso(x + w / 2, y).y - (wh + base + 30) * z;
+  return iso(x + w / 2, y).y - (roofTop + 6) * z;
 }
 // Battlements: back edges first (before anything on the roof), front edges last.
 function merlons(x, y, w, d, h, col, front) {
@@ -775,16 +814,17 @@ function flag(p, col, ts, len = 12) {
   const fl = Math.sin(ts / 300 + p.x) * 2 * z;
   pg([[p.x, p.y - 16 * z], [p.x + len * z, p.y - 13 * z + fl], [p.x, p.y - 9 * z]], col);
 }
-function drawCastle(x, y, w, d, du, bannerCol, ts) {
-  const z = cam.z, stone = '#bfb8ac', wh = 54;
+function drawCastle(x, y, w, d, du, bannerCol, ts, n = 0) {
+  const z = cam.z, stone = '#bfb8ac', ex = n * FLOOR_H, wh = 54 + ex;
   const b = box(x, y, w, d, wh, stone);
-  for (let r = 1; r < 9; r++) { wallLine(b.left, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); wallLine(b.right, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); }
+  for (let r = 1; r * 6 < wh; r++) { wallLine(b.left, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); wallLine(b.right, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); }
   const arch = [];
   for (let k = 0; k <= 10; k++) { const a = k / 10 * Math.PI; arch.push(wallPt(b.left, 0, du + Math.cos(a) * 0.1, 22 + Math.sin(a) * 8)); }
   poly([wallPt(b.left, 0, du + 0.1, 0), ...arch, wallPt(b.left, 0, du - 0.1, 0)], '#5a3a22', '#8a8478', 1.5 * z);
   for (let k = 1; k < 5; k++) wallLine(b.left, 0, du - 0.1 + k * 0.04, 0, du - 0.1 + k * 0.04, 26, 'rgba(30,20,10,.5)', 0.8);
   [0.27, 0.6].forEach(u => { wallRect(b.left, 0, u - 0.035, u + 0.035, 24, 46, bannerCol); const p1 = wallPt(b.left, 0, u - 0.035, 24), p2 = wallPt(b.left, 0, u + 0.035, 24), p3 = wallPt(b.left, 0, u, 28); poly([p1, p2, p3], stone); });
   [0.3, 0.7].forEach(u => { winFace(b.right, u, 0.035, 14, 26); winFace(b.right, u, 0.035, 34, 46); });
+  storyRows(b, 50, n, { left: [0.15, 0.45, 0.75], right: [0.3, 0.7], uw: 0.03, uwR: 0.035 });
   merlons(x, y, w, d, wh, stone, false);
   const kx = x + w / 2 - 0.8, ky = y + 0.4, kt = box(kx, ky, 1.6, 1.6, 34, stone, wh);
   winFace(kt.left, 0.5, 0.08, wh + 12, wh + 26);
@@ -794,8 +834,9 @@ function drawCastle(x, y, w, d, du, bannerCol, ts) {
   merlons(x, y, w, d, wh, stone, true);
   [[x - 0.55, y + d - 1], [x + w - 0.95, y + d - 1]].forEach(([tx, ty]) => {
     const t = box(tx, ty, 1.5, 1.5, wh + 20, stone);
-    for (let r = 1; r < 12; r++) { wallLine(t.left, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); wallLine(t.right, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); }
+    for (let r = 1; r * 6 < wh + 20; r++) { wallLine(t.left, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); wallLine(t.right, 0, 0, r * 6, 1, r * 6, 'rgba(0,0,0,.08)', 0.7); }
     winFace(t.left, 0.5, 0.12, 36, 50); winFace(t.right, 0.5, 0.12, 36, 50);
+    for (let k = 0; k < n; k++) { winFace(t.left, 0.5, 0.12, 64 + k * FLOOR_H, 78 + k * FLOOR_H); winFace(t.right, 0.5, 0.12, 64 + k * FLOOR_H, 78 + k * FLOOR_H); }
     merlons(tx, ty, 1.5, 1.5, wh + 20, stone, false);
     const apex = pyramid(tx - 0.12, ty - 0.12, 1.74, 1.74, wh + 22, 30, bannerCol);
     merlons(tx, ty, 1.5, 1.5, wh + 20, stone, true);
@@ -982,6 +1023,87 @@ function drawFurn2(it, x, y, w, d, rot, tint, ts) {
       box(x + 0.12, y + 0.35, 0.45, 0.45, 3, carpet, 24);
       box(x + 0.35, y + 0.2, 0.5, 0.5, 3, carpet, 44);
       const p = P(0.6, 0.45, 47); ellipse(p.x, p.y, 5 * z, 2 * z, shade(carpet, -0.15));
+      break;
+    }
+    case 'shoerack': {
+      const s = strip(0.5), b = box(s[0], s[1], s[2], s[3], 22, WOOD), f = F(b);
+      wallLine(f, 0, 0, 11, 1, 11, DARKWOOD, 0.8);
+      [['#ef6f6c', 0.25, 13], ['#38a3e0', 0.7, 13], ['#f2d24b', 0.3, 2.5], ['#34b27b', 0.72, 2.5]].forEach(([col, u, h]) => {
+        const p = wallPt(f, 0, u, h + 3);
+        rrect(p.x - 6 * z, p.y - 2 * z, 12 * z, 5 * z, 2.5 * z, col); rrect(p.x - 6 * z, p.y + 2 * z, 12 * z, 1.6 * z, 0.8 * z, '#fff');
+      });
+      const tp = P(0.5, 0.35, 22); emoji('🏅', tp.x, tp.y + 2 * z, 10 * z);
+      break;
+    }
+    case 'moonlamp': {
+      box(x + 0.32, y + 0.32, 0.36, 0.36, 5, '#e8e1d4');
+      const p = P(0.5, 0.5, 5);
+      line(p.x, p.y, p.x, p.y - 8 * z, '#c9c1b2', 1.2 * z);
+      const m = { x: p.x, y: p.y - 19 * z }, r = 10 * z;
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,224,140,.9)'; ctx.shadowBlur = 10 + NIGHT * 14;
+      ctx.beginPath(); ctx.arc(m.x, m.y, r * 0.72, Math.PI * 0.55, Math.PI * 1.95);
+      ctx.lineWidth = r * 0.55; ctx.lineCap = 'round'; ctx.strokeStyle = '#ffe9a8'; ctx.stroke();
+      ctx.restore();
+      [[m.x + 9 * z, m.y + 4 * z], [m.x + 11 * z, m.y - 8 * z]].forEach(([sx, sy], i) => emoji('✦', sx, sy + 4 * z, (5 + i) * z));
+      GLOWS.push({ x: m.x, y: m.y, r: 40 * z, a: 0.3 + NIGHT * 0.6 });
+      break;
+    }
+    case 'medal': {
+      const b = box(x + 0.25, y + 0.3, 0.5, 0.4, 16, '#f3eee4'), p = P(0.5, 0.5, 16);
+      wallLine(F(b), 0, 0.1, 8, 0.9, 8, '#d9d0c0', 0.8);
+      rrect(p.x - 9 * z, p.y - 26 * z, 18 * z, 22 * z, 2 * z, '#7a4f2e');
+      rrect(p.x - 7 * z, p.y - 24 * z, 14 * z, 18 * z, 1.5 * z, '#fffaf0');
+      pg([[p.x - 4 * z, p.y - 24 * z], [p.x, p.y - 16 * z], [p.x + 4 * z, p.y - 24 * z]], '#4f8ef7');
+      circle(p.x, p.y - 13 * z, 4.5 * z, '#f2c230', '#c9971c', 0.8 * z);
+      [['#fa114f', 2.6], ['#92e82a', 1.8], ['#1eeaef', 1.0]].forEach(([c, rr]) => ellipse(p.x, p.y - 13 * z, rr * z, rr * z, null, c, 0.6 * z));
+      break;
+    }
+    case 'books': {
+      const p = P(0.5, 0.55, 0);
+      ellipse(p.x, p.y, 16 * z, 7 * z, '#c9765b');
+      ellipse(p.x, p.y - 1 * z, 13 * z, 5.5 * z, '#e39a7e');
+      ['#4f8ef7', '#ef6f6c', '#f2d24b', '#34b27b', '#a46ef0'].forEach((c, i) => {
+        rrect(p.x - 9 * z + (i % 2) * 2 * z, p.y - 5 * z - i * 3.2 * z, 14 * z, 3 * z, 0.8 * z, c);
+      });
+      const lp = P(0.85, 0.25, 0);
+      line(lp.x, lp.y, lp.x, lp.y - 30 * z, '#666', 1.2 * z);
+      pg([[lp.x - 5 * z, lp.y - 30 * z], [lp.x + 5 * z, lp.y - 30 * z], [lp.x + 3 * z, lp.y - 37 * z], [lp.x - 3 * z, lp.y - 37 * z]], '#fff3d6');
+      GLOWS.push({ x: lp.x, y: lp.y - 30 * z, r: 34 * z, a: 0.25 + NIGHT * 0.5 });
+      emoji('☕', p.x + 12 * z, p.y + 2 * z, 8 * z);
+      break;
+    }
+    case 'bonsai': {
+      const b = box(x + 0.25, y + 0.25, 0.5, 0.5, 9, '#3d5a73'), p = P(0.5, 0.5, 9);
+      wallLine(F(b), 0, 0, 7, 1, 7, '#2c4357', 0.8);
+      ellipse(p.x, p.y, 10 * z, 4 * z, '#8a6a4a');
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.quadraticCurveTo(p.x - 6 * z, p.y - 8 * z, p.x + 2 * z, p.y - 14 * z);
+      ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 2.4 * z; ctx.lineCap = 'round'; ctx.stroke();
+      [[-6, -14, 7], [4, -18, 6], [-1, -21, 5], [7, -12, 4.5]].forEach(([dx, dy, r]) => ellipse(p.x + dx * z, p.y + dy * z, r * z, r * 0.7 * z, ['#4e8f45', '#5fa652', '#6db35c', '#4e8f45'][Math.abs(dx) % 4]));
+      [[-5, 1], [5, 1.5]].forEach(([dx, dy]) => ellipse(p.x + dx * z, p.y + dy * z, 1.6 * z, 1 * z, '#e8e1d4'));
+      break;
+    }
+    case 'trophy': {
+      const b = box(x + 0.28, y + 0.28, 0.44, 0.44, 14, '#5a3a22'), p = P(0.5, 0.5, 14);
+      wallRect(F(b), 0, 0.2, 0.8, 5, 9, '#f2c230');
+      rrect(p.x - 2 * z, p.y - 8 * z, 4 * z, 8 * z, 1 * z, '#d9a92a');
+      ctx.beginPath(); ctx.moveTo(p.x - 9 * z, p.y - 24 * z); ctx.quadraticCurveTo(p.x - 8 * z, p.y - 7 * z, p.x, p.y - 7 * z); ctx.quadraticCurveTo(p.x + 8 * z, p.y - 7 * z, p.x + 9 * z, p.y - 24 * z); ctx.closePath();
+      ctx.fillStyle = '#f2c230'; ctx.fill();
+      ellipse(p.x, p.y - 24 * z, 9 * z, 2.6 * z, '#ffe27a');
+      [-1, 1].forEach(s => { ctx.beginPath(); ctx.ellipse(p.x + s * 10 * z, p.y - 19 * z, 3.5 * z, 4.5 * z, 0, 0, Math.PI * 2); ctx.strokeStyle = '#d9a92a'; ctx.lineWidth = 1.6 * z; ctx.stroke(); });
+      const sh = (Math.sin(ts / 600) + 1) / 2;
+      circle(p.x - 4 * z, p.y - 18 * z, (1 + sh) * z, 'rgba(255,255,255,.85)');
+      break;
+    }
+    case 'calendar': {
+      const p = P(0.5, 0.45, 0);
+      line(p.x - 6 * z, p.y, p.x - 2 * z, p.y - 26 * z, DARKWOOD, 1.4 * z); line(p.x + 6 * z, p.y, p.x + 2 * z, p.y - 26 * z, DARKWOOD, 1.4 * z);
+      rrect(p.x - 10 * z, p.y - 36 * z, 20 * z, 22 * z, 2 * z, '#fffaf0', '#d9d0c0', 0.8 * z);
+      rrect(p.x - 10 * z, p.y - 36 * z, 20 * z, 5 * z, 2 * z, '#ef6f6c');
+      for (let i = 0; i < 7; i++) {
+        const cx = p.x - 7.5 * z + (i % 4) * 5 * z, cy = p.y - 27 * z + Math.floor(i / 4) * 6 * z;
+        line(cx - 1.3 * z, cy, cx - 0.2 * z, cy + 1.3 * z, '#34b27b', 1 * z); line(cx - 0.2 * z, cy + 1.3 * z, cx + 1.6 * z, cy - 1.4 * z, '#34b27b', 1 * z);
+      }
       break;
     }
     case 'grandclock': {
