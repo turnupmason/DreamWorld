@@ -1261,6 +1261,7 @@ function awardSouvenirs() {
 const costValue = c => (c.coins || 0) + (c.wood || 0) * 5; // wood only comes from real life, so it counts extra
 function assetBreakdown(h) {
   const b = { cash: h.coins + h.wood * 5, house: 0, land: 0, items: 0, cars: 0, animals: 0, goods: 0 };
+  if (h === S.me && S.bank) b.cash += S.bank.save - S.bank.loans.reduce((t2, l) => t2 + l.left, 0) + (S.stocks ? stocksValue() : 0);   // v0.26: savings and shares count, loans don't
   h.houses.forEach(i => { b.house += costValue(HOUSES[i].cost); });
   for (let i = 1; i <= h.fieldLv; i++) b.land += costValue(FIELD_COST[i]);
   for (let i = 1; i <= h.pastureLv; i++) b.land += costValue(PASTURE[i].cost);
@@ -2076,5 +2077,151 @@ function chatWork(id) {
   if (r !== 'ok') return r;
   if (p.boss) { S.job.rel = Math.min(JOB_REL.max, S.job.rel + 3); addNeed('social', NEED_GAIN.boss - NEED_GAIN.chat); }
   else { S.job.rel = Math.min(JOB_REL.max, S.job.rel + 1); addNeed('social', NEED_GAIN.mate - NEED_GAIN.chat); }
+  return 'ok';
+}
+
+// ---------- the phone (v0.26): bank, loans, stocks, contacts, texts ----------
+function bank() {
+  S.bank = S.bank || { save: 0, at: now(), loans: [] };
+  const b = S.bank, days = (now() - b.at) / DAY;
+  if (days > 0.0005) { b.save += Math.min(b.save, BANK.interestCap) * BANK.rate * days; b.at = now(); }
+  return b;
+}
+const amountOf = (v, max) => v === 'all' ? Math.floor(max) : Math.min(Math.floor(max), +v || 0);
+function deposit(v) { const n = amountOf(v, S.me.coins); if (n <= 0) return 'poor'; S.me.coins -= n; bank().save += n; return 'ok'; }
+function withdraw(v) { const b = bank(), n = amountOf(v, b.save); if (n <= 0) return 'poor'; b.save -= n; S.me.coins += n; return 'ok'; }
+const loanPrice = (kind, k) => (kind === 'house' ? HOUSES[k] : CARS[k]).cost;
+function loanQuote(kind, k) {
+  const c = loanPrice(kind, k), price = c.coins || 0, down = Math.ceil(price * BANK.down), amount = price - down, fee = Math.round(amount * BANK[kind].fee), total = amount + fee, days = BANK[kind].days;
+  return { price, down, amount, fee, total, days, perDay: Math.ceil(total / days), wood: c.wood || 0 };
+}
+function loanCheck(kind, k) {
+  const b = bank(), q = loanQuote(kind, k);
+  if (b.loans.some(l => l.late)) return 'late';
+  if (b.loans.length >= BANK.maxLoans) return 'maxloans';
+  if (S.me.coins < q.down || (q.wood && (S.me.wood || 0) < q.wood)) return 'poor';
+  return 'ok';
+}
+// Borrow the rest, then buy it the usual way (buy() returns 'ok' or why not; if it fails the loan never happens)
+function withLoan(kind, k, buy) {
+  const r0 = loanCheck(kind, k);
+  if (r0 !== 'ok') return r0;
+  const q = loanQuote(kind, k);
+  S.me.coins += q.amount;
+  const r = buy();
+  if (r !== 'ok') { S.me.coins -= q.amount; return r; }
+  bank().loans.push({ id: uid(), kind, k, total: q.total, left: q.total, perDay: q.perDay, next: now() + DAY, start: now() });
+  return 'ok';
+}
+// Once a day each loan takes its payment: from your coins, then your savings. Short? Nothing happens except that
+// it's marked late (no new loans) and tried again.
+function loanTick() {
+  const b = bank(); let done = null, late = false;
+  b.loans.forEach(l => {
+    let guard = 60;
+    while (l.left > 0 && now() >= l.next && guard--) {
+      const due = Math.min(l.perDay, l.left);
+      if (S.me.coins >= due) S.me.coins -= due;
+      else if (S.me.coins + b.save >= due) { b.save -= due - S.me.coins; S.me.coins = 0; }
+      else { if (!l.late) late = true; l.late = true; break; }
+      l.left -= due; l.next += DAY; l.late = false;
+    }
+    if (l.left <= 0) done = l;
+  });
+  b.loans = b.loans.filter(l => l.left > 0);
+  return { done, late };
+}
+function repayLoan(id) {
+  const b = bank(), l = b.loans.find(x => x.id === id);
+  if (!l) return 'no';
+  if (S.me.coins + b.save < l.left) return 'poor';
+  const fromCoins = Math.min(S.me.coins, l.left); S.me.coins -= fromCoins; b.save -= l.left - fromCoins;
+  b.loans = b.loans.filter(x => x !== l);
+  return 'ok';
+}
+const debtLeft = () => bank().loans.reduce((t2, l) => t2 + l.left, 0);
+// stocks: a seeded random walk per company, the same on every phone
+const STOCK_KEYS = Object.keys(STOCKS);
+function srand(a, b) { let h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+const stockT = () => Math.floor((now() - STOCK.epoch) / (STOCK.tickMin * MIN));
+let STOCK_CACHE = { T: null, s: {} };
+function stockSeries(co) {
+  const T = stockT();
+  if (STOCK_CACHE.T !== T) STOCK_CACHE = { T, s: {} };
+  if (STOCK_CACHE.s[co]) return STOCK_CACHE.s[co];
+  const c = STOCK_KEYS.indexOf(co) + 1, D = STOCKS[co], keep = 24 * 60 / STOCK.tickMin + 1, out = [];
+  let x = 0;
+  for (let i = T - STOCK.window; i <= T; i++) {
+    const g = (srand(c, i) + srand(c + 17, i) + srand(c + 31, i) - 1.5) * 2;
+    x = STOCK.phi * x + STOCK.sigma * D.vol * g;
+    if (i > T - keep) out.push(+(D.base * Math.exp(STOCK.trend * i + x)).toFixed(2));
+  }
+  return (STOCK_CACHE.s[co] = out);
+}
+const stockPrice = co => { const s = stockSeries(co); return s[s.length - 1]; };
+const stockChange = co => { const s = stockSeries(co); return (s[s.length - 1] / s[0] - 1) * 100; };
+const holding = co => ((S.stocks || {})[co] || { n: 0, cost: 0 });
+function buyStock(co, v) {
+  const p = stockPrice(co), each = p * (1 + STOCK.fee), n = v === 'max' ? Math.floor(S.me.coins / each) : +v;
+  if (!(n > 0)) return 'poor';
+  const cost = Math.ceil(each * n);
+  if (S.me.coins < cost) return 'poor';
+  S.stocks = S.stocks || {}; const h = S.stocks[co] = S.stocks[co] || { n: 0, cost: 0 };
+  S.me.coins -= cost; h.n += n; h.cost += cost;
+  return 'ok';
+}
+function sellStock(co, v) {
+  const h = holding(co), n = v === 'all' ? h.n : Math.min(h.n, +v);
+  if (!(n > 0)) return 'none';
+  const got = Math.floor(stockPrice(co) * n * (1 - STOCK.fee));
+  S.me.coins += got; h.cost -= h.cost * n / h.n; h.n -= n;
+  if (!h.n) delete S.stocks[co];
+  return 'ok';
+}
+const stocksValue = () => STOCK_KEYS.reduce((t2, co) => t2 + holding(co).n * stockPrice(co), 0);
+// contacts: your friends, the people you work with, and anyone in town you've talked to
+function contacts() {
+  const out = S.friends.map(h => ({ id: h.id, kind: 'friend' }));
+  if (S.job) workPeople(S.job.place).forEach(p => out.push({ id: p.id, kind: p.boss ? 'boss' : 'mate' }));
+  Object.keys(S.rel || {}).filter(id => !id.startsWith('work_') && !out.some(o => o.id === id) && homeOf(id)).forEach(id => out.push({ id, kind: 'neighbour' }));
+  return out;
+}
+function whoIs(id) {
+  const wp = S.job && id.startsWith('work_') ? workPeople(S.job.place).find(p => p.id === id) : null;
+  if (wp) return { name: nm(wp.name), look: wp.look, wp };
+  const h = homeOf(id);
+  return h ? { name: homeName(h), look: h.look } : null;
+}
+function onceToday(key) { S.chatDay = S.chatDay || {}; const k = key + '@' + today(); if (S.chatDay[k]) return false; S.chatDay[k] = 1; return true; }
+function callPerson(id) {
+  if (!onceToday('call_' + id)) return 'done';
+  S.rel = S.rel || {}; S.rel[id] = Math.min(100, (S.rel[id] || 0) + 3); addNeed('social', NEED_GAIN.call);
+  if (id.startsWith('work_') && S.job && workPeople(S.job.place).find(p => p.id === id && p.boss)) S.job.rel = Math.min(JOB_REL.max, S.job.rel + 1);
+  return 'ok';
+}
+function textPerson(id, i) {
+  const T = TEXTS[i]; if (!T) return 'no';
+  S.texts = S.texts || {}; const th = S.texts[id] = S.texts[id] || [];
+  th.push({ me: 1, i, t: now() }, { i, r: Math.floor(Math.random() * T.re.length), t: now() + 2500 + Math.random() * 2500 });
+  while (th.length > 30) th.shift();
+  if (onceToday('text_' + id)) addNeed('social', NEED_GAIN.text);
+  return 'ok';
+}
+// one text a day from someone you know (a friend, or now and then your boss)
+function dailyText() {
+  if (S.textDay === today()) return null;
+  S.textDay = today();
+  const cs = contacts().filter(c => c.kind === 'friend' || c.kind === 'boss');
+  if (!cs.length) return null;
+  const c = cs[Math.floor(Math.random() * cs.length)], pool = c.kind === 'boss' ? BOSS_INBOX : INBOX;
+  S.texts = S.texts || {}; (S.texts[c.id] = S.texts[c.id] || []).push({ inbox: Math.floor(Math.random() * pool.length), boss: c.kind === 'boss' ? 1 : 0, t: now() });
+  return c.id;
+}
+const unreadTexts = () => Object.entries(S.texts || {}).reduce((n, [id, th]) => n + th.filter(m => !m.me && m.t <= now() && m.t > ((S.textSeen || {})[id] || 0)).length, 0);
+function seeTexts(id) { S.textSeen = S.textSeen || {}; S.textSeen[id] = now(); }
+// ask someone to meet you in the park (once a day); they're there for an hour
+function meetInPark(id) {
+  if (!onceToday('meet_' + id)) return 'done';
+  S.meet = { id, until: now() + HOUR };
   return 'ok';
 }

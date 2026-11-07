@@ -948,3 +948,43 @@ Object.assign(STR.en, {
   chat_walk_btn: 'Walk over and chat', go_strolling: 'Strolling round the park…', go_to_chat: 'Walking over to chat with {name}…', pl_stroll_lap: 'A lap of the park (fun +{f})', pl_park_here: 'People in the park: tap Chat to walk over', boss: 'Boss', coworker: 'Coworker', friend: 'Friend', neighbour: 'Neighbour', rel_level: 'Know them {n}', chat_btn: 'Have a chat', chat_done: 'You’ve talked today', chat_go_out: 'You can talk to people when you’re out in town',
   job_people: 'People you work with', job_people_note: 'Talk to them at work, or bump into them in the park', chat_ok: 'A lovely chat with {name}', chat_boss_ok: 'A chat with your boss {name}: they think well of you', chat_boss_note: 'Talking to your boss: work +3 (faster promotion)', chat_mate_note: 'Talking to a coworker: work +1, and it helps your social need',
 });
+
+// ---------- v0.26: the phone ----------
+Object.assign(STR.zh, {
+  ph_name: '手机', ph_contacts: '通讯录', ph_texts: '消息', ph_bank: '银行', ph_stocks: '股票', ph_mail: '信件', ph_map: '我在哪', ph_friends: '好朋友', ph_work: '工作', ph_people: '镇上认识的人',
+  ph_no_contacts: '还没有联系人。交朋友、去上班、在镇上和人聊天，他们就会出现在这里。', ph_call: '打电话', ph_call_again: '再打一次', ph_text: '发消息', ph_meet: '约到公园见',
+  ph_person_note: '每天第一次打电话：社交 +{c}；第一次发消息：社交 +{x}。约到公园：对方会在公园等你一小时，走过去就能聊。',
+  ph_calling: '通话中…', ph_call_ok: '聊得很开心：社交 +{n}，熟悉度 +3', ph_call_done: '今天已经打过电话了（只聊天，不再加社交）', ph_hang: '挂断',
+  ph_say_hi: '打个招呼吧 👋', ph_no_texts: '还没有消息。', ph_new_text: '给谁发消息', meet_ok: '{name}说：好呀，我在公园等你！', meet_done: '今天已经约过了',
+  text_new: '{name}给你发了消息', bank_net: '我的家产（房子、车、东西、钱包、存款、股票，减去贷款）', bank_debt: '其中还欠贷款 🪙{n}', bank_wallet: '钱包', bank_save: '存款', bank_all: '全部',
+  bank_rate: '存款每天利息 {p}%（最多算 🪙{cap}），今天约 🪙{n}', bank_in_out: '⬇ 存进银行　⬆ 取出来', bank_empty: '存款不够',
+  loan_list: '贷款', loan_none: '没有贷款。在房产中介或车行可以贷款买房买车。', loan_next: '下次还 🪙{n}，{m} 后自动扣（先扣钱包，不够扣存款）',
+  loan_late_row: '钱不够，这期还没还上。存点钱就会自动补上；补上前不能再贷款。', loan_repay: '提前还清 🪙{n}', loan_paid_off: '贷款还清了！',
+  loan_late_note: '钱不够还这期贷款，存点钱会自动补上', loan_btn: '贷款买：首付 🪙{n}，每天还 🪙{d}，{days} 天', loan_title: '贷款买 {name}',
+  loan_price: '价格', loan_down: '首付（现在付）', loan_amount: '贷款', loan_fee: '手续费（{p}%）', loan_daily: '每天还', loan_daily_v: '🪙{n} × {d} 天',
+  loan_rule: '每天自动从钱包扣（不够扣存款）。钱不够也不会收走东西，只是还上之前不能再贷款。随时可以提前还清。', loan_sign: '签贷款合同',
+  loan_no_late: '你有一笔贷款还没还上，先还上才能再贷款。', loan_no_maxloans: '最多同时有 2 笔贷款。', loan_no_poor: '首付的钱不够。', loan_no_wood: '木材不够（木材要自己付）。',
+  loan_house_ok: '贷款买下了{name}！每天会自动还款', loan_car_ok: '贷款买下了{name}，{m} 分钟后送到家！每天会自动还款',
+  stock_mine: '我的股票', stock_have: '持有 {n} 股', stock_note: '价格每 {m} 分钟变一次，有涨有跌。买卖各收 {p}% 手续费。别把要用的钱都放进去。',
+  stock_24h: '24 小时', stock_own: '我持有', stock_value: '现在值', stock_buy: '买', stock_sell: '卖', stock_max: '最多', stock_wallet: '钱包里有 🪙{n}',
+  news_up_1: '{name}：新产品卖得很好', news_up_2: '{name}：这季度赚得比预期多', news_up_3: '{name}：在镇上开了新店', news_down_1: '{name}：原料涨价了', news_down_2: '{name}：来了新的竞争对手', news_down_3: '{name}：最近生意清淡',
+});
+Object.assign(STR.en, {
+  ph_name: 'Phone', ph_contacts: 'Contacts', ph_texts: 'Messages', ph_bank: 'Bank', ph_stocks: 'Stocks', ph_mail: 'Letters', ph_map: 'Find me', ph_friends: 'Friends', ph_work: 'Work', ph_people: 'People in town',
+  ph_no_contacts: 'No contacts yet. Make friends, get a job, talk to people in town, and they’ll show up here.', ph_call: 'Call', ph_call_again: 'Call again', ph_text: 'Message', ph_meet: 'Meet at the park',
+  ph_person_note: 'First call of the day: social +{c}; first message: social +{x}. Meet at the park: they wait there for an hour; walk over to chat.',
+  ph_calling: 'On a call…', ph_call_ok: 'A lovely chat: social +{n}, know them +3', ph_call_done: 'You’ve called today already (a nice chat, no more social)', ph_hang: 'Hang up',
+  ph_say_hi: 'Say hi 👋', ph_no_texts: 'No messages yet.', ph_new_text: 'New message', meet_ok: '{name}: sure, see you at the park!', meet_done: 'Already arranged today',
+  text_new: '{name} sent you a message', bank_net: 'Home worth (house, cars, things, wallet, savings, shares, minus loans)', bank_debt: 'Still owed on loans: 🪙{n}', bank_wallet: 'Wallet', bank_save: 'Savings', bank_all: 'All',
+  bank_rate: 'Savings earn {p}% a day (on up to 🪙{cap}); about 🪙{n} today', bank_in_out: '⬇ pay in　⬆ take out', bank_empty: 'Not enough savings',
+  loan_list: 'Loans', loan_none: 'No loans. Take one at the estate agent or the car dealer.', loan_next: 'Next payment 🪙{n} in {m} (from your wallet, then savings)',
+  loan_late_row: 'Not enough money for this payment. Save some and it’s paid automatically; no new loans until then.', loan_repay: 'Pay it all off 🪙{n}', loan_paid_off: 'Loan paid off!',
+  loan_late_note: 'Not enough money for a loan payment; it’ll go through once you have it', loan_btn: 'Loan: 🪙{n} down, 🪙{d} a day for {days} days', loan_title: 'Buy {name} with a loan',
+  loan_price: 'Price', loan_down: 'Down payment (now)', loan_amount: 'Loan', loan_fee: 'Fee ({p}%)', loan_daily: 'Each day', loan_daily_v: '🪙{n} × {d} days',
+  loan_rule: 'Paid automatically each day from your wallet (then savings). If you’re short nothing is taken away; you just can’t borrow again until you catch up. Pay it off any time.', loan_sign: 'Sign the loan',
+  loan_no_late: 'You’re behind on a loan; catch up first.', loan_no_maxloans: 'Two loans at a time at most.', loan_no_poor: 'Not enough for the down payment.', loan_no_wood: 'Not enough wood (wood isn’t lent).',
+  loan_house_ok: 'You bought {name} with a loan! Payments go out each day', loan_car_ok: 'You bought the {name} with a loan; it arrives in {m} min! Payments go out each day',
+  stock_mine: 'My shares', stock_have: '{n} shares', stock_note: 'Prices change every {m} minutes, up and down. {p}% fee to buy or sell. Don’t put in money you need.',
+  stock_24h: '24 h', stock_own: 'I own', stock_value: 'Worth now', stock_buy: 'Buy', stock_sell: 'Sell', stock_max: 'max', stock_wallet: 'Wallet: 🪙{n}',
+  news_up_1: '{name}: the new product is selling well', news_up_2: '{name}: profits beat expectations', news_up_3: '{name}: opening a new branch in town', news_down_1: '{name}: costs are going up', news_down_2: '{name}: a new competitor', news_down_3: '{name}: business is slow',
+});

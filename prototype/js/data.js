@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.25.0';
+const VERSION = '0.26.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -25,10 +25,44 @@ const SMALL_ANIMALS = ['chicken', 'duck', 'rabbit'];   // v0.19: every store has
 // and low needs never take anything away: a good mood (all three high on average) just adds a little to your pay.
 const NEEDS = { hunger: { e: '🍔', hours: 10 }, social: { e: '💬', hours: 16 }, fun: { e: '🎉', hours: 16 }, floor: 8, goodMood: 70, moodPay: 0.1 };
 const FOOD_FILL = { burger: 55, noodles: 50, pizza: 60, sushi: 45, boba: 15, icecream: 15, snack: 30, cook: 45 };
-const NEED_GAIN = { chat: 15, visit: 20, letter: 8, movie: 40, movieSocial: 6, claw: 8, stroll: 20, boss: 8, mate: 12, snackSocial: 4, cookFun: 5, sweetFun: 8 };
+const NEED_GAIN = { call: 10, text: 5, chat: 15, visit: 20, letter: 8, movie: 40, movieSocial: 6, claw: 8, stroll: 20, boss: 8, mate: 12, snackSocial: 4, cookFun: 5, sweetFun: 8 };
 const SNACK = { price: 15 };
 // the people at your work (not the same names as people in town)
 const BOSS_NAMES = [{ zh: '赵经理', en: 'Ms. Zhao' }, { zh: '孙店长', en: 'Mr. Sun' }, { zh: '钱老板', en: 'Mrs. Chen' }, { zh: '吴主管', en: 'Mr. Wu' }, { zh: '郑经理', en: 'Ms. Zheng' }, { zh: '何老板', en: 'Mr. Ho' }];
+// ---------- v0.26: the phone ----------
+// Bank: savings earn a little every day (on up to interestCap). Loans for a car or a house: pay a fifth now, the rest
+// (plus a flat fee) comes off in equal payments once a day; if you can't pay, nothing is taken away, you just can't
+// borrow again until you catch up.
+const BANK = { rate: 0.002, interestCap: 50000, down: 0.2, car: { days: 14, fee: 0.08 }, house: { days: 30, fee: 0.12 }, maxLoans: 2 };
+// Stocks: six companies in town. Prices move every 15 minutes (the same for everyone, worked out from the time),
+// swing around a slowly rising trend, and buying or selling costs 1%.
+const STOCKS = {
+  farm:   { zh: '镜像农业', en: 'Mirror Farms',      e: '🌾', base: 40,  vol: 1.0, col: '#7cc35a' },
+  motors: { zh: '小镇汽车', en: 'Town Motors',       e: '🚗', base: 120, vol: 1.3, col: '#4c8fe8' },
+  bakery: { zh: '甜甜烘焙', en: 'Sweet Bakes',       e: '🥐', base: 25,  vol: 0.8, col: '#e8a64c' },
+  cinema: { zh: '星光影院', en: 'Starlight Cinemas', e: '🎬', base: 60,  vol: 1.2, col: '#b36be0' },
+  fit:    { zh: '动起来科技', en: 'MoveTech',        e: '⌚', base: 200, vol: 1.6, col: '#e85c7a' },
+  parcel: { zh: '飞快快递', en: 'Zip Parcel',        e: '📦', base: 80,  vol: 1.0, col: '#c08a5a' },
+};
+const STOCK = { tickMin: 15, phi: 0.99, sigma: 0.006, trend: 0.000005, fee: 0.01, window: 900, epoch: Date.UTC(2026, 0, 1) };
+// Texts you can send, and what people say back
+const TEXTS = [
+  { zh: '最近怎么样？', en: 'How are you doing?', re: [{ zh: '挺好的！刚从公园回来 🌳', en: 'Pretty good! Just back from the park 🌳' }, { zh: '还不错，今天菜地收成很好 🥕', en: 'Not bad, a good harvest today 🥕' }, { zh: '有点累，不过很开心 😊', en: 'A bit tired, but happy 😊' }] },
+  { zh: '你家院子好漂亮', en: 'Your yard looks lovely', re: [{ zh: '谢谢！我花了好多心思 🌷', en: 'Thanks! I put a lot into it 🌷' }, { zh: '哈哈，下次来我家玩 🏡', en: 'Ha, come over some time 🏡' }] },
+  { zh: '谢谢你！', en: 'Thank you!', re: [{ zh: '不客气 😄', en: 'Any time 😄' }, { zh: '小事一桩～', en: 'No problem at all~' }] },
+  { zh: '今天走了好多步 👟', en: 'I walked loads today 👟', re: [{ zh: '厉害！我也要去走走 💪', en: 'Nice! I should go for a walk too 💪' }, { zh: '我今天也去健身了 🏋️', en: 'I hit the gym today too 🏋️' }] },
+];
+// People text you now and then (one a day)
+const INBOX = [
+  { zh: '早上好！今天天气不错 ☀️', en: 'Morning! Lovely day ☀️' }, { zh: '我刚看了一部电影，超好看 🎬', en: 'Just saw a film, so good 🎬' },
+  { zh: '你的菜长得怎么样了？🥕', en: 'How are your veggies doing? 🥕' }, { zh: '周末一起去公园吗？🌳', en: 'Park this weekend? 🌳' },
+  { zh: '我新买了一辆车 🚗', en: 'I got a new car 🚗' }, { zh: '谢谢上次帮忙 🙏', en: 'Thanks for helping last time 🙏' },
+];
+const BOSS_INBOX = [{ zh: '这周干得不错 👍', en: 'Good work this week 👍' }, { zh: '明天记得准时来哦 💼', en: 'See you on time tomorrow 💼' }];
+const CALL_LINES = [
+  { zh: '喂？是你呀！最近好吗？', en: 'Hello? Oh, it’s you! How are things?' }, { zh: '哈哈，正想给你打电话呢！', en: 'Ha, I was just about to call you!' },
+  { zh: '我在公园散步呢，空气很好。', en: 'I’m out for a walk in the park, lovely air.' }, { zh: '今天在店里忙了一天，听到你声音真好。', en: 'Busy day at the shop, nice to hear you.' },
+];
 const MATE_NAMES = [{ zh: '小林', en: 'Lin' }, { zh: '阿伟', en: 'Will' }, { zh: '小雨', en: 'Rain' }, { zh: '阿豪', en: 'Hal' }, { zh: '佳佳', en: 'Jojo' }, { zh: '小周', en: 'Joe' }, { zh: '文文', en: 'Wendy' }, { zh: '阿凯', en: 'Kai' }];   // a bite at the café or the bakery
 const SCHOOL = { fee: 120, perCert: 3, certPay: 0.05, maxCerts: 4, minutes: 45 };   // v0.24: a class lasts 45 minutes
 const POLICE = { witness: 0.08, strikes: 3, strikeDays: 7, fineMult: 5, fineMin: 80, fineMax: 400, jailMin: 30, bail: 150 };

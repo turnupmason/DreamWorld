@@ -1548,14 +1548,20 @@ const Scene = (() => {
   // v0.25: people in the park: on the benches and on the lawn, chatting; your boss or a coworker now and then
   let PARK_PEOPLE = [], CHAT = null;   // who's in the park now; who you're talking to (and until when)
   const chatting = id => CHAT && CHAT.until > performance.now() && (id === undefined || CHAT.id === id);
-  function parkPeople(objs, ts) {
+  // who's in the park right now (worked out from the time, so it's the same whether you're looking or not)
+  function parkList() {
+    if (VIEW_TOWN !== myTown() || !TL.park) return [];
     const P = TL.park, dayN = Math.floor(now() / DAY), list = [];
     const ids = allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id));
     [[P.x + 16.4, P.y + 13.3], [P.x + 17.5, P.y + 13.2], [P.x + 7.4, P.y + 21.2], [P.x + 15.6, P.y + 7.4]].forEach(([x, y], i) => { const id = ids[(dayN * 3 + i * 7) % Math.max(1, ids.length)]; if (id) list.push({ id, look: homeOf(id).look, x, y, i }); });
+    if (S.meet && S.meet.until > now()) { const who = whoIs(S.meet.id); if (who) list.push({ id: S.meet.id, look: who.look, x: P.x + 12.6, y: P.y + 13.4, i: 11, work: !!who.wp, boss: !!(who.wp && who.wp.boss) }); }   // v0.26: you asked them on the phone
     const wp = S.job ? workPeople(S.job.place) : [];
     if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 3 === 0) list.push({ id: wp[1].id, look: wp[1].look, x: P.x + 18.2, y: P.y + 17.5, i: 9, work: true });
     if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 4 === 1) list.push({ id: wp[0].id, look: wp[0].look, x: P.x + 27, y: P.y + 16.4, i: 10, work: true, boss: true });
-    PARK_PEOPLE = list;
+    return list;
+  }
+  function parkPeople(objs, ts) {
+    const list = PARK_PEOPLE = parkList();
     list.forEach(pp => objs.push({ d: pp.x + pp.y + 0.3, f: () => {
       const z = cam.z, q = iso(pp.x, pp.y);
       drawPerson(q.x, q.y, z, { look: pp.look, face: pp.i % 2 ? -1 : 1, view: 'front', turn: [pp.i % 2 ? -0.6 : 0.6, 1], energy: 'good', ts, seed: pp.i, pose: 'stand', wave: Math.sin(ts / 1100 + pp.i) > 0.85 });
@@ -3350,9 +3356,9 @@ const Scene = (() => {
     mePoint() { if (!S) return null; TL = layoutOf(myTown()); const keep = VIEW_TOWN; return S.work || S.jail || (S.out && S.out.town === myTown()) ? (VIEW_TOWN === myTown() ? mePos() : null) : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })(); },
     pingMe() { PING = performance.now(); },
     // v0.25: walk up to someone in town (a person out walking or someone in the park), then have a chat
-    canWalkUp(id) { return mode === 'town' && VIEW_TOWN === myTown() && !S.work && !S.study && !jailed() && !!(PARK_PEOPLE.find(p => p.id === id) || (WALK.town === VIEW_TOWN && WALK.list.find(w => w.id === id))); },
+    canWalkUp(id) { return mode === 'town' && VIEW_TOWN === myTown() && !S.work && !S.study && !jailed() && !!(parkList().find(p => p.id === id) || (WALK.town === VIEW_TOWN && WALK.list.find(w => w.id === id))); },
     walkUp(id, done) {
-      const pp = PARK_PEOPLE.find(p => p.id === id), w = !pp && WALK.town === VIEW_TOWN && WALK.list.find(x => x.id === id);
+      const pp = parkList().find(p => p.id === id), w = !pp && WALK.town === VIEW_TOWN && WALK.list.find(x => x.id === id);
       if (mode !== 'town' || (!pp && !w)) { if (done) done(); return; }
       if (w) { w.path = []; w.stay = Math.max(w.stay || 0, 14); w.moving = false; }   // they stop for you
       const pt = pp ? [pp.x, pp.y] : [w.x, w.y], stand = [pt[0] + 0.15, pt[1] + 1.05], from = mePos();   // just in front of them
@@ -3362,7 +3368,7 @@ const Scene = (() => {
       trip = { kind: 'chat', town: VIEW_TOWN, legs: [{ how: 'walk', from, path }], li: 0, how: 'walk', inCar: false, car: null, x: from[0], y: from[1], path: path.slice(), dest: null, place, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now(),
         done: () => { CHAT = { id, until: performance.now() + 4000 }; if (w) w.stay = Math.max(w.stay, 5); if (done) done(); } };
     },
-    parkFolk() { return mode === 'town' && VIEW_TOWN === myTown() ? PARK_PEOPLE.map(p => ({ id: p.id, work: !!p.work, boss: !!p.boss })) : []; },
+    parkFolk() { return parkList().map(p => ({ id: p.id, work: !!p.work, boss: !!p.boss })); },
     stroll(done) {   // v0.25: a lap of the park's jogging path, then back where you started
       if (mode !== 'town' || !TL.parkLoop) { if (done) done(); return; }
       const loop = smoothPts(TL.parkLoop, 1.2).map(p => [p[0], p[1]]), from = mePos();

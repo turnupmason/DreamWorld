@@ -175,7 +175,7 @@ function renderHUD() {
     <div class="row between">
       <button class="row me plain" data-act="energyInfo">${avatar(S.me.look, 'hud e-' + e, e)}<div><div class="me-name">${esc(S.me.name)}</div>
         <div class="energy">${ENERGY_EMOJI[e]} ${energyName(e)} · ${t('sleep_short', { n: S.sleep ? S.sleep.score : '–' })}</div>${needBars()}</div></button>
-      <div class="row tight">${mail ? `<button class="pill mail" data-act="mailGo">✉️ ${mail}</button>` : ''}${weatherPill()}</div>
+      <div class="row tight"><button class="pill phone-pill" data-act="phone" aria-label="${t('ph_name')}" title="${t('ph_name')}">📱${phoneBadge() ? `<i class="badge">${phoneBadge()}</i>` : ''}</button>${weatherPill()}</div>
     </div>
     <div class="res row">
       <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>
@@ -267,7 +267,7 @@ function renderOverlay() {
   }
 }
 function overlaySig() {
-  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang, ['hunger', 'social', 'fun'].map(k => Math.round(needs()[k] / 5)).join(','), JSON.stringify(Scene.tripNow()), S.out ? S.out.place || S.out.id || 1 : 0, UI.inStore, UI.mallFloor].join('|');
+  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang, phoneBadge(), ['hunger', 'social', 'fun'].map(k => Math.round(needs()[k] / 5)).join(','), JSON.stringify(Scene.tripNow()), S.out ? S.out.place || S.out.id || 1 : 0, UI.inStore, UI.mallFloor].join('|');
 }
 // 1F 2F 3F … chips inside a house, plus ＋ to build another storey in your own.
 function floorChips(h) {
@@ -713,7 +713,7 @@ function openSheet(type, arg) {
   UI.sheet = { type, arg };
   renderSheet();
   const compact = ['friend', 'host', 'go', 'field', 'animal', 'car', 'tree', 'ware', 'food', 'claw', 'cinema'].includes(type);
-  $('#sheet').className = 'sheet' + (compact ? ' compact' : '') + (type === 'pets' || type === 'trophies' ? ' tall' : '');
+  $('#sheet').className = 'sheet' + (compact ? ' compact' : '') + (type === 'pets' || type === 'trophies' ? ' tall' : '') + (type === 'phone' ? ' phone-sheet' : '');
   $('#sheet').hidden = false;
   $('#backdrop').hidden = false;
   $('#backdrop').classList.toggle('light', compact);
@@ -727,6 +727,16 @@ function stagesRow(kind, k, n, cur, names, w = 72) {
   return `<div class="stages">${names.map((nmS, s) => `<div class="${s === cur ? 'on' : ''}">${thumbImg(kind, k, { stage: s }, w, 60, 'thumb xs')}<span>${nmS}</span></div>`).join('')}</div>`;
 }
 const SHEETS = {
+  phone(arg) { return phoneScreen(arg || 'home'); },   // v0.26
+  loan(wid) {   // v0.26: the loan offer, before you sign
+    const w = Scene.shopWare(wid); if (!w) return '';
+    const kind = w.kind === 'house' ? 'house' : 'car', k = kind === 'house' ? +w.k : w.k, q = loanQuote(kind, k), chk = loanCheck(kind, k), name = nm(kind === 'house' ? HOUSES[k] : CARS[k]);
+    const row = (a, b) => `<div class="row between"><span>${a}</span><b>${b}</b></div>`;
+    return `<h2>🏦 ${t('loan_title', { name })}</h2><div class="card">${row(t('loan_price'), '🪙' + q.price.toLocaleString())}${row(t('loan_down'), '🪙' + q.down.toLocaleString() + (q.wood ? ` + 🪵${q.wood}` : ''))}
+      ${row(t('loan_amount'), '🪙' + q.amount.toLocaleString())}${row(t('loan_fee', { p: Math.round(BANK[kind].fee * 100) }), '🪙' + q.fee.toLocaleString())}${row(t('loan_daily'), t('loan_daily_v', { n: q.perDay.toLocaleString(), d: q.days }))}</div>
+      <p class="muted small">${t('loan_rule')}</p>
+      ${chk === 'ok' ? `<button class="btn primary block" data-act="loanSign" data-arg="${wid}">✍️ ${t('loan_sign')}</button>` : `<p class="host-say">${t('loan_no_' + chk)}</p>`}`;
+  },
   person(id) {   // v0.25: someone in town: talk to them (helps your social need; once a day each), or go to their home
     const wp = S.job ? workPeople(S.job.place).find(p => p.id === id) : null, h = wp ? null : homeOf(id), name = wp ? nm(wp.name) : homeName(h), look = wp ? wp.look : h.look;
     const done = (S.chatDay || {})[id + '@' + today()], rel = (S.rel || {})[id] || 0, out = (S.out && S.out.town === myTown()) || S.work;
@@ -749,10 +759,10 @@ const SHEETS = {
       btns = [1, 5, 10].map(n => `<button class="btn small ${n === 5 ? 'primary' : ''}" data-act="addWare" data-arg="${w.id}#${n}">🛒 ×${n} 🪙${c.seed * n}</button>`).join(''); }
     else if (w.kind === 'house') { const i = +w.k, H = HOUSES[i], own = S.me.houses.includes(i);
       info = `${t('house_room', { w: H.room[0], d: H.room[1] })} · ${t('house_floors', { n: H.floors[0], max: H.floors[1] })}`;
-      btns = i === S.me.house ? `<span class="tag ok">${t('house_current')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${own || canAfford(H.cost) ? '' : 'disabled'}>✍️ ${own ? t('house_move') : `${t('ware_sign')} ${costText(H.cost)}`}</button>`; }
+      btns = i === S.me.house ? `<span class="tag ok">${t('house_current')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${own || canAfford(H.cost) ? '' : 'disabled'}>✍️ ${own ? t('house_move') : `${t('ware_sign')} ${costText(H.cost)}`}</button>${own ? '' : loanBtn('house', i, w.id)}`; }
     else if (w.kind === 'land') { const L = landDeal(w.k); info = L.sub; btns = L.next ? `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${canAfford(L.cost) ? '' : 'disabled'}>✍️ ${t('ware_sign')} ${costText(L.cost)}</button>` : `<span class="tag ok">${t('maxed')}</span>`; }
     else if (w.kind === 'car') { const own = S.me.cars.some(c => c.k === w.k); info = t('car_cargo', { n: CARS[w.k].cargo || WALK_CARRY }) + ' · ' + t('car_delivered', { m: DELIVERY.minutes });
-      btns = own ? `<span class="tag ok">${t('owned')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${canAfford(CARS[w.k].cost) ? '' : 'disabled'}>✍️ ${t('ware_sign')} ${costText(CARS[w.k].cost)}</button>`; }
+      btns = own ? `<span class="tag ok">${t('owned')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${canAfford(CARS[w.k].cost) ? '' : 'disabled'}>✍️ ${t('ware_sign')} ${costText(CARS[w.k].cost)}</button>${loanBtn('car', w.k, w.id)}`; }
     else if (w.kind === 'act') { info = t('st_short_mall'); btns = `<button class="btn primary" data-act="mallAct" data-arg="${w.k}">${t('act_' + w.k)}</button>`; }
     else {
       const r = wareCheck(w, B.items), vol = wareVol({ ...w, n: 1 });
@@ -1329,6 +1339,26 @@ const ACT = {
   },
   close: () => closeSheet(),
   energyInfo: () => openSheet('energy'),
+  // v0.26: the phone
+  phone(arg) { if (arg === 'mail') { closeSheet(); return ACT.mailGo(); } if (arg === 'map') { closeSheet(); return ACT.findMe(); } if (typeof arg === 'string' && arg.startsWith('texts|')) seeTexts(arg.split('|')[1]); openSheet('phone', arg || 'home'); },
+  phoneCall(id) { const r = callPerson(id); if (r === 'ok') { Sound.play('chime'); save(); } openSheet('phone', 'call|' + id + '|' + r); },
+  phoneText(a) { const [id, i] = a.split('|'); textPerson(id, +i); seeTexts(id); Sound.play('tick'); save(); renderSheet(); },
+  phoneMeet(id) { const r = meetInPark(id), who = whoIs(id); if (r === 'ok') { Sound.play('chime'); snack(`🌳 ${t('meet_ok', { name: who ? who.name : '' })}`); save(); } else snack(t('meet_done')); renderSheet(); },
+  bankIn(v) { const r = deposit(v); if (r === 'ok') { Sound.play('coins'); save(); } else snack(t('snack_poor')); renderSheet(); },
+  bankOut(v) { const r = withdraw(v); if (r === 'ok') { Sound.play('coins'); save(); } else snack(t('bank_empty')); renderSheet(); },
+  loanRepay(id) { const r = repayLoan(id); if (r === 'ok') { Sound.play('levelup'); snack(`🏦 ${t('loan_paid_off')}`); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },
+  stockBuy(a) { const [co, v] = a.split('|'), r = buyStock(co, v); if (r === 'ok') { Sound.play('coins'); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },
+  stockSell(a) { const [co, v] = a.split('|'), r = sellStock(co, v); if (r === 'ok') { Sound.play('coins'); save(); } renderSheet(); },
+  loanAsk(wid) { openSheet('loan', wid); },
+  loanSign(wid) {
+    const w = Scene.shopWare(wid); if (!w) return;
+    const house = w.kind === 'house', k = house ? +w.k : w.k;
+    const r = withLoan(house ? 'house' : 'car', k, () => house ? buyHouse(k) : orderCar(w));
+    closeSheet();
+    if (r !== 'ok') { Sound.play('oops'); return snack(r === 'poor' ? t('snack_poor') : r === 'own' ? t('owned') : r === 'garage' ? `🚗 ${t('garage_full')}` : t('loan_no_' + r)); }
+    Sound.play('coins'); save();
+    snack(house ? `🏦 ${t('loan_house_ok', { name: nm(HOUSES[k]) })}` : `🏦 ${t('loan_car_ok', { name: nm(CARS[k]), m: DELIVERY.minutes })}`);
+  },
   chat(id, here) { if (!here && Scene.canWalkUp(id)) { closeSheet(); UI.tripTo = homeName(homeOf(id)); Scene.walkUp(id, () => ACT.chat(id, true)); return refresh(); }   // walk over first, then talk
     const r = chatWith(id); if (r === 'ok') { Sound.play('chime'); snack(`💬 ${t('chat_ok', { name: homeName(homeOf(id)) })}`); save(); } else snack(t('chat_done')); renderSheet(); },
   chatWork(id, here) { if (!here && Scene.canWalkUp(id)) { closeSheet(); UI.tripTo = nm((workPeople(S.job.place).find(x => x.id === id) || {}).name); Scene.walkUp(id, () => ACT.chatWork(id, true)); return refresh(); }
@@ -1532,14 +1562,9 @@ const ACT = {
     }
     if (w.kind === 'land') return result(buyLand(w.k), () => { Sound.play('coins'); snack(t('snack_land_' + w.k)); save(); });
     if (w.kind === 'car') {
-      const pend = allPending().filter(e => e.act === 'buyCar').length;
-      if (S.me.cars.some(c => c.k === w.k) || allPending().some(e => e.act === 'buyCar' && e.k === w.k)) return snack(t('owned'));
-      if (S.me.cars.length + pend >= driveCap() + garageCap()) { Sound.play('oops'); return snack(`🚗 ${t('garage_full')}`); }
-      if (!canAfford(CARS[w.k].cost)) { Sound.play('oops'); return snack(t('snack_poor')); }
-      pay(CARS[w.k].cost); S.me.coins += w.price;   // paid in full (wood too); the coin part rides with the delivery
-      if (checkout([{ wid: w.id, kind: 'car', k: w.k, act: 'buyCar', arg: w.k, price: w.price, n: 1, vol: 0 }], 'deliver') !== 'ok') return;
-      S.deliveries[S.deliveries.length - 1].free = true; S.me.coins += deliveryFee([{ price: w.price }]);   // the dealer delivers for free
-      Sound.play('coins'); snack(`🚗 ${t('car_ordered', { name: nm(CARS[w.k]), m: DELIVERY.minutes })}`); save();
+      const r = orderCar(w);
+      if (r === 'ok') { Sound.play('coins'); snack(`🚗 ${t('car_ordered', { name: nm(CARS[w.k]), m: DELIVERY.minutes })}`); save(); }
+      else { Sound.play('oops'); snack(r === 'own' ? t('owned') : r === 'garage' ? `🚗 ${t('garage_full')}` : t('snack_poor')); }
     }
   },
   // v0.16: watch mini-you work out in town
@@ -2824,6 +2849,9 @@ setInterval(() => {
   { const d = dueDeliveries(); if (d) { Sound.play('chime'); snack(`🚚 ${t('delivered', { n: d.ok })}${d.back ? ' ' + t('unloaded_back', { n: d.back }) : ''}`); refresh(); } }
   { const c = classTick(); if (c) { Sound.play(c === 'cert' ? 'levelup' : 'chime'); snack(c === 'cert' ? `🎓 ${t('school_cert', { n: S.school.certs, p: Math.round(S.school.certs * SCHOOL.certPay * 100) })}` : `📚 ${t('school_class', { n: S.school.classes % SCHOOL.perCert, m: SCHOOL.perCert })}`); refresh(); } }   // v0.24
   if (jailTick()) { Sound.play('chime'); snack(`🚔 ${t('jail_out')}`); outOfJail(); refresh(); }
+  { const L = loanTick(); if (L.done) { Sound.play('levelup'); snack(`🏦 ${t('loan_paid_off')}`); save(); } if (L.late) { snack(`🏦 ${t('loan_late_note')}`); save(); } }   // v0.26
+  { const who = dailyText(); if (who) { const p = whoIs(who); if (p) { Sound.play('chime'); snack(`💬 ${t('text_new', { name: p.name })}`); } save(); } }
+  if (UI.sheet && UI.sheet.type === 'phone') { const sig = stockT() + ':' + Object.values(S.texts || {}).map(th => th.filter(m => m.t <= now()).length).join(','); if (sig !== UI.phoneSig) { UI.phoneSig = sig; renderSheet(); } }
   if (S.work && now() >= S.work.end) { const r = finishShift(); if (r) { Sound.play('coins'); snack(`💼 ${t(r.promoted ? 'job_promoted' : 'job_done', { n: r.pay, rank: nm(JOB_RANKS[jobRank()]) })}`); refresh(); } }
   if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }
   if (S.floodNews) { snack(`🌊 ${t('w_flooded', { n: S.floodNews })}`); S.floodNews = 0; }
@@ -2885,7 +2913,7 @@ function playMovie() {
 }
 
 // ---------- v0.25: needs in the HUD; a bite to eat; the people you work with ----------
-const snackBtn = key => `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${key === 'cafe' ? '☕' : '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`;
+function snackBtn(key) { return `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${key === 'cafe' ? '☕' : '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`; }
 function workmates(key) {
   const at = S.work && S.work.place === key, day = today();
   return `<div class="muted small gap-top">${t('job_people')}</div>${workPeople(key).map(p => { const done = (S.chatDay || {})[p.id + '@' + day];
@@ -2895,4 +2923,92 @@ function workmates(key) {
 function needBars() {
   const n = needs();
   return `<div class="my-needs">${['hunger', 'social', 'fun'].map(k => `<span class="mn ${n[k] < 30 ? 'low' : ''}">${NEEDS[k].e}<b><i style="width:${Math.round(n[k])}%"></i></b></span>`).join('')}</div>`;
+}
+
+// ---------- v0.26: the phone ----------
+function phoneBadge() { try { return unreadTexts() + unreadMail() + (bank().loans.some(l => l.late) ? 1 : 0); } catch (e) { return 0; } }   // v0.26: letters live in the phone too
+function loanBtn(kind, k, wid) { const q = loanQuote(kind, k), ok = loanCheck(kind, k) === 'ok';
+  return `<button class="btn block gap-top" data-act="loanAsk" data-arg="${wid}" ${ok ? '' : 'disabled'}>🏦 ${t('loan_btn', { n: q.down.toLocaleString(), d: q.perDay.toLocaleString(), days: q.days })}</button>`; }
+// buy a car at the dealer: paid in full, the dealer brings it home (free delivery)
+function orderCar(w) {
+  const pend = allPending().filter(e => e.act === 'buyCar').length;
+  if (S.me.cars.some(c => c.k === w.k) || allPending().some(e => e.act === 'buyCar' && e.k === w.k)) return 'own';
+  if (S.me.cars.length + pend >= driveCap() + garageCap()) return 'garage';
+  if (!canAfford(CARS[w.k].cost)) return 'poor';
+  pay(CARS[w.k].cost); S.me.coins += w.price;   // paid in full (wood too); the coin part rides with the delivery
+  if (checkout([{ wid: w.id, kind: 'car', k: w.k, act: 'buyCar', arg: w.k, price: w.price, n: 1, vol: 0 }], 'deliver') !== 'ok') return 'poor';
+  S.deliveries[S.deliveries.length - 1].free = true; S.me.coins += deliveryFee([{ price: w.price }]);   // the dealer delivers for free
+  return 'ok';
+}
+function coin(n) { return '🪙' + Math.floor(n).toLocaleString(); }
+function spark(s, w, h, col) { const lo = Math.min(...s), hi = Math.max(...s), d = hi - lo || 1;
+  const pts = s.map((v, i) => `${(i / (s.length - 1) * w).toFixed(1)},${(h - 2 - (v - lo) / d * (h - 4)).toFixed(1)}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`; }
+function pct(v) { return `<span class="${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`; }
+function phoneScreen(arg) {
+  const [scr, a, b] = String(arg).split('|');
+  const head = (title, back = 'home') => `<div class="ph-head"><button class="ph-back" data-act="phone" data-arg="${back}">‹</button><b>${title}</b></div>`;
+  let body = '';
+  if (scr === 'home') {
+    const unread = unreadTexts(), late = bank().loans.some(l => l.late), d = new Date(now());
+    const app = (k, e, bg, label, n) => `<button class="ph-app" data-act="phone" data-arg="${k}"><i style="background:${bg}">${e}</i>${label}${n ? `<em class="ph-badge">${n}</em>` : ''}</button>`;
+    body = `<div class="ph-clock">${fmtClock(now())}</div><div class="ph-date">${d.getMonth() + 1}/${d.getDate()} · ${weatherPill().replace(/<[^>]+>/g, ' ').trim()}</div>
+      <div class="ph-apps">${app('contacts', '📇', '#34c759', t('ph_contacts'))}${app('texts', '💬', '#30a2ff', t('ph_texts'), unread)}${app('bank', '🏦', '#ff9f0a', t('ph_bank'), late ? '!' : 0)}
+      ${app('stocks', '📈', '#1c1c1e', t('ph_stocks'))}${app('mail', '✉️', '#5e5ce6', t('ph_mail'), unreadMail())}${app('map', '📍', '#ff375f', t('ph_map'))}</div>`;
+  } else if (scr === 'contacts') {
+    const cs = contacts(), group = (kind, label) => { const g = cs.filter(c => c.kind === kind || (kind === 'work' && (c.kind === 'boss' || c.kind === 'mate'))); return g.length ? `<div class="ph-sub">${label}</div>` + g.map(c => { const w = whoIs(c.id); return w ? `<button class="ph-row" data-act="phone" data-arg="person|${c.id}">${avatar(w.look)}<div class="grow"><b>${esc(w.name)}</b><div class="ph-muted">${c.kind === 'boss' ? '💼 ' + t('boss') : c.kind === 'mate' ? '💼 ' + t('coworker') : t('rel_level', { n: (S.rel || {})[c.id] || 0 })}</div></div><span>›</span></button>` : ''; }).join('') : ''; };
+    body = head(`📇 ${t('ph_contacts')}`) + (group('friend', '💛 ' + t('ph_friends')) + group('work', '💼 ' + t('ph_work')) + group('neighbour', '🏡 ' + t('ph_people')) || `<p class="ph-muted">${t('ph_no_contacts')}</p>`);
+  } else if (scr === 'person') {
+    const w = whoIs(a); if (!w) return phoneScreen('contacts');
+    const called = (S.chatDay || {})['call_' + a + '@' + today()], met = (S.chatDay || {})['meet_' + a + '@' + today()], here = VIEW_TOWN === myTown() && townOf(a.startsWith('work_') ? 'me' : a) === myTown();
+    body = head(esc(w.name), 'contacts') + `<div class="ph-who">${avatar(w.look, 'xl')}<b>${esc(w.name)}</b><span class="ph-muted">${t('rel_level', { n: (S.rel || {})[a] || 0 })}</span></div>
+      <div class="ph-acts"><button class="ph-btn go" data-act="phoneCall" data-arg="${a}">📞 ${t(called ? 'ph_call_again' : 'ph_call')}</button><button class="ph-btn" data-act="phone" data-arg="texts|${a}">💬 ${t('ph_text')}</button>
+      ${here ? `<button class="ph-btn" data-act="phoneMeet" data-arg="${a}" ${met ? 'disabled' : ''}>🌳 ${t(met ? 'meet_done' : 'ph_meet')}</button>` : ''}${!w.wp ? `<button class="ph-btn" data-act="goTo" data-arg="${a}">🏡 ${t('visit')}</button>` : ''}</div>
+      <p class="ph-muted small">${t('ph_person_note', { c: NEED_GAIN.call, x: NEED_GAIN.text })}</p>`;
+  } else if (scr === 'call') {
+    const w = whoIs(a); if (!w) return phoneScreen('contacts');
+    const line = CALL_LINES[(a.length + new Date(now()).getDate()) % CALL_LINES.length];
+    body = `<div class="ph-call">${avatar(w.look, 'xl')}<b>${esc(w.name)}</b><span class="ph-muted">${t('ph_calling')}</span><div class="bubble them">${esc(nm(line))}</div>
+      <p class="ph-muted small">${b === 'ok' ? t('ph_call_ok', { n: NEED_GAIN.call }) : t('ph_call_done')}</p><button class="ph-btn hang" data-act="phone" data-arg="person|${a}">📵 ${t('ph_hang')}</button></div>`;
+  } else if (scr === 'texts' && a) {
+    const w = whoIs(a); if (!w) return phoneScreen('texts');
+    const th = ((S.texts || {})[a] || []).filter(m => m.t <= now()), typing = ((S.texts || {})[a] || []).some(m => m.t > now());
+    const msg = m => m.me ? nm(TEXTS[m.i]) : m.inbox !== undefined ? nm((m.boss ? BOSS_INBOX : INBOX)[m.inbox]) : nm(TEXTS[m.i].re[m.r]);
+    body = head(esc(w.name), 'texts') + `<div class="ph-thread">${th.map(m => `<div class="bubble ${m.me ? 'me' : 'them'}">${esc(msg(m))}</div>`).join('') || `<p class="ph-muted">${t('ph_say_hi')}</p>`}${typing ? '<div class="bubble them typing">…</div>' : ''}</div>
+      <div class="ph-quick">${TEXTS.map((x, i) => `<button class="ph-btn" data-act="phoneText" data-arg="${a}|${i}">${esc(nm(x))}</button>`).join('')}</div>`;
+  } else if (scr === 'texts') {
+    const ids = Object.keys(S.texts || {}).filter(id => whoIs(id) && S.texts[id].length).sort((x, y) => S.texts[y][S.texts[y].length - 1].t - S.texts[x][S.texts[x].length - 1].t);
+    body = head(`💬 ${t('ph_texts')}`) + (ids.map(id => { const w = whoIs(id), th = S.texts[id].filter(m => m.t <= now()), last = th[th.length - 1], n = th.filter(m => !m.me && m.t > ((S.textSeen || {})[id] || 0)).length;
+      const txt = last ? (last.me ? nm(TEXTS[last.i]) : last.inbox !== undefined ? nm((last.boss ? BOSS_INBOX : INBOX)[last.inbox]) : nm(TEXTS[last.i].re[last.r])) : '…';
+      return `<button class="ph-row" data-act="phone" data-arg="texts|${id}">${avatar(w.look)}<div class="grow"><b>${esc(w.name)}</b><div class="ph-muted">${esc(txt)}</div></div>${n ? `<em class="ph-badge">${n}</em>` : ''}</button>`; }).join('') || `<p class="ph-muted">${t('ph_no_texts')}</p>`)
+      + `<button class="ph-btn block" data-act="phone" data-arg="contacts">✏️ ${t('ph_new_text')}</button>`;
+  } else if (scr === 'bank') {
+    const B = bank(), st = stocksValue(), debt = debtLeft();
+    body = head(`🏦 ${t('ph_bank')}`) + `<div class="ph-card big"><span class="ph-muted">${t('bank_net')}</span><b>${coin(assetValue(S.me))}</b>${debt ? `<span class="ph-muted small">${t('bank_debt', { n: Math.ceil(debt).toLocaleString() })}</span>` : ''}</div>
+      <div class="ph-card"><div class="row between"><span>👛 ${t('bank_wallet')}</span><b>${coin(S.me.coins)}</b></div><div class="row between"><span>🐷 ${t('bank_save')}</span><b>${coin(B.save)}</b></div>
+        <div class="ph-muted small">${t('bank_rate', { p: (BANK.rate * 100).toFixed(1), cap: BANK.interestCap.toLocaleString(), n: Math.floor(Math.min(B.save, BANK.interestCap) * BANK.rate) })}</div>
+        <div class="ph-acts">${['100', '1000', 'all'].map(v => `<button class="ph-btn go" data-act="bankIn" data-arg="${v}">⬇ ${v === 'all' ? t('bank_all') : v}</button>`).join('')}</div>
+        <div class="ph-acts">${['100', '1000', 'all'].map(v => `<button class="ph-btn" data-act="bankOut" data-arg="${v}">⬆ ${v === 'all' ? t('bank_all') : v}</button>`).join('')}</div>
+        <div class="ph-muted small">${t('bank_in_out')}</div></div>
+      ${st ? `<button class="ph-card ph-row" data-act="phone" data-arg="stocks">📈 ${t('ph_stocks')}<b class="grow right">${coin(st)}</b></button>` : ''}
+      <div class="ph-sub">🧾 ${t('loan_list')}</div>${B.loans.map(l => { const name = nm(l.kind === 'house' ? HOUSES[l.k] : CARS[l.k]), done = 1 - l.left / l.total;
+        return `<div class="ph-card ${l.late ? 'late' : ''}"><div class="row between"><b>${l.kind === 'house' ? '🏠' : '🚗'} ${esc(name)}</b><span>${coin(l.left)}</span></div><div class="bar"><i style="width:${Math.round(done * 100)}%"></i></div>
+          <div class="ph-muted small">${l.late ? '⚠️ ' + t('loan_late_row') : t('loan_next', { n: Math.min(l.perDay, l.left).toLocaleString(), m: fmtDur(Math.max(0, l.next - now())) })}</div>
+          <button class="ph-btn" data-act="loanRepay" data-arg="${l.id}" ${S.me.coins + B.save >= l.left ? '' : 'disabled'}>✅ ${t('loan_repay', { n: Math.ceil(l.left).toLocaleString() })}</button></div>`; }).join('') || `<p class="ph-muted small">${t('loan_none')}</p>`}`;
+  } else if (scr === 'stocks') {
+    const st = stocksValue(), cost = STOCK_KEYS.reduce((t2, co) => t2 + holding(co).cost, 0);
+    body = head(`📈 ${t('ph_stocks')}`) + `<div class="ph-card big"><span class="ph-muted">${t('stock_mine')}</span><b>${coin(st)}</b>${cost ? pct((st / cost - 1) * 100) : ''}</div>`
+      + STOCK_KEYS.map(co => { const D = STOCKS[co], h = holding(co); return `<button class="ph-row" data-act="phone" data-arg="stock|${co}"><span class="ph-logo" style="background:${D.col}">${D.e}</span><div class="grow"><b>${nm(D)}</b><div class="ph-muted">${h.n ? t('stock_have', { n: h.n }) : ''}</div></div>${spark(stockSeries(co), 64, 26, stockChange(co) >= 0 ? '#4cd964' : '#ff6b6b')}<div class="right"><b>${stockPrice(co).toFixed(1)}</b><div>${pct(stockChange(co))}</div></div></button>`; }).join('')
+      + `<p class="ph-muted small">${t('stock_note', { p: STOCK.fee * 100, m: STOCK.tickMin })}</p>`;
+  } else if (scr === 'stock') {
+    const D = STOCKS[a]; if (!D) return phoneScreen('stocks');
+    const p = stockPrice(a), h = holding(a), ch = stockChange(a), up = ch >= 0, newsN = Math.floor(srand(STOCK_KEYS.indexOf(a) + 3, Math.floor(now() / DAY)) * 3) + 1;
+    body = head(`${D.e} ${nm(D)}`, 'stocks') + `<div class="ph-card big"><b>🪙${p.toFixed(2)}</b>${pct(ch)} <span class="ph-muted small">${t('stock_24h')}</span>${spark(stockSeries(a), 270, 110, up ? '#4cd964' : '#ff6b6b')}</div>
+      <div class="ph-card">📰 ${t('news_' + (up ? 'up' : 'down') + '_' + newsN, { name: nm(D) })}</div>
+      <div class="ph-card"><div class="row between"><span>${t('stock_own')}</span><b>${h.n}</b></div>${h.n ? `<div class="row between"><span>${t('stock_value')}</span><b>${coin(h.n * p)} ${pct((h.n * p / h.cost - 1) * 100)}</b></div>` : ''}
+        <div class="ph-acts">${['1', '10', 'max'].map(v => `<button class="ph-btn go" data-act="stockBuy" data-arg="${a}|${v}">${t('stock_buy')} ${v === 'max' ? t('stock_max') : '×' + v}</button>`).join('')}</div>
+        ${h.n ? `<div class="ph-acts">${['1', '10', 'all'].map(v => `<button class="ph-btn warn" data-act="stockSell" data-arg="${a}|${v}">${t('stock_sell')} ${v === 'all' ? t('bank_all') : '×' + v}</button>`).join('')}</div>` : ''}
+        <div class="ph-muted small">${t('stock_wallet', { n: Math.floor(S.me.coins).toLocaleString() })}</div></div>`;
+  } else return phoneScreen('home');
+  return `<div class="ph-device"><div class="ph-bar"><span>${fmtClock(now())}</span><span>▂▄▆ 🔋</span></div><div class="ph-screen">${body}</div><button class="ph-home" data-act="${scr === 'home' ? 'close' : 'phone'}" data-arg="home" aria-label="home"></button></div>`;
 }
