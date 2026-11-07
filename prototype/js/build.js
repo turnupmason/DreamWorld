@@ -866,6 +866,7 @@ const SHOP_LOOK = {
   gym:     { e: '🏋️', wall: '#e0e5eb', awn: '#ef7d3c', zh: '健身房', en: 'Gym' },
   library: { e: '📚', wall: '#efe3cf', awn: '#8a5a36', zh: '图书馆', en: 'Library' },
   post:    { e: '📮', wall: '#f3ead8', awn: '#2f6fb2', zh: '邮局', en: 'Post office' },
+  clinic:  { e: '🏥', wall: '#f4f6f8', awn: '#e5484d', zh: '诊所', en: 'Clinic' },
 };
 // A little shop facing +y: shop window, door, striped awning, a sign on the roof. Returns its tap box.
 function drawShop(k, x, y, ts) {

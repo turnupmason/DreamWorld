@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -133,6 +133,19 @@ P('');
 P('## 专属（拿到奖杯才能买，' + D.EXCLUSIVES.length + ' 件）');
 P('');
 table(['专属', '类型', '价格'], D.EXCLUSIVES.map(([kind, k]) => { const d = kind === 'yard' ? D.YARD[k] : kind === 'car' ? D.CARS[k] : kind === 'pet' ? D.PET_BREEDS[k] : D.ANIMALS[k]; return [`${d.zh} (${d.en})`, { yard: '院子', car: '车', pet: '宠物', animal: '牲畜' }[kind], `🪙${kind === 'car' ? d.cost.coins : d.price}`]; }));
+
+P('## 市场、天气、打工、生病（v0.14）');
+P('');
+table(['项目', '数值'], [
+  ['收购价', `每 ${D.MARKET.slotHours} 小时变一次，平时价的 ${D.MARKET.min}–${D.MARKET.max} 倍，抖动 ±${D.MARKET.jitter / 2}`],
+  ['占地方', `货 1 格，小崽子 ${D.BABY_SIZE} 格，活牲畜：${Object.entries(D.ANIMAL_SIZE).map(([k, n]) => (D.ANIMALS[k] || {}).zh + ' ' + n).join('、')}`],
+  ['下雨', `菜长得快 ${D.WEATHER_FARM.rainGrow * 100}%`], ['大雨 / 暴风雨', `每块地每小时 ${D.WEATHER_FARM.flood.heavy * 100}% / ${D.WEATHER_FARM.flood.storm * 100}% 被淹，淹 ${D.WEATHER_FARM.floodHours} 小时，成熟的每 ${D.WEATHER_FARM.rotHours} 小时烂一份`],
+  ['下雪', `长得慢 ${D.WEATHER_FARM.snowSlow * 100}%，湖面结冰`],
+  ['老板关系', `做满一班 +${D.JOB_REL.finish}，提前下班 ${D.JOB_REL.quit}，最高 ${D.JOB_REL.max}`],
+  ['生病', `每天 ${D.SICK.base * 100}%（连续上班 ${D.SICK.overworkDays} 天 +${D.SICK.overwork * 100}%，睡眠 < ${D.SICK.lowSleepScore} +${D.SICK.lowSleep * 100}%）；走路 ×${D.SICK.walk}，现实奖励 ×${D.SICK.earn}；药 🪙${D.SICK.medicine}，吃药后躺 ${D.SICK.restSec} 秒；不吃药 ${D.SICK.days} 天好`],
+]);
+table(['工作', '时薪', '时间'], Object.values(D.JOBS).map(j => [j.zh, `🪙${j.wage}`, `${j.from}:00–${j.to}:00`]));
+table(['职位', '关系', '工资倍数'], D.JOB_RANKS.map(r => [r.zh, r.at, `×${r.pay}`]));
 
 P('## 小镇格局（v0.12）');
 P('');

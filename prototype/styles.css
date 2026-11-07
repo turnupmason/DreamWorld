@@ -640,3 +640,20 @@ body.dark .lib-card { background: linear-gradient(160deg, #3a3226, #2e281f); }
 .tip { left: 12px; right: 12px; max-width: none; margin: 0 auto; width: fit-content; min-width: 200px; max-width: calc(100% - 24px); padding-right: 16px; }
 .tip.show { animation: tipDown .22s ease-out; }
 @keyframes tipDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+/* ================= v0.14: market board ================= */
+.board-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.board-row:last-child { border-bottom: 0; }
+.board-row .be { font-size: 20px; width: 26px; text-align: center; }
+.board-row .bp { font-weight: 800; min-width: 52px; text-align: right; }
+.board-row .up, .cost .up, .item-sub .up { color: #23a455; font-weight: 800; font-size: 12px; min-width: 44px; text-align: right; }
+.board-row .down, .cost .down, .item-sub .down { color: #e5484d; font-weight: 800; font-size: 12px; min-width: 44px; text-align: right; }
+.spark { flex: none; }
+.flood-note { background: #e3f0f8; color: #2f5f80; border-radius: 12px; padding: 8px 10px; font-weight: 700; }
+body.dark .flood-note { background: #1f3342; color: #a9d2ec; }
+.job-card { margin-top: 10px; }
+.job-card .bar { margin: 6px 0; }
+.pill.work { background: #fff1d6; color: #9a5b12; }
+.pill.sick { background: #ffe1e1; }
+body.dark .pill.work { background: #3a2f1c; color: #f2c27a; }
+body.dark .pill.sick { background: #3a2222; }

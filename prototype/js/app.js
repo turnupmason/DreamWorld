@@ -104,7 +104,8 @@ function realWeather(loud) {
     const lat = pos.coords.latitude.toFixed(1), lon = pos.coords.longitude.toFixed(1);
     fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`)
       .then(r => r.json()).then(j => {
-        S.weather = { kind: codeKind(j.current.weather_code), temp: Math.round(j.current.temperature_2m), real: true, at: now() };
+        const code = j.current.weather_code;
+        S.weather = { kind: codeKind(code), temp: Math.round(j.current.temperature_2m), real: true, at: now(), heavy: [63, 65, 66, 67, 81, 82].includes(code) };
         if (loud) snack(`${WEATHER_E[S.weather.kind]} ${t('w_' + S.weather.kind)} · ${S.weather.temp}°C`);
         refresh();
       }).catch(() => { if (loud) snack(t('w_fail')); }).finally(() => { weatherBusy = false; });
@@ -178,6 +179,7 @@ function renderHUD() {
     <div class="res row">
       <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>
       <button class="pill farm ${actionsLeft() === 0 ? 'done' : ''}" data-act="capInfo" style="--p:${Math.round(actionsLeft() / ACTION_CAP * 100)}"><i class="ring"></i>${t('farm_pill', { n: actionsLeft() })}</button>${live}
+      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : ''}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
     </div>`;
 }
@@ -446,13 +448,12 @@ function panelShop() {
   } else {
     const all = Object.keys(h.barn), keys = all.filter(k => !sub || sellKind(k) === sub.id);
     subs = subChips('sell', s => all.filter(k => sellKind(k) === s.id).length || null);
-    note = all.length ? `<button class="btn small primary" data-act="sellAll">${t('sell_all', { n: fmtNum(barnValue()) })}</button>` : '';
+    note = `${t('mk_shop_note')} <button class="btn small primary" data-act="placeGo" data-arg="market">🛒 ${t('mk_go_sell')}</button>`;
     body = keys.length ? keys.map(k => {
       const b = barnInfo(k), n = h.barn[k];
       const img = CROPS[k] ? thumbImg('crop', k) : GOODS[k] ? thumbImg('good', k) : thumbImg('animal', b.baby, { stage: 0 });
-      return shopCard(img, `${b.e} ${b.name} ×${n}`, t('sell_each', { n: b.sell }),
-        buyBtn('sell', k + '|1', t('sell_one'), true, '') + buyBtn('sell', k + '|' + n, t('sell_n', { n: fmtNum(n * b.sell) }), true)
-        + (b.baby && pastureCount() < pastureCap() ? buyBtn('release', b.baby, t('baby_release'), true, '') : ''));
+      return shopCard(img, `${b.e} ${b.name} ×${n}`, `${t('mk_price_now', { n: marketPrice(k) })} ${trendArrow(k)}`,
+        b.baby && pastureCount() < pastureCap() ? buyBtn('release', b.baby, t('baby_release'), true, '') : '');
     }).join('') : `<p class="muted center gap-top">${t('sell_empty')}</p>`;
   }
   return `<div class="shop-head"><h1 class="panel-title">${t('shop_title')}</h1>
@@ -661,7 +662,7 @@ const SHEETS = {
     }
     const c = CROPS[f.crop], st = cropStage(f), left = c.grow * MIN - (now() - f.at);
     const thieves = f.thieves.filter(x => x !== owner).map(fname).filter(Boolean);
-    let extra = '';
+    let extra = isFlooded(f) ? `<p class="flood-note">🌊 ${t('w_field_flooded', { m: fmtDur(f.flood - now()) })}</p>` : '';
     if (mine && thieves.length && f.left < c.yield) extra = `<p class="muted">${t('stolen_by', { names: esc(thieves.join('、')) })}</p>`;
     if (!mine && isRipe(f)) extra = `<p class="muted">${f.thieves.includes('me') ? t('steal_done') : t('steal_keep')}</p>`;
     return `<div class="row">${thumbImg('crop', f.crop, { stage: st }, 96, 80, 'thumb')}<div class="grow">
@@ -684,7 +685,7 @@ const SHEETS = {
         : `<p>${t('prod_left', { d: `<b>${fmtDur(d.every * MIN - (now() - (a.last || a.born + d.grow * MIN)))}</b>`, what })}</p><div class="bar warm"><i style="width:${prodProg(a) * 100}%"></i></div>`;
     }
     const btns = mine ? `<div class="row gap-top">${animalReady(a) ? buyBtn('collectAnimal', a.id, t('collect'), true) : ''}
-        ${buyBtn('sellAnimal', a.id, t('sell_for', { n: d.sell[st] }), true, '')}</div>` : '';
+        ${d.pet ? '' : buyBtn('carryAnimal', a.id, t('mk_take_animal', { n: marketPrice('animal_' + a.k + '_' + st) }), true, '')}</div>` : '';
     return `<div class="row">${thumbImg('animal', a.k, { stage: st }, 96, 80)}<div class="grow"><h2>${d.e} ${animalName(a)}</h2>
       <div class="muted">${stageName(a)}${mine ? '' : ' · ' + t('home_of', { name: esc(homeName(h)) })}</div></div></div>
       <div class="card gap-top">${info}${stagesRow('animal', a.k, 3, st, ['stage_baby', 'stage_young', 'stage_adult'].map(k => t(k)))}</div>${btns}`;
@@ -704,12 +705,11 @@ const SHEETS = {
   barn() {
     const h = S.me, keys = Object.keys(h.barn);
     const goods = keys.length ? keys.map(k => { const b = barnInfo(k); return `<div class="list-item"><span class="big-emoji">${b.e}</span>
-      <div class="grow"><b>${b.name}</b> <span class="muted">×${h.barn[k]}</span><div class="cost">${t('sell_each', { n: b.sell })}</div></div>
-      ${buyBtn('sell', k + '|' + h.barn[k], t('sell_n', { n: fmtNum(h.barn[k] * b.sell) }), true, '')}</div>`; }).join('')
+      <div class="grow"><b>${b.name}</b> <span class="muted">×${h.barn[k]}</span><div class="cost">${t('mk_price_now', { n: marketPrice(k) })} ${trendArrow(k)}</div></div></div>`; }).join('')
       : `<p class="muted">${t('barn_empty')}</p>`;
     const seeds = Object.entries(h.seeds).filter(([, n]) => n > 0), store = Object.entries(h.store);
     return `<h2>🧺 ${t('barn_title')}</h2><p class="muted">${t('barn_desc')}</p>
-      <div class="card"><div class="row between"><h3>🌾 ${t('barn_goods')}</h3>${keys.length ? `<button class="btn small primary" data-act="sellAll">${t('sell_all', { n: fmtNum(barnValue()) })}</button>` : ''}</div>${goods}</div>
+      <div class="card"><div class="row between"><h3>🌾 ${t('barn_goods')}</h3>${keys.length ? `<button class="btn small primary" data-act="placeGo" data-arg="market">🛒 ${t('mk_go_sell')}</button>` : ''}</div>${goods}</div>
       <div class="card"><h3>🌱 ${t('barn_seeds')}</h3>${seeds.length ? seeds.map(([k, n]) => `<span class="chip static">${CROPS[k].e} ${nm(CROPS[k])} ×${n}</span>`).join('') : `<p class="muted">${t('no_seeds_short')}</p>`}</div>
       <div class="card"><h3>📦 ${t('barn_store')}</h3>${store.length ? store.map(([key, n]) => { const [sc, k] = key.split(':'); return `<span class="chip static">${nm(itemDef(sc, k))} ×${n}</span>`; }).join('') : `<p class="muted">${t('store_empty')}</p>`}</div>`;
   },
@@ -734,6 +734,7 @@ const SHEETS = {
     const P = placeInfo(key), here = Scene.here() === key, mineTown = VIEW_TOWN === myTown();
     const head = `<div class="place-head"><span class="big-emoji">${P.e}</span><div class="grow"><h2>${nm(P)}</h2><p class="muted">${t('pl_desc_' + (key === 'lake' && P === PLACE_INFO.beach ? 'beach' : key))}</p></div></div>`;
     if (!mineTown) return head + `<p class="muted">${t('pl_other_town')}</p>`;
+    if (!here && key === 'market') return head + marketBody(false) + `<div class="sec-title">${t('mk_go')}</div>${goTiles(goTarget({ place: key }))}<p class="muted small center">${t('mk_carry', { w: WALK_CARRY, c: carryCap('car') })}</p>`;
     if (!here && key !== 'plaza') return head + `<div class="sec-title">${t('pl_go_first')}</div>${goTiles(goTarget({ place: key }))}`;
     return head + placeBody(key);
   },
@@ -852,7 +853,7 @@ const SHEETS = {
     const w = weatherNow();
     return `<div class="center"><div class="big-emoji xl">${WEATHER_E[w.kind]}</div><h2>${t('w_' + w.kind)}${w.temp != null ? ` · ${w.temp}°C` : ''}</h2>
       <p class="muted">${w.real ? t('w_real_src') : t('w_sim_src')}</p></div>
-      <div class="card gap-top"><p>${t('w_effect_' + w.kind)}</p></div>
+      <div class="card gap-top"><p>${t('w_effect_' + w.kind)}</p><p class="muted">🌾 ${t(w.heavy && w.kind === 'rain' ? 'w_farm_heavy' : 'w_farm_' + w.kind)}</p></div>
       <div class="card privacy-card"><label class="row between toggle-row"><span>📍 ${t('w_real_toggle')}<small>${t('w_real_note')}</small></span>
         <input type="checkbox" class="switch" data-act="weatherReal" ${S.weatherReal ? 'checked' : ''}></label></div>`;
   },
@@ -968,6 +969,7 @@ function result(code, onOk) {
 }
 function walkDo(tg, o) {
   if (S.live) { snack(t('snack_live_busy')); return false; }
+  if (S.work) { snack(`💼 ${t('job_busy', { place: nm(placeInfo(S.work.place)) })}`); return false; }   // v0.14: at work
   const ok = Scene.go(tg, { queue: true, fail: () => snack(t('snack_cant_reach')), ...o });
   if (!ok) snack(t('snack_cant_reach'));
   refreshSoon();
@@ -1029,7 +1031,8 @@ function sneakDo(tg, fn, pose = 'crouch') {
   walkDo(tg, { sneak: true, pose, dur: 900, done: after(fn) });
 }
 function stealResult(fid, r) {
-  if (r.r === 'ok') { Scene.floatMe(`+${r.n} ${goodE(r.k)}`); snack(t('snack_stole', { n: r.n, e: goodE(r.k) })); Sound.play('sneak'); }
+  if (r.r === 'ok') { const e = r.k.startsWith('baby_') ? ANIMALS[r.k.slice(5)].e : goodE(r.k); Scene.floatMe(`+${r.n} ${e}`); snack(t(r.k.startsWith('baby_') ? 'snack_stole_baby' : 'snack_stole', { n: r.n, e })); Sound.play('sneak'); }
+  else if (r.r === 'few') snack(t('snack_baby_few'));
   else if (r.r === 'dog') {
     // caught: the dog barks and chases you out, you pay the owner, and you can't come back today
     Scene.floatMe(`🐕💢 -🪙${r.fine}`); snack(t('snack_dog_fine', { name: fname(fid), n: r.fine }));
@@ -1129,7 +1132,7 @@ const ACT = {
   },
   souvGo() { closeSheet(); UI.tab = 'home'; setLevel(0); UI.inside = true; syncView(); },
   recenter: () => Scene.recenter(),
-  goHome() { if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; UI.wtown = null; setLevel(0); setTab('home'); },
+  goHome() { if (cargoUsed()) { unloadCargo(); snack(`📦 ${t('mk_unloaded')}`); } if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; UI.wtown = null; setLevel(0); setTab('home'); },
   backTown() { if (UI.visit) leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); },
   // Going somewhere (v0.12). Homes in your own community: choose how to go. Elsewhere in the world: straight there.
   goTo(id) {
@@ -1140,8 +1143,13 @@ const ACT = {
   travel(how) {
     const arg = UI.sheet && UI.sheet.arg, a = typeof arg === 'string' ? { place: arg } : arg;
     if (!a) return;
+    if (S.work) {   // v0.14: you're at work; leaving means leaving early
+      if (!confirm(t('job_leave_q', { n: Math.round(hoursWorked(S.work) * S.work.wage) }))) return;
+      const r = quitShift(); snack(`💼 ${t('job_quit_done', { n: r.pay })}`);
+    }
     closeSheet();
     const T = goTarget(a), arrive = () => { UI.tripTo = null; if (a.id) ACT.visit(a.id); else { openSheet('place', a.place); arrivedFx(a.place); } refresh(); };
+    if (how === 'now' && a.place === 'market') loadCargo(S.me.cars[S.me.car] ? 'car' : 'walk');
     if (how === 'now' && a.place) {   // straight there: you're standing at the place in town
       if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
       if (UI.tab !== 'town') UI.tab = 'town';
@@ -1154,10 +1162,34 @@ const ACT = {
     syncView();
     const car = how === 'walk' ? null : S.me.cars[S.me.car], kind = !car ? 'walk' : CARS[car.k].kind === 'two' ? 'bike' : 'car';
     UI.tripTo = T.short;
+    if (a.place === 'market') { const n = loadCargo(car ? 'car' : 'walk'); snack(n ? `📦 ${t('mk_loaded', { n, cap: carryCap(car ? 'car' : 'walk') })}` : `📦 ${t('mk_nothing')}`); }
     Scene.travel(T.pt, kind, car, arrive, a.id || null, a.place || null);
     if (kind !== 'walk') Sound.play('select');
   },
   tripFast() { Scene.finishTrip(); },
+  // jobs and the clinic (v0.14)
+  jobApply(key) {
+    if (S.job && S.job.place !== key && !confirm(t('job_switch_q', { old: nm(JOBS[S.job.place]) }))) return;
+    if (takeJob(key) === 'ok') { Sound.play('chime'); snack(`🎉 ${t('job_hired', { job: nm(JOBS[key]) })}`); }
+    if (UI.sheet) renderSheet();
+  },
+  jobStart(key) {
+    const r = startShift(key);
+    if (r === 'ok') { Sound.play('select'); snack(`💼 ${t('job_started', { to: JOBS[key].to })}`); }
+    else if (r === 'closed') snack(t('job_closed', { from: JOBS[key].from, to: JOBS[key].to }));
+    if (UI.sheet) renderSheet();
+  },
+  jobQuit() {
+    if (!S.work || !confirm(t('job_leave_q', { n: Math.round(hoursWorked(S.work) * S.work.wage) }))) return;
+    const r = quitShift(); snack(`💼 ${t('job_quit_done', { n: r.pay })}`);
+    if (UI.sheet) renderSheet();
+  },
+  buyMed() {
+    const r = buyMedicine();
+    if (r === 'poor') return snack(t('snack_poor'));
+    if (r === 'ok') { Sound.play('collect'); snack(`💊 ${t('sick_med_bought', { n: SICK.restSec })}`); }
+    if (UI.sheet) renderSheet();
+  },
   placeGo: key => openSheet('place', key),
   // Using a place (you're there)
   placeDo(arg) {
@@ -1167,7 +1199,7 @@ const ACT = {
       if (r.r === 'nojobs') { closeSheet(); return openSheet('cap'); }
       if (r.r === 'ok') { Sound.play('harvest'); snack(`🌾 ${t('pl_helped', { n: HELP_HARVEST.wheat })}`); if (r.fest) setTimeout(() => { Sound.play('levelup'); snack(`🎉 ${t('pl_fest_now')}`); }, 900); }
     } else if (act === 'bake') { const r = bakeBread(); snack(r === 'ok' ? `🍞 ${t('pl_baked')}` : t('pl_need_wheat', { n: BREAD.wheat })); if (r === 'ok') Sound.play('collect'); }
-    else if (act === 'fish') { const r = lakeFish(); if (r.r === 'nojobs') { closeSheet(); return openSheet('cap'); } if (r.r === 'ok') { Sound.play('collect'); snack(`${GOODS[r.k].e} ${t('pl_caught', { name: nm(GOODS[r.k]) })}`); } }
+    else if (act === 'fish') { const r = lakeFish(); if (r.r === 'frozen') return snack(`🧊 ${t('w_frozen')}`); if (r.r === 'nojobs') { closeSheet(); return openSheet('cap'); } if (r.r === 'ok') { Sound.play('collect'); snack(`${GOODS[r.k].e} ${t('pl_caught', { name: nm(GOODS[r.k]) })}`); } }
     else if (act === 'walk') { const n = parkWalk(); Sound.play(n ? 'woof' : 'select'); snack(n ? `🐕 ${t('pl_dog_walked', { n })}` : `🌳 ${t('pl_strolled')}`); }
     else if (act === 'read') { if (readLib() === 'ok') { Sound.play('chime'); snack(`📚 ${t('pl_read_done')}`); } }
     else if (act === 'card') { if (sendPostcard(x) === 'ok') { Sound.play('chime'); snack(`📮 ${t('pl_card_sent', { name: homeName(homeOf(x)), town: nm(COMMUNITIES[myTown()]) })}`); setTimeout(() => { addFeed({ kind: 'msg', from: x, msgKey: 'msg_postcard' }); refresh(); }, 6000); } }
@@ -1253,8 +1285,14 @@ const ACT = {
     snack(r > 1 ? t('snack_moved_stored', { name: nm(HOUSES[+i]), n: r - 1 }) : t('snack_moved', { name: nm(HOUSES[+i]) }));
     setLevel(0); UI.tab = 'home'; UI.inside = false; syncView();
   },
-  sell(arg) { const [k, n] = arg.split('|'), v = sellBarn(k, +n); if (v) snack(`+🪙${v}`); },
-  sellAll() { const v = sellAllBarn(); if (v) snack(t('snack_sold', { n: v })); },
+  // Selling happens at the market only (v0.14): what you brought, at the price on the board.
+  sell(arg) { if (Scene.here() !== 'market') return ACT.placeGo('market'); const [k, n] = arg.split('|'), v = sellCargo(k, +n); if (v) { Sound.play('coins'); snack(`+🪙${v}`); } },
+  sellAll() { if (Scene.here() !== 'market') return ACT.placeGo('market'); const v = sellAllCargo(); if (v) { Sound.play('coins'); snack(t('snack_sold', { n: v })); } },
+  carryAnimal(id) {
+    const r = cargoAnimal(id);
+    if (r === 'full') return snack(`🚗 ${t('mk_full')}`);
+    if (r === 'ok') { closeSheet(); snack(`🚚 ${t('mk_animal_on')}`); ACT.placeGo('market'); }
+  },
   release(k) { if (releaseBaby(k)) snack(t('snack_baby', { name: nm(ANIMALS[k].baby) })); },
   // design mode
   design() { Scene.startEdit(UI.tab === 'home' && UI.inside ? 'room' : 'yard'); UI.tray = 'items'; },
@@ -1397,6 +1435,8 @@ function onSceneHit(h) {
     if (h.what === 'field') return sneakDo({ kind: 'field', i: h.i }, () => stealResult(h.owner, steal(h.owner, h.i)));
     if (h.what === 'animal') {
       if (mine) { const j = animalJob(h.id); return walkDo(j.tg, j.o); }
+      const a0 = homeOf(h.owner).animals.find(x => x.id === h.id);
+      if (a0 && babyStealable(homeOf(h.owner), a0)) return sneakDo({ kind: 'animal', id: h.id }, () => stealResult(h.owner, stealBaby(h.owner, h.id)));   // v0.14: a baby
       return sneakDo({ kind: 'animal', id: h.id }, () => stealResult(h.owner, stealProduct(h.owner, h.id)));
     }
     if (h.what === 'tree') {
@@ -1445,7 +1485,7 @@ function onSceneHit(h) {
     return;
   }
   if (k === 'worldMap') { ACT.world(); return refresh(); }
-  if (k === 'shop') return openSheet('place', h.k);
+  if (k === 'shop') return openSheet('place', h.k);   // (clinic is a shop too since v0.14)
   if (k === 'place') return openSheet('place', h.key);
   if (k === 'land') return openSheet('land', { st: h.st, p: h.p, n: h.n, run: h.run });
   if (k === 'buyParcel') return openSheet('land', { st: lotOf('me').st, p: lotOf('me').p + lotOf('me').n, n: 1, next: true });
@@ -1969,11 +2009,57 @@ function goTiles(T) {
     ${tile('now', '⚡', t('go_now'), t('go_now_sub'))}
   </div>`;
 }
+// The market's board (v0.14): every price right now, how it moved, and (when you're there) what you brought to sell.
+function trendArrow(k) {
+  const tr = priceTrend(k), a = tr[tr.length - 2], b = tr[tr.length - 1], pct = a ? Math.round((b - a) / a * 100) : 0;
+  return pct > 0 ? `<span class="up">▲${pct}%</span>` : pct < 0 ? `<span class="down">▼${-pct}%</span>` : `<span class="muted">—</span>`;
+}
+function sparkline(k) {
+  const tr = priceTrend(k), lo = Math.min(...tr), hi = Math.max(...tr), w = 56, h = 18;
+  const pts = tr.map((v, i) => `${(i / (tr.length - 1) * w).toFixed(1)},${(h - 2 - (hi > lo ? (v - lo) / (hi - lo) : 0.5) * (h - 4)).toFixed(1)}`).join(' ');
+  const up = tr[tr.length - 1] >= tr[tr.length - 2];
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${up ? '#3dbb62' : '#e5484d'}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+}
+function marketBody(here) {
+  const c = cargo(), all = [...Object.keys(CROPS).filter(k => !CROPS[k].rare), ...Object.keys(GOODS)];
+  const mine = new Set([...Object.keys(S.me.barn), ...Object.keys(c.items)]);
+  const rows = all.filter(k => mine.has(k)).concat(all.filter(k => !mine.has(k)).slice(0, mine.size ? 6 : 12)).map(k => {
+    const b = barnInfo(k);
+    return `<div class="board-row"><span class="be">${b.e}</span><b class="grow">${b.name}</b>${sparkline(k)}<span class="bp">🪙${marketPrice(k)}</span>${trendArrow(k)}</div>`;
+  }).join('');
+  const next = Math.max(1, Math.round(((priceSlot() + 1) * MARKET.slotHours * HOUR - now()) / MIN));
+  const board = `<div class="card board"><div class="row between"><b>📋 ${t('mk_board')}</b><span class="muted small">${t('mk_next', { m: fmtDur(next * MIN) })}</span></div>${rows}</div>`;
+  if (!here) return board;
+  const lines = Object.entries(c.items).map(([k, n]) => { const b = barnInfo(k), p = marketPrice(k);
+    return `<div class="list-item"><span class="big-emoji">${b.e}</span><div class="grow"><b>${b.name}</b> <span class="muted">×${n}</span><div class="cost">🪙${p} ${trendArrow(k)}</div></div>
+      ${buyBtn('sell', k + '|1', t('sell_one'), true, '')}${buyBtn('sell', k + '|' + n, `🪙${fmtNum(p * n)}`, true)}</div>`; })
+    .concat(c.animals.map(a => { const p = marketPrice('animal_' + a.k + '_' + animalStage(a));
+      return `<div class="list-item"><span class="big-emoji">${ANIMALS[a.k].e}</span><div class="grow"><b>${animalName(a)}</b><div class="cost">🪙${p}</div></div>${buyBtn('sell', 'animal:' + a.id + '|1', `🪙${fmtNum(p)}`, true)}</div>`; })).join('');
+  return `<div class="card"><div class="row between"><b>📦 ${t('mk_cargo', { n: cargoUsed(), cap: c.cap || WALK_CARRY })}</b>${lines ? `<button class="btn small primary" data-act="sellAll">${t('mk_sell_all')}</button>` : ''}</div>
+    ${lines || `<p class="muted">${t('mk_empty_load')}</p>`}</div>${board}`;
+}
 // The lake is a beach in towns by the sea.
 const placeInfo = key => (key === 'lake' && layoutOf(VIEW_TOWN).lake.sea ? PLACE_INFO.beach : PLACE_INFO[key]);
 // A little sound when you get there.
 function arrivedFx(key) { Sound.play(key === 'park' ? 'woof' : key === 'lake' ? 'tick' : 'select'); }
 // What you can do at a place (you're there).
+// A job at this place (v0.14): apply, start a shift during the hours, or see how your shift is going.
+function jobSection(key) {
+  const J = JOBS[key];
+  if (!J) return '';
+  const mine = S.job && S.job.place === key, w = S.work && S.work.place === key, rank = mine ? jobRank() : 0, R = JOB_RANKS[rank], next = JOB_RANKS[rank + 1];
+  const head = `<div class="row between"><b>💼 ${nm(J)}${mine ? ` · ${nm(R)}` : ''}</b><span class="muted">🪙${jobWage(key)}/${t('job_hour')} · ${J.from}:00–${J.to}:00</span></div>`;
+  let body;
+  if (w) {
+    const pct = Math.round(Math.min(1, (now() - S.work.start) / (S.work.end - S.work.start)) * 100), sofar = Math.round(hoursWorked(S.work) * S.work.wage);
+    body = `<p>${t('job_working', { m: fmtDur(S.work.end - now()), n: sofar, full: Math.round((S.work.end - S.work.start) / HOUR * S.work.wage) })}</p><div class="bar"><i style="width:${pct}%"></i></div>
+      <button class="btn block gap-top" data-act="jobQuit">🚪 ${t('job_quit', { n: sofar })}</button>`;
+  } else if (!mine) body = `<p class="muted">${t(S.job ? 'job_switch_note' : 'job_apply_note')}</p><button class="btn primary block" data-act="jobApply" data-arg="${key}">✍️ ${t('job_apply')}</button>`;
+  else if (inShift(key)) body = `<button class="btn primary block" data-act="jobStart" data-arg="${key}">💼 ${t('job_start', { to: J.to, n: Math.round((shiftEnd(key) - now()) / HOUR * jobWage(key)) })}</button>`;
+  else body = `<p class="muted">${t('job_closed', { from: J.from, to: J.to })}</p>`;
+  const rel = mine ? `<div class="muted small">${t('job_rel', { n: S.job.rel })}${next ? ' · ' + t('job_next', { rank: nm(next), n: next.at }) : ''}</div><div class="bar warm"><i style="width:${S.job.rel}%"></i></div>` : '';
+  return `<div class="card job-card">${head}${rel}${body}</div>`;
+}
 function placeBody(key) {
   const P = placeDay(), btn = (act, label, on = true, x = '') => `<button class="btn ${on ? 'primary' : ''} block" data-act="placeDo" data-arg="${key}|${act}|${x}" ${on ? '' : 'disabled'}>${label}</button>`;
   if (key === 'fields') {
@@ -1987,25 +2073,30 @@ function placeBody(key) {
     return `<p>${t('pl_park_people', { n: Math.max(2, Math.round(onlineIn(VIEW_TOWN) * 0.04)) })}</p>${btn('walk', dogs ? `🐕 ${t('pl_walk_dog')}` : `🚶 ${t('pl_stroll')}`, !(dogs && P.park))}`;
   }
   if (key === 'lake') return btn('fish', P.fish ? `✅ ${t('pl_fished')}` : `🎣 ${t('pl_fish')}`, !P.fish) + `<p class="muted small">${t('pl_swim_note')}</p>`;
-  if (key === 'bakery') return `<p>${t('pl_bake_note', { n: BREAD.wheat, have: S.me.barn.wheat || 0, bread: S.me.barn.bread || 0 })}</p>${btn('bake', `🍞 ${t('pl_bake')}`, (S.me.barn.wheat || 0) >= BREAD.wheat)}`;
+  if (key === 'bakery') return jobSection(key) + `<p>${t('pl_bake_note', { n: BREAD.wheat, have: S.me.barn.wheat || 0, bread: S.me.barn.bread || 0 })}</p>${btn('bake', `🍞 ${t('pl_bake')}`, (S.me.barn.wheat || 0) >= BREAD.wheat)}`;
   if (key === 'library') {
     const c = libCard();
-    return `<div class="card lib-card"><div class="sec-title">📖 ${t('pl_card_today')}</div><p class="lib-text">${nm(c)}</p></div>
+    return jobSection(key) + `<div class="card lib-card"><div class="sec-title">📖 ${t('pl_card_today')}</div><p class="lib-text">${nm(c)}</p></div>
       ${btn('read', P.lib ? `✅ ${t('pl_read')}` : `📖 ${t('pl_read_it')}`, !P.lib)}<p class="muted small center">${t('pl_read_n', { n: S.stats.libRead || 0 })}</p>`;
   }
   if (key === 'post') {
     const fr = S.friends.filter(f => lotOf(f.id));
-    return `<p>${t('pl_post_note', { town: nm(COMMUNITIES[myTown()]) })}</p><div class="card">${fr.map(f => `<div class="list-item">${avatar(f.look)}<div class="grow"><b>${esc(homeName(f))}</b></div>
+    return jobSection(key) + `<p>${t('pl_post_note', { town: nm(COMMUNITIES[myTown()]) })}</p><div class="card">${fr.map(f => `<div class="list-item">${avatar(f.look)}<div class="grow"><b>${esc(homeName(f))}</b></div>
       ${P.cards[f.id] ? `<span class="tag ok">${t('pl_sent')}</span>` : `<button class="btn small primary" data-act="placeDo" data-arg="post|card|${f.id}">📮 ${t('pl_send')}</button>`}</div>`).join('') || `<p class="muted">${t('pl_no_friends')}</p>`}</div>`;
   }
   if (key === 'cafe') {
     const ids = allLots(VIEW_TOWN).map(l => l.id).filter(id => id !== 'me' && homeOf(id) && isOnline(id)).sort((a, b) => isFriend(b) - isFriend(a)).slice(0, 8);
-    return `<p>${t('pl_cafe_note')}</p><div class="card">${ids.map(id => { const h = homeOf(id), at = visitingNow(id);
+    return jobSection(key) + `<p>${t('pl_cafe_note')}</p><div class="card">${ids.map(id => { const h = homeOf(id), at = visitingNow(id);
       return `<div class="list-item">${avatar(h.look)}<div class="grow"><b>${esc(homeName(h))}</b> ${isFriend(id) ? '💛' : ''}<div class="muted"><span class="online-dot"></span>${at ? t('host_away', { name: esc(homeName(homeOf(at))) }) : t('host_home')}</div></div>
         <button class="btn small" data-act="goTo" data-arg="${at || id}">${t('visit')}</button></div>`; }).join('') || `<p class="muted">${t('pl_nobody')}</p>`}</div>`;
   }
-  if (key === 'market') return `<p>${t('pl_market_note')}</p>${btn('sell', `🧺 ${t('pl_sell')}`)}`;
-  if (key === 'gym') return `<p>${t('pl_gym_note')}</p><p class="muted">${t('pl_gym_people', { n: Math.max(1, Math.round(onlineIn(VIEW_TOWN) * 0.02)) })}</p>`;
+  if (key === 'market') return marketBody(true) + jobSection(key);
+  if (key === 'clinic') {
+    const s = S.sick, med = s && s.med;
+    return `<p>${s ? t('sick_here', { why: t('sick_why_' + (s.why || 'cold')) }) : t('sick_well')}</p>
+      ${s ? (med ? `<p class="host-say yes">💊 ${t('sick_med_have', { n: SICK.restSec })}</p>` : `<button class="btn primary block" data-act="buyMed">💊 ${t('sick_buy', { n: SICK.medicine })}</button>`) : ''}${jobSection(key)}`;
+  }
+  if (key === 'gym') return `<p>${t('pl_gym_note')}</p><p class="muted">${t('pl_gym_people', { n: Math.max(1, Math.round(onlineIn(VIEW_TOWN) * 0.02)) })}</p>` + jobSection(key);
   if (key === 'plaza') return `<p>${t('pl_plaza_note', { lv: townLevel() })}</p>${btn('rank', `🏆 ${t('fab_rank')}`)}`;
   return '';
 }
@@ -2278,7 +2369,10 @@ setInterval(() => {
   if (overlaySig() !== UI.sig) { renderHUD(); renderOverlay(); renderTabbar(); UI.sig = overlaySig(); }
   if (UI.sheet && ['field', 'animal', 'tree'].includes(UI.sheet.type)) renderSheet();
   if (UI.tab === 'real' && S.live) renderPanel();
-  rainGrow(1000);
+  weatherFarm(1000);
+  if (S.work && now() >= S.work.end) { const r = finishShift(); if (r) { Sound.play('coins'); snack(`💼 ${t(r.promoted ? 'job_promoted' : 'job_done', { n: r.pay, rank: nm(JOB_RANKS[jobRank()]) })}`); refresh(); } }
+  if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }
+  if (S.floodNews) { snack(`🌊 ${t('w_flooded', { n: S.floodNews })}`); S.floodNews = 0; }
   // trophies: celebrate each new one (once)
   if (!S.onboarding) {
     const tn = trophyNews();

@@ -32,7 +32,7 @@ const STR = {
     tray_empty: '储物间是空的。点已经摆好的东西可以移动、旋转或收起。', go_shop: '去商店',
     // shop
     shop_title: '商店', shop_money_note: '金币和木材只能从现实里赚：睡好、运动、少刷手机。农场卖的钱可以帮你更快攒够。',
-    cat_seeds: '种子', cat_trees: '树苗', cat_animals: '牲畜', cat_land: '土地', cat_furn: '家具', cat_yard: '庭院', cat_cars: '载具', cat_houses: '房子', cat_sell: '出售',
+    cat_seeds: '种子', cat_trees: '树苗', cat_animals: '牲畜', cat_land: '土地', cat_furn: '家具', cat_yard: '庭院', cat_cars: '载具', cat_houses: '房子', cat_sell: '行情',
     seed_sub: '{d}成熟 · 收 {n} 个 · 每个 🪙{p}', have_n: '已有 {n} 颗', buy_n: '买 {n}',
     rare_sleep: '睡眠分 80+ 获得', rare_rings: '三环全合获得', rare_focus: '离线 2 小时获得', rare_steps: '走满 6,000 步获得',
     note_seeds: '种子越贵，长得越久，卖得也越多。郁金香、玫瑰、向日葵、南瓜只能靠现实目标得到。',
@@ -192,7 +192,7 @@ const STR = {
     wallpaper: 'Walls', floor: 'Floor', wall_color: 'Walls', roof_color: 'Roof',
     tray_empty: 'Storage is empty. Tap something you placed to move, rotate or store it.', go_shop: 'Shop',
     shop_title: 'Shop', shop_money_note: 'Coins and wood only come from real life: sleep, movement and less scrolling. Farm sales help you save faster.',
-    cat_seeds: 'Seeds', cat_trees: 'Trees', cat_animals: 'Animals', cat_land: 'Land', cat_furn: 'Furniture', cat_yard: 'Yard', cat_cars: 'Vehicles', cat_houses: 'Houses', cat_sell: 'Sell',
+    cat_seeds: 'Seeds', cat_trees: 'Trees', cat_animals: 'Animals', cat_land: 'Land', cat_furn: 'Furniture', cat_yard: 'Yard', cat_cars: 'Vehicles', cat_houses: 'Houses', cat_sell: 'Prices',
     seed_sub: 'Ripe in {d} · {n} each · 🪙{p} each', have_n: '{n} in stock', buy_n: 'Buy {n}',
     rare_sleep: 'Sleep score 80+', rare_rings: 'Close all rings', rare_focus: '2 hours offline', rare_steps: 'Walk 6,000 steps',
     note_seeds: 'Pricier seeds grow longer and sell for more. Tulips, roses, sunflowers and pumpkins only come from real-life goals.',
@@ -688,3 +688,53 @@ Object.assign(STR.en, {
 // ---------- v0.13 ----------
 Object.assign(STR.zh, { car_cargo: '📦 一次能拉 {n} 件货去卖' });
 Object.assign(STR.en, { car_cargo: '📦 Carries {n} goods to market' });
+
+// ---------- v0.14: the market ----------
+Object.assign(STR.zh, {
+  mk_board: '今日收购价', mk_next: '{m} 后更新', mk_go: '去市场卖：', mk_carry: '走路一次带 {w} 件，开车带 {c} 件', mk_loaded: '装好了 {n} 件货（最多 {cap} 件）', mk_nothing: '仓库里没有能卖的东西',
+  mk_unloaded: '没卖完的东西放回仓库了', mk_full: '装不下了，换辆大点的车或者先卖掉一些', mk_animal_on: '装上车了，带去市场卖吧', mk_take_animal: '带去市场卖（现价 🪙{n}）',
+  mk_price_now: '市场现价 🪙{n}', mk_go_sell: '去市场卖', mk_shop_note: '东西要拉到市场去卖，价格每 4 小时变一次，有涨有跌。',
+  mk_cargo: '带来的货 {n}/{cap}', mk_sell_all: '全部卖掉', mk_empty_load: '这次没带东西。回家装好再来（开车一次能拉更多）。',
+});
+Object.assign(STR.en, {
+  mk_board: 'Prices right now', mk_next: 'next change in {m}', mk_go: 'Go and sell:', mk_carry: 'On foot you carry {w}; by car {c}', mk_loaded: 'Loaded {n} goods (room for {cap})', mk_nothing: 'Nothing in the barn to sell',
+  mk_unloaded: 'What you didn’t sell went back into the barn', mk_full: 'No room left: take a bigger vehicle or sell some first', mk_animal_on: 'Loaded up: take it to the market to sell', mk_take_animal: 'Take to market (now 🪙{n})',
+  mk_price_now: 'Market price 🪙{n}', mk_go_sell: 'Sell at the market', mk_shop_note: 'Goods are sold at the market in town. Prices change every 4 hours, up and down.',
+  mk_cargo: 'Your load {n}/{cap}', mk_sell_all: 'Sell everything', mk_empty_load: 'You didn’t bring anything. Load up at home (a car carries more).',
+});
+
+// ---------- v0.14: weather on the farm ----------
+Object.assign(STR.zh, {
+  w_flooded: '大雨把 {n} 块地淹了：水退之前菜不长，成熟的菜会慢慢烂', w_frozen: '湖面结冰了，今天钓不了鱼', w_field_flooded: '这块地被水淹了，大约 {m} 后退水。水退之前菜不长，成熟的菜会慢慢烂掉一些。',
+  w_farm_clear: '晴天：菜照常长。', w_farm_clouds: '多云：菜照常长。', w_farm_fog: '起雾：菜照常长。', w_farm_rain: '下雨：菜长得快 25%。',
+  w_farm_heavy: '大雨：菜长得快，但地有可能被淹（淹了就不长，成熟的会烂）。', w_farm_storm: '暴风雨：地很可能被淹，成熟的菜最好早点收。', w_farm_snow: '下雪：菜长得慢一半，湖面结冰钓不了鱼。',
+});
+Object.assign(STR.en, {
+  w_flooded: 'Heavy rain flooded {n} field(s): nothing grows until the water drains, and ripe crops start to spoil', w_frozen: 'The lake is frozen: no fishing today', w_field_flooded: 'This field is flooded; the water drains in about {m}. Nothing grows until then, and a ripe crop spoils a little.',
+  w_farm_clear: 'Sunny: crops grow as usual.', w_farm_clouds: 'Cloudy: crops grow as usual.', w_farm_fog: 'Foggy: crops grow as usual.', w_farm_rain: 'Rain: crops grow 25% faster.',
+  w_farm_heavy: 'Heavy rain: crops grow faster, but fields may flood (nothing grows, ripe crops spoil).', w_farm_storm: 'Storm: fields will likely flood; harvest ripe crops soon.', w_farm_snow: 'Snow: crops grow half as fast, and the lake freezes.',
+});
+
+// ---------- v0.14: jobs, illness, babies ----------
+Object.assign(STR.zh, {
+  pl_desc_clinic: '生病了来这里买药；也可以在这里上班。', job_hour: '小时', job_apply: '应聘这份工作', job_apply_note: '找份工作吧：按真实时间上班，下班拿工资。',
+  job_switch_note: '你现在有别的工作，换工作的话和老板的关系从头开始。', job_switch_q: '要辞掉「{old}」换这份工作吗？和老板的关系会从头开始。', job_hired: '被录用了：{job}！到上班时间来这里点「开始上班」',
+  job_start: '开始上班（到 {to}:00，能拿 🪙{n}）', job_started: '上班了，{to}:00 下班。上班的时候小人在这里，不能干别的', job_closed: '现在不是上班时间（{from}:00–{to}:00）',
+  job_working: '上班中，还有 {m} 下班。已经挣了 🪙{n}（做满 🪙{full}）', job_quit: '提前下班（只拿 🪙{n}，老板会不太高兴）', job_leave_q: '你还在上班。现在走只能拿 🪙{n}，和老板的关系也会变差。要提前下班吗？',
+  job_quit_done: '提前下班了：+🪙{n}，老板有点不高兴', job_done: '下班了！+🪙{n}，老板对你更满意了', job_promoted: '下班了！+🪙{n}，你升职了：{rank} 🎉',
+  job_busy: '在{place}上班呢，下班再说', job_rel: '和老板的关系 {n}/100', job_next: '到 {n} 升职为「{rank}」',
+  sick_well: '你身体很好，不用买药。', sick_here: '你生病了（{why}）：走路慢，现实里挣的金币也少一点。买药吃了，再回家在床上躺一会儿就好了。',
+  sick_why_work: '连续上班太累了', sick_why_sleep: '最近没睡好', sick_why_cold: '着凉了', sick_buy: '买药（🪙{n}）', sick_med_have: '已经吃药了：回家在床上躺 {n} 秒就好了。',
+  sick_med_bought: '吃药了：回家在床上躺 {n} 秒就好', sick_cured: '病好了！又精神了', snack_stole_baby: '偷偷抱走了一只 {e}，放进你的牧场', snack_baby_few: '他家这种小崽子只有一只，下不去手',
+});
+Object.assign(STR.en, {
+  pl_desc_clinic: 'Buy medicine here when you’re ill; you can work here too.', job_hour: 'hr', job_apply: 'Apply for this job', job_apply_note: 'Get a job: work real-time shifts and get paid when they end.',
+  job_switch_note: 'You have another job; switching starts the relationship with the boss from zero.', job_switch_q: 'Quit “{old}” for this job? The relationship with the boss starts over.', job_hired: 'Hired: {job}! Come here during the hours and tap “Start work”',
+  job_start: 'Start work (until {to}:00, earns 🪙{n})', job_started: 'At work until {to}:00. While you work your townie stays here', job_closed: 'Not open for work now ({from}:00–{to}:00)',
+  job_working: 'At work: {m} to go. Earned 🪙{n} so far (🪙{full} for the whole shift)', job_quit: 'Leave early (only 🪙{n}; the boss won’t like it)', job_leave_q: 'You’re still at work. Leaving now pays only 🪙{n} and the boss will like you less. Leave early?',
+  job_quit_done: 'Left early: +🪙{n}, the boss isn’t happy', job_done: 'Shift done! +🪙{n}, the boss is pleased', job_promoted: 'Shift done! +🪙{n}, and you’re promoted: {rank} 🎉',
+  job_busy: 'At work at the {place}; after work', job_rel: 'Boss relationship {n}/100', job_next: '{n} to be promoted to {rank}',
+  sick_well: 'You’re well; no medicine needed.', sick_here: 'You’re ill ({why}): you walk slower and real-life rewards are a bit smaller. Take medicine, then lie in bed at home for a little while.',
+  sick_why_work: 'too many work days in a row', sick_why_sleep: 'poor sleep lately', sick_why_cold: 'caught a cold', sick_buy: 'Buy medicine (🪙{n})', sick_med_have: 'Medicine taken: lie in bed at home for {n} seconds.',
+  sick_med_bought: 'Medicine taken: lie in bed at home for {n} seconds', sick_cured: 'All better!', snack_stole_baby: 'You sneaked off with a {e} for your pasture', snack_baby_few: 'They only have one of these; you can’t do it',
+});

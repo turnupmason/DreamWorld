@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.13.0';
+const VERSION = '0.14.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -728,9 +728,16 @@ function buildLayout(id, flip) {
   });
   const rect = r => (flip ? [MIRROR_X - r[2], r[1], MIRROR_X - r[0], r[3], ...r.slice(4)] : r.slice());
   const box = (b, w = b.w || 0) => ({ ...b, x: fx(b.x, w) });
+  const centre = box(B.centre), plaza = box(B.plaza, LOT_W), shops = B.shops.map(([k, x, y]) => [k, fx(x, 6), y]);
+  // v0.14: a clinic in the first free spot of the town centre
+  const busy = [[plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y]) => [x, y, x + 6, y + 5.5])];
+  fit: for (let yy = centre.y + 1; yy <= centre.y + centre.d - 6.5; yy += 0.5) for (let xx = centre.x + 1; xx <= centre.x + centre.w - 7; xx += 0.5) {
+    if (busy.some(r => xx < r[2] + 1 && r[0] < xx + 7 && yy < r[3] + 1 && r[1] < yy + 6.5)) continue;
+    shops.push(['clinic', xx, yy]); break fit;
+  }
   return {
     id: id + (flip ? '|f' : ''), streets, npcLots, roads: B.roads.map(rect), water: B.water.map(rect),
-    centre: box(B.centre), plaza: box(B.plaza, LOT_W), shops: B.shops.map(([k, x, y]) => [k, fx(x, 6), y]),
+    centre, plaza, shops,
     park: box(B.park), lake: { ...B.lake, x: fx(B.lake.x) }, fields: B.fields.map(f => box(f)),
     places: B.places.map(([x, y]) => [fx(x), y]), labels: B.labels.map(([k, x, y]) => [k, fx(x), y]),
   };
@@ -750,6 +757,7 @@ const PLACE_INFO = {
   gym:     { e: '🏋️', zh: '健身房', en: 'Gym' },
   library: { e: '📚', zh: '图书馆', en: 'Library' },
   post:    { e: '📮', zh: '邮局', en: 'Post office' },
+  clinic:  { e: '🏥', zh: '诊所', en: 'Clinic' },
 };
 const HARVEST_GOAL = 30;          // the town fields: helps from everyone in town today; full = harvest festival
 const HELP_HARVEST = { wheat: 2 }; // helping once a day (uses 1 farm job) gives you this; the festival gives 1 bread
@@ -772,6 +780,39 @@ const LIB_CARDS = [
   { zh: '卧室凉一点、暗一点、安静一点，睡得更好。', en: 'A cool, dark, quiet bedroom helps you sleep better.' },
   { zh: '午睡别超过半小时，晚上才睡得着。', en: 'Keep naps under half an hour so you still sleep at night.' },
 ];
+// ---------- the market (v0.14) ----------
+// Goods and animals are sold only at the market in town, at the price on the board right now. Prices move every
+// few hours, the same for everyone in a community: a smooth random drift between `min` and `max` times the usual
+// price plus a little jitter, so you can sell high, or end up selling for less than you paid.
+const MARKET = { slotHours: 4, min: 0.55, max: 1.6, jitter: 0.16, history: 8 };
+const ANIMAL_SIZE = { chicken: 2, duck: 2, rabbit: 2, sheep: 5, goat: 5, pig: 6, cow: 10, alpaca: 8, rainbowalpaca: 8 };   // room a live animal takes
+const BABY_SIZE = 3;   // a baby animal from the barn
+// ---------- weather on the farm (v0.14) ----------
+// The real local weather (or the simulated one) changes the farm. Rain waters the crops (they grow faster); heavy
+// rain and storms can flood a planted field (chance per field per hour): under water nothing grows and a ripe crop
+// loses a share every hour, until the water drains away. Snow slows growth and freezes the lake for fishing.
+const WEATHER_FARM = { rainGrow: 0.25, flood: { heavy: 0.12, storm: 0.25 }, floodHours: 2, rotHours: 1, snowSlow: 0.5 };
+// ---------- jobs (v0.14) ----------
+// Work a real-time shift at a shop in town. Start during the shift hours, at the workplace; your townie stays at
+// work until the shift ends. Leave early and you're paid only for the hours you worked, and the boss likes you a
+// bit less; finish shifts and the boss likes you more; at 30 and 70 you're promoted (more pay per hour).
+// (Since v0.14 coins also come from work and from selling at the market; wood still only from real life.)
+const JOBS = {
+  bakery:  { zh: '面包店店员', en: 'Bakery assistant', wage: 12, from: 7, to: 15 },
+  cafe:    { zh: '咖啡师', en: 'Barista', wage: 11, from: 8, to: 16 },
+  market:  { zh: '超市收银员', en: 'Cashier', wage: 11, from: 9, to: 18 },
+  library: { zh: '图书管理员', en: 'Librarian', wage: 10, from: 9, to: 17 },
+  post:    { zh: '邮递员', en: 'Postal worker', wage: 12, from: 8, to: 16 },
+  gym:     { zh: '健身教练', en: 'Fitness coach', wage: 14, from: 10, to: 19 },
+  clinic:  { zh: '诊所护士', en: 'Clinic nurse', wage: 16, from: 9, to: 18 },
+};
+const JOB_RANKS = [{ zh: '新人', en: 'Newcomer', at: 0, pay: 1 }, { zh: '熟手', en: 'Skilled', at: 30, pay: 1.3 }, { zh: '主管', en: 'Supervisor', at: 70, pay: 1.7 }];
+const JOB_REL = { finish: 4, quit: -6, max: 100 };
+// ---------- getting sick (v0.14) ----------
+// Each new day there's a small chance your townie falls ill: more after many work days in a row or a poor night's
+// sleep. Sick: walks slower and real-life rewards are a bit smaller. Medicine from the clinic plus a rest in bed
+// cures it; otherwise it passes after a couple of days.
+const SICK = { base: 0.03, overwork: 0.08, overworkDays: 5, lowSleep: 0.06, lowSleepScore: 60, longShift: 0.1, walk: 0.6, earn: 0.75, days: 2, medicine: 60, restSec: 20 };
 // How many other people are drawn at once (v0.11). Thousands can be in a community and hundreds at a popular
 // home; we draw only a few and say "+N more".
 const SHOW_LIMITS = { town: 10, home: 4, room: 3 };

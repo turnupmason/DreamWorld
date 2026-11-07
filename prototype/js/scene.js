@@ -368,7 +368,7 @@ const Scene = (() => {
   function cancel(a) { a.jobs = []; a.cur = null; a.act = null; a.path = []; a.seat = 0; a.useId = null; }
   function speedOf(h) {
     const e = h.id === 'me' ? energyLevel() : friendEnergy(h);
-    return { great: 2.6, good: 2.2, tired: 1.7, exhausted: 1.3 }[e];
+    return { great: 2.6, good: 2.2, tired: 1.7, exhausted: 1.3 }[e] * (h.id === 'me' && S.sick ? SICK.walk : 1);   // ill: slower (v0.14)
   }
 
   // Wandering for friends and animals.
@@ -471,6 +471,11 @@ const Scene = (() => {
         tile(ox + x, oy + y, '#9a6a44', 'rgba(255,255,255,.22)');
         for (const v of [0.3, 0.55, 0.8]) { const a = iso(ox + x + 0.12, oy + y + v), b = iso(ox + x + 0.88, oy + y + v); line(a.x, a.y, b.x, b.y, 'rgba(70,40,20,.3)', 1.1 * z); }
       } else tile(ox + x, oy + y, '#9a6a44');
+      const fl = h.fields[i];
+      if (isFlooded(fl)) {   // v0.14: a flooded field: muddy water with ripples
+        tile(ox + x + 0.04, oy + y + 0.04, 'rgba(96,140,170,.72)');
+        if (f) { const c = iso(ox + x + 0.5, oy + y + 0.5), ph = (performance.now() / 1300 + i * 0.37) % 1; ellipse(c.x, c.y, (6 + ph * 14) * z, (3 + ph * 7) * z, null, `rgba(255,255,255,${0.5 * (1 - ph)})`, 1 * z); }
+      } else if (weatherNow().kind === 'snow') tile(ox + x + 0.05, oy + y + 0.05, 'rgba(248,251,253,.55)');
     }
     if (opt.mine && f && h.fieldLv < FIELD_LEVELS.length - 1) dashed(AREA.fields.x, AREA.fields.y + h.fields.length / 4, 4, 1);
     if (f) for (let k = 0; k < 18 + (LW - LOT_W); k++) {
@@ -666,6 +671,7 @@ const Scene = (() => {
         if (pet && h.id === 'me' && petAsks(a).length && !e.moving) emoji(PET_NEEDS[petAsks(a)[0]].e, p.x + 8 * z, p.y - 26 * z, 12 * z);
         if (focus) {
           hits.push({ kind: 'animal', owner: h.id, id: a.id, x0: p.x - 16 * z, x1: p.x + 16 * z, y0: p.y - 30 * z, y1: p.y + 6 * z });
+          if (!opt.mine && babyStealable(h, a) && st === 0) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 22 * z }, ch: '🍼', ok: true });   // v0.14
           if (animalReady(a)) {
             const d = ANIMALS[a.k], baby = nextIsBaby(a);
             if (opt.mine) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 26 * z }, ch: baby ? '🍼' : GOODS[d.prod].e, ok: true });
@@ -689,7 +695,7 @@ const Scene = (() => {
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
-    if (me.lot === h.id && !meInLake() && !(trip && mode === 'town')) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
+    if (me.lot === h.id && !meInLake() && !(trip && mode === 'town') && !S.work) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
   }
   function liveBadge(p, live, mine) {
     const z = cam.z, w = WORKOUTS[live.type];
@@ -1000,7 +1006,11 @@ const Scene = (() => {
     if (meInLake()) { const [ox, oy] = origin(me.lot); objs.push({ d: ox + oy + me.x + me.y, f: () => drawMe(ox, oy, ts, false) }); }
     // people who are online right now, out walking: to the square, the park, the lake, and home again
     if (z > 0.055) walkers(objs, dt, ts);
-    if (trip && mode === 'town') objs.push({ d: trip.x + trip.y + 0.6, f: () => drawTrip(ts) });
+    if (trip && mode === 'town' && !S.work) objs.push({ d: trip.x + trip.y + 0.6, f: () => drawTrip(ts) });
+    if (S.work && mode === 'town' && VIEW_TOWN === myTown()) {   // at work (v0.14): your townie at the door of the workplace
+      const [wx, wy] = Scene.placePoint(S.work.place);
+      objs.push({ d: wx + wy + 0.6, f: () => { const p = iso(wx, wy); drawPerson(p.x, p.y, cam.z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand' }); if (cam.z > 0.3) nameTag(p, `💼 ${S.me.name || ''}`, true); } });
+    }
     if (mode === 'town') parkedObjs(objs, ts);
     if (edit && edit.scope === 'yard') { const [ox, oy] = origin('me'); yardSpots(homeW(S.me)).forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)')); }
     weatherGround(ts);
@@ -1717,7 +1727,7 @@ const Scene = (() => {
     const useIt = usingId && room.items.find(x => x.id === usingId), useK = useIt && FURN[useIt.k].use;
     const bedD = useK === 'sleep' && !(trS && trS.pose === 'walk') ? useIt.x + useIt.y + itemSize('room', useIt).reduce((a, b) => a + b) / 2 + 0.02 : 0;   // in bed: right after the bed
     const meD = clipR ? clipR.x + clipR.y + 1.4 : onFlight && upR ? upR.x + upR.y + 1.38 : bedD || meIn.x + meIn.y + (meIn.seat || useK === 'sit' ? 0.7 : 0);
-    objs.push({ d: meD, f: () => {
+    if (!(S.work && owner === 'me')) objs.push({ d: meD, f: () => {
       const p = iso(meIn.x, meIn.y), pose = trS ? trS.pose : meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
       const it = meIn.useId && room.items.find(x => x.id === meIn.useId), lift = meIn.lift || 0;
       ctx.save();
@@ -2353,7 +2363,8 @@ const Scene = (() => {
       const a = Math.atan2((C.y + C.d / 2 - K.y) / K.ry, (C.x + C.w / 2 - K.x) / K.rx), m = K.sea ? 1 + 1.6 / K.ry : 1 + 1.2 / Math.min(K.rx, K.ry);
       return [K.x + Math.cos(a) * K.rx * m, K.y + Math.sin(a) * K.ry * m];
     },
-    here() { return trip && trip.arrived && trip.town === VIEW_TOWN ? trip.place : null; },
+    here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : trip && trip.arrived && trip.town === VIEW_TOWN ? trip.place : null; },
+    resting() { return mode === 'interior' && owner === 'me' && !!meIn.useId && !!(homeOf('me').room.items.concat(...(homeOf('me').ups || []).map(u => u.items)).find(i => i.id === meIn.useId && FURN[i.k].use === 'sleep')); },
     arriveAt(pt, place) { if (mode !== 'town') return; trip = { town: VIEW_TOWN, how: 'walk', x: pt[0], y: pt[1], path: [], arrived: true, moving: false, place, face: 1, phase: 0 }; flyTo(pt[0], pt[1], Math.max(cam.z, 0.5)); },
     tripTime(to, how) { if (!S) return 0; TL = layoutOf(VIEW_TOWN); return Math.max(1, Math.round(pathLen(tripPath(to, how)) / (TRIP_SPEED[how] || 3))); },
     tripNow() { return trip && !trip.arrived ? { how: trip.how } : null; },

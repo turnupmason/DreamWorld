@@ -177,6 +177,7 @@ function checkDay() {
   ['steps10k', 'steps20k'].forEach(id => { const ok = y.steps + y.pushes >= STREAK_TROPHIES[id].need; st['cur_' + id] = ok ? (st['cur_' + id] || 0) + 1 : 0; st['best_' + id] = Math.max(st['best_' + id] || 0, st['cur_' + id]); });
   st.cur_rings = y.paid.rings.all ? (st.cur_rings || 0) + 1 : 0; st.best_rings = Math.max(st.best_rings || 0, st.cur_rings);
   closeDayAwards(y);
+  closeDayHealth(y);
   st.days++;
   S.today = freshDay();
   S.friends.forEach(f => { f.goalToday = false; f.energy = 55 + Math.round(Math.random() * 40); });
@@ -377,7 +378,7 @@ function energyScore() {
 function energyLevel(score = energyScore()) { return ENERGY_LEVELS.find(e => score >= e.min).id; }
 function energyMult() {
   const m = ENERGY_LEVELS.find(e => e.id === energyLevel()).mult;
-  return S.today.restDay ? Math.max(1, m) : m;   // on a rest / sick day nothing is discounted
+  return (S.today.restDay ? Math.max(1, m) : m) * (S.sick ? SICK.earn : 1);   // real rest day: nothing discounted; ill in the game (v0.14): a bit less
 }
 // A friend's face only shows their energy if they chose to share it (and you're not in calm mode).
 function friendEnergy(h) {
@@ -742,12 +743,26 @@ function codeKind(c) {
   if (c >= 95) return 'storm';
   return 'rain';
 }
-// Rain waters the crops: while it rains, everything in the fields grows a quarter faster.
-function rainGrow(ms) {
-  const w = weatherNow().kind;
-  if (w !== 'rain' && w !== 'storm') return;
-  [S.me, ...S.friends].forEach(h => h.fields.forEach(f => { if (f && !isRipe(f)) f.at -= ms * 0.25; }));
+// Weather on the farm (v0.14), run every second: rain helps, heavy rain and storms can flood fields, snow slows growth.
+const isFlooded = f => !!(f && f.flood && f.flood > now());
+function weatherFarm(ms) {
+  const w = weatherNow(), k = w.kind, heavy = k === 'storm' ? 'storm' : w.heavy ? 'heavy' : null, hrs = ms / HOUR;
+  let flooded = 0;
+  [S.me, ...S.friends].forEach(h => h.fields.forEach(f => {
+    if (!f) return;
+    if (isFlooded(f)) {   // under water: nothing grows, and a ripe crop spoils bit by bit
+      f.at += ms;
+      if (isRipe(f) && f.left > 1) { f.rot = (f.rot || 0) + hrs; if (f.rot >= WEATHER_FARM.rotHours) { f.left--; f.rot = 0; } }
+      return;
+    }
+    if (heavy && Math.random() < WEATHER_FARM.flood[heavy] * hrs) { f.flood = now() + WEATHER_FARM.floodHours * HOUR; if (h === S.me) flooded++; return; }
+    if (isRipe(f)) return;
+    if (k === 'rain' || k === 'storm') f.at -= ms * WEATHER_FARM.rainGrow;
+    else if (k === 'snow') f.at += ms * WEATHER_FARM.snowSlow;
+  }));
+  if (flooded) S.floodNews = (S.floodNews || 0) + flooded;
 }
+const rainGrow = weatherFarm;
 
 // ---------- storeys ----------
 // Every storey is its own room (wallpaper, floor, furniture). LEVEL is the storey you're looking at inside
@@ -1465,6 +1480,7 @@ function bakeBread() {
 function lakeFish() {
   const P = placeDay();
   if (P.fish) return { r: 'done' };
+  if (weatherNow().kind === 'snow') return { r: 'frozen' };   // v0.14: the water is frozen
   if (!useAction()) return { r: 'nojobs' };
   P.fish = true;
   let r = Math.random(), k = FISH_KINDS[0][0];
@@ -1538,3 +1554,146 @@ function fixBlockedYards() {
   S.yardWayV = 1;
   save();
 }
+
+// ---------- the market (v0.14) ----------
+const priceSlot = (ms = now()) => Math.floor(ms / (MARKET.slotHours * HOUR));
+// How the price of one thing stands against its usual price in a community (same for everyone, changes every slot).
+function priceFactor(k, t = myTown(), slot = priceSlot()) {
+  const seed = idNum(k + '|' + t), big = Math.floor(slot / 6), u = (slot - big * 6) / 6, e = u * u * (3 - 2 * u);
+  const v = n => hash(seed * 0.013 + n * 0.71, 3.3), smooth = v(big) + (v(big + 1) - v(big)) * e;
+  const f = MARKET.min + (MARKET.max - MARKET.min) * (0.1 + 0.8 * smooth) + (hash(seed * 0.017, slot) - 0.5) * MARKET.jitter;
+  return clamp(f, MARKET.min, MARKET.max);
+}
+// Usual price: barn goods (crops, goods, baby animals) or a live animal at its stage.
+const usualPrice = k => (k.startsWith('animal_') ? ANIMALS[k.split('_')[1]].sell[+k.split('_')[2]] : barnInfo(k).sell);
+const priceKey = k => (k.startsWith('animal_') ? 'animal_' + k.split('_')[1] : k);
+function marketPrice(k, slot = priceSlot()) { return Math.max(1, Math.round(usualPrice(k) * priceFactor(priceKey(k), myTown(), slot))); }
+function priceTrend(k) { const s = priceSlot(); return Array.from({ length: MARKET.history }, (_, i) => marketPrice(k, s - MARKET.history + 1 + i)); }
+// What you carry: barn goods and live animals, up to the room you have (on foot or in your vehicle).
+function cargo() { S.cargo = S.cargo || { items: {}, animals: [], cap: 0 }; return S.cargo; }
+const cargoSlots = k => (k.startsWith('baby_') ? BABY_SIZE : 1);
+function cargoUsed() { const c = cargo(); return Object.entries(c.items).reduce((s, [k, n]) => s + n * cargoSlots(k), 0) + c.animals.reduce((s, a) => s + (ANIMAL_SIZE[a.k] || 5), 0); }
+const carryCap = how => (how === 'walk' ? WALK_CARRY : ((CARS[(S.me.cars[S.me.car] || {}).k] || {}).cargo || WALK_CARRY));
+// Setting off for the market: fill up with what sells best right now.
+function loadCargo(how) {
+  const c = cargo(), cap = carryCap(how);
+  c.cap = cap;
+  let room = cap - cargoUsed(), n = 0;
+  const keys = Object.keys(S.me.barn).sort((a, b) => marketPrice(b) / cargoSlots(b) - marketPrice(a) / cargoSlots(a));
+  for (const k of keys) {
+    while (room >= cargoSlots(k) && S.me.barn[k] > 0) { S.me.barn[k]--; c.items[k] = (c.items[k] || 0) + 1; room -= cargoSlots(k); n++; }
+    if (!S.me.barn[k]) delete S.me.barn[k];
+  }
+  return n;
+}
+// Take a live animal along to sell it.
+function cargoAnimal(id, how) {
+  const h = S.me, i = h.animals.findIndex(a => a.id === id), c = cargo();
+  if (i < 0) return 'none';
+  const a = h.animals[i], cap = Math.max(c.cap || 0, carryCap(how || 'car'));
+  if (cargoUsed() + (ANIMAL_SIZE[a.k] || 5) > cap) return 'full';
+  c.cap = cap; h.animals.splice(i, 1); c.animals.push(a);
+  return 'ok';
+}
+// Selling at the market (you must be there).
+function sellCargo(k, n) {
+  const c = cargo();
+  if (k.startsWith('animal:')) {
+    const i = c.animals.findIndex(a => a.id === k.slice(7));
+    if (i < 0) return 0;
+    const a = c.animals[i], v = marketPrice('animal_' + a.k + '_' + animalStage(a));
+    c.animals.splice(i, 1); S.me.coins += v; S.stats.sold = (S.stats.sold || 0) + v;
+    return v;
+  }
+  n = Math.min(n, c.items[k] || 0);
+  if (!n) return 0;
+  c.items[k] -= n; if (!c.items[k]) delete c.items[k];
+  const v = n * marketPrice(k);
+  S.me.coins += v; S.stats.sold = (S.stats.sold || 0) + v;
+  return v;
+}
+function sellAllCargo() { const c = cargo(); return [...Object.keys(c.items).map(k => sellCargo(k, c.items[k])), ...c.animals.map(a => a.id).map(id => sellCargo('animal:' + id))].reduce((a, b) => a + b, 0); }
+// Home again: what you didn't sell goes back to the barn (animals back to the pasture if there's room).
+function unloadCargo() {
+  const c = cargo();
+  Object.entries(c.items).forEach(([k, n]) => addBarn(S.me, k, n));
+  c.animals.forEach(a => { if (pastureCount() < pastureCap()) S.me.animals.push(a); else addBarn(S.me, 'baby_' + a.k, 1); });
+  S.cargo = { items: {}, animals: [], cap: 0 };
+}
+
+// ---------- jobs (v0.14) ----------
+const jobRank = (rel = (S.job || {}).rel || 0) => JOB_RANKS.filter(r => rel >= r.at).length - 1;
+const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay);
+function shiftEnd(place, ms = now()) { const d = new Date(ms); d.setHours(JOBS[place].to, 0, 0, 0); return d.getTime(); }
+function inShift(place, ms = now()) { const h = localHour(myTown(), ms); return h >= JOBS[place].from && h < JOBS[place].to; }
+function takeJob(place) { if (S.work) return 'working'; S.job = { place, rel: S.job && S.job.place === place ? S.job.rel : 0, since: now() }; return 'ok'; }
+function startShift(place) {
+  if (!S.job || S.job.place !== place) return 'nojob';
+  if (S.work) return 'working';
+  if (!inShift(place)) return 'closed';
+  S.work = { place, start: now(), end: shiftEnd(place), wage: jobWage(place) };
+  return 'ok';
+}
+const hoursWorked = w => Math.max(0, (Math.min(now(), w.end) - w.start) / HOUR);
+// The shift is over: full pay and a better relationship (and maybe a promotion).
+function finishShift() {
+  const w = S.work;
+  if (!w || now() < w.end) return null;
+  const pay = Math.round(hoursWorked(w) * w.wage), before = jobRank();
+  S.me.coins += pay; S.work = null;
+  S.job.rel = Math.min(JOB_REL.max, S.job.rel + JOB_REL.finish);
+  S.today.worked = true; S.stats.workPay = (S.stats.workPay || 0) + pay;
+  if ((S.stats.workStreak || 0) + 1 >= SICK.overworkDays && !S.sick && Math.random() < SICK.longShift) S.sick = { since: now(), med: false, why: 'work' };
+  return { pay, promoted: jobRank() > before };
+}
+// Leaving early: only the hours worked, and the boss isn't happy.
+function quitShift() {
+  const w = S.work;
+  if (!w) return null;
+  const pay = Math.round(hoursWorked(w) * w.wage);
+  S.me.coins += pay; S.work = null;
+  S.job.rel = Math.max(0, S.job.rel + JOB_REL.quit);
+  S.stats.workPay = (S.stats.workPay || 0) + pay;
+  return { pay };
+}
+// ---------- getting sick (v0.14) ----------
+function closeDayHealth(y) {
+  const st = S.stats;
+  st.workStreak = y.worked ? (st.workStreak || 0) + 1 : 0;
+  if (S.sick) { if (now() - S.sick.since > SICK.days * DAY || (S.sick.med && S.sick.rested)) S.sick = null; return; }
+  const sleep = (S.sleep && S.sleep.score) || 75;
+  const p = SICK.base + (st.workStreak >= SICK.overworkDays ? SICK.overwork : 0) + (sleep < SICK.lowSleepScore ? SICK.lowSleep : 0);
+  if (Math.random() < p) S.sick = { since: now(), med: false, why: st.workStreak >= SICK.overworkDays ? 'work' : sleep < SICK.lowSleepScore ? 'sleep' : 'cold' };
+}
+function buyMedicine() {
+  if (!S.sick) return 'well';
+  if (S.sick.med) return 'have';
+  if (S.me.coins < SICK.medicine) return 'poor';
+  S.me.coins -= SICK.medicine; S.sick.med = true;
+  return 'ok';
+}
+// Lying in bed after taking the medicine: a short rest and you're well again.
+function restInBed(sec) {
+  if (!S.sick || !S.sick.med) return false;
+  S.sick.rest = (S.sick.rest || 0) + sec;
+  if (S.sick.rest >= SICK.restSec) { S.sick = null; return true; }
+  return false;
+}
+// ---------- stealing a baby animal (v0.14) ----------
+// A little prank: carry off one baby animal from a friend's pasture (they must have at least two of that kind;
+// once a day per friend). A guard dog is more watchful here.
+function stealBaby(fid, aid) {
+  const h = friendById(fid), a = h && h.animals.find(x => x.id === aid);
+  if (!a || ANIMALS[a.k].pet || animalStage(a) !== 0) return { r: 'no' };
+  if (h.animals.filter(x => x.k === a.k).length < 2) return { r: 'few' };
+  S.today.babies = S.today.babies || {};
+  if (S.today.babies[fid]) return { r: 'done' };
+  const err = sneakCheck(fid); if (err) return { r: err };
+  S.today.babies[fid] = true;
+  if (hasGuardDog(h) && Math.random() < 0.45) return caught(fid, ANIMALS[a.k].sell[0]);
+  h.animals.splice(h.animals.indexOf(a), 1);
+  if (pastureCount() < pastureCap()) S.me.animals.push({ ...a, id: uid() }); else addBarn(S.me, 'baby_' + a.k, 1);
+  S.stats.babies = (S.stats.babies || 0) + 1;
+  return { r: 'ok', k: 'baby_' + a.k, n: 1 };
+}
+const babyStealable = (h, a) => isFriend(h.id) && !ANIMALS[a.k].pet && animalStage(a) === 0 && h.animals.filter(x => x.k === a.k).length >= 2 && !((S.today.babies || {})[h.id]);
