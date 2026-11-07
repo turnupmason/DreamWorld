@@ -2,9 +2,13 @@
 
 每个版本在 GitHub 上都有同名标签（tag），可以随时切回去看。
 
+## v0.6.2 · 2026-11-07
+
+- GitHub Pages 这次真正打开了（上一次设置没生效，发布失败）。交接文档里补了手机上找不到设置时的办法：浏览器切到「桌面版网站」再打开 Settings → Pages。
+
 ## v0.6.1 · 2026-11-07
 
-- Mason 打开了 GitHub Pages，网页版线上地址开通：https://turnupmason.github.io/DreamWorld/ ，之后每次推送自动更新。
+- 记录 GitHub Pages 线上地址：https://turnupmason.github.io/DreamWorld/ （这一版发布时设置还没生效，见 v0.6.2）。
 
 ## v0.6.0 · 2026-11-06
 
