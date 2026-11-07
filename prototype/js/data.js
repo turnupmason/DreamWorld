@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.24.0';
+const VERSION = '0.25.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -20,6 +20,16 @@ const DELIVERY = { fee: 0.08, min: 15, minutes: 15 };   // delivery: 8% of the b
 const SMALL_ANIMALS = ['chicken', 'duck', 'rabbit'];   // v0.19: every store has a car park this deep in front, between the building and the road
 // v0.22: evening classes at the school: one a day; every few classes earn a certificate, and each certificate
 // raises the pay for every job a little (a slow way up, paid for with your own coins).
+// v0.25: needs. Energy is your real sleep (as before). Three more go down slowly over real hours and come back by
+// living: eating (hunger), being with people (social) and having fun (fun). They never go to zero (they stop at 8)
+// and low needs never take anything away: a good mood (all three high on average) just adds a little to your pay.
+const NEEDS = { hunger: { e: '🍔', hours: 10 }, social: { e: '💬', hours: 16 }, fun: { e: '🎉', hours: 16 }, floor: 8, goodMood: 70, moodPay: 0.1 };
+const FOOD_FILL = { burger: 55, noodles: 50, pizza: 60, sushi: 45, boba: 15, icecream: 15, snack: 30, cook: 45 };
+const NEED_GAIN = { chat: 15, visit: 20, letter: 8, movie: 40, movieSocial: 6, claw: 8, stroll: 20, boss: 8, mate: 12, snackSocial: 4, cookFun: 5, sweetFun: 8 };
+const SNACK = { price: 15 };
+// the people at your work (not the same names as people in town)
+const BOSS_NAMES = [{ zh: '赵经理', en: 'Ms. Zhao' }, { zh: '孙店长', en: 'Mr. Sun' }, { zh: '钱老板', en: 'Mrs. Chen' }, { zh: '吴主管', en: 'Mr. Wu' }, { zh: '郑经理', en: 'Ms. Zheng' }, { zh: '何老板', en: 'Mr. Ho' }];
+const MATE_NAMES = [{ zh: '小林', en: 'Lin' }, { zh: '阿伟', en: 'Will' }, { zh: '小雨', en: 'Rain' }, { zh: '阿豪', en: 'Hal' }, { zh: '佳佳', en: 'Jojo' }, { zh: '小周', en: 'Joe' }, { zh: '文文', en: 'Wendy' }, { zh: '阿凯', en: 'Kai' }];   // a bite at the café or the bakery
 const SCHOOL = { fee: 120, perCert: 3, certPay: 0.05, maxCerts: 4, minutes: 45 };   // v0.24: a class lasts 45 minutes
 const POLICE = { witness: 0.08, strikes: 3, strikeDays: 7, fineMult: 5, fineMin: 80, fineMax: 400, jailMin: 30, bail: 150 };
 const STEP_GOAL = 6000;                  // starting step goal; it then follows your own last 7 days (see stepGoal())

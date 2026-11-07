@@ -710,3 +710,13 @@ body.dark .use-note { background: #3a2f1c; color: #f2c27a; }
 .tray-hint { padding: 2px 4px 6px; }
 .tray-item.on { outline: 2px solid var(--accent); }
 .drive-pic { display: flex; align-items: center; justify-content: center; height: 58px; }
+/* v0.25: needs */
+.my-needs { display: flex; gap: 7px; margin-top: 3px; }
+.mn { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; line-height: 1; }
+.mn b { display: block; width: 24px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.12); overflow: hidden; }
+.mn b i { display: block; height: 100%; border-radius: 3px; background: #4caf6a; }
+.mn.low b i { background: #e5484d; }
+.mn-row { display: grid; grid-template-columns: 64px 1fr 30px; align-items: center; gap: 8px; margin-top: 8px; }
+.mn-row .bar { height: 8px; }
+.mn-row .bar.low i { background: #e5484d; }
+.need-tip { grid-column: 1 / -1; margin-top: -4px; }

@@ -1158,6 +1158,7 @@ const Scene = (() => {
     if (z > 0.07 && mode === 'town') traffic(objs, dt, ts);   // v0.21
     if (mode === 'town') signalObjs(objs, vr);   // v0.22
     if (mode === 'town') liveTownObjs(objs, dt, ts);
+    if (mode === 'town' && cam.z > 0.2 && VIEW_TOWN === myTown()) parkPeople(objs, ts);   // v0.25
     if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
     else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = S.out.pt; objs.push({ d: mx + my + 0.6, f: () => drawMeOut(mx, my, ts) }); }
     const atPlace = S.work ? S.work.place : jailed() ? 'police' : S.study ? 'school' : null;
@@ -1517,29 +1518,51 @@ const Scene = (() => {
       if (ids.length) {
         const id = ids[Math.floor(Math.random() * ids.length)], g = gateOf(id);
         const others = allLots().filter(l => l.id !== id && homeOf(l.id)), dest = Math.random() < 0.3 && others.length ? gateOf(others[Math.floor(Math.random() * others.length)].id) : TL.places[Math.floor(Math.random() * TL.places.length)];
-        WALK.list.push({ id, h: homeOf(id), x: g[0], y: g[1] - 1.2, path: [[g[0], g[1]], ...route(g, dest)], home: g, phase: 0, face: 1, moving: true, stay: 0, back: false, alpha: 0 });
+        const bike = Math.random() < 0.3;   // v0.25: some people ride their bikes (on the road)
+        WALK.list.push({ id, h: homeOf(id), x: g[0], y: g[1] - 1.2, path: [[g[0], g[1]], ...(bike ? route(g, dest, false) : route(g, dest))], home: g, phase: 0, face: 1, moving: true, stay: 0, back: false, alpha: 0, bike, bikeCol: COLORS[Math.floor(Math.random() * COLORS.length)] });
       }
     }
     WALK.list = WALK.list.filter(w => {
-      if (w.stay > 0) { w.stay -= dt; w.moving = false; if (w.stay <= 0) { w.path = route([w.x, w.y], w.home).concat([[w.home[0], w.home[1] - 1.2]]); w.going = true; } }
+      if (w.stay > 0) { w.stay -= dt; w.moving = false; if (w.stay <= 0) { w.path = route([w.x, w.y], w.home, !w.bike).concat([[w.home[0], w.home[1] - 1.2]]); w.going = true; } }
       else if (w.path.length) {
-        const [tx, ty] = w.path[0], dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy), st = 1.6 * dt;
-        if (d <= st) { w.x = tx; w.y = ty; w.path.shift(); } else { w.x += dx / d * st; w.y += dy / d * st; }
-        faceTo(w, dx, dy); w.phase += dt * 9.5; w.moving = true;
+        const [tx, ty] = w.path[0], dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy), st = (w.bike ? 4.2 : 1.6) * dt;
+        if (w.bike && mustStop(w.x, w.y, tx, ty)) { w.moving = false; } else if (d <= st) { w.x = tx; w.y = ty; w.path.shift(); } else { w.x += dx / d * st; w.y += dy / d * st; }
+        faceTo(w, dx, dy); if (d > 0.01) w.cdir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); w.phase += dt * (w.bike ? 8 : 9.5); w.moving = true;
         if (!w.path.length) { if (w.going) return false; w.stay = 6 + Math.random() * 10; }
       }
       w.alpha = Math.min(1, w.alpha + dt * 2);
       objs.push({ d: w.x + w.y, f: () => {
-        const p = iso(w.x, w.y);
+        const riding = w.bike && w.path.length, o = riding ? { '+x': [0, 0.85], '-x': [0, -0.85], '+y': [-0.85, 0], '-y': [0.85, 0] }[w.cdir || '+x'] : [0, 0], p = iso(w.x + o[0], w.y + o[1]);
         ctx.save(); ctx.globalAlpha = w.alpha;
-        drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: !w.moving && Math.sin(ts / 900 + w.x) > 0.7 });
+        if (riding) { drawPerson(p.x, p.y, z, { look: w.h.look, face: w.cdir === '+x' || w.cdir === '-y' ? 1 : -1, energy: 'good', ts, seed: w.x, pose: 'bike', phase: w.phase, bikeCol: w.bikeCol }); }   // v0.25: on a bike, at the right-hand edge of the road
+        else drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: !w.moving && Math.sin(ts / 900 + w.x) > 0.7 });
         ctx.restore();
+        if (chatting(w.id)) emoji(Math.floor(ts / 700) % 2 ? '😄' : '💬', p.x + 10 * z, p.y - 64 * z, 15 * z);   // v0.25: talking with you
         if (z > 0.3) pill(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z));
         else if (z > 0.12) circle(p.x, p.y - 48 * z, Math.max(2, 3.5 * z), '#34c759', '#fff', 1);
-        if (z > 0.2) hits.push({ kind: 'lot', owner: w.id, pri: 2, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 46 * z, y1: p.y + 4 });
+        if (z > 0.2) hits.push({ kind: 'person', id: w.id, pri: 2, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 46 * z, y1: p.y + 4 });   // v0.25: talk to them
       } });
       return true;
     });
+  }
+  // v0.25: people in the park: on the benches and on the lawn, chatting; your boss or a coworker now and then
+  let PARK_PEOPLE = [], CHAT = null;   // who's in the park now; who you're talking to (and until when)
+  const chatting = id => CHAT && CHAT.until > performance.now() && (id === undefined || CHAT.id === id);
+  function parkPeople(objs, ts) {
+    const P = TL.park, dayN = Math.floor(now() / DAY), list = [];
+    const ids = allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id));
+    [[P.x + 16.4, P.y + 13.3], [P.x + 17.5, P.y + 13.2], [P.x + 7.4, P.y + 21.2], [P.x + 15.6, P.y + 7.4]].forEach(([x, y], i) => { const id = ids[(dayN * 3 + i * 7) % Math.max(1, ids.length)]; if (id) list.push({ id, look: homeOf(id).look, x, y, i }); });
+    const wp = S.job ? workPeople(S.job.place) : [];
+    if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 3 === 0) list.push({ id: wp[1].id, look: wp[1].look, x: P.x + 18.2, y: P.y + 17.5, i: 9, work: true });
+    if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 4 === 1) list.push({ id: wp[0].id, look: wp[0].look, x: P.x + 27, y: P.y + 16.4, i: 10, work: true, boss: true });
+    PARK_PEOPLE = list;
+    list.forEach(pp => objs.push({ d: pp.x + pp.y + 0.3, f: () => {
+      const z = cam.z, q = iso(pp.x, pp.y);
+      drawPerson(q.x, q.y, z, { look: pp.look, face: pp.i % 2 ? -1 : 1, view: 'front', turn: [pp.i % 2 ? -0.6 : 0.6, 1], energy: 'good', ts, seed: pp.i, pose: 'stand', wave: Math.sin(ts / 1100 + pp.i) > 0.85 });
+      if (z > 0.35) { if (pp.work) pill(pp.boss ? `💼 ${t('boss')}` : `💼 ${t('coworker')}`, q.x, q.y - 50 * z - 12, '#fff1d6', '#9a5b12', `800 ${Math.max(9, 10 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(14, 17 * z)); else if (Math.sin(ts / 1500 + pp.i) > 0.6) emoji('💬', q.x + 9 * z, q.y - 44 * z, 10 * z); }
+      if (chatting(pp.id)) emoji(Math.floor(ts / 700) % 2 ? '😄' : '💬', q.x + 10 * z, q.y - 50 * z, 15 * z);
+      hits.push({ kind: 'person', id: pp.id, work: !!pp.work, pri: 2, x0: q.x - 12 * z, x1: q.x + 12 * z, y0: q.y - 46 * z, y1: q.y + 4 });
+    } }));
   }
   // ---------- traffic lights (v0.22): at every crossing on an avenue; cars along x and along y take turns ----------
   let SIGNALS = null;
@@ -1594,7 +1617,11 @@ const Scene = (() => {
   function traffic(objs, dt, ts) {
     if (CARS_OUT.town !== VIEW_TOWN) CARS_OUT = { town: VIEW_TOWN, list: [], next: 0 };
     const now2 = performance.now(), kinds = Object.keys(CARS).filter(k => !CARS[k].excl && CARS[k].kind !== 'two' && k !== 'tractor');
-    if (now2 > CARS_OUT.next && CARS_OUT.list.length < 6) {
+    if (!CARS_OUT.list.some(c => c.police)) {   // v0.25: a police car on patrol
+      const ends = [...TL.places, ...(TL.stores || []).map(st => storeGeo(st).bay)], a = ends[Math.floor(Math.random() * ends.length)], b = ends[Math.floor(Math.random() * ends.length)];
+      if (a && b && a !== b) { const path = route(a, b, false); if (path.length > 2) CARS_OUT.list.push({ police: true, car: { k: 'sedan', color: '#24324f' }, x: path[0][0], y: path[0][1], path: path.slice(1), dir: '+x', h: 0, alpha: 0 }); }
+    }
+    if (now2 > CARS_OUT.next && CARS_OUT.list.length < 7) {
       CARS_OUT.next = now2 + 1800 + Math.random() * 2600;
       const ends = [...TL.places, ...(TL.stores || []).map(st => storeGeo(st).bay), ...allLots().filter(l => homeOf(l.id)).slice(0, 20).map(l => gateOf(l.id))];
       if (ends.length > 1) {
@@ -1606,11 +1633,20 @@ const Scene = (() => {
       let go = 6 * dt;
       if (c.path.length && !c.h && mustStop(c.x, c.y, c.path[0][0], c.path[0][1])) go = 0;   // v0.22: red light
       while (go > 0 && c.path.length) { const [tx, ty, th = 0] = c.path[0], dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy); if (d > 0.01) c.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); if (d <= go) { c.x = tx; c.y = ty; c.h = th; c.path.shift(); go -= d; } else { c.x += dx / d * go; c.y += dy / d * go; c.h += (th - c.h) * (go / d); go = 0; } }
+      if (c.police && !c.path.length) { const b = TL.places[Math.floor(Math.random() * TL.places.length)], np = b && route([c.x, c.y], b, false); if (np && np.length > 2) c.path = np.slice(1); }   // v0.25: the patrol never ends
       c.alpha = c.path.length ? Math.min(1, c.alpha + dt * 2) : c.alpha - dt * 2;
       if (c.alpha <= 0 && !c.path.length) return false;
       // keep to the right-hand side of the road
       const off = c.dir === '+x' ? [0, 0.45] : c.dir === '-x' ? [0, -0.45] : c.dir === '+y' ? [-0.45, 0] : [0.45, 0];
-      objs.push({ d: c.x + c.y + 0.6 + ((c.h || 0) > 4 ? 3 : 0), f: () => { ctx.save(); ctx.globalAlpha = Math.max(0, c.alpha); ctx.translate(0, -(c.h || 0) * cam.z); drawCarDir(c.car, c.x + off[0], c.y + off[1], c.dir, ts); ctx.restore(); } });
+      objs.push({ d: c.x + c.y + 0.6 + ((c.h || 0) > 4 ? 3 : 0), f: () => { ctx.save(); ctx.globalAlpha = Math.max(0, c.alpha); ctx.translate(0, -(c.h || 0) * cam.z); drawCarDir(c.car, c.x + off[0], c.y + off[1], c.dir, ts);
+        if (c.police) {   // a light bar on the roof, flashing red and blue
+          const z2 = cam.z, lp = up(iso(c.x + off[0], c.y + off[1]), 16 * z2), on = Math.floor(ts / 260) % 2;
+          ctx.save(); ctx.globalAlpha *= 0.35; circle(lp.x - 4 * z2, lp.y, 7 * z2, on ? '#ff4d4d' : 'rgba(0,0,0,0)'); circle(lp.x + 4 * z2, lp.y, 7 * z2, on ? 'rgba(0,0,0,0)' : '#3b7bff'); ctx.restore();
+          rrect(lp.x - 7 * z2, lp.y - 2 * z2, 14 * z2, 4 * z2, 1.4 * z2, '#2a2d33');
+          rrect(lp.x - 6.4 * z2, lp.y - 1.5 * z2, 6 * z2, 3 * z2, 1 * z2, on ? '#ff4d4d' : '#8a2020'); rrect(lp.x + 0.4 * z2, lp.y - 1.5 * z2, 6 * z2, 3 * z2, 1 * z2, on ? '#2a5fd8' : '#7ab0ff');
+          if (NIGHT > 0.3) glow(lp.x, lp.y, 22 * z2, 0.9);
+        }
+        ctx.restore(); } });
       return true;
     });
   }
@@ -1743,7 +1779,8 @@ const Scene = (() => {
   // You, standing where you are out in town.
   function drawMeOut(x, y, ts) {
     const z = cam.z, p = iso(x, y);
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand' });
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand', wave: chatting() && Math.floor(ts / 900) % 2 === 0 });
+    if (chatting()) emoji(Math.floor(ts / 700) % 2 ? '💬' : '😊', p.x - 10 * z, p.y - 50 * z, 15 * z);
     carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
   }
@@ -3312,6 +3349,27 @@ const Scene = (() => {
     travel(to, how, car, done, dest, place, pick) { if (mode !== 'town') return false; TRIP_CAR = pick === undefined ? null : pick; try { startTrip(to, how, car, done, dest, place); } finally { TRIP_CAR = null; } return true; },
     mePoint() { if (!S) return null; TL = layoutOf(myTown()); const keep = VIEW_TOWN; return S.work || S.jail || (S.out && S.out.town === myTown()) ? (VIEW_TOWN === myTown() ? mePos() : null) : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })(); },
     pingMe() { PING = performance.now(); },
+    // v0.25: walk up to someone in town (a person out walking or someone in the park), then have a chat
+    canWalkUp(id) { return mode === 'town' && VIEW_TOWN === myTown() && !S.work && !S.study && !jailed() && !!(PARK_PEOPLE.find(p => p.id === id) || (WALK.town === VIEW_TOWN && WALK.list.find(w => w.id === id))); },
+    walkUp(id, done) {
+      const pp = PARK_PEOPLE.find(p => p.id === id), w = !pp && WALK.town === VIEW_TOWN && WALK.list.find(x => x.id === id);
+      if (mode !== 'town' || (!pp && !w)) { if (done) done(); return; }
+      if (w) { w.path = []; w.stay = Math.max(w.stay || 0, 14); w.moving = false; }   // they stop for you
+      const pt = pp ? [pp.x, pp.y] : [w.x, w.y], stand = [pt[0] + 0.15, pt[1] + 1.05], from = mePos();   // just in front of them
+      const inPark = q => { const P = TL.park; return q[0] > P.x && q[0] < P.x + P.w && q[1] > P.y && q[1] < P.y + P.d; };
+      const near = Math.hypot(stand[0] - from[0], stand[1] - from[1]) < 4 || (inPark(from) && inPark(stand)), path = near ? [stand] : [...route(from, stand), stand];   // across the lawn when you're both in the park
+      const place = pp ? 'park' : (S.out && S.out.place) || null;
+      trip = { kind: 'chat', town: VIEW_TOWN, legs: [{ how: 'walk', from, path }], li: 0, how: 'walk', inCar: false, car: null, x: from[0], y: from[1], path: path.slice(), dest: null, place, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now(),
+        done: () => { CHAT = { id, until: performance.now() + 4000 }; if (w) w.stay = Math.max(w.stay, 5); if (done) done(); } };
+    },
+    parkFolk() { return mode === 'town' && VIEW_TOWN === myTown() ? PARK_PEOPLE.map(p => ({ id: p.id, work: !!p.work, boss: !!p.boss })) : []; },
+    stroll(done) {   // v0.25: a lap of the park's jogging path, then back where you started
+      if (mode !== 'town' || !TL.parkLoop) { if (done) done(); return; }
+      const loop = smoothPts(TL.parkLoop, 1.2).map(p => [p[0], p[1]]), from = mePos();
+      let k0 = 0, bd = 1e9; loop.forEach((p, i) => { const d = Math.hypot(p[0] - from[0], p[1] - from[1]); if (d < bd) { bd = d; k0 = i; } });
+      const lap = [...loop.slice(k0), ...loop.slice(0, k0), loop[k0], from];
+      trip = { kind: 'stroll', town: VIEW_TOWN, legs: [{ how: 'walk', from, path: lap }], li: 0, how: 'walk', inCar: false, car: null, x: from[0], y: from[1], path: lap.slice(), done, dest: null, place: 'park', face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now() };
+    },
     // Public places (v0.12): where each one is (where you walk to), and whether you're there now.
     placePoint(key) { TL = layoutOf(VIEW_TOWN); return placePt(key); },
     here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : S && jailed() && VIEW_TOWN === myTown() ? 'police' : trip && !trip.arrived ? null : outHere() ? S.out.place : null; },
@@ -3321,7 +3379,7 @@ const Scene = (() => {
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
     tripPlan(to, how, dest, place) { return planTrip(to, how, dest, place); },   // for testing
-    tripNow() { return trip && !trip.arrived ? { how: trip.inCar ? trip.how : 'walk', toCar: !!(trip.legs[trip.li] || {}).toCar } : null; },
+    tripNow() { return trip && !trip.arrived ? { how: trip.inCar ? trip.how : 'walk', toCar: !!(trip.legs[trip.li] || {}).toCar, kind: trip.kind || null } : null; },
     endTrip() { trip = null; },
     finishTrip() { finishTripNow(false); },
     // a trip that was still on the way when the app closed: you're there now (v0.19)
@@ -3388,7 +3446,7 @@ const Scene = (() => {
     },
     floatHouse(text) { const [fx, fy, w, d] = HOUSES[S.me.house].fp; floatLocal('me', fx + w / 2, fy + d / 2, text); },
     thumb,
-    debug: () => ({ traffic: CARS_OUT.list.map(c => [Math.round(c.x), Math.round(c.y), c.path.length]), meS: { x: meS.x, y: meS.y, path: meS.path.length }, cam: { ...cam }, W, H, mode, owner, edit, ents: ents.size, me: { x: me.x, y: me.y, lot: me.lot, jobs: me.jobs.length, cur: !!me.cur, act: me.act && me.act.pose, pose: mePose() }, meIn: { x: meIn.x, y: meIn.y, pose: meIn.act && meIn.act.pose } }),
+    debug: () => ({ traffic: CARS_OUT.list.map(c => [Math.round(c.x), Math.round(c.y), c.path.length, c.police ? 'police' : '']), walkers: WALK.list.map(w => [Math.round(w.x), Math.round(w.y), w.bike ? 'bike' : 'walk', w.path.length]), meS: { x: meS.x, y: meS.y, path: meS.path.length }, cam: { ...cam }, W, H, mode, owner, edit, ents: ents.size, me: { x: me.x, y: me.y, lot: me.lot, jobs: me.jobs.length, cur: !!me.cur, act: me.act && me.act.pose, pose: mePose() }, meIn: { x: meIn.x, y: meIn.y, pose: meIn.act && meIn.act.pose } }),
     look(z, wx, wy) { useCam(); cam.z = z; centerOn(wx, wy); fly = null; follow = false; },
     bench(n = 20) { const t0 = performance.now(); for (let i = 0; i < n; i++) render(t0 + i * 16); return +((performance.now() - t0) / n).toFixed(2); },
   };

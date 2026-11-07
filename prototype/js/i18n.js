@@ -875,14 +875,14 @@ Object.assign(STR.en, { act_trophies: 'Trophy shop' });
 
 // ---------- v0.20: what the mall's fun is for ----------
 Object.assign(STR.zh, {
-  movie_poster: '看完了！《{name}》的海报放进仓库了，可以摆在家里（家产会多一点）', cinema_use: '每看一部新电影，就得到它的海报，可以摆在家里，家产也会多一点。',
-  claw_use: '玩偶可以摆在家里，家产会多一点；6 个都抓到，再送你一只巨型泰迪熊。', claw_big: '6 个玩偶全收集齐了！送你一只巨型泰迪熊，在仓库里',
-  food_use: '吃饱了 {h} 小时：打工工资多 {p}%，走路快 {w}%。', food_full: '吃饱了 {h} 小时：打工多赚 {p}%', food_still: '现在还饱着，还有 {m}',
+  movie_poster: '看完了！《{name}》的海报放进仓库了，可以摆在家里（家产会多一点）', cinema_use: '看电影：娱乐 +{f}、社交 +{s}（心情好打工多挣）。每看一部新电影，还得到它的海报，可以摆在家里，家产也会多一点。',
+  claw_use: '每抓一次娱乐 +{c}。玩偶可以摆在家里，家产会多一点；6 个都抓到，再送你一只巨型泰迪熊。', claw_big: '6 个玩偶全收集齐了！送你一只巨型泰迪熊，在仓库里',
+  food_use: '吃东西补饱腹。吃饱了 {h} 小时：打工工资多 {p}%，走路快 {w}%。', food_full: '吃饱了 {h} 小时：打工多赚 {p}%', food_still: '现在还饱着，还有 {m}',
 });
 Object.assign(STR.en, {
-  movie_poster: 'That was fun! The {name} poster is in storage: put it up at home (it adds to your home’s worth)', cinema_use: 'Every new film you see gives you its poster for your home, which adds to your home’s worth.',
-  claw_use: 'Plush toys decorate your home and add to its worth. Win all six and you get a giant teddy too.', claw_big: 'All six plush toys! Here’s a giant teddy, it’s in storage',
-  food_use: 'Full for {h} hours: {p}% more pay at work, {w}% quicker on foot.', food_full: 'Full for {h} hours: {p}% more pay at work', food_still: 'Still full for {m}',
+  movie_poster: 'That was fun! The {name} poster is in storage: put it up at home (it adds to your home’s worth)', cinema_use: 'A film: fun +{f}, social +{s} (a good mood means more pay). Every new film also gives you its poster for your home, which adds to its worth.',
+  claw_use: 'Each go: fun +{c}. Plush toys decorate your home and add to its worth. Win all six and you get a giant teddy too.', claw_big: 'All six plush toys! Here’s a giant teddy, it’s in storage',
+  food_use: 'Eating fills your hunger. Full for {h} hours: {p}% more pay at work, {w}% quicker on foot.', food_full: 'Full for {h} hours: {p}% more pay at work', food_still: 'Still full for {m}',
 });
 
 // ---------- v0.22 ----------
@@ -929,4 +929,22 @@ Object.assign(STR.en, {
   drive_note: '{n} on the drive + {g} in the garage', drive_built: 'Your {name} is built', drive_no_room: 'That drive won’t fit: move some things first', drive_cars: 'Too many cars for that drive',
   in_garage: 'In the garage', on_drive: 'On the drive', garage_spaces: '{d} drive spaces + {g} garage spaces; you have {n} cars', no_cars: 'No cars yet',
   school_take: 'Take a class 🪙{n} ({m} min)', school_started: 'Class has started: it ends in {m} min', school_busy: 'In class for {m} more', school_in_class: 'In class for {m} more',
+});
+
+// ---------- v0.25: needs and people ----------
+Object.assign(STR.zh, {
+  needs_title: '状态', need_hunger: '饱腹', need_social: '社交', need_fun: '娱乐', mood_good: '心情好：打工工资 +{p}%', mood_note: '三条平均 70 以上心情好，打工多挣一点',
+  need_hunger_tip: '吃饭补：美食广场、咖啡馆、面包店，或在家用自己种的东西做饭', need_social_tip: '和人聊天、去朋友家、写信', need_fun_tip: '看电影、抓娃娃、在公园散步',
+  cook_btn: '在家做饭（用仓库里 2 样东西）', cook_need_kitchen: '要有厨房或灶台才能做饭', cook_need_food: '仓库里至少要有 2 样能吃的东西', cook_ok: '做了一顿饭，吃饱了',
+  snack_buy: '买点吃的 🪙{n}（饱腹 +{h}）', snack_ok: '吃了点东西',
+  chat_walk_btn: '走过去聊聊天', go_strolling: '在公园里散步…', go_to_chat: '走过去找{name}聊天…', pl_stroll_lap: '绕公园走一圈（娱乐 +{f}）', pl_park_here: '公园里的人：点「聊聊天」走过去', boss: '老板', coworker: '同事', friend: '好朋友', neighbour: '邻居', rel_level: '熟悉度 {n}', chat_btn: '聊聊天', chat_done: '今天已经聊过了', chat_go_out: '出门在外的时候才能和人聊天',
+  job_people: '一起工作的人', job_people_note: '上班时可以和他们聊天；下班在公园也可能碰到', chat_ok: '和{name}聊得很开心', chat_boss_ok: '和老板{name}聊了聊，老板对你印象更好了', chat_boss_note: '和老板聊天：工作关系 +3（升职更快）', chat_mate_note: '和同事聊天：工作关系 +1，社交也会补',
+});
+Object.assign(STR.en, {
+  needs_title: 'How you are', need_hunger: 'Hunger', need_social: 'Social', need_fun: 'Fun', mood_good: 'Good mood: +{p}% pay at work', mood_note: 'All three at 70+ on average: a good mood, a bit more pay',
+  need_hunger_tip: 'Eat: the food court, the café, the bakery, or cook at home with what you grow', need_social_tip: 'Talk to people, visit friends, write letters', need_fun_tip: 'Films, the claw machine, a stroll in the park',
+  cook_btn: 'Cook at home (2 things from your barn)', cook_need_kitchen: 'You need a kitchen or a stove to cook', cook_need_food: 'You need at least 2 things to eat in your barn', cook_ok: 'You cooked a meal: full',
+  snack_buy: 'Get a bite 🪙{n} (hunger +{h})', snack_ok: 'That hit the spot',
+  chat_walk_btn: 'Walk over and chat', go_strolling: 'Strolling round the park…', go_to_chat: 'Walking over to chat with {name}…', pl_stroll_lap: 'A lap of the park (fun +{f})', pl_park_here: 'People in the park: tap Chat to walk over', boss: 'Boss', coworker: 'Coworker', friend: 'Friend', neighbour: 'Neighbour', rel_level: 'Know them {n}', chat_btn: 'Have a chat', chat_done: 'You’ve talked today', chat_go_out: 'You can talk to people when you’re out in town',
+  job_people: 'People you work with', job_people_note: 'Talk to them at work, or bump into them in the park', chat_ok: 'A lovely chat with {name}', chat_boss_ok: 'A chat with your boss {name}: they think well of you', chat_boss_note: 'Talking to your boss: work +3 (faster promotion)', chat_mate_note: 'Talking to a coworker: work +1, and it helps your social need',
 });

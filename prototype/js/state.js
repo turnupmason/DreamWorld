@@ -1390,7 +1390,7 @@ function randomGift() {
 function sendLetter(to, text, paper, gift) {
   if (gift && !giveGift(to, gift)) return null;
   const l = { id: uid(), to, text, paper, gift: gift || null, t: now() };
-  S.mail.sent.unshift(l);
+  S.mail.sent.unshift(l); addNeed('social', NEED_GAIN.letter);   // v0.25
   if (S.mail.sent.length > 50) S.mail.sent.pop();
   return l;
 }
@@ -1549,14 +1549,14 @@ function lakeFish() {
 function parkWalk() {
   const dogs = myPets(S.me).filter(a => a.k === 'dog');
   dogs.forEach(a => { careFor(a.id, 'clean'); careFor(a.id, 'play'); });
-  placeDay().park = true;
+  placeDay().park = true; addNeed('fun', NEED_GAIN.stroll);   // v0.25
   return dogs.length;
 }
 function sendPostcard(id) {
   const P = placeDay();
   if (P.cards[id]) return 'done';
   P.cards[id] = true;
-  S.stats.postcards = (S.stats.postcards || 0) + 1;
+  S.stats.postcards = (S.stats.postcards || 0) + 1; addNeed('social', NEED_GAIN.letter);
   return 'ok';
 }
 const libCard = () => LIB_CARDS[Math.floor(now() / DAY) % LIB_CARDS.length];
@@ -1688,7 +1688,7 @@ function startShift(place) {
   if (!S.job || S.job.place !== place) return 'nojob';
   if (S.work) return 'working';
   if (!inShift(place)) return 'closed';
-  S.work = { place, start: now(), end: shiftEnd(place), wage: jobWage(place) };
+  S.work = { place, start: now(), end: shiftEnd(place), wage: jobWage(place) * (moodGood() ? 1 + NEEDS.moodPay : 1), mood: moodGood() };   // v0.25: in a good mood you work better
   return 'ok';
 }
 const hoursWorked = w => Math.max(0, (Math.min(now(), w.end) - w.start) / HOUR);
@@ -1798,7 +1798,7 @@ function wearClothes(k, h = S.me) {
 function watchMovie(k) {
   if (!MALL.movies[k]) return 'no';
   if (S.me.coins < MALL.movie) return 'poor';
-  S.me.coins -= MALL.movie;
+  S.me.coins -= MALL.movie; addNeed('fun', NEED_GAIN.movie); addNeed('social', NEED_GAIN.movieSocial);   // v0.25: a film is fun
   if (S.mall.movies.includes(k)) return 'ok';
   S.mall.movies.push(k);
   const key = 'room:poster' + k; S.me.store[key] = (S.me.store[key] || 0) + 1;   // v0.20: its poster, for your home
@@ -1806,7 +1806,7 @@ function watchMovie(k) {
 }
 function clawTry() {
   if (S.me.coins < MALL.claw) return { r: 'poor' };
-  S.me.coins -= MALL.claw;
+  S.me.coins -= MALL.claw; addNeed('fun', NEED_GAIN.claw);
   if (Math.random() >= MALL.clawWin) return { r: 'miss' };
   const all = Object.keys(MALL.plush), fresh = all.filter(k => !S.mall.plush.includes(k));
   const k = (fresh.length && Math.random() < 0.7 ? fresh : all)[Math.floor(Math.random() * (fresh.length && Math.random() < 0.7 ? fresh.length : all.length))] || all[0];
@@ -1822,6 +1822,7 @@ function eatFood(k) {
   S.me.coins -= f.price;
   if (!S.mall.foods.includes(k)) S.mall.foods.push(k);
   S.fed = { k, until: now() + MALL.fed.hours * HOUR };   // v0.20: full for a few hours
+  addNeed('hunger', FOOD_FILL[k] || 30); if (k === 'boba' || k === 'icecream') addNeed('fun', NEED_GAIN.sweetFun);   // v0.25
   return 'ok';
 }
 
@@ -2026,3 +2027,54 @@ function carSlots(h = S.me) {
   return { drive, garage };
 }
 function setTint(scope, id, col) { const it = findItem(scope, id); if (!it || !it.tint) return false; it.tint = col; return true; }
+
+// ---------- needs (v0.25) ----------
+function needs() {
+  S.needs = S.needs || { hunger: 80, social: 70, fun: 70, at: now() };
+  const n = S.needs, dt = (now() - n.at) / HOUR;
+  if (dt > 0.005) { ['hunger', 'social', 'fun'].forEach(k => { n[k] = Math.max(NEEDS.floor, n[k] - dt * 100 / NEEDS[k].hours); }); n.at = now(); }
+  return n;
+}
+function addNeed(k, v) { const n = needs(); n[k] = Math.max(0, Math.min(100, n[k] + v)); return n[k]; }
+const moodScore = () => { const n = needs(); return Math.round((n.hunger + n.social + n.fun) / 3); };
+const moodGood = () => moodScore() >= NEEDS.goodMood;
+// a bite at the café / bakery
+function buySnack() { if (S.me.coins < SNACK.price) return 'poor'; S.me.coins -= SNACK.price; addNeed('hunger', FOOD_FILL.snack); addNeed('social', NEED_GAIN.snackSocial); return 'ok'; }
+// cooking at home: two things from your barn (crops, eggs, milk, fruit...) and a kitchen or a stove
+function canCook(h = S.me) { return hasFurn(h, 'kitchen') || hasFurn(h, 'stove'); }
+function cookMeal(h = S.me) {
+  if (!canCook(h)) return 'nokitchen';
+  const food = Object.keys(h.barn).filter(k => h.barn[k] > 0 && !k.startsWith('baby_') && (CROPS[k] || GOODS[k]));
+  const total = food.reduce((t, k) => t + h.barn[k], 0);
+  if (total < 2) return 'noingredients';
+  let need = 2; for (const k of food) { while (need > 0 && h.barn[k] > 0) { h.barn[k]--; need--; } if (!h.barn[k]) delete h.barn[k]; }
+  addNeed('hunger', FOOD_FILL.cook); addNeed('fun', NEED_GAIN.cookFun);
+  return 'ok';
+}
+// people: a chat (once a day each) helps your social need and how well you know them
+function chatWith(id) {
+  S.rel = S.rel || {}; S.chatDay = S.chatDay || {};
+  const k = id + '@' + today();
+  if (S.chatDay[k]) return 'done';
+  for (const key in S.chatDay) if (!key.endsWith('@' + today())) delete S.chatDay[key];
+  S.chatDay[k] = 1; S.rel[id] = Math.min(100, (S.rel[id] || 0) + 5);
+  addNeed('social', NEED_GAIN.chat);
+  return 'ok';
+}
+function visitSocial(id) { S.chatDay = S.chatDay || {}; const k = 'visit_' + id + '@' + today(); if (S.chatDay[k]) return; S.chatDay[k] = 1; addNeed('social', NEED_GAIN.visit); }
+// your boss and two coworkers (made up from where you work, the same people every day)
+function workPeople(place) {
+  if (!place) return [];
+  let n = 7; for (const ch of place) n = (n * 31 + ch.charCodeAt(0)) % 99991;
+  const r = () => { n = (n * 16807) % 2147483647; return (n % 1000) / 1000; }, pick = a => a[Math.floor(r() * a.length)];
+  return [0, 1, 2].map(i => ({ id: 'work_' + place + '_' + i, boss: i === 0, name: i === 0 ? BOSS_NAMES[n % BOSS_NAMES.length] : MATE_NAMES[(n + i * 3) % MATE_NAMES.length], look: dressUp({ shirt: pick(COLORS), skin: pick(SKINS), hair: pick(HAIRS), hairCol: pick(HAIR_COLORS), mob: 'walk' }, place + i) }));
+}
+function chatWork(id) {
+  const p = S.job && workPeople(S.job.place).find(x => x.id === id);
+  if (!p) return 'no';
+  const r = chatWith(id);
+  if (r !== 'ok') return r;
+  if (p.boss) { S.job.rel = Math.min(JOB_REL.max, S.job.rel + 3); addNeed('social', NEED_GAIN.boss - NEED_GAIN.chat); }
+  else { S.job.rel = Math.min(JOB_REL.max, S.job.rel + 1); addNeed('social', NEED_GAIN.mate - NEED_GAIN.chat); }
+  return 'ok';
+}

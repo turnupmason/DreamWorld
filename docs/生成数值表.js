@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -147,6 +147,14 @@ P('## 买东西带回家（v0.20）');
 P('');
 table(['项目', '数值'], [['拿在手上', `每件 ≤ ${D.BIG_VOL}，一共 ≤ ${D.HANDS_VOL}（1×1 家具 = 10，种子 10 包 = 1）`], ['后备箱', '按车的载货量'], ['送货上门', `账单 ${D.DELIVERY.fee * 100}%，至少 🪙${D.DELIVERY.min}，约 ${D.DELIVERY.minutes} 分钟`],
   ['吃饱', `${D.MALL.fed.hours} 小时：打工 +${D.MALL.fed.pay * 100}%，走路快 ${D.MALL.fed.walk * 100}%`], ['电影海报 / 玩偶 / 巨型泰迪熊', '家产 +60 / +40 / +300']]);
+P('## 状态：饱腹、社交、娱乐（v0.25）');
+P('');
+P(`精力还是来自现实睡眠。另外三条随真实时间慢慢下降，最低停在 ${D.NEEDS.floor}，不会扣任何东西；三条平均 ${D.NEEDS.goodMood} 以上「心情好」，打工工资 +${D.NEEDS.moodPay * 100}%。`);
+P('');
+table(['状态', '从 100 降到 0 大约', '怎么补'], [['🍔 饱腹', `${D.NEEDS.hunger.hours} 小时`, `美食广场 +${D.FOOD_FILL.boba}～+${D.FOOD_FILL.pizza}，咖啡馆 / 面包店买吃的 🪙${D.SNACK.price} +${D.FOOD_FILL.snack}，在家做饭（灶台或厨房 + 仓库 2 样东西）+${D.FOOD_FILL.cook}`],
+  ['💬 社交', `${D.NEEDS.social.hours} 小时`, `聊天 +${D.NEED_GAIN.chat}（每人每天一次），和老板 +${D.NEED_GAIN.boss}、同事 +${D.NEED_GAIN.mate}，去朋友家 +${D.NEED_GAIN.visit}，写信 / 明信片 +${D.NEED_GAIN.letter}，看电影 +${D.NEED_GAIN.movieSocial}`],
+  ['🎉 娱乐', `${D.NEEDS.fun.hours} 小时`, `看电影 +${D.NEED_GAIN.movie}，绕公园走一圈 +${D.NEED_GAIN.stroll}，抓娃娃 +${D.NEED_GAIN.claw}，奶茶 / 冰淇淋 +${D.NEED_GAIN.sweetFun}，做饭 +${D.NEED_GAIN.cookFun}`]]);
+table(['聊天对象', '工作关系'], [['老板', '+3（升职更快）'], ['同事', '+1'], ['邻居 / 朋友', '熟悉度 +5']]);
 P('## 车道（v0.24）');
 P('');
 table(['车道', '大小', '停几辆', '价格'], Object.values(D.DRIVES).map(d => [d.zh, `${d.w} × ${d.d}`, d.cap, d.cost ? `🪙${d.cost}` : '免费']));
