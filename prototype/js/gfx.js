@@ -98,13 +98,61 @@ function flatRect(x, y, w, d, fill, stroke, h = 0, lw) {
 }
 // Box over a footprint. Returns its two visible faces as [left point, right point] on the ground,
 // for putting windows and doors on with wallRect().
+// v0.21: materials. Every solid gets light falling from above (a little lighter at the top of each wall, darker
+// at the bottom), a soft dark band where it meets the ground, a bright edge where the light catches it, a faint
+// grain so surfaces aren't flat plastic, and a soft shadow on the ground. Only close up (cheap when far away).
+const isHex = c => typeof c === 'string' && c[0] === '#';
+function vgrad(pts, col, kTop, kBot) {
+  if (!isHex(col)) return col;
+  const ys = pts.map(p => p.y), top = Math.min(...ys), bot = Math.max(...ys);
+  if (bot - top < 2) return col;
+  const g = ctx.createLinearGradient(0, top, 0, bot); g.addColorStop(0, shade(col, kTop)); g.addColorStop(1, shade(col, kBot)); return g;
+}
+let GRAIN = null;
+function grainPattern() {
+  if (GRAIN !== null) return GRAIN;
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 96;
+    const g = c.getContext('2d'), im = g.createImageData(96, 96);
+    for (let i = 0; i < im.data.length; i += 4) { const v = 110 + Math.random() * 145; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+    g.putImageData(im, 0, 0); GRAIN = g.createPattern(c, 'repeat');
+  } catch (e) { GRAIN = false; }
+  return GRAIN;
+}
+function grain(pts, a = 0.07) { const pat = grainPattern(); if (!pat) return; ctx.save(); ctx.globalAlpha = a; ctx.globalCompositeOperation = 'multiply'; poly(pts, pat); ctx.restore(); }
+// darker where a wall meets the ground (k px tall)
+function groundAO(pts, k) {
+  const bot = Math.max(pts[0].y, pts[1].y), g = ctx.createLinearGradient(0, bot - k, 0, bot);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.16)'); poly(pts, g);
+}
+// a soft shadow on the ground round a footprint, falling away from the light (towards -x)
+function softShadow(x, y, w, d, h) {
+  const z = cam.z, L = Math.min(1.4, h / 45), pts = (e, sx) => [iso(x - e - sx, y - e + sx * 0.25), iso(x + w + e - sx * 0.3, y - e + sx * 0.25), iso(x + w + e - sx * 0.3, y + d + e), iso(x - e - sx, y + d + e)].map(p => ({ x: p.x, y: p.y + 1 * z }));
+  poly(pts(0.22, L), 'rgba(40,30,20,.05)'); poly(pts(0.12, L * 0.8), 'rgba(40,30,20,.06)'); poly(pts(0.04, L * 0.55), 'rgba(40,30,20,.07)');
+}
 function box(x, y, w, d, h, col, base = 0, o = {}) {
   const z = cam.z, hb = base * z, hh = (base + h) * z;
   const A = iso(x, y), B = iso(x + w, y), C = iso(x + w, y + d), D = iso(x, y + d);
-  const edge = o.edge === undefined ? 'rgba(0,0,0,.07)' : o.edge;
-  poly([up(D, hb), up(C, hb), up(C, hh), up(D, hh)], o.left || shade(col, -0.16), edge);
-  poly([up(C, hb), up(B, hb), up(B, hh), up(C, hh)], o.right || shade(col, -0.04), edge);
-  if (!o.noTop) poly([up(A, hh), up(B, hh), up(C, hh), up(D, hh)], o.top || shade(col, 0.1), edge);
+  const edge = o.edge === undefined ? 'rgba(0,0,0,.07)' : o.edge, fine = z >= 0.32 && h * z > 2.5 && !o.flat;
+  if (fine && !base && o.shadow !== false && h >= 5) softShadow(x, y, w, d, h);
+  const Lf = [up(D, hb), up(C, hb), up(C, hh), up(D, hh)], Rf = [up(C, hb), up(B, hb), up(B, hh), up(C, hh)];
+  const lc = o.left || shade(col, -0.16), rc = o.right || shade(col, -0.04);
+  poly(Lf, fine ? vgrad(Lf, lc, 0.05, -0.07) : lc, edge);
+  poly(Rf, fine ? vgrad(Rf, rc, 0.06, -0.05) : rc, edge);
+  if (fine) {
+    if (isHex(lc)) grain(Lf); if (isHex(rc)) grain(Rf);
+    if (!base && h * z > 6) { const k = Math.min(9, h * 0.25) * z; groundAO(Lf, k); groundAO(Rf, k); }
+  }
+  if (!o.noTop) {
+    const T = [up(A, hh), up(B, hh), up(C, hh), up(D, hh)], tc = o.top || shade(col, 0.1);
+    poly(T, fine && isHex(tc) ? (() => { const g = ctx.createLinearGradient(T[0].x, T[0].y, T[2].x, T[2].y); g.addColorStop(0, shade(tc, 0.05)); g.addColorStop(1, shade(tc, -0.03)); return g; })() : tc, edge);
+    if (fine && isHex(tc)) grain(T, 0.05);
+  }
+  if (fine && o.shine !== false) {   // the light catches the near edges
+    const hl = 'rgba(255,255,255,.32)';
+    line(up(D, hh).x, up(D, hh).y, up(C, hh).x, up(C, hh).y, hl, 0.9 * z); line(up(C, hh).x, up(C, hh).y, up(B, hh).x, up(B, hh).y, 'rgba(255,255,255,.42)', 0.9 * z);
+    line(up(C, hb).x, up(C, hb).y, up(C, hh).x, up(C, hh).y, 'rgba(255,255,255,.2)', 0.8 * z);
+  }
   return { left: [D, C], right: [C, B], A, B, C, D, base, h };
 }
 // Rectangle on a wall face. u runs 0..1 along the face, h0/h1 are heights in unscaled px.
@@ -117,7 +165,33 @@ function wallLine(face, base, u0, h0, u1, h1, col, w) {
   line(a.x, a.y, b.x, b.y, col, w * z);
 }
 function wallPt(face, base, u, h) { return up(lerp(face[0], face[1], u), (base + h) * cam.z); }
+// v0.21: writing on a wall, sloping with it
+function wallText(face, u, h, text, size, col) {
+  const p = wallPt(face, 0, u, h), [a, b] = face, k = (b.y - a.y) / ((b.x - a.x) || 1);
+  ctx.save(); ctx.translate(p.x, p.y); ctx.transform(1, k, 0, 1, 0, 0);
+  ctx.font = `800 ${size}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = col; ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
 
+// v0.21: a roof slope that faces you: lighter near the ridge, rows of tiles, a faint grain.
+// pts = [eave start, eave end, ridge end, ridge start].
+function roofPlane(pts, col, z) {
+  if (z < 0.32 || !isHex(col)) { poly(pts, col, 'rgba(0,0,0,.1)'); return; }
+  const [E0, E1, R1, R0] = pts, g = ctx.createLinearGradient(mid(R0, R1).x, mid(R0, R1).y, mid(E0, E1).x, mid(E0, E1).y);
+  g.addColorStop(0, shade(col, 0.1)); g.addColorStop(1, shade(col, -0.08));
+  poly(pts, g, 'rgba(0,0,0,.1)');
+  ctx.save(); ctx.beginPath(); ctx.moveTo(E0.x, E0.y); pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.clip();
+  const rows = z > 0.8 ? 7 : 4;
+  for (let i = 1; i < rows; i++) { const u = i / rows, a = lerp(E0, R0, u), b = lerp(E1, R1, u); line(a.x, a.y, b.x, b.y, shade(col, -0.13), 1 * z); }
+  if (z > 0.8) for (let i = 0; i < rows; i++) for (let j = 1; j < 14; j++) {   // staggered tile joints
+    const u0 = i / rows, u1 = (i + 1) / rows, v = (j + (i % 2) * 0.5) / 14, a = lerp(lerp(E0, E1, v), lerp(R0, R1, v), u0), b = lerp(lerp(E0, E1, v), lerp(R0, R1, v), u1);
+    line(a.x, a.y, b.x, b.y, shade(col, -0.08), 0.6 * z);
+  }
+  ctx.restore();
+  grain(pts, 0.06);
+}
+// The dark line under the edge of a roof, on the wall below it.
+function eaveShadow(a, b, z) { if (z < 0.32) return; line(a.x, a.y + 2 * z, b.x, b.y + 2 * z, 'rgba(0,0,0,.16)', 3 * z); }
 // Gable roof, ridge along x (gable end shows on the right). between() draws things like a chimney
 // after the back slope but before the front slope, so the roof hides the chimney's base.
 function gableX(x, y, w, d, baseH, roofH, roofCol, endCol, between) {
@@ -126,13 +200,10 @@ function gableX(x, y, w, d, baseH, roofH, roofCol, endCol, between) {
   const R1 = up(mid(Au, Du), rh), R2 = up(mid(Bu, Cu), rh);
   poly([Au, Bu, R2, R1], shade(roofCol, -0.3));
   if (between) between();
-  poly([Du, Cu, R2, R1], roofCol, 'rgba(0,0,0,.1)');
-  ctx.save();
-  ctx.beginPath(); ctx.moveTo(Du.x, Du.y); ctx.lineTo(Cu.x, Cu.y); ctx.lineTo(R2.x, R2.y); ctx.lineTo(R1.x, R1.y); ctx.closePath(); ctx.clip();
-  for (const u of [0.25, 0.5, 0.75]) { const a = lerp(Du, R1, u), b = lerp(Cu, R2, u); line(a.x, a.y, b.x, b.y, shade(roofCol, -0.12), 1.2 * z); }
-  ctx.restore();
-  poly([Cu, Bu, R2], endCol, 'rgba(0,0,0,.08)');
+  roofPlane([Du, Cu, R2, R1], roofCol, z);
+  poly([Cu, Bu, R2], z >= 0.32 ? vgrad([Cu, Bu, R2], endCol, 0.04, -0.06) : endCol, 'rgba(0,0,0,.08)');
   line(R1.x, R1.y, R2.x, R2.y, shade(roofCol, 0.3), 1.6 * z);
+  eaveShadow(Du, Cu, z);
   return { Bu, Cu, R1, R2, Du };
 }
 // Gable roof, ridge along y (gable end faces the road, bottom left).
@@ -141,9 +212,10 @@ function gableY(x, y, w, d, baseH, roofH, roofCol, endCol) {
   const Au = up(iso(x, y), bh), Bu = up(iso(x + w, y), bh), Cu = up(iso(x + w, y + d), bh), Du = up(iso(x, y + d), bh);
   const R1 = up(mid(Au, Bu), rh), R2 = up(mid(Du, Cu), rh);
   poly([Au, Du, R2, R1], shade(roofCol, -0.3));
-  poly([Bu, Cu, R2, R1], roofCol, 'rgba(0,0,0,.1)');
-  poly([Du, Cu, R2], endCol, 'rgba(0,0,0,.08)');
+  roofPlane([Cu, Bu, R1, R2], roofCol, z);
+  poly([Du, Cu, R2], z >= 0.32 ? vgrad([Du, Cu, R2], endCol, 0.04, -0.06) : endCol, 'rgba(0,0,0,.08)');
   line(R1.x, R1.y, R2.x, R2.y, shade(roofCol, 0.3), 1.6 * z);
+  eaveShadow(Cu, Bu, z);
   return { Du, Cu, R1, R2 };
 }
 function pyramid(x, y, w, d, base, rh, col) {
@@ -161,10 +233,11 @@ function hipRoof(x, y, w, d, base, rh, col) {
   const Au = up(iso(x, y), bh), Bu = up(iso(x + w, y), bh), Cu = up(iso(x + w, y + d), bh), Du = up(iso(x, y + d), bh);
   const R1 = up(iso(x + d / 2, y + d / 2), (base + rh) * z), R2 = up(iso(x + w - d / 2, y + d / 2), (base + rh) * z);
   poly([Au, Bu, R2, R1], shade(col, -0.3));
-  poly([Du, Cu, R2, R1], col, 'rgba(0,0,0,.08)');
+  roofPlane([Du, Cu, R2, R1], col, z);
   poly([Cu, Bu, R2], shade(col, -0.18), 'rgba(0,0,0,.08)');
   poly([Au, Du, R1], shade(col, -0.05));
   line(R1.x, R1.y, R2.x, R2.y, shade(col, 0.3), 1.4 * z);
+  eaveShadow(Du, Cu, z); eaveShadow(Cu, Bu, z);
 }
 
 // ---------- soft things and round things ----------

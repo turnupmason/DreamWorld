@@ -543,7 +543,7 @@ const Scene = (() => {
     const key = `${h.house}|${h.wall}|${h.roof}|${ex}|${zb}|${nb}`;
     let s = HOUSE_SPR.get(key);
     if (!s) {
-      const dpr = Math.min(2, window.devicePixelRatio || 1), topPx = (HOUSE_H[H.id] || 120) + ex * 40 + 50;
+      const dpr = Math.min(2, window.devicePixelRatio || 1), topPx = (HOUSE_H[H.id] || (H.spec ? specHouseH(H) : 120)) + ex * 40 + 50;
       const wpx = (w + d + 2) * 32 * zq, hpx = ((w + d + 2) * 16 + topPx) * zq;
       const c = document.createElement('canvas');
       c.width = Math.max(1, Math.ceil(wpx * dpr)); c.height = Math.max(1, Math.ceil(hpx * dpr));
@@ -1151,6 +1151,7 @@ const Scene = (() => {
     if (meInLake()) { const [ox, oy] = origin(me.lot); objs.push({ d: ox + oy + me.x + me.y, f: () => drawMe(ox, oy, ts, false) }); }
     // people who are online right now, out walking: to the square, the park, the lake, and home again
     if (z > 0.055) walkers(objs, dt, ts);
+    if (z > 0.07 && mode === 'town') traffic(objs, dt, ts);   // v0.21
     if (mode === 'town') liveTownObjs(objs, dt, ts);
     if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
     else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = S.out.pt; objs.push({ d: mx + my + 0.6, f: () => drawMeOut(mx, my, ts) }); }
@@ -1535,6 +1536,30 @@ const Scene = (() => {
       return true;
     });
   }
+  // ---------- traffic (v0.21): other people's cars driving between the places in town ----------
+  let CARS_OUT = { town: null, list: [], next: 0 };
+  function traffic(objs, dt, ts) {
+    if (CARS_OUT.town !== VIEW_TOWN) CARS_OUT = { town: VIEW_TOWN, list: [], next: 0 };
+    const now2 = performance.now(), kinds = Object.keys(CARS).filter(k => !CARS[k].excl && CARS[k].kind !== 'two' && k !== 'tractor');
+    if (now2 > CARS_OUT.next && CARS_OUT.list.length < 6) {
+      CARS_OUT.next = now2 + 1800 + Math.random() * 2600;
+      const ends = [...TL.places, ...(TL.stores || []).map(st => storeGeo(st).bay), ...allLots().filter(l => homeOf(l.id)).slice(0, 20).map(l => gateOf(l.id))];
+      if (ends.length > 1) {
+        const a = ends[Math.floor(Math.random() * ends.length)], b = ends[Math.floor(Math.random() * ends.length)];
+        if (a !== b) { const path = route(a, b, false); if (path.length > 2) CARS_OUT.list.push({ car: { k: kinds[Math.floor(Math.random() * kinds.length)], color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)] }, x: path[0][0], y: path[0][1], path: path.slice(1), dir: '+x', h: 0, alpha: 0 }); }
+      }
+    }
+    CARS_OUT.list = CARS_OUT.list.filter(c => {
+      let go = 6 * dt;
+      while (go > 0 && c.path.length) { const [tx, ty, th = 0] = c.path[0], dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy); if (d > 0.01) c.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); if (d <= go) { c.x = tx; c.y = ty; c.h = th; c.path.shift(); go -= d; } else { c.x += dx / d * go; c.y += dy / d * go; c.h += (th - c.h) * (go / d); go = 0; } }
+      c.alpha = c.path.length ? Math.min(1, c.alpha + dt * 2) : c.alpha - dt * 2;
+      if (c.alpha <= 0 && !c.path.length) return false;
+      // keep to the right-hand side of the road
+      const off = c.dir === '+x' ? [0, 0.45] : c.dir === '-x' ? [0, -0.45] : c.dir === '+y' ? [-0.45, 0] : [0.45, 0];
+      objs.push({ d: c.x + c.y + 0.6 + ((c.h || 0) > 4 ? 3 : 0), f: () => { ctx.save(); ctx.globalAlpha = Math.max(0, c.alpha); ctx.translate(0, -(c.h || 0) * cam.z); drawCarDir(c.car, c.x + off[0], c.y + off[1], c.dir, ts); ctx.restore(); } });
+      return true;
+    });
+  }
   // ---------- going somewhere in town (v0.12; v0.19: from where you are, and by car from where it's parked) ----------
   // Where you are is kept in S.out (null = at home) and where your car is in S.carAt (null = in your drive). A trip is a
   // few legs: walk to your car if it isn't with you, drive along the roads to the car park of where you're going and
@@ -1723,6 +1748,30 @@ const Scene = (() => {
     }
     meS.phase += dt * 11;
   }
+  // v0.21: a path along the aisles (half-tile cells) from a to b, or null
+  function shopPath(P, a, b) {
+    const { g, gw, gd, GS } = P.nav, cell = (x, y) => [clamp(Math.floor(x / GS), 0, gw - 1), clamp(Math.floor(y / GS), 0, gd - 1)], free = (i, j) => i >= 0 && j >= 0 && i < gw && j < gd && g[j * gw + i];
+    const [si, sj] = cell(a[0], a[1]), [ti, tj] = cell(b[0], b[1]);
+    if (!free(ti, tj)) return null;
+    const prev = new Int32Array(gw * gd).fill(-1), seen = new Uint8Array(gw * gd), q = [sj * gw + si]; seen[sj * gw + si] = 1;
+    for (let h2 = 0; h2 < q.length; h2++) { const cc = q[h2], i = cc % gw, j = (cc - i) / gw; if (i === ti && j === tj) break; [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([di, dj]) => { const ni = i + di, nj = j + dj, nn = nj * gw + ni; if (free(ni, nj) && !seen[nn]) { seen[nn] = 1; prev[nn] = cc; q.push(nn); } }); }
+    if (!seen[tj * gw + ti]) return null;
+    const out = []; for (let cc = tj * gw + ti; cc >= 0 && cc !== sj * gw + si; cc = prev[cc]) out.unshift([(cc % gw + 0.5) * GS, (Math.floor(cc / gw) + 0.5) * GS]);
+    return out;
+  }
+  // other people shopping: they wander from one thing to another, stop and look, and wander on
+  function shoppers(P, objs, dt, ts) {
+    if (!P.npcs) {
+      const ids = allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id)).slice(0, 12);
+      P.npcs = [0, 1, 2].map(i => { const id = ids[(i * 5 + P.n) % Math.max(1, ids.length)], h = id && homeOf(id); return { look: h ? h.look : dressUp({ shirt: COLORS[i], skin: SKINS[i % SKINS.length], hair: HAIRS[i % HAIRS.length], hairCol: HAIR_COLORS[i], mob: 'walk' }, 'shop' + i), x: 2 + i * 3, y: P.RD - 2, path: [], wait: 1 + i * 2, face: 1, phase: 0 }; });
+    }
+    P.npcs.forEach((n, i) => {
+      if (n.wait > 0) { n.wait -= dt; n.moving = false; if (n.wait <= 0 && P.wares.length) { const w = P.wares[Math.floor(Math.random() * P.wares.length)]; n.path = shopPath(P, [n.x, n.y], [w.x + w.w / 2, w.y + w.d + 0.55]) || []; n.look2 = w; } }
+      else if (n.path.length) { let go = 2.2 * dt; while (go > 0 && n.path.length) { const [tx, ty] = n.path[0], dx = tx - n.x, dy = ty - n.y, d = Math.hypot(dx, dy); if (d > 0.01) faceTo(n, dx, dy); if (d <= go) { n.x = tx; n.y = ty; n.path.shift(); go -= d; } else { n.x += dx / d * go; n.y += dy / d * go; go = 0; } } n.phase += dt * 10; n.moving = true; if (!n.path.length) { n.wait = 3 + Math.random() * 5; n.view = 'back'; n.turn = [0, -1]; } }
+      else n.wait = 1;
+      objs.push({ d: n.x + n.y + 0.3, f: () => { const p2 = iso(n.x, n.y); drawPerson(p2.x, p2.y, cam.z, { look: n.look, face: n.face, back: n.back && n.moving, view: n.moving ? n.view : 'back', turn: n.moving ? n.turn : [-0.3, -1], moving: n.moving, phase: n.phase, energy: 'good', ts, seed: i + 7, pose: n.moving ? 'walk' : 'stand' }); } });
+    });
+  }
   // A picture (made by thumb) drawn on the canvas, once it has loaded.
   function pic(kind, k, o, w, h, sx, sy, sw, sh) {
     const url = thumb(kind, k, o, w, h), im = IMGS[url] || (IMGS[url] = Object.assign(new Image(), { src: url }));
@@ -1738,18 +1787,36 @@ const Scene = (() => {
     else if (w.kind === 'animal') {
       flatRect(x, y, w.w, w.d, '#cfe3a6');
       [[x, y, x + w.w, y], [x, y, x, y + w.d], [x + w.w, y, x + w.w, y + w.d], [x, y + w.d, x + w.w, y + w.d]].forEach(([a, b, c2, d2]) => { const A = iso(a, b), B2 = iso(c2, d2); line(A.x, A.y - 7 * z, B2.x, B2.y - 7 * z, '#a8835c', 1.4 * z); [A, B2].forEach(P2 => line(P2.x, P2.y, P2.x, P2.y - 8 * z, '#8a6a4a', 1.4 * z)); });
-      drawAnimal(w.k, 0, c.x, c.y + 6 * z, z * 1.9, { face: 1, ts, seed: x });
+      { const u = Math.sin(ts / 1700 + x * 3), mv = Math.abs(Math.cos(ts / 1700 + x * 3)) > 0.35, a = iso(x + w.w / 2 + u * 0.45, y + w.d / 2 + u * 0.2); drawAnimal(w.k, 0, a.x, a.y + 6 * z, z * 1.9, { face: Math.cos(ts / 1700 + x * 3) > 0 ? 1 : -1, ts, seed: x, moving: mv, phase: ts / 120 }); }
     }
-    else if (w.kind === 'pet') { flatRect(x, y, w.w, w.d, '#f4e6c8'); const B = PET_BREEDS[w.k]; drawAnimal(B.kind, 0, c.x, c.y + 5 * z, z * 1.7, { face: 1, ts, seed: x, breed: w.k }); }
+    else if (w.kind === 'pet') { flatRect(x, y, w.w, w.d, '#f4e6c8'); const B = PET_BREEDS[w.k]; const u = Math.sin(ts / 1300 + x * 2), a = iso(x + w.w / 2 + u * 0.25, y + w.d / 2); drawAnimal(B.kind, 0, a.x, a.y + 5 * z, z * 1.7, { face: Math.cos(ts / 1300 + x * 2) > 0 ? 1 : -1, ts, seed: x, breed: w.k, moving: Math.abs(Math.cos(ts / 1300 + x * 2)) > 0.4, phase: ts / 110, mood: 'happy' }); }
     else if (w.kind === 'petfood' || w.kind === 'seed') {
       const b = box(x + 0.1, y + 0.2, w.w - 0.2, w.d - 0.4, 20, '#c99a6b', 0, { top: '#e6c79a' });
       const e = w.kind === 'seed' ? CROPS[w.k].e : PET_FOOD[w.k].e;
       [0.25, 0.5, 0.75].forEach((u, i) => { const p2 = wallPt(b.left, 0, u, 8 + (i % 2) * 6); emoji(e, p2.x, p2.y, 9 * z); });
       const tp = iso(x + 0.5, y + 0.5); emoji(e, tp.x, tp.y - 26 * z, 12 * z);
     }
-    else if (w.kind === 'car') { ellipse(c.x, c.y + 2 * z, 40 * z, 20 * z, '#d5dbe2'); drawCarDir({ k: w.k, color: CARS[w.k].look || CAR_COLORS[0] }, x + w.w / 2, y + w.d / 2, '+y', ts); }
-    else if (w.kind === 'house') { const b = box(x + 0.2, y + 0.6, w.w - 0.4, 0.4, 14, '#c99a6b', 0, { top: '#e6c79a' }); pic('house', +w.k, {}, 120, 96, c.x - 34 * z, c.y - 66 * z, 68 * z, 54 * z); }
-    else if (w.kind === 'land') { line(c.x, c.y, c.x, c.y - 26 * z, '#8a6a4a', 2 * z); rrect(c.x - 20 * z, c.y - 44 * z, 40 * z, 22 * z, 3 * z, '#fffaf0', '#c99a6b', 1.2 * z); emoji({ field: '🟫', pasture: '🐄', orchard: '🌳', pond: '🐟', garage: '🚗' }[w.k], c.x, c.y - 33 * z, 13 * z); }
+    else if (w.kind === 'car') {   // on a turntable that slowly turns, under a spotlight
+      ellipse(c.x, c.y + 3 * z, 44 * z, 22 * z, '#b9c1ca'); ellipse(c.x, c.y + 1 * z, 42 * z, 21 * z, '#dfe5eb'); ellipse(c.x, c.y + 1 * z, 34 * z, 17 * z, `rgba(255,255,255,${0.35 + 0.2 * Math.sin(ts / 800 + x)})`);
+      const dirs = ['+y', '+x', '-y', '-x'], dir = dirs[Math.floor(ts / 2600 + x * 0.7) % 4];
+      drawCarDir({ k: w.k, color: CARS[w.k].look || CAR_COLORS[0] }, x + w.w / 2, y + w.d / 2, dir, ts);
+    }
+    else if (w.kind === 'house') {   // v0.21: a real little model of the house on a round stand, its lights coming on and off
+      const i = +w.k, H = HOUSES[i], [fx, fy, fw, fd] = H.fp, sc = 0.3, cx = x + w.w / 2, cy = y + w.d / 2;
+      ellipse(c.x, c.y + 3 * z, 50 * z, 25 * z, 'rgba(0,0,0,.12)'); ellipse(c.x, c.y, 48 * z, 24 * z, '#d8cfc2'); ellipse(c.x, c.y - 3 * z, 46 * z, 23 * z, '#f6f1e8');
+      const glowA = 0.25 + 0.15 * Math.sin(ts / 900 + i); ellipse(c.x, c.y - 3 * z, 40 * z, 20 * z, `rgba(255,236,170,${glowA})`);
+      const savedN = NIGHT, savedG = GLOWS; NIGHT = Math.sin(ts / 1400 + i * 1.7) > 0.2 ? 0.4 : 0; GLOWS = [];
+      ctx.save(); ctx.translate(c.x, c.y - 4 * z); ctx.scale(sc, sc); ctx.translate(-c.x, -(c.y - 4 * z));
+      try { drawHouse({ house: i, wall: WALL_COLORS[(i * 3) % WALL_COLORS.length], roof: ROOF_COLORS[(i * 2 + 1) % ROOF_COLORS.length], extra: {} }, cx - fx - fw / 2, cy - fy - fd / 2, ts); } catch (e) { /* a model that can't draw stays empty */ }
+      ctx.restore(); NIGHT = savedN; GLOWS = savedG;
+    }
+    else if (w.kind === 'land') {   // v0.21: a big plan board on two legs, a picture and the name, centred
+      [-16, 16].forEach(k => line(c.x + k * z, c.y + 2 * z, c.x + k * z, c.y - 30 * z, '#6b4428', 2.2 * z));
+      rrect(c.x - 30 * z, c.y - 66 * z, 60 * z, 40 * z, 4 * z, '#fffaf0', '#b07a4a', 1.6 * z);
+      rrect(c.x - 26 * z, c.y - 62 * z, 52 * z, 22 * z, 3 * z, { field: '#c99a6b', pasture: '#b8dd8c', orchard: '#9fd07a', pond: '#8fc9ea', garage: '#cfd5dc' }[w.k] || '#eee');
+      emoji({ field: '🌱', pasture: '🐄', orchard: '🌳', pond: '🐟', garage: '🚗' }[w.k], c.x, c.y - 41 * z, 17 * z);
+      if (z > 0.45) { ctx.font = `800 ${9 * z}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#5b4632'; ctx.fillText(t('land_' + w.k), c.x, c.y - 32.5 * z); }
+    }
     else if (w.kind === 'clothes') { ellipse(c.x, c.y, 12 * z, 6 * z, '#d8cfc2'); const C2 = CLOTHES[w.k]; drawPerson(c.x, c.y, z * 0.95, { look: { ...MANNEQUIN, [C2.slot]: w.k }, face: 1, view: 'front', turn: [0.4, 1], energy: 'good', ts: 0, seed: 0, pose: 'stand' }); }
     else if (w.kind === 'excl') {
       box(x + 0.1, y + 0.1, w.w - 0.2, w.d - 0.2, 12, '#e9e2d4', 0, { top: '#f6f1e8' });
@@ -1759,9 +1826,9 @@ const Scene = (() => {
       poly([g0, g1, up(g1, 30 * z), up(g0, 30 * z)], 'rgba(200,230,250,.25)', 'rgba(255,255,255,.6)', 1);
     }
     else if (w.kind === 'act') {
-      if (w.k === 'claw') { box(x + 0.1, y + 0.1, 0.8, 0.8, 34, '#ec6aa8', 0, { top: '#f59ac6' }); const p2 = up(iso(x + 0.5, y + 0.9), 22 * z); emoji('🧸', p2.x, p2.y, 10 * z); }
+      if (w.k === 'claw') { const b = box(x + 0.1, y + 0.1, 0.8, 0.8, 34, '#ec6aa8', 0, { top: '#f59ac6' }); const p2 = up(iso(x + 0.5, y + 0.9), 22 * z); emoji('🧸', p2.x, p2.y, 10 * z); for (let k = 0; k < 6; k++) { const q = wallPt(b.left, 0, (k + 0.5) / 6, 32); circle(q.x, q.y, 1.3 * z, (Math.floor(ts / 250) + k) % 2 ? '#fff6a8' : '#ff8fc4'); } }
       else if (w.k === 'trophies') { line(c.x, c.y, c.x, c.y - 26 * z, '#8a6a4a', 2 * z); rrect(c.x - 18 * z, c.y - 46 * z, 36 * z, 24 * z, 3 * z, '#fff6dc', '#d9a520', 1.4 * z); emoji('🏆', c.x, c.y - 34 * z, 14 * z); }
-      else if (w.k === 'food') { const b = box(x, y + 0.2, w.w, 0.7, 16, '#f59e0b', 0, { top: '#fff3e0' }); ['🍔', '🍜', '🍕', '🧋'].forEach((e, i) => { const p2 = up(iso(x + 0.3 + i * 0.45, y + 0.5), 20 * z); emoji(e, p2.x, p2.y, 9 * z); }); }
+      else if (w.k === 'food') { const b = box(x, y + 0.2, w.w, 0.7, 16, '#f59e0b', 0, { top: '#fff3e0' }); ['🍔', '🍜', '🍕', '🧋'].forEach((e, i) => { const p2 = up(iso(x + 0.3 + i * 0.45, y + 0.5), 20 * z); emoji(e, p2.x, p2.y, 9 * z); const st = ((ts / 1100 + i * 0.3) % 1); ctx.save(); ctx.globalAlpha = 0.5 * (1 - st); line(p2.x, p2.y - 12 * z - st * 10 * z, p2.x + Math.sin(st * 6) * 2 * z, p2.y - 16 * z - st * 10 * z, '#ffffff', 1.4 * z); ctx.restore(); }); }
       else { const b = box(x, y, w.w, 0.4, 42, '#2d2540', 0, { top: '#3b3152' }); wallRect(b.left, 0, 0.15, 0.85, 0, 28, '#1b1530', '#f2c230', 1.6); const p2 = wallPt(b.left, 0, 0.5, 36); emoji('🎬', p2.x, p2.y, 11 * z); }
     }
     const f0 = iso(x + w.w / 2, y + w.d);
@@ -1777,14 +1844,19 @@ const Scene = (() => {
     poly([D, A, up(A, WH * z), up(D, WH * z)], shade(wall, -0.08)); poly([A, B, up(B, WH * z), up(A, WH * z)], wall);
     wallRect([D, A], 0, 0, 1, WH - 8, WH, acc); wallRect([A, B], 0, 0, 1, WH - 8, WH, shade(acc, 0.1));
     for (let k = 1; k <= 3; k++) wallRect([D, A], 0, k / 4 - 0.08, k / 4 + 0.08, 30, 62, '#bfe6f7', '#fffaf0', 1.4);   // windows
-    { const p2 = wallPt([A, B], 0, 0.5, 52); pill(`${S2.e} ${nm(S2)}`, p2.x, p2.y, '#fffdf8', '#3b3125', `800 ${Math.max(10, 15 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(18, 26 * z)); }
+    { const F = [A, B], u0 = Math.max(0.2, 0.5 - 2.8 / RW), u1 = Math.min(0.8, 0.5 + 2.8 / RW);   // v0.21: a sign fixed to the back wall
+      wallRect(F, 0, u0 - 0.006, u1 + 0.006, 39, 63, shade(acc, -0.25)); wallRect(F, 0, u0, u1, 40, 62, acc); wallRect(F, 0, u0 + 0.01, u1 - 0.01, 42, 60, shade(acc, 0.12));
+      [u0 + 0.02, u1 - 0.02].forEach(u => { const q = wallPt(F, 0, u, 58); circle(q.x, q.y, 1.2 * z, '#e8e2d6'); });
+      wallText(F, 0.5, 51, `${S2.e} ${nm(S2)}`, Math.max(9, 15 * z), '#ffffff'); }
     flatRect(P.door[0] - 1.2, RD - 0.9, 2.4, 0.9, shade(acc, 0.25));   // the door mat
     const objs = [];
-    P.wares.forEach(w => objs.push({ d: w.x + w.y + (w.w + w.d) / 2, f: () => { const r = drawWare(w, ts); if (r) hits.push({ kind: 'ware', id: w.id, wk: w.kind, k: w.k, ...r }); } }));
+    P.wares.forEach(w => { const q = iso(w.x + w.w / 2, w.y + w.d / 2); if (q.x < -120 || q.x > W + 120 || q.y < -60 || q.y > H + 200) return;   // v0.21: only what's on screen
+      objs.push({ d: w.x + w.y + (w.w + w.d) / 2, f: () => { const r = drawWare(w, ts); if (r) hits.push({ kind: 'ware', id: w.id, wk: w.kind, k: w.k, ...r }); } }); });
     const C = P.counter;
-    objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand' });
+    objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: Math.sin(ts / 2300) > 0.75 ? null : 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
       hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
     objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#c99a6b', 0, { top: '#e6c79a' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji('💳', p2.x, p2.y, 9 * z); } });
+    shoppers(P, objs, dt, ts);
     objs.push({ d: meS.x + meS.y + 0.3, f: () => { const p2 = iso(meS.x, meS.y); drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand' }); carryBox(p2, z); } });
     { const dp = iso(P.door[0], RD - 0.45); hits.push({ kind: 'shopDoor', x0: dp.x - 30 * z, x1: dp.x + 30 * z, y0: dp.y - 14 * z, y1: dp.y + 14 * z }); }
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
@@ -2627,7 +2699,7 @@ const Scene = (() => {
     car(k, o, w, h) { if (CARS[k].kind === 'two') frameFoot(1, 1.6, 30, w, h, 2.8); else frameFoot(1.1, 2.5, 34, w, h, 2); drawCar({ k, color: o.color || CAR_COLORS[0] }, 0, 0, 0); },
     house(k, o, w, h) {
       const H = HOUSES[k], [fx, fy, fw, fd] = H.fp, ex = o.extra || 0;
-      frameFoot(fw + 0.6, fd + 0.6, HOUSE_H[H.id] + ex * (H.id === 'chinese' ? 38 : FLOOR_H), w, h, 1.6);
+      frameFoot(fw + 0.6, fd + 0.6, (HOUSE_H[H.id] || (H.spec ? specHouseH(H) : 120)) + ex * (H.id === 'chinese' ? 38 : FLOOR_H), w, h, 1.6);
       drawHouse({ house: k, wall: o.wall || WALL_COLORS[H.id === 'cabin' ? 6 : 1], roof: o.roof || ROOF_COLORS[0], extra: { [k]: ex } }, -fx + 0.2, -fy + 0.1, 0);
     },
     // Pictures for the first screens (onboarding): 0 sleep → energy, 1 moving → coins, 2 home and friends.
@@ -2910,7 +2982,7 @@ const Scene = (() => {
     },
     floatHouse(text) { const [fx, fy, w, d] = HOUSES[S.me.house].fp; floatLocal('me', fx + w / 2, fy + d / 2, text); },
     thumb,
-    debug: () => ({ meS: { x: meS.x, y: meS.y, path: meS.path.length }, cam: { ...cam }, W, H, mode, owner, edit, ents: ents.size, me: { x: me.x, y: me.y, lot: me.lot, jobs: me.jobs.length, cur: !!me.cur, act: me.act && me.act.pose, pose: mePose() }, meIn: { x: meIn.x, y: meIn.y, pose: meIn.act && meIn.act.pose } }),
+    debug: () => ({ traffic: CARS_OUT.list.map(c => [Math.round(c.x), Math.round(c.y), c.path.length]), meS: { x: meS.x, y: meS.y, path: meS.path.length }, cam: { ...cam }, W, H, mode, owner, edit, ents: ents.size, me: { x: me.x, y: me.y, lot: me.lot, jobs: me.jobs.length, cur: !!me.cur, act: me.act && me.act.pose, pose: mePose() }, meIn: { x: meIn.x, y: meIn.y, pose: meIn.act && meIn.act.pose } }),
     look(z, wx, wy) { useCam(); cam.z = z; centerOn(wx, wy); fly = null; follow = false; },
     bench(n = 20) { const t0 = performance.now(); for (let i = 0; i < n; i++) render(t0 + i * 16); return +((performance.now() - t0) / n).toFixed(2); },
   };

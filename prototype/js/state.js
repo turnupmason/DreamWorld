@@ -1850,8 +1850,8 @@ function storeWares(store) {
     .forEach(k => add('furn', k, 'buyItem', 'room|' + k, FURN[k].price, FURN[k].w, FURN[k].d));
   if (store === 'dealer') Object.entries(CARS).filter(([, c]) => !c.excl).forEach(([k, c]) => add('car', k, 'buyCar', k, c.cost.coins, CARS[k].kind === 'two' ? 1.2 : 1.6, CARS[k].kind === 'two' ? 2 : 3));
   if (store === 'realty') {
-    HOUSES.forEach((H, i) => add('house', String(i), 'buyHouse', String(i), H.cost.coins || 0, 2, 2));
     ['field', 'pasture', 'orchard', 'pond', 'garage'].forEach(k => add('land', k, 'buyLand', k, 0, 2, 1));
+    HOUSES.forEach((H, i) => add('house', String(i), 'buyHouse', String(i), H.cost.coins || 0, 2.4, 2.4));
   }
   if (store === 'mall') {
     ['cinema', 'claw', 'food', 'trophies'].forEach(k => add('act', k, 'mallAct', k, 0, k === 'claw' || k === 'trophies' ? 1 : 2, 1));

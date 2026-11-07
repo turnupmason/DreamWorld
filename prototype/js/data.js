@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.20.0';
+const VERSION = '0.21.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -36,9 +36,13 @@ const AREA = {
 };
 // v0.19: a garage in the yard for 1–5 cars (built at the estate agent). Your own car parks in the drive; the others
 // wait in the garage. You can own one car for the drive plus one for each garage space.
+// v0.21: the dearer, the grander: a carport, a wooden garage, a brick garage, a modern garage, a glass showroom.
 const GARAGE = [null,
-  { cap: 1, cost: { coins: 900, wood: 20 } }, { cap: 2, cost: { coins: 2000, wood: 40 } }, { cap: 3, cost: { coins: 3600, wood: 60 } },
-  { cap: 4, cost: { coins: 5600, wood: 90 } }, { cap: 5, cost: { coins: 8000, wood: 120 } }];
+  { cap: 1, style: 'carport', zh: '车棚', en: 'Carport', cost: { coins: 700, wood: 10 } },
+  { cap: 2, style: 'wood', zh: '木车库', en: 'Wooden garage', cost: { coins: 2000, wood: 40 } },
+  { cap: 3, style: 'brick', zh: '砖砌车库', en: 'Brick garage', cost: { coins: 4000, wood: 70 } },
+  { cap: 4, style: 'modern', zh: '现代车库', en: 'Modern garage', cost: { coins: 7000, wood: 100 } },
+  { cap: 5, style: 'showroom', zh: '豪华玻璃车库', en: 'Glass showroom garage', cost: { coins: 12000, wood: 150 } }];
 const garageSize = lv => ({ w: Math.ceil(0.4 + 1.8 * GARAGE[lv].cap), d: 3 });
 const DOOR_X = 3.5;
 const MAILBOX = [4, 13];                 // every home has a mailbox by the gate
@@ -207,7 +211,26 @@ const HOUSES = [
   { id: 'chinese',  zh: '中式庭院', en: 'Courtyard house',  fp: [1, 1, 6, 4], room: [8, 7],  floors: [1, 3], cost: { coins: 7500, wood: 140 } },
   { id: 'mansion',  zh: '豪宅',     en: 'Mansion',          fp: [1, 1, 6, 4], room: [10, 8], floors: [2, 5], cost: { coins: 12000, wood: 180 } },
   { id: 'castle',   zh: '城堡',     en: 'Castle',           fp: [1, 1, 6, 4], room: [11, 9], floors: [2, 6], cost: { coins: 25000, wood: 300 } },
+  // v0.21: more kinds of home (drawn from a recipe: walls, roof, porch and trimmings; see drawSpecHouse)
+  { id: 'bungalow',  zh: '平房小屋',   en: 'Bungalow',       fp: [2, 1, 4, 4], room: [6, 5],  floors: [1, 2], cost: { coins: 1300, wood: 40 },  spec: { mat: 'siding', roof: 'gableY', porch: 'small', chimney: true } },
+  { id: 'aframe',    zh: 'A 字木屋',   en: 'A-frame cabin',  fp: [2, 1, 4, 4], room: [6, 5],  floors: [1, 2], cost: { coins: 1700, wood: 60 },  spec: { mat: 'wood', roof: 'aframe', wallCol: '#a8683a', deck: true } },
+  { id: 'farmhouse', zh: '乡村农舍',   en: 'Farmhouse',      fp: [1, 1, 5, 4], room: [7, 6],  floors: [2, 3], cost: { coins: 2600, wood: 70 },  spec: { mat: 'siding', roof: 'gable', porch: 'wrap', chimney: true, wallCol: '#f4f1ea' } },
+  { id: 'ranch',     zh: '牧场平房',   en: 'Ranch house',    fp: [1, 1, 6, 4], room: [8, 6],  floors: [1, 2], cost: { coins: 2900, wood: 70 },  spec: { mat: 'brick', roof: 'hip', low: true, wallCol: '#b5563c', windows: 'wide' } },
+  { id: 'capecod',   zh: '科德角小屋', en: 'Cape Cod',       fp: [1, 1, 5, 4], room: [7, 6],  floors: [1, 3], cost: { coins: 3200, wood: 75 },  spec: { mat: 'shingle', roof: 'steep', dormers: 2, shutters: true, chimney: true, wallCol: '#c9c3b6' } },
+  { id: 'colonial',  zh: '殖民地式',   en: 'Colonial',       fp: [1, 1, 6, 4], room: [8, 6],  floors: [2, 4], cost: { coins: 4200, wood: 90 },  spec: { mat: 'brick', roof: 'gable', porch: 'columns', shutters: true, chimney: true, wallCol: '#a94b37' } },
+  { id: 'craftsman', zh: '工匠风住宅', en: 'Craftsman',      fp: [1, 1, 6, 4], room: [8, 6],  floors: [1, 3], cost: { coins: 4600, wood: 110 }, spec: { mat: 'siding', roof: 'gableY', base: 'stone', porch: 'columns' } },
+  { id: 'spanish',   zh: '西班牙别墅', en: 'Spanish villa',  fp: [1, 1, 6, 4], room: [8, 7],  floors: [1, 3], cost: { coins: 5600, wood: 100 }, spec: { mat: 'stucco', roof: 'hip', roofCol: '#c8653c', arches: true, wallCol: '#f3e6cf' } },
+  { id: 'tudor',     zh: '都铎风住宅', en: 'Tudor',          fp: [1, 1, 6, 4], room: [8, 7],  floors: [2, 3], cost: { coins: 6200, wood: 120 }, spec: { mat: 'half', roof: 'steep', base: 'stone', chimney: true, wallCol: '#f1eadb' } },
+  { id: 'beach',     zh: '海滨别墅',   en: 'Beach house',    fp: [1, 1, 6, 4], room: [8, 7],  floors: [2, 3], cost: { coins: 6800, wood: 110 }, spec: { mat: 'siding', roof: 'hip', low: true, stilts: true, windows: 'wide' } },
+  { id: 'brownstone', zh: '褐石联排',  en: 'Brownstone',     fp: [2, 1, 4, 4], room: [6, 6],  floors: [3, 5], cost: { coins: 8000, wood: 120 }, spec: { mat: 'brick', roof: 'flat', cornice: true, stoop: true, wallCol: '#7a4b36', windows: 'tall' } },
+  { id: 'glass',     zh: '玻璃屋',     en: 'Glass house',    fp: [1, 1, 6, 4], room: [9, 7],  floors: [2, 4], cost: { coins: 9500, wood: 130 }, spec: { mat: 'glass', roof: 'flat', wallCol: '#eef1f4' } },
+  { id: 'victorian', zh: '维多利亚式', en: 'Victorian',      fp: [1, 1, 6, 4], room: [9, 7],  floors: [2, 4], cost: { coins: 11000, wood: 160 }, spec: { mat: 'siding', roof: 'steep', turret: true, porch: 'wrap', shutters: true } },
+  { id: 'lodge',     zh: '山间大木屋', en: 'Mountain lodge', fp: [1, 1, 6, 4], room: [10, 8], floors: [2, 4], cost: { coins: 14000, wood: 220 }, spec: { mat: 'wood', base: 'stone', roof: 'gableY', glassFront: true, chimney: true, wallCol: '#9a6236' } },
 ];
+// How tall a recipe house is on the outside (px at zoom 1), for pictures and its name tag.
+const specWallH = H => 4 + H.floors[0] * 28 + (H.spec.stilts ? 12 : 0) + (H.spec.stoop ? 8 : 0);
+const SPEC_ROOF_H = { gable: 30, steep: 46, gableY: 32, hip: 26, flat: 8, aframe: 80 };
+const specHouseH = H => (H.spec.roof === 'aframe' ? 86 : specWallH(H) + (H.spec.low ? 18 : SPEC_ROOF_H[H.spec.roof] || 30) + (H.spec.turret ? 30 : 0) + 8);
 // Building another storey: price per floor tile of the room, growing ×1.5 with every storey. A late-game money sink.
 const FLOOR_BUILD = { coinsPerTile: 40, woodPerTile: 0.8, grow: 1.5 };
 const FLOOR_H = 28;                      // how much taller the house gets outside per storey you build (px)
@@ -395,9 +418,9 @@ const SHOP_SUBS = {
     { id: 'van', e: '🚐', zh: '面包车房车', en: 'Vans', keys: ['minivan', 'camper'] },
   ],
   houses: [
-    { id: 'small', e: '⛺', zh: '小屋', en: 'Small', keys: ['tent', 'cabin', 'cottage'] },
-    { id: 'family', e: '🏠', zh: '家庭', en: 'Family', keys: ['twostory', 'modern', 'villa'] },
-    { id: 'grand', e: '🏰', zh: '豪华', en: 'Grand', keys: ['chinese', 'mansion', 'castle'] },
+    { id: 'small', e: '⛺', zh: '小屋', en: 'Small', keys: ['tent', 'cabin', 'cottage', 'bungalow', 'aframe'] },
+    { id: 'family', e: '🏠', zh: '家庭', en: 'Family', keys: ['twostory', 'farmhouse', 'ranch', 'capecod', 'modern', 'colonial', 'craftsman', 'villa', 'beach', 'brownstone'] },
+    { id: 'grand', e: '🏰', zh: '豪华', en: 'Grand', keys: ['spanish', 'tudor', 'chinese', 'glass', 'victorian', 'mansion', 'lodge', 'castle'] },
   ],
   sell: [
     { id: 'crops', e: '🥕', zh: '作物', en: 'Crops', keys: [] },

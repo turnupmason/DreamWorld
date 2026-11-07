@@ -35,6 +35,10 @@ function doorFace(face, u, uw, h, col = '#7a4b2a') {
 function chimney(x, y, base, h, col = '#b4603e') {
   const b = box(x, y, 0.42, 0.42, h, col, base);
   flatRect(x - 0.04, y - 0.04, 0.5, 0.5, shade(col, -0.25), null, base + h);
+  if (cam.z > 0.28) {   // v0.21: a little smoke drifting up
+    const z = cam.z, t0 = performance.now() / 1000, p = up(iso(x + 0.21, y + 0.21), (base + h + 2) * z);
+    for (let k = 0; k < 4; k++) { const u = (t0 * 0.35 + k / 4 + x * 0.13) % 1; circle(p.x + Math.sin(u * 5 + k) * 3 * z + u * 8 * z, p.y - u * 34 * z, (2.5 + u * 6) * z, `rgba(240,240,236,${0.42 * (1 - u)})`); }
+  }
   return b;
 }
 
@@ -57,7 +61,8 @@ function drawHouse(h, ox, oy, ts) {
   const du = (DOOR_X - fx) / w, wall = h.wall, roof = h.roof, id = H.id;
   const n = Math.max(0, floorsOf(h) - H.floors[0]), ex = n * FLOOR_H;
   let top = c.y;
-  if (id === 'tent') {
+  if (H.spec) top = drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H);
+  else if (id === 'tent') {
     const g = gableY(x + 0.1, y + 0.1, w - 0.2, d - 0.2, 0, 46, roof, shade(roof, 0.22));
     const a = lerp(g.Du, g.Cu, 0.3), b = lerp(g.Du, g.Cu, 0.7), tp = lerp(mid(g.Du, g.Cu), g.R2, 0.74);
     poly([a, b, tp], shade(roof, -0.55));
@@ -1968,7 +1973,7 @@ function storeShow(st, objs, ts) {
   if (k === 'ranch' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); drawAnimal('cow', 2, p.x, p.y, z * 0.85, { face: 1, ts, seed: 2 }); });
     if (sl[1]) { const [qx, qy] = sl[1]; put(qx, qy, () => { const p = iso(qx, qy); drawAnimal('sheep', 2, p.x, p.y, z * 0.85, { face: -1, ts, seed: 3 }); }); } }
   if (k === 'petshop' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); drawAnimal('dog', 2, p.x, p.y, z * 0.8, { face: -1, ts, seed: 4, breed: 'shiba' }); }); }
-  if (k === 'mall') sl.slice(0, 3).forEach(([px, py], i) => put(px, py, () => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 40 * z, '#888', 1 * z); pg([[p.x, p.y - 40 * z], [p.x + 9 * z, p.y - 37 * z], [p.x, p.y - 33 * z]], ['#e5484d', '#2f80ed', '#f2c230'][i]); }));
+  if (k === 'mall') sl.slice(0, 3).forEach(([px, py], i) => put(px, py, () => { const p = iso(px, py), wv = Math.sin(ts / 260 + i * 1.3) * 1.6 * z; line(p.x, p.y, p.x, p.y - 40 * z, '#888', 1 * z); pg([[p.x, p.y - 40 * z], [p.x + 5 * z, p.y - 39.5 * z + wv * 0.5], [p.x + 10 * z, p.y - 37 * z + wv], [p.x + 5 * z, p.y - 34.5 * z + wv * 0.5], [p.x, p.y - 33 * z]], ['#e5484d', '#2f80ed', '#f2c230'][i]); }));   // v0.21: flags flutter
   if (k === 'realty' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 16 * z, '#8a5a36', 1.6 * z); rrect(p.x - 8 * z, p.y - 20 * z, 16 * z, 8 * z, 1.5 * z, '#fffaf0', '#e5484d', 1 * z); }); }
 }
 
@@ -1992,32 +1997,68 @@ function drawPlush(k, x, y) {
   ellipse(cx, by - 5 * z, 4 * z, 3.6 * z, shade(col, 0.15));
 }
 
-// v0.19: a garage with a door per car space; the doors are up where a car is parked inside.
+// v0.19, v0.21: the garage, in the style of its level (n = its number of spaces): the cars inside show through
+// the open doors (or through the glass, or under the carport roof).
 function drawGarage(x, y, n, cars, ts) {
-  const z = cam.z, w = garageSize(n === 0 ? 1 : GARAGE.findIndex(g => g && g.cap === n)).w, d = 3, H = 32, wall = '#ece6db', bay = (w - 0.4) / n;
-  const A = iso(x, y), B = iso(x + w, y), C = iso(x + w, y + d), D = iso(x, y + d), c = iso(x + w / 2, y + d / 2);
-  ellipse(c.x, c.y + 4 * z, (w + d) * 9 * z, (w + d) * 4 * z, 'rgba(0,0,0,.08)');
-  flatRect(x, y + d - 0.05, w, 0.5, '#c9c3b6');   // the apron in front
+  const lv = Math.max(1, GARAGE.findIndex(g => g && g.cap === n)), G = GARAGE[lv], z = cam.z, w = garageSize(lv).w, d = 3, bay = (w - 0.4) / n;
+  const carAt = i => { const car = cars[i]; if (!car) return; const L = (CAR_SPEC[car.k] || CAR_SPEC.mini).len || 2.4; drawCarDir(car, x + 0.2 + bay * (i + 0.5), y + d - L / 2 - 0.15, '+y', ts); };
+  const A = iso(x, y), B = iso(x + w, y), C = iso(x + w, y + d), D = iso(x, y + d);
+  if (G.style === 'carport') {   // a concrete pad, four posts and a metal roof
+    flatRect(x - 0.1, y - 0.1, w + 0.2, d + 0.4, '#cdc7bb'); flatRect(x, y, w, d, '#d9d4c9');
+    cars.forEach((c, i) => { if (i < n) carAt(i); });
+    [[x + 0.05, y + 0.05], [x + w - 0.2, y + 0.05], [x + 0.05, y + d - 0.2], [x + w - 0.2, y + d - 0.2]].forEach(([px, py]) => box(px, py, 0.15, 0.15, 26, '#8a939e', 0, { shadow: false }));
+    const r = box(x - 0.15, y - 0.15, w + 0.3, d + 0.3, 2.2, '#7d8794', 26, { top: '#9aa3ad' });
+    for (let k = 1; k < 8; k++) wallLine(r.left, 26, k / 8, 0, k / 8, 2.2, 'rgba(255,255,255,.35)', 0.6);
+    return { x0: D.x, x1: B.x, y0: up(A, 30 * z).y, y1: C.y };
+  }
+  const H = { wood: 30, brick: 32, modern: 32, showroom: 36 }[G.style], DH = { wood: 22, brick: 22, modern: 23, showroom: 30 }[G.style];
+  const wall = { wood: '#b07a4a', brick: '#a94b37', modern: '#f1efea', showroom: '#f4f5f7' }[G.style];
+  const face = [D, C], U = v => v / w;
+  flatRect(x - 0.05, y + d - 0.05, w + 0.1, 0.55, G.style === 'showroom' ? '#d9dde2' : '#c9c3b6');   // the apron
+  if (G.style === 'showroom') {   // dark polished floor, lit platforms, glass all round
+    softShadow(x, y, w, d, H);
+    flatRect(x, y, w, d, '#eef1f4'); for (let i = 1; i < w; i++) { const a = iso(x + i, y), b = iso(x + i, y + d); line(a.x, a.y, b.x, b.y, 'rgba(160,170,180,.35)', 0.6 * z); }
+    for (let i = 0; i < n; i++) { const c = iso(x + 0.2 + bay * (i + 0.5), y + d / 2 + 0.2); ellipse(c.x, c.y, 26 * z, 13 * z, `rgba(255,230,160,${0.25 + 0.12 * Math.sin(ts / 700 + i)})`); }
+    poly([A, B, up(B, H * z), up(A, H * z)], '#f7f8fa'); poly([A, D, up(D, H * z), up(A, H * z)], '#e6e9ee');
+    cars.forEach((c, i) => { if (i < n) carAt(i); });
+    poly([D, C, up(C, H * z), up(D, H * z)], 'rgba(170,215,245,.18)', '#2d3036', 1.4 * z);
+    poly([C, B, up(B, H * z), up(C, H * z)], 'rgba(150,200,235,.26)', '#2d3036', 1.4 * z);
+    for (let i = 1; i < n; i++) wallLine(face, 0, U(0.2 + bay * i), 0, U(0.2 + bay * i), H, '#1b1d22', 1.6);
+    wallRect(face, 0, 0, 1, 0, 1.5, '#1b1d22');
+    wallRect(face, 0, 0.08, 0.5, H * 0.35, H * 0.85, 'rgba(255,255,255,.12)', null);   // a reflection
+    const r = box(x - 0.3, y - 0.3, w + 0.6, d + 0.6, 2.6, '#2d3036', H, { top: '#f4f5f7' });
+    for (let i = 0; i < n * 2; i++) { const q = wallPt(r.left, H, (i + 0.5) / (n * 2), -0.5); circle(q.x, q.y, 1.4 * z, '#fff3c4'); }
+    return { x0: D.x, x1: B.x, y0: up(A, (H + 4) * z).y, y1: C.y };
+  }
+  softShadow(x, y, w, d, H);
   poly([D, C, up(C, H * z), up(D, H * z)], '#3c3a37');   // inside, seen through the open doors
-  const face = [D, C], U = v => v / w, DH = 22;
   wallRect(face, 0, 0, 1, DH, H, wall);   // above the doors
   for (let i = 0; i <= n; i++) { const a = i === 0 ? 0 : 0.2 + bay * i - 0.12, b = i === n ? w : 0.2 + bay * i + 0.12; wallRect(face, 0, U(a), U(b), 0, DH, wall); }
+  const doorCol = { wood: '#f4efe6', brick: '#5a3a2a', modern: '#d9dde2' }[G.style];
   for (let i = 0; i < n; i++) {
     const a = U(0.2 + bay * i + 0.12), b = U(0.2 + bay * (i + 1) - 0.12);
-    if (!cars[i]) { wallRect(face, 0, a, b, 0, DH, '#d5dbe2'); for (let k = 1; k < 5; k++) wallLine(face, 0, a, k * DH / 5, b, k * DH / 5, '#b8c0c9', 0.8); }
-    else wallRect(face, 0, a, b, DH - 3, DH, '#d5dbe2');   // the rolled-up door
+    if (!cars[i]) {
+      wallRect(face, 0, a, b, 0, DH, doorCol);
+      if (G.style === 'wood') for (let k = 1; k < 5; k++) wallLine(face, 0, a, k * DH / 5, b, k * DH / 5, '#cfc6b6', 0.8);
+      if (G.style === 'brick') { wallLine(face, 0, (a + b) / 2, 0, (a + b) / 2, DH, '#3a2418', 1); wallRect(face, 0, a + (b - a) * 0.1, b - (b - a) * 0.1, DH * 0.7, DH * 0.88, '#bfe6f7'); }
+      if (G.style === 'modern') { for (let k = 1; k < 4; k++) wallLine(face, 0, a, k * DH / 4, b, k * DH / 4, '#b8c0c9', 1); wallRect(face, 0, a, b, DH * 0.62, DH * 0.9, 'rgba(200,225,245,.8)'); }
+    } else wallRect(face, 0, a, b, DH - 3, DH, doorCol);   // rolled up
   }
-  poly([C, B, up(B, H * z), up(C, H * z)], shade(wall, -0.08), 'rgba(0,0,0,.06)');
-  poly([up(A, H * z), up(B, H * z), up(C, H * z), up(D, H * z)], '#8a94a0', 'rgba(0,0,0,.08)');
-  wallRect(face, 0, 0, 1, H - 2, H, '#9aa3ad');
-  // the cars inside show through the open doors (drawn last, only inside the door openings)
+  poly([C, B, up(B, H * z), up(C, H * z)], vgrad([C, B, up(B, H * z), up(C, H * z)], shade(wall, -0.06), 0.05, -0.06), 'rgba(0,0,0,.06)');
+  const bx = { left: [D, C], right: [C, B] };
+  if (G.style === 'wood' || G.style === 'brick') wallMaterial(bx, H, G.style, wall, 0);
+  if (G.style === 'brick') winFace([C, B], 0.5, 0.12, 12, 22);
+  // the cars inside show through the open doors
   ctx.save(); ctx.beginPath();
   const P = (u, h) => up(lerp(D, C, u), h * z);
-  cars.forEach((car, i) => { if (!car || i >= n) return; const a = U(0.2 + bay * i + 0.12), b = U(0.2 + bay * (i + 1) - 0.12), q = [P(a, 0), P(b, 0), P(b, DH - 3), P(a, DH - 3)]; ctx.moveTo(q[0].x, q[0].y); q.slice(1).forEach(t => ctx.lineTo(t.x, t.y)); ctx.closePath(); });
-  ctx.clip();
-  cars.forEach((car, i) => { if (car && i < n) { const L = (CAR_SPEC[car.k] || CAR_SPEC.mini).len || 2.4; drawCarDir(car, x + 0.2 + bay * (i + 0.5), y + d - L / 2 - 0.02, '+y', ts); } });
-  ctx.restore();
-  return { x0: D.x, x1: B.x, y0: up(A, H * z).y, y1: C.y };
+  cars.forEach((car, i) => { if (!car || i >= n) return; const a = U(0.2 + bay * i + 0.12), b = U(0.2 + bay * (i + 1) - 0.12), q = [P(a, 0), P(b, 0), P(b, DH - 3), P(a, DH - 3)]; ctx.moveTo(q[0].x, q[0].y); q.slice(1).forEach(t2 => ctx.lineTo(t2.x, t2.y)); ctx.closePath(); });
+  ctx.clip(); cars.forEach((c, i) => { if (i < n) carAt(i); }); ctx.restore();
+  // the roof
+  if (G.style === 'wood') gableX(x - 0.15, y - 0.15, w + 0.3, d + 0.3, H, 16, '#6b4428', wall);
+  else if (G.style === 'brick') hipRoof(x - 0.2, y - 0.2, w + 0.4, d + 0.4, H, 14, '#5b5f66');
+  else { box(x - 0.2, y - 0.2, w + 0.4, d + 0.4, 3, '#b08356', H, { top: '#e9e4da' }); wallRect(face, 0, 0, 1, H - 1.5, H - 0.5, `rgba(255,240,190,${0.6 + 0.3 * Math.sin(ts / 600)})`); }   // modern: a flat roof and a strip of light
+  if (G.style !== 'modern') [0.06, 0.94].forEach(u => { const q = wallPt(face, 0, u, DH + 4); rrect(q.x - 1.6 * z, q.y - 3 * z, 3.2 * z, 4 * z, 1 * z, '#2d2d2d'); circle(q.x, q.y - 1 * z, 1.1 * z, '#ffe39a'); });
+  return { x0: D.x, x1: B.x, y0: up(A, (H + 16) * z).y, y1: C.y };
 }
 
 // v0.20: a framed film poster on a little stand (from the cinema)
@@ -2028,4 +2069,131 @@ function drawPosterStand(film, x, y) {
   rrect(c.x - 9 * z, c.y - 40 * z, 18 * z, 25 * z, 1.5 * z, '#fffaf0'); rrect(c.x - 7.5 * z, c.y - 38.5 * z, 15 * z, 22 * z, 1 * z, bg);
   emoji((MALL.movies[film] || {}).e || '🎬', c.x, c.y - 29 * z, 11 * z);
   rrect(c.x - 6 * z, c.y - 21 * z, 12 * z, 2 * z, 0.6 * z, 'rgba(255,255,255,.75)');
+}
+
+// ---------- recipe houses (v0.21) ----------
+// Walls of one material (siding, shingle, brick, stucco, stone, wood boards, half-timber or glass), a roof (gable,
+// steep gable, gable facing the street, hip, flat or an A-frame), and trimmings: porches, chimney, dormers, shutters,
+// a turret, stilts with a deck, a stoop, a glass gable. The wall and roof colours you pick are used where they fit.
+function wallMaterial(b, wh, mat, col, lift) {
+  const z = cam.z;
+  if (z < 0.42) return;
+  const L = (f, u0, h0, u1, h1, c, wd) => wallLine(f, 0, u0, h0 + lift, u1, h1 + lift, c, wd);
+  if (mat === 'siding' || mat === 'shingle') for (let hh = 3.2; hh < wh - 1; hh += mat === 'shingle' ? 2.4 : 3.2) [b.left, b.right].forEach(f => L(f, 0, hh, 1, hh, shade(col, -0.13), 0.6));
+  if (mat === 'brick') for (let hh = 2.6, r = 0; hh < wh - 0.5; hh += 2.6, r++) [b.left, b.right].forEach(f => {
+    L(f, 0, hh, 1, hh, 'rgba(255,238,220,.4)', 0.5);
+    if (z > 0.7) for (let u = (r % 2) * 0.035; u < 1; u += 0.07) L(f, u, hh - 2.6, u, hh, 'rgba(255,238,220,.3)', 0.45);
+  });
+  if (mat === 'wood') { for (let u = 0.04; u < 1; u += 0.045) L(b.left, u, 0, u, wh, shade(col, -0.2), 0.6); for (let u = 0.05; u < 1; u += 0.07) L(b.right, u, 0, u, wh, shade(col, -0.17), 0.6); }
+  if (mat === 'stone') for (let hh = 4, r = 0; hh < wh; hh += 4, r++) [b.left, b.right].forEach((f, i) => { L(f, 0, hh, 1, hh, 'rgba(60,50,40,.25)', 0.6); for (let u = ((r * 7 + i * 3) % 5) * 0.03; u < 1; u += 0.11 + ((r + i) % 3) * 0.02) L(f, u, hh - 4, u, hh, 'rgba(60,50,40,.22)', 0.5); });
+  if (mat === 'half') [b.left, b.right].forEach(f => {   // dark timber frame on pale plaster
+    const dk = '#4a3324', fl = Math.max(1, Math.round(wh / 28));
+    for (let k = 0; k <= fl; k++) L(f, 0, Math.min(wh - 1, k * 28 + 1), 1, Math.min(wh - 1, k * 28 + 1), dk, 1.6);
+    for (let u = 0; u <= 1.001; u += 0.2) L(f, u, 0, u, wh, dk, 1.4);
+    for (let k = 0; k < fl; k++) for (let u = 0; u < 0.99; u += 0.4) { L(f, u, k * 28 + 2, u + 0.2, k * 28 + 26, dk, 1.1); L(f, u + 0.4, k * 28 + 2, u + 0.2, k * 28 + 26, dk, 1.1); }
+  });
+}
+function specWin(f, u, uw, h0, h1, o, lift) { winFace(f, u, uw, h0 + lift, h1 + lift, o); }
+function specDoor(f, u, uw, h, col, lift) {
+  wallRect(f, 0, u - uw * 1.2, u + uw * 1.2, lift, lift + h + 2.4, '#fffaf0');
+  wallRect(f, 0, u - uw, u + uw, lift, lift + h, col);
+  wallRect(f, 0, u - uw * 0.7, u + uw * 0.7, lift + h * 0.55, lift + h * 0.88, shade(col, -0.15));
+  const k = wallPt(f, 0, u + uw * 0.6, lift + h * 0.45); circle(k.x, k.y, 0.9 * cam.z, '#e8c35a');
+}
+// a porch: a floor, posts and a roof, in front of the door (small), across the front (columns) or round the corner (wrap)
+function specPorch(kind, x, y, w, d, dx, roof, trim) {
+  const z = cam.z, x0 = kind === 'small' ? dx - 1 : x, x1 = kind === 'small' ? dx + 1 : x + w, py = y + d, pd = 0.9;
+  box(x0 - 0.05, py, x1 - x0 + 0.1, pd, 2.5, '#d9d2c4', 0, { shadow: false });
+  const posts = kind === 'small' ? [x0 + 0.1, x1 - 0.25] : Array.from({ length: Math.round((x1 - x0) / 1.4) + 1 }, (_, i) => x0 + 0.1 + i * (x1 - x0 - 0.35) / Math.round((x1 - x0) / 1.4));
+  posts.forEach(px => box(px, py + pd - 0.25, 0.18, 0.18, 22, trim, 2.5, { shadow: false }));
+  if (kind === 'wrap') { box(x + w, y + 0.4, 0.9, d + 0.5, 2.5, '#d9d2c4', 0, { shadow: false }); [y + 0.6, y + d * 0.55].forEach(py2 => box(x + w + 0.65, py2, 0.18, 0.18, 22, trim, 2.5, { shadow: false })); box(x + w - 0.05, y + 0.35, 1.05, d + 0.6, 2.5, shade(roof, -0.05), 24.5, { shadow: false }); }
+  box(x0 - 0.15, py - 0.05, x1 - x0 + 0.3, pd + 0.15, 2.5, shade(roof, -0.05), 24.5, { shadow: false });
+  if (z > 0.5) for (let u = x0 + 0.3; u < x1 - 0.1; u += 0.35) { const a = up(iso(u, py + pd), 3 * z), b = up(iso(u, py + pd), 9 * z); line(a.x, a.y, b.x, b.y, trim, 0.7 * z); }
+}
+function drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H) {
+  const z = cam.z, S2 = H.spec, ex = n * FLOOR_H, f0 = H.floors[0], trim = '#fffaf0';
+  const col = S2.wallCol || wall, rc = S2.roofCol || roof, lift = (S2.stilts ? 12 : 0) + (S2.stoop ? 8 : 0);
+  const wh = 4 + f0 * 28 + ex, dx = x + du * w, c = iso(x + w / 2, y + d / 2);
+  let top;
+  if (S2.roof === 'aframe') {   // the roof comes right down to the ground; a glass front and a deck
+    if (S2.deck) { box(x - 0.3, y + d - 0.1, w + 0.6, 1.1, 3, '#a8835c', 0, { shadow: false }); }
+    const g = gableY(x - 0.25, y - 0.1, w + 0.5, d + 0.2, 6, 82 + ex, rc, col);
+    const A0 = lerp(g.Du, g.Cu, 0.18), A1 = lerp(g.Du, g.Cu, 0.82), apex = lerp(mid(g.Du, g.Cu), g.R2, 0.82);
+    poly([A0, A1, apex], NIGHT > 0.3 ? '#ffe39a' : '#bfe6f7', '#6b4428', 1.6 * z);
+    for (let u = 0.25; u < 1; u += 0.25) { const p = lerp(A0, A1, u); line(p.x, p.y, lerp(p, apex, 0.9 * (1 - Math.abs(u - 0.5) * 1.6)).x, lerp(p, apex, 0.9 * (1 - Math.abs(u - 0.5) * 1.6)).y, '#6b4428', 1 * z); }
+    line(lerp(A0, apex, 0.45).x, lerp(A0, apex, 0.45).y, lerp(A1, apex, 0.45).x, lerp(A1, apex, 0.45).y, '#6b4428', 1 * z);
+    const dp = lerp(g.Du, g.Cu, du); rrect(dp.x - 5 * z, dp.y - 20 * z, 10 * z, 20 * z, 1 * z, '#6b3f22');
+    if (NIGHT > 0.3) glow(apex.x, (apex.y + A0.y) / 2, 40 * z);
+    return g.R1.y - 10 * z;
+  }
+  if (S2.stilts) {   // up on posts, with a deck and stairs
+    [[x + 0.1, y + 0.1], [x + w - 0.3, y + 0.1], [x + 0.1, y + d - 0.3], [x + w - 0.3, y + d - 0.3], [x + w / 2, y + d - 0.3]].forEach(([px, py]) => box(px, py, 0.22, 0.22, 12, '#a8835c'));
+    box(x - 0.3, y + d - 0.2, w + 0.6, 1.2, 2, '#c4a073', 12, { shadow: false });
+    for (let k = 0; k < 5; k++) box(dx - 0.45, y + d + 1 + k * 0.28, 0.9, 0.28, 2, '#c4a073', 10 - k * 2.4, { shadow: false });
+  }
+  if (S2.stoop) for (let k = 0; k < 4; k++) box(dx - 0.6, y + d + 0.85 - k * 0.24, 1.2, 0.28, 2, '#b8aea0', k * 2, { shadow: false });
+  if (S2.turret) {}   // drawn after the walls
+  const b = box(x, y, w, d, wh, col, lift);
+  if (S2.base) { const bc = S2.base === 'stone' ? '#9c968c' : '#a5523c', bb = box(x - 0.05, y - 0.05, w + 0.1, d + 0.1, 9, bc, lift, { noTop: true }); wallMaterial(bb, 9, 'stone', bc, lift); }
+  else wallRect(b.left, 0, 0, 1, lift, lift + 3, shade(col, -0.35));
+  wallMaterial(b, wh, S2.mat, col, lift);
+  // windows on every floor; the door at the bottom
+  const tall = S2.windows === 'tall', wide = S2.windows === 'wide', sh = S2.shutters ? shade(rc, -0.05) : null;
+  for (let fl = 0; fl < f0 + n; fl++) {
+    const h0 = fl * 28 + (S2.base ? 10 : 8), h1 = h0 + (tall ? 18 : wide ? 11 : 14);
+    if (S2.mat === 'glass') {
+      wallRect(b.left, 0, 0.03, 0.97, h0 - 3 + lift, h0 + 21 + lift, NIGHT > 0.3 ? '#ffe39a' : '#a9d8ee', '#ffffff', 1.4);
+      wallRect(b.right, 0, 0.04, 0.96, h0 - 3 + lift, h0 + 21 + lift, NIGHT > 0.3 ? '#ffe39a' : '#9ccde4', '#ffffff', 1.4);
+      for (let u = 0.12; u < 0.95; u += 0.12) { wallLine(b.left, 0, u, h0 - 3 + lift, u, h0 + 21 + lift, '#ffffff', 1); }
+      wallRect(b.left, 0, 0.03, 0.5, h0 + 2 + lift, h0 + 12 + lift, 'rgba(255,255,255,.22)', null);
+      continue;
+    }
+    const us = fl === 0 ? (wide ? [0.2, 0.8] : [0.17, 0.83]) : (wide ? [0.2, 0.5, 0.8] : [0.17, 0.5, 0.83]);
+    us.forEach(u => specWin(b.left, u, wide ? 0.1 : 0.06, h0, h1, { shutters: sh, box: !!(S2.porch === 'small' && fl === 0) }, lift));
+    [0.3, 0.7].forEach(u => specWin(b.right, u, wide ? 0.12 : 0.08, h0, h1, { shutters: sh }, lift));
+    if (S2.arches && z > 0.4) us.forEach(u => { const p = wallPt(b.left, 0, u, h1 + lift + 1.5); ellipse(p.x, p.y, 5 * z, 2.4 * z, '#c8653c'); });
+  }
+  if (S2.mat === 'glass') { const dp = wallPt(b.left, 0, du, 0); rrect(dp.x - 5 * z, dp.y - 19 * z, 10 * z, 19 * z, 1 * z, 'rgba(255,255,255,.35)', '#ffffff', 1.2 * z); }
+  else specDoor(b.left, du, 0.06, 20, S2.mat === 'brick' ? '#2f4a3a' : shade(rc, -0.25), lift);
+  if (S2.porch) specPorch(S2.porch, x, y, w, d, dx, rc, trim);
+  // the roof
+  const RH = S2.low ? 18 : SPEC_ROOF_H[S2.roof] || 30;
+  const chim = S2.chimney ? () => chimney(x + w - 0.9, y + 0.5, wh + lift, RH + 12, S2.mat === 'brick' ? shade(col, -0.1) : '#9a948a') : null;
+  if (S2.roof === 'gable' || S2.roof === 'steep') {
+    const g = gableX(x - 0.18, y - 0.18, w + 0.36, d + 0.36, wh + lift, RH, rc, col, chim);
+    if (S2.dormers) for (let k = 0; k < S2.dormers; k++) {   // little windows standing out of the roof
+      const u = (k + 1) / (S2.dormers + 1), dxk = x + u * w - 0.45, base = wh + lift + RH * 0.28;
+      const bd = box(dxk, y + d - 0.85, 0.9, 0.6, 11, col, base, { shadow: false });
+      specWin(bd.left, 0.5, 0.22, 2, 9, {}, base);
+      gableY(dxk - 0.08, y + d - 0.9, 1.06, 0.7, base + 11, 7, rc, col);
+    }
+    top = g.R1.y - 10 * z;
+  } else if (S2.roof === 'gableY') {
+    if (chim) chim();
+    const g = gableY(x - 0.2, y - 0.2, w + 0.4, d + 0.4, wh + lift, RH, rc, col);
+    if (S2.glassFront) { const A0 = lerp(g.Du, g.Cu, 0.2), A1 = lerp(g.Du, g.Cu, 0.8), ap = lerp(mid(g.Du, g.Cu), g.R2, 0.75); poly([A0, A1, ap], NIGHT > 0.3 ? '#ffe39a' : '#bfe6f7', '#5b3a22', 1.6 * z); line(mid(A0, A1).x, mid(A0, A1).y, ap.x, ap.y, '#5b3a22', 1.2 * z); }
+    top = g.R1.y - 10 * z;
+  } else if (S2.roof === 'hip') {
+    hipRoof(x - 0.25, y - 0.25, w + 0.5, d + 0.5, wh + lift, RH, rc);
+    if (chim) chim();
+    top = up(c, (wh + lift + RH + 6) * z).y;
+  } else {   // flat: a parapet (and a cornice on a brownstone)
+    box(x - 0.08, y - 0.08, w + 0.16, d + 0.16, 4, shade(col, -0.12), wh + lift, { shadow: false });
+    if (S2.cornice) box(x - 0.2, y - 0.2, w + 0.4, d + 0.4, 2.4, '#e9e2d4', wh + lift - 2, { noTop: true, shadow: false });
+    if (S2.mat === 'glass') box(x - 0.3, y - 0.3, w + 0.6, d + 0.6, 2.2, '#ffffff', wh + lift + 1, { shadow: false });
+    top = up(c, (wh + lift + 12) * z).y;
+  }
+  if (S2.turret) {   // a round tower on the front corner with a pointed roof
+    const tx = x + w - 0.2, ty = y + d - 0.2, tc = iso(tx, ty), rx = 0.95 * 45 * z, ry = rx / 2, th = (wh + lift + 10) * z;
+    const g = ctx.createLinearGradient(tc.x - rx, 0, tc.x + rx, 0); g.addColorStop(0, shade(col, -0.18)); g.addColorStop(0.6, shade(col, 0.04)); g.addColorStop(1, shade(col, -0.1));
+    ctx.beginPath(); ctx.ellipse(tc.x, tc.y, rx, ry, 0, 0, Math.PI); ctx.lineTo(tc.x - rx, tc.y - th); ctx.ellipse(tc.x, tc.y - th, rx, ry, 0, Math.PI, 0, true); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+    ellipse(tc.x, tc.y - th, rx, ry, shade(col, 0.08));
+    [-0.45, 0.35].forEach(k => { const wx = tc.x + k * rx; rrect(wx - 3 * z, tc.y - th * 0.55 - 8 * z, 6 * z, 12 * z, 1.5 * z, NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5', trim, 1 * z); });
+    const apex = { x: tc.x, y: tc.y - th - 40 * z };
+    const rg = ctx.createLinearGradient(tc.x - rx, 0, tc.x + rx, 0); rg.addColorStop(0, shade(rc, -0.2)); rg.addColorStop(0.6, shade(rc, 0.06)); rg.addColorStop(1, shade(rc, -0.12));
+    ctx.beginPath(); ctx.moveTo(tc.x - rx * 1.1, tc.y - th); ctx.ellipse(tc.x, tc.y - th, rx * 1.1, ry * 1.1, 0, Math.PI, 0, true); ctx.lineTo(apex.x, apex.y); ctx.closePath(); ctx.fillStyle = rg; ctx.fill();
+    line(apex.x, apex.y, apex.x, apex.y - 7 * z, '#6b5a3a', 1 * z);
+    top = Math.min(top, apex.y - 10 * z);
+  }
+  return top;
 }

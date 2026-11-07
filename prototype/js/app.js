@@ -341,7 +341,7 @@ function landCard(kind, img, icon) {
   const h = S.me, table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];
   if (kind === 'garage') {   // v0.19
     const lv = h.garageLv || 0, next = GARAGE[lv + 1];
-    return shopCard(img, `${icon} ${t('land_garage')}${lv ? ` · ${t('garage_cars', { n: GARAGE[lv].cap })}` : ''}`, next ? t(lv ? 'garage_up' : 'garage_new', { n: next.cap }) : t('garage_max'),
+    return shopCard(img, `${icon} ${lv ? nm(GARAGE[lv]) : t('land_garage')}${lv ? ` · ${t('garage_cars', { n: GARAGE[lv].cap })}` : ''}`, next ? `${nm(next)} · ${t(lv ? 'garage_up' : 'garage_new', { n: next.cap })}` : t('garage_max'),
       next ? buyBtn('buyLand', 'garage', costText(next.cost), canAfford(next.cost)) : `<span class="tag ok">${t('maxed')}</span>`);
   }
   const [levels, key] = table, lv = h[key], next = levels[lv + 1], cost = next && (next.cost || next);
@@ -660,7 +660,7 @@ function panelFeed() {
 // v0.20: the next step of a farm area or the garage, for the estate agent's plans
 function landDeal(kind) {
   const h = S.me;
-  if (kind === 'garage') { const lv = h.garageLv || 0, next = GARAGE[lv + 1]; return { next, cost: next && next.cost, sub: next ? t(lv ? 'garage_up' : 'garage_new', { n: next.cap }) : t('garage_max') }; }
+  if (kind === 'garage') { const lv = h.garageLv || 0, next = GARAGE[lv + 1]; return { next, cost: next && next.cost, sub: next ? `${nm(next)} · ${t(lv ? 'garage_up' : 'garage_new', { n: next.cap })}` : t('garage_max') }; }
   const [levels, key] = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind], lv = h[key], next = levels[lv + 1], cost = next && (next.cost || next);
   let sub;
   if (kind === 'field') sub = next ? t('land_field_sub', { a: FIELD_LEVELS[lv], b: FIELD_LEVELS[lv + 1] }) : t('land_field_max', { n: FIELD_LEVELS[lv] });

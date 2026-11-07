@@ -833,12 +833,12 @@ Object.assign(STR.en, {
   car_out_first: 'Your car is parked out in town: drive it home before you switch cars',
 });
 Object.assign(STR.zh, {
-  land_garage: '车库', garage_cars: '{n} 个车位', garage_new: '在院子里盖一个 {n} 个车位的车库', garage_up: '扩建到 {n} 个车位', garage_max: '已经是最大的车库（5 个车位）',
+  land_garage: '车库', garage_cars: '{n} 个车位', garage_new: '在院子里盖，{n} 个车位', garage_up: '升级到 {n} 个车位，更气派', garage_max: '已经是最豪华的车库（5 个车位）',
   garage_space: '院子里放不下这么大的车库：先挪一挪地块，或者买旁边的地', garage_full: '车位满了：车道停一辆，车库每个车位停一辆。去房产中介盖 / 扩车库',
   snack_land_garage: '车库盖好了 🚗', area_garage: '车库',
 });
 Object.assign(STR.en, {
-  land_garage: 'Garage', garage_cars: '{n} spaces', garage_new: 'Build a garage for {n} car in your yard', garage_up: 'Make it {n} spaces', garage_max: 'The biggest garage (5 spaces)',
+  land_garage: 'Garage', garage_cars: '{n} spaces', garage_new: 'Built in your yard, {n} space', garage_up: 'Upgrade to {n} spaces, and grander', garage_max: 'The grandest garage (5 spaces)',
   garage_space: 'A garage that big won’t fit in your yard: move things around or buy the land next door', garage_full: 'No space: one car in the drive, one per garage space. Build or extend a garage at the estate agent',
   snack_land_garage: 'Your garage is built 🚗', area_garage: 'Garage',
 });

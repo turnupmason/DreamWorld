@@ -149,7 +149,7 @@ table(['项目', '数值'], [['拿在手上', `每件 ≤ ${D.BIG_VOL}，一共 
   ['吃饱', `${D.MALL.fed.hours} 小时：打工 +${D.MALL.fed.pay * 100}%，走路快 ${D.MALL.fed.walk * 100}%`], ['电影海报 / 玩偶 / 巨型泰迪熊', '家产 +60 / +40 / +300']]);
 P('## 车库（v0.19）');
 P('');
-table(['车库', '车位', '价格'], D.GARAGE.slice(1).map((g, i) => [`Lv${i + 1}`, g.cap, `🪙${g.cost.coins} + 🪵${g.cost.wood}`]));
+table(['车库', '样子', '车位', '价格'], D.GARAGE.slice(1).map((g, i) => [`Lv${i + 1}`, g.zh, g.cap, `🪙${g.cost.coins} + 🪵${g.cost.wood}`]));
 P('## 警察（v0.18）');
 P('');
 table(['项目', '数值'], [['没有狗时被邻居看见的概率', `${D.POLICE.witness * 100}%`], ['几天内被抓几次警察会来', `${D.POLICE.strikeDays} 天 ${D.POLICE.strikes} 次（偷小动物被抓直接来）`],
