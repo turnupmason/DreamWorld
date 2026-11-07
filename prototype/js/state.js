@@ -491,6 +491,19 @@ function isRipe(f) { return !!f && cropProg(f) >= 1; }
 // (h.areaAt[key] = [x, y], the top-left tile); without that, the usual spot in AREA.
 const MOVABLE = ['pasture', 'fields', 'orchard', 'pond'];
 const movables = h => (h && h.garageLv ? [...MOVABLE, 'garage'] : MOVABLE);   // v0.19: the garage moves too, once built
+// v0.24: the drive (its design and where it meets the road), with the spaces cars stand in (lot tiles)
+function driveOf(h = S.me) {
+  const st = (h && h.drive && DRIVES[h.drive.style]) ? h.drive.style : 'long', D = DRIVES[st], x = h && h.drive && h.drive.x !== undefined ? h.drive.x : 0, y = LOT_D - D.d;
+  const rects = D.curve ? [{ x, y: y + 2, w: 2, d: D.d - 2 }, { x, y, w: D.w, d: 2 }] : [{ x, y, w: D.w, d: D.d }];
+  let spots;
+  if (st === 'single') spots = [[x + 1, LOT_D - 1.7]];
+  else if (st === 'long') spots = [[x + 1, LOT_D - 1.7], [x + 1, LOT_D - 4.9]];
+  else if (st === 'curve') spots = [[x + 1, LOT_D - 1.9], [x + D.w - 1, y + 1]];
+  else spots = Array.from({ length: D.cap }, (_, i) => [x + 1 + i * 2, y + D.d / 2 + 0.3]);
+  return { st, x, y, w: D.w, d: D.d, cap: D.cap, rects, spots, front: D.curve ? [x, x + 2] : [x, x + D.w] };
+}
+const driveCap = (h = S.me) => driveOf(h).cap;
+const onDrive = (h, x, y) => driveOf(h).rects.some(r => inRect(r, x, y));
 function areaOf(h, k) {
   if (k === 'garage') { const at = h && h.areaAt && h.areaAt.garage, sz = garageSize(Math.max(1, (h && h.garageLv) || 1)); return { x: at ? at[0] : 0, y: at ? at[1] : 0, ...sz }; }
   const A = AREA[k], at = h && h.areaAt && h.areaAt[k]; return at ? { x: at[0], y: at[1], w: A.w, d: A.d } : A;
@@ -903,7 +916,7 @@ const PORCH = { x: AREA.house.x, y: AREA.house.y + AREA.house.d, w: AREA.house.w
 function yardReserved(x, y, w = LOT_W, h = S.me) {
   if (x < 0 || y < 0 || x >= w || y >= LOT_D) return true;
   if (x === MAILBOX[0] && y === MAILBOX[1]) return true;
-  return ['house', 'drive', 'path'].some(k => inRect(AREA[k], x, y)) || movables(h).some(k => inRect(areaOf(h, k), x, y)) || inRect(PORCH, x, y);
+  return ['house', 'path'].some(k => inRect(AREA[k], x, y)) || onDrive(h, x, y) || movables(h).some(k => inRect(areaOf(h, k), x, y)) || inRect(PORCH, x, y);
 }
 function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
   const def = itemDef(scope, k);
@@ -1208,7 +1221,7 @@ function buyItem(scope, k, h = S.me) {
 }
 function buyCar(k, h = S.me) {
   if (h.cars.some(c => c.k === k)) return 'own';
-  if (h === S.me && h.cars.length >= 1 + garageCap(h)) return 'garage';   // v0.19: one in the drive, the rest in the garage
+  if (h === S.me && h.cars.length >= driveCap(h) + garageCap(h)) return 'garage';   // v0.19 / v0.24: room on the drive and in the garage
   if (CARS[k].excl && !exclOK(CARS[k].excl, h)) return 'locked';
   const c = CARS[k].cost;
   if (!canAfford(c, h)) return 'poor';
@@ -1746,12 +1759,13 @@ const babyStealable = (h, a) => isFriend(h.id) && !ANIMALS[a.k].pet && animalSta
 // It has to fit inside your yard, not cover the house, the drive, the path, another area or anything in the yard,
 // and everything must still be reachable afterwards.
 function moveArea(k, x, y, h = S.me) {
+  if (k === 'drive') return moveDrive(x, h);
   if (!movables(h).includes(k)) return 'no';
   const A = areaOf(h, k), LW = homeW(h);
   if (x < 0 || y < 0 || x + A.w > LW || y + A.d > LOT_D) return 'space';
   const r = { x, y, w: A.w, d: A.d }, over = q => x < q.x + q.w && q.x < x + A.w && y < q.y + q.d && q.y < y + A.d;
   const [fx, fy, fw, fd] = HOUSES[h.house].fp;
-  if ([{ x: fx, y: fy, w: fw, d: fd }, AREA.drive, AREA.path, PORCH, { x: MAILBOX[0], y: MAILBOX[1], w: 1, d: 1 }].some(over)) return 'space';
+  if ([{ x: fx, y: fy, w: fw, d: fd }, ...driveOf(h).rects, AREA.path, PORCH, { x: MAILBOX[0], y: MAILBOX[1], w: 1, d: 1 }].some(over)) return 'space';
   if (movables(h).filter(o => o !== k).some(o => over(areaOf(h, o)))) return 'space';
   if (h.yard.some(it => { const [w, d] = itemSize('yard', it); return over({ x: it.x, y: it.y, w, d }); })) return 'space';
   const old = h.areaAt ? { ...h.areaAt } : null;
@@ -1953,10 +1967,62 @@ const fedMult = w => (S.fed && w && S.fed.until > w.start ? 1 + MALL.fed.pay : 1
 // ---------- the school (v0.22) ----------
 function takeClass() {
   S.school = S.school || { classes: 0, certs: 0, day: null };
+  if (S.study) return 'busy';
   if (S.school.day === today()) return 'done';
   if (S.school.certs >= SCHOOL.maxCerts) return 'max';
   if (S.me.coins < SCHOOL.fee) return 'poor';
-  S.me.coins -= SCHOOL.fee; S.school.day = today(); S.school.classes++;
+  S.me.coins -= SCHOOL.fee; S.school.day = today();
+  S.study = { start: now(), end: now() + SCHOOL.minutes * MIN };   // v0.24: a class takes time; you're at school till it ends
+  return 'ok';
+}
+// the class is over: it counts (every few classes, a certificate)
+function classTick() {
+  if (!S.study || now() < S.study.end) return null;
+  S.study = null; S.school.classes++;
   if (S.school.classes % SCHOOL.perCert === 0) { S.school.certs++; return 'cert'; }
   return 'ok';
 }
+
+// ---------- the drive (v0.24) ----------
+// Slide it along the front of the lot (it always reaches the road); it can't cover the house, the path, the mailbox,
+// a farm area, the garage or anything in the yard, and everything must stay reachable.
+function driveFits(h, st, x) {
+  const D = DRIVES[st], LW = homeW(h);
+  if (x < 0 || x + D.w > LW) return 'space';
+  const keep = h.drive; h.drive = { style: st, x };
+  try {
+    const rs = driveOf(h).rects, over = q => rs.some(r => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.d && q.y < r.y + r.d);
+    const [fx, fy, fw, fd] = HOUSES[h.house].fp;
+    if ([{ x: fx, y: fy, w: fw, d: fd }, { x: MAILBOX[0], y: MAILBOX[1], w: 1, d: 1 }].some(over)) return 'space';   // (the garden path can run onto the drive)
+    if (movables(h).some(o => over(areaOf(h, o)))) return 'space';
+    if (h.yard.some(it => { const [w, d] = itemSize('yard', it); return over({ x: it.x, y: it.y, w, d }); })) return 'space';
+    if (typeof yardKeepsWay === 'function' && !yardKeepsWay(h, h.yard)) return 'block';
+    return 'ok';
+  } finally { h.drive = keep; }
+}
+function moveDrive(x, h = S.me) {
+  const st = driveOf(h).st, r = driveFits(h, st, Math.round(x));
+  if (r !== 'ok') return r;
+  h.drive = { style: st, x: Math.round(x) }; YARD_SPOTS = {};
+  return 'ok';
+}
+// A new design: where it fits best (where it is now, else the first place along the front). Paid when it's built.
+function setDrive(st, h = S.me) {
+  const D = DRIVES[st];
+  if (!D || driveOf(h).st === st) return 'same';
+  if (h.cars.length > D.cap + garageCap(h)) return 'cars';
+  if (h.coins < D.cost) return 'poor';
+  const cur = driveOf(h).x, xs = [cur, ...Array.from({ length: homeW(h) }, (_, i) => i).filter(i => i !== cur)];
+  const x = xs.find(xx => driveFits(h, st, xx) === 'ok');
+  if (x === undefined) return 'space';
+  h.coins -= D.cost; h.drive = { style: st, x }; YARD_SPOTS = {};
+  return 'ok';
+}
+// Which car is where at home: the one you drive on the first drive space, then the garage, then the rest of the drive.
+function carSlots(h = S.me) {
+  const others = h.cars.map((c, i) => i).filter(i => i !== h.car), g = garageCap(h), dv = driveOf(h);
+  const garage = others.slice(0, g), rest = others.slice(g);
+  const drive = [[h.car, dv.spots[0]], ...rest.map((i, k) => [i, dv.spots[k + 1]])].filter(([i, s]) => i >= 0 && h.cars[i] && s);
+  return { drive, garage };
+}
+function setTint(scope, id, col) { const it = findItem(scope, id); if (!it || !it.tint) return false; it.tint = col; return true; }

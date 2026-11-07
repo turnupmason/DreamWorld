@@ -180,7 +180,7 @@ function renderHUD() {
     <div class="res row">
       <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>
       <button class="pill farm ${actionsLeft() === 0 ? 'done' : ''}" data-act="capInfo" style="--p:${Math.round(actionsLeft() / ACTION_CAP * 100)}"><i class="ring"></i>${t('farm_pill', { n: actionsLeft() })}</button>${live}
-      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : ''}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${isFed() ? `<button class="pill fed" data-act="mallAct" data-arg="food">😋 ${fmtDur(S.fed.until - now())}</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
+      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : ''}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${S.study ? `<button class="pill work" data-act="placeGo" data-arg="school">📚 ${fmtDur(Math.max(0, S.study.end - now()))}</button>` : ''}${isFed() ? `<button class="pill fed" data-act="mallAct" data-arg="food">😋 ${fmtDur(S.fed.until - now())}</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
     </div>`;
 }
@@ -278,7 +278,8 @@ function floorChips(h) {
 }
 
 function trayHTML(ed) {
-  const scope = ed.scope;
+  // v0.24: drag anything to move it; tap a thing, the house or an area to change it here
+  const scope = ed.scope, h = S.me, sw = (list, cur, act, val = (c, i) => i) => list.map((c, i) => `<button class="swatch sm ${cur === val(c, i) ? 'on' : ''}" style="background:${c.c1 || c}" data-act="${act}" data-arg="${val(c, i)}"></button>`).join('');
   if (ed.hold) {
     const d = itemDef(scope, ed.hold.k);
     return `<div class="tray-row"><div class="grow"><b>${t('tray_place', { name: nm(d) })}</b></div>
@@ -289,38 +290,37 @@ function trayHTML(ed) {
     const it = findItem(scope, ed.sel);
     if (it) {
       const d = itemDef(scope, it.k);
-      return `<div class="tray-row"><div class="grow"><b>${nm(d)}</b></div>
+      return `<div class="tray-row"><div class="grow"><b>${nm(d)}</b><div class="muted small">${t('tray_drag_it')}</div></div>
         <button class="btn small" data-act="trayRotate">↻ ${t('rotate')}</button>
-        ${it.tint ? `<button class="btn small" data-act="trayTint">🎨 ${t('recolor')}</button>` : ''}
-        <button class="btn small" data-act="trayMove">✋ ${t('move')}</button>
-        <button class="btn small" data-act="trayStore">📦 ${t('store')}</button></div>`;
+        <button class="btn small" data-act="trayStore">📦 ${t('store')}</button></div>
+        ${it.tint ? `<div class="color-row"><span>🎨</span>${sw(TINTS, it.tint, 'tintSel', c => c)}</div>` : ''}`;
     }
   }
-  if (scope === 'yard' && UI.moveArea) return `<div class="tray-row"><div class="grow"><b>${t('area_tap_new', { name: t('area_' + UI.moveArea) })}</b></div>
-      <button class="btn small" data-act="areaCancel">✕ ${t('cancel')}</button></div>`;
-  const tabs = `<div class="tray-tabs"><button class="chip ${UI.tray === 'items' ? 'on' : ''}" data-act="trayTab" data-arg="items">${t('tray_items')}</button>
-    <button class="chip ${UI.tray === 'colors' ? 'on' : ''}" data-act="trayTab" data-arg="colors">${t('tray_colors')}</button>
-    ${scope === 'yard' ? `<button class="chip ${UI.tray === 'areas' ? 'on' : ''}" data-act="trayTab" data-arg="areas">${t('tray_areas')}</button>` : ''}
-    <span class="muted">${t('tray_hint')}</span></div>`;
-  if (UI.tray === 'areas' && scope === 'yard') {   // v0.15: move the pasture, fields, orchard or pond
-    const E = { pasture: '🐄', fields: '🌱', orchard: '🌳', pond: '🐟', garage: '🚗' };
-    return tabs + `<div class="tray-areas">${movables(S.me).map(k => `<button class="btn small" data-act="areaPick" data-arg="${k}">${E[k]} ${t('area_' + k)}</button>`).join('')}</div><p class="muted small">${t('area_note')}</p>`;
+  if (scope === 'yard' && UI.editSel === 'house') return `<div class="tray-row"><div class="grow"><b>🏠 ${nm(HOUSES[h.house])}</b></div><button class="btn small" data-act="editSel" data-arg="">✓ ${t('done')}</button></div>
+      <div class="color-row"><span>${t('wall_color')}</span>${sw(WALL_COLORS, WALL_COLORS.indexOf(h.wall), 'setWall')}</div>
+      <div class="color-row"><span>${t('roof_color')}</span>${sw(ROOF_COLORS, ROOF_COLORS.indexOf(h.roof), 'setRoof')}</div>`;
+  if (scope === 'yard' && UI.editSel === 'drive') {
+    const cur = driveOf(h).st;
+    return `<div class="tray-row"><div class="grow"><b>🚗 ${t('area_drive')}</b><div class="muted small">${t('drive_note', { n: driveCap(h), g: garageCap(h) })}</div></div><button class="btn small" data-act="editSel" data-arg="">✓ ${t('done')}</button></div>
+      <div class="tray-items">${Object.entries(DRIVES).map(([k, D]) => `<button class="tray-item ${k === cur ? 'on' : ''}" data-act="setDrive" data-arg="${k}"><span class="drive-pic">${drivePic(k)}</span><span>${nm(D)}</span><i>${k === cur ? '✓' : D.cost ? '🪙' + fmtNum(D.cost) : t('free')}</i></button>`).join('')}</div>`;
   }
-  if (UI.tray === 'colors') {
-    const sw = (list, cur, act) => list.map((c, i) => `<button class="swatch sm ${cur === i ? 'on' : ''}" style="background:${c.c1 || c}" data-act="${act}" data-arg="${i}"></button>`).join('');
-    if (scope === 'room') return tabs + `<div class="color-row"><span>${t('wallpaper')}</span>${sw(ROOM_WALLS, curRoom(S.me).wall, 'setRoomWall')}</div>
-      <div class="color-row"><span>${t('floor')}</span>${sw(FLOORS, curRoom(S.me).floor, 'setFloor')}</div>`;
-    return tabs + `<div class="color-row"><span>${t('wall_color')}</span>${sw(WALL_COLORS, WALL_COLORS.indexOf(S.me.wall), 'setWall')}</div>
-      <div class="color-row"><span>${t('roof_color')}</span>${sw(ROOF_COLORS, ROOF_COLORS.indexOf(S.me.roof), 'setRoof')}</div>`;
-  }
-  const stored = Object.entries(S.me.store).filter(([key]) => key.startsWith(scope + ':'));
-  if (!stored.length) return tabs + `<div class="tray-empty"><span class="muted">${t('tray_empty')}</span>
-    <button class="btn small" data-act="openShop" data-arg="${scope === 'room' ? 'furn' : 'yard'}">🛒 ${t('go_shop')}</button></div>`;
-  return tabs + `<div class="tray-items">${stored.map(([key, n]) => {
+  if (scope === 'yard' && UI.editSel) return `<div class="tray-row"><div class="grow"><b>${t('area_' + UI.editSel)}</b><div class="muted small">${t('tray_drag_area')}</div></div><button class="btn small" data-act="editSel" data-arg="">✓ ${t('done')}</button></div>`;
+  const colors = scope === 'room' ? `<div class="color-row"><span>${t('wallpaper')}</span>${sw(ROOM_WALLS, curRoom(h).wall, 'setRoomWall')}</div><div class="color-row"><span>${t('floor')}</span>${sw(FLOORS, curRoom(h).floor, 'setFloor')}</div>` : '';
+  const hint = `<div class="tray-hint muted small">✋ ${t(scope === 'yard' ? 'tray_hint_yard' : 'tray_hint_room')}</div>`;
+  const stored = Object.entries(h.store).filter(([key]) => key.startsWith(scope + ':'));
+  if (!stored.length) return hint + `<div class="tray-empty"><span class="muted">${t('tray_empty')}</span>
+    <button class="btn small" data-act="openShop" data-arg="${scope === 'room' ? 'furn' : 'yard'}">🛒 ${t('go_shop')}</button></div>` + colors;
+  return hint + `<div class="tray-items">${stored.map(([key, n]) => {
     const k = key.split(':')[1], d = itemDef(scope, k);
     return `<button class="tray-item" data-act="holdNew" data-arg="${k}">${thumbImg(scope === 'room' ? 'furn' : 'yard', k, {}, 72, 58, 'thumb sm')}
       <span>${nm(d)}</span><i>×${n}</i></button>`;
-  }).join('')}</div>`;
+  }).join('')}</div>` + colors;
+}
+// a tiny plan of a drive design
+function drivePic(k) {
+  const D = DRIVES[k], s2 = 6, w = D.w * s2, d = D.d * s2;
+  const r = D.curve ? `<rect x="0" y="${2 * s2}" width="${2 * s2}" height="${d - 2 * s2}" rx="2"/><rect x="0" y="0" width="${w}" height="${2 * s2}" rx="2"/>` : `<rect x="0" y="0" width="${w}" height="${d}" rx="2"/>`;
+  return `<svg width="${w + 2}" height="${d + 2}" viewBox="-1 -1 ${w + 2} ${d + 2}"><g fill="#cfc8bb" stroke="#9a9384" stroke-width="1">${r}</g></svg>`;
 }
 
 // ---------- shop ----------
@@ -727,6 +727,11 @@ function stagesRow(kind, k, n, cur, names, w = 72) {
   return `<div class="stages">${names.map((nmS, s) => `<div class="${s === cur ? 'on' : ''}">${thumbImg(kind, k, { stage: s }, w, 60, 'thumb xs')}<span>${nmS}</span></div>`).join('')}</div>`;
 }
 const SHEETS = {
+  garage() {   // v0.24: which car is where (drive, garage, parked out) and which one you drive
+    const h = S.me, sl = carSlots(h), where = i => (i === h.car && S.carAt ? `📍 ${S.carAt.place ? nm(placeInfo(S.carAt.place)) : t('away_street')}` : sl.garage.includes(i) ? `🅿️ ${t('in_garage')}` : `🚗 ${t('on_drive')}`);
+    const rows = h.cars.map((c, i) => `<div class="list-item">${thumbImg('car', c.k, { color: c.color }, 84, 56, 'thumb sm')}<div class="grow"><b>${nm(CARS[c.k])}</b><div class="muted small">${where(i)}</div></div>${i === h.car ? `<span class="tag ok">${t('car_driving')}</span>` : `<button class="btn small" data-act="driveCar" data-arg="${i}">${t('car_drive')}</button>`}</div>`).join('');
+    return `<h2>🅿️ ${h.garageLv ? nm(GARAGE[h.garageLv]) : t('land_garage')}</h2><p class="muted">${t('garage_spaces', { d: driveCap(h), g: garageCap(h), n: h.cars.length })}</p><div class="card">${rows || `<p class="muted">${t('no_cars')}</p>`}</div>`;
+  },
   ware(id) {
     const w = Scene.shopWare(id);
     if (!w) return '';
@@ -1172,6 +1177,7 @@ function walkDo(tg, o) {
   if (S.live) { snack(t('snack_live_busy')); return false; }
   if (awayCheck()) return false;
   if (S.work) { snack(`💼 ${t('job_busy', { place: nm(placeInfo(S.work.place)) })}`); return false; }   // v0.14: at work
+  if (S.study) { snack(`📚 ${t('school_busy', { m: fmtDur(S.study.end - now()) })}`); return false; }   // v0.24: in class
   if (jailed()) { jailSnack(); return false; }   // v0.18: held at the police station
   const ok = Scene.go(tg, { queue: true, fail: () => snack(t('snack_cant_reach')), ...o });
   if (!ok) snack(t('snack_cant_reach'));
@@ -1329,9 +1335,9 @@ const ACT = {
     if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
     if (r === 'done') return snack(t('school_done'));
     if (r === 'max') return snack(t('school_max'));
-    Sound.play(r === 'cert' ? 'levelup' : 'chime');
-    snack(r === 'cert' ? `🎓 ${t('school_cert', { n: S.school.certs, p: Math.round(S.school.certs * SCHOOL.certPay * 100) })}` : `📚 ${t('school_class', { n: S.school.classes % SCHOOL.perCert, m: SCHOOL.perCert })}`);
-    save(); if (UI.sheet) renderSheet();
+    if (r === 'busy') return snack(t('school_busy', { m: fmtDur(S.study.end - now()) }));
+    Sound.play('chime'); snack(`📚 ${t('school_started', { m: SCHOOL.minutes })}`);
+    save(); closeSheet();
   },
   // v0.18: things to do at the mall
   mallAct: k => (k === 'trophies' ? openSheet('trophies', 'me') : openSheet(k)),
@@ -1510,7 +1516,7 @@ const ACT = {
     if (w.kind === 'car') {
       const pend = allPending().filter(e => e.act === 'buyCar').length;
       if (S.me.cars.some(c => c.k === w.k) || allPending().some(e => e.act === 'buyCar' && e.k === w.k)) return snack(t('owned'));
-      if (S.me.cars.length + pend >= 1 + garageCap()) { Sound.play('oops'); return snack(`🚗 ${t('garage_full')}`); }
+      if (S.me.cars.length + pend >= driveCap() + garageCap()) { Sound.play('oops'); return snack(`🚗 ${t('garage_full')}`); }
       if (!canAfford(CARS[w.k].cost)) { Sound.play('oops'); return snack(t('snack_poor')); }
       pay(CARS[w.k].cost); S.me.coins += w.price;   // paid in full (wood too); the coin part rides with the delivery
       if (checkout([{ wid: w.id, kind: 'car', k: w.k, act: 'buyCar', arg: w.k, price: w.price, n: 1, vol: 0 }], 'deliver') !== 'ok') return;
@@ -1650,7 +1656,10 @@ const ACT = {
   release(k) { if (releaseBaby(k)) snack(t('snack_baby', { name: nm(ANIMALS[k].baby) })); },
   // design mode
   design() { Scene.startEdit(UI.tab === 'home' && UI.inside ? 'room' : 'yard'); UI.tray = 'items'; },
-  editDone() { Scene.stopEdit(); },
+  editDone() { Scene.stopEdit(); UI.editSel = null; Scene.editSel(null); },
+  editSel(k) { UI.editSel = k || null; Scene.editSel(UI.editSel); },
+  tintSel(c) { const ed = Scene.getEdit(); if (ed && ed.sel) setTint(ed.scope, ed.sel, c); },
+  setDrive(st) { const r = setDrive(st); if (r === 'ok') { Sound.play('coins'); snack(`🚗 ${t('drive_built', { name: nm(DRIVES[st]) })}`); Scene.dropEnts(); } else if (r === 'poor') { Sound.play('oops'); snack(t('snack_poor')); } else if (r === 'space') snack(t('drive_no_room')); else if (r === 'cars') snack(t('drive_cars')); },
   trayTab(x) { UI.tray = x; },
   areaPick(k) { UI.moveArea = k; Scene.select(null); },
   areaCancel() { UI.moveArea = null; },
@@ -1854,7 +1863,8 @@ function onSceneHit(h) {
   if (k === 'shopDoor') { ACT.leaveStore(); return refresh(); }
   if (k === 'worldMap') { ACT.world(); return refresh(); }
   if (k === 'shop') return openSheet('place', h.k);   // (clinic is a shop too since v0.14)
-  if (k === 'place') return openSheet('place', h.key);
+  if (k === 'place' && h.key) return openSheet('place', h.key);
+  if (k === 'garage' && h.owner === 'me') return openSheet('garage');   // v0.24: which cars are where
   if (k === 'land') return openSheet('land', { st: h.st, p: h.p, n: h.n, run: h.run });
   if (k === 'buyParcel') return openSheet('land', { st: lotOf('me').st, p: lotOf('me').p + lotOf('me').n, n: 1, next: true });
   if (k === 'furn') {
@@ -1871,11 +1881,18 @@ function onSceneHit(h) {
   if (k === 'plaza') return openSheet('place', 'plaza');
   const ed = Scene.getEdit();
   if (!ed) return;
-  if (k === 'place') {
+  if (k === 'drop') {   // v0.24 (was 'place', which a public place also used, so nothing could be put down)
     const hd = ed.hold;
+    if (!hd) return refresh();
     const ok = hd.id ? moveItem(ed.scope, hd.id, h.x, h.y, hd.rot) : placeFromStore(ed.scope, hd.k, h.x, h.y, hd.rot, hd.tint);
-    if (ok) { Scene.hold(null); snack(t('snack_placed')); } else snack(t(PLACE_WHY === 'block' ? 'snack_blocks_way' : 'snack_noroom'));
-  } else if (k === 'item') Scene.select(h.id);
+    if (ok) { Scene.hold(null); Sound.play('select'); if (hd.id) Scene.select(hd.id); else snack(t('snack_placed')); }
+    else { snack(t(PLACE_WHY === 'block' ? 'snack_blocks_way' : 'snack_noroom')); if (h.dragged) Scene.hold(null); }   // dragged somewhere it can't go: it stays where it was
+  } else if (k === 'areaDrop') {
+    const r = moveArea(h.k, h.x, h.y);
+    if (r === 'ok') { Sound.play('select'); Scene.dropEnts(); } else snack(t(r === 'block' ? 'snack_blocks_way' : 'area_no_room'));
+    UI.editSel = h.k; Scene.editSel(h.k);
+  } else if (k === 'editArea' || k === 'editHouse') { Scene.select(null); UI.editSel = k === 'editHouse' ? 'house' : h.k; Scene.editSel(UI.editSel); }
+  else if (k === 'item') { UI.editSel = null; Scene.editSel(null); Scene.select(h.id); }
   else if (k === 'deselect') {
     if (UI.moveArea && h.lx !== undefined) {   // v0.15: put the farm area here (its top-left corner)
       const r = moveArea(UI.moveArea, Math.floor(h.lx), Math.floor(h.ly));
@@ -1883,7 +1900,7 @@ function onSceneHit(h) {
       else snack(t(r === 'block' ? 'snack_blocks_way' : 'area_no_room'));
       return refresh();
     }
-    Scene.select(null);
+    Scene.select(null); UI.editSel = null; Scene.editSel(null);
   }
   refresh();
 }
@@ -2448,7 +2465,8 @@ function placeBody(key) {
     return `<p>${t('st_desc_school', { n: SCHOOL.fee, m: SCHOOL.perCert, p: Math.round(SCHOOL.certPay * 100), max: SCHOOL.maxCerts })}</p>
       <div class="card"><div class="row between"><span>🎓 ${t('school_certs')}</span><b>${sc.certs} / ${SCHOOL.maxCerts}</b></div><div class="row between"><span>📚 ${t('school_next')}</span><b>${sc.classes % SCHOOL.perCert} / ${SCHOOL.perCert}</b></div>
       <div class="muted small">${t('school_pay_now', { p: Math.round(sc.certs * SCHOOL.certPay * 100) })}</div></div>
-      <button class="btn primary block" data-act="takeClass" ${done || max || S.me.coins < SCHOOL.fee ? 'disabled' : ''}>📚 ${max ? t('school_max') : done ? t('school_done') : t('school_take', { n: SCHOOL.fee })}</button>`;
+      ${S.study ? `<p>📚 ${t('school_in_class', { m: fmtDur(S.study.end - now()) })}</p><div class="bar"><i style="width:${Math.round(Math.min(1, (now() - S.study.start) / (S.study.end - S.study.start)) * 100)}%"></i></div>`
+        : `<button class="btn primary block" data-act="takeClass" ${done || max || S.me.coins < SCHOOL.fee ? 'disabled' : ''}>📚 ${max ? t('school_max') : done ? t('school_done') : t('school_take', { n: SCHOOL.fee, m: SCHOOL.minutes })}</button>`}`;
   }
   if (key === 'firestation' || key === 'gas') return `<p>${t('st_desc_' + key)}</p>`;
   if (key === 'police') {   // v0.18: the holding cell (when you're held) or how the police work
@@ -2779,6 +2797,7 @@ setInterval(() => {
   weatherFarm(1000);
   if (!Scene.tripNow()) { const u = unloadAtHome(); if (u) { Sound.play('collect'); snack(`📦 ${t('unloaded', { n: u.ok })}${u.back ? ' ' + t('unloaded_back', { n: u.back }) : ''}`); refresh(); } }   // v0.20
   { const d = dueDeliveries(); if (d) { Sound.play('chime'); snack(`🚚 ${t('delivered', { n: d.ok })}${d.back ? ' ' + t('unloaded_back', { n: d.back }) : ''}`); refresh(); } }
+  { const c = classTick(); if (c) { Sound.play(c === 'cert' ? 'levelup' : 'chime'); snack(c === 'cert' ? `🎓 ${t('school_cert', { n: S.school.certs, p: Math.round(S.school.certs * SCHOOL.certPay * 100) })}` : `📚 ${t('school_class', { n: S.school.classes % SCHOOL.perCert, m: SCHOOL.perCert })}`); refresh(); } }   // v0.24
   if (jailTick()) { Sound.play('chime'); snack(`🚔 ${t('jail_out')}`); outOfJail(); refresh(); }
   if (S.work && now() >= S.work.end) { const r = finishShift(); if (r) { Sound.play('coins'); snack(`💼 ${t(r.promoted ? 'job_promoted' : 'job_done', { n: r.pay, rank: nm(JOB_RANKS[jobRank()]) })}`); refresh(); } }
   if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }

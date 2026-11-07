@@ -15,7 +15,7 @@ const Scene = (() => {
   let hits = [];
   const floats = [];
   const ents = new Map();
-  let edit = null, hover = null;
+  let edit = null, hover = null, UI_EDIT_SEL = null;   // UI_EDIT_SEL (v0.24): 'house' or an area picked in design mode
   let rankCache = { t: 0, total: 0 };
   const WOODS = 14, WX0 = WORLD.x0 - WOODS, WY0 = WORLD.y0 - WOODS, WX1 = WORLD.x1 + WOODS, WY1 = WORLD.y1 + WOODS;
   // The town plan on screen (v0.12: every community has its own; see LAYOUTS in data.js). Set every frame.
@@ -185,10 +185,10 @@ const Scene = (() => {
     h.trees.forEach((t, i) => { if (t && i < orchardSlots(h)) { const [sx, sy] = orchardSlot(h, i); block(sx, sy, 1, 1); } });
     h.fields.forEach((f, i) => { const [x, y] = fieldPos(i, h); block(x, y, 1, 1); });   // farmland is not for walking on
     h.yard.forEach(it => { const [w2, d2] = itemSize('yard', it); block(it.x, it.y, w2, d2); });
-    if (h.car >= 0 && h.cars[h.car]) block(0, 9, 2, 2);
+    carSlots(h).drive.forEach(([i, sp]) => { if (!(h.id === 'me' && i === h.car && S.carAt)) block(Math.floor(sp[0] - 0.5), Math.floor(sp[1] - 1), 1, 2); });
     block(MAILBOX[0], MAILBOX[1], 1, 1);
     const wall = (ax, ay, bx, by) => {
-      if (ax === bx && Math.min(ay, by) === LOT_D - 1 && Math.max(ay, by) === LOT_D) return !(ax <= 1 || ax === 3);   // front fence, open at drive and path
+      if (ax === bx && Math.min(ay, by) === LOT_D - 1 && Math.max(ay, by) === LOT_D) { const fr = driveOf(h).front; return !((ax >= fr[0] && ax < fr[1]) || ax === 3); }   // front fence, open at the drive and the path
       if (ay === by && Math.min(ax, bx) === LW - 1 && Math.max(ax, bx) === LW) return ay < LOT_D;                      // side fence
       if (pr && inRect(pr, ax, ay) !== inRect(pr, bx, by)) {
         const gy = pr.y + pr.d - 1;
@@ -454,7 +454,10 @@ const Scene = (() => {
         tile(ox + i, oy + j, LAWN[((i + j) % 2) * 2 + (v > 0.5 ? 1 : 0)]);
       }
     } else flatRect(ox, oy, LW, LOT_D, PAL.lawn);
-    flatRect(ox + AREA.drive.x + 0.1, oy + AREA.drive.y, AREA.drive.w - 0.2, AREA.drive.d, '#cfc8bb', 'rgba(0,0,0,.05)');
+    { const dv = driveOf(h);   // v0.24: the drive's design
+      dv.rects.forEach(r => { flatRect(ox + r.x + 0.05, oy + r.y, r.w - 0.1, r.d, '#bdb6a8'); flatRect(ox + r.x + 0.15, oy + r.y + 0.08, r.w - 0.3, r.d - 0.08, '#d3ccbe'); });
+      if (dv.st === 'curve') { const c = iso(ox + dv.x + 2, oy + dv.y + 2); ellipse(c.x, c.y, 0.9 * 45 * cam.z, 0.45 * 45 * cam.z, '#d3ccbe'); }
+      if (cam.z > 0.4) dv.spots.forEach(([sx, sy]) => { const a = iso(ox + sx - 0.95, oy + sy - 1.3), b = iso(ox + sx - 0.95, oy + sy + 1.3), c2 = iso(ox + sx + 0.95, oy + sy - 1.3), d2 = iso(ox + sx + 0.95, oy + sy + 1.3); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.55)', 0.8 * cam.z); line(c2.x, c2.y, d2.x, d2.y, 'rgba(255,255,255,.55)', 0.8 * cam.z); }); }
     const [, hfy, , hd] = HOUSES[h.house].fp;
     if (f) for (let j = hfy + hd; j < LOT_D; j++) for (const dv of [0.28, 0.72]) {
       const c = iso(ox + 3.5 + (hash(j, dv) - 0.5) * 0.2, oy + j + dv);
@@ -517,7 +520,7 @@ const Scene = (() => {
     if (f) {
       for (let x = 0; x < LOT_W; x++) {
         if (!onPasture(x, 0, x + 1, 0)) seg(x, 0, x + 1, 0);
-        if (x !== 3 && x > 1) seg(x, LOT_D, x + 1, LOT_D);
+        { const fr = driveOf(h).front; if (x !== 3 && !(x >= fr[0] && x < fr[1])) seg(x, LOT_D, x + 1, LOT_D); }
       }
       for (let y = 0; y < LOT_D; y++) { seg(0, y, 0, y + 1); if (!onPasture(LOT_W, y, LOT_W, y + 1)) seg(LOT_W, y, LOT_W, y + 1); }
       if (pr) {
@@ -525,7 +528,7 @@ const Scene = (() => {
         for (let x = pr.x; x < pr.x + pr.w; x++) { seg(x, pr.y, x + 1, pr.y, 'rail'); seg(x, pr.y + pr.d, x + 1, pr.y + pr.d, 'rail'); }
         for (let y = pr.y; y < pr.y + pr.d; y++) { if (y !== gy) seg(pr.x, y, pr.x, y + 1, 'rail'); seg(pr.x + pr.w, y, pr.x + pr.w, y + 1, 'rail'); }
       }
-    } else { seg(0, 0, LOT_W, 0); seg(0, 0, 0, LOT_D); seg(2, LOT_D, 3, LOT_D); seg(4, LOT_D, LOT_W, LOT_D); seg(LOT_W, 0, LOT_W, LOT_D); }
+    } else { seg(0, 0, LOT_W, 0); seg(0, 0, 0, LOT_D); seg(LOT_W, 0, LOT_W, LOT_D); }
   }
   const footRect = (x, y, w, d, hgt) => ({ x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: iso(x, y).y - hgt * cam.z, y1: iso(x + w, y + d).y });
 
@@ -632,14 +635,15 @@ const Scene = (() => {
     }
     // v0.19: the garage, with the cars that aren't in the drive parked inside
     if (h.garageLv) {
-      const G = areaOf(h, 'garage'), inside = h.cars.filter((c, i) => i !== h.car || (h.id === 'me' && false));
+      const G = areaOf(h, 'garage'), inside = carSlots(h).garage.map(i => h.cars[i]);
       objs.push({ d: ox + oy + G.x + G.y + (G.w + G.d) / 2, f: () => { const r = drawGarage(ox + G.x, oy + G.y, garageCap(h), inside, ts); if (focus && r) hits.push({ kind: 'garage', owner: h.id, ...r }); } });
     }
     // car
-    if (h.car >= 0 && h.cars[h.car] && !(h.id === 'me' && (S.carAt || (trip && trip.inCar && !trip.arrived)))) {   // not while it's parked out or you're driving it
-      const c = h.cars[h.car];
-      objs.push({ d: ox + oy + 1 + 10.2, f: () => { const r = drawCar(c, ox + 0.5, oy + 9, ts); if (focus && r) hits.push({ kind: 'car', owner: h.id, ...r }); } });
-    }
+    carSlots(h).drive.forEach(([i, sp]) => {   // v0.24: each car on its space on the drive (not the one you're out in)
+      if (h.id === 'me' && i === h.car && (S.carAt || (trip && trip.inCar && !trip.arrived))) return;
+      const c = h.cars[i];
+      objs.push({ d: ox + oy + sp[0] + sp[1] + 0.2, f: () => { drawCarDir(c, ox + sp[0], oy + sp[1], '+y', ts); const q = iso(ox + sp[0], oy + sp[1]); if (focus) hits.push({ kind: 'car', owner: h.id, x0: q.x - 26 * cam.z, x1: q.x + 26 * cam.z, y0: q.y - 34 * cam.z, y1: q.y + 14 * cam.z }); } });
+    });
     // yard
     h.yard.forEach(it => {
       if (edit && edit.hold && edit.hold.id === it.id) return;
@@ -838,8 +842,8 @@ const Scene = (() => {
   function peaks() {
     if (PEAKS) return PEAKS;
     PEAKS = [];
-    for (let x = WX0 - 6; x < WX1 + 10; x += 15) PEAKS.push({ x: x + hash(x, 1) * 6, y: WY0 - 6 + hash(x, 2) * 5, r: 9 + hash(x, 3) * 6, h: 150 + hash(x, 4) * 140 });
-    for (let y = WY0 + 8; y < WY1 + 6; y += 15) PEAKS.push({ x: WX0 - 6 + hash(y, 5) * 5, y: y + hash(y, 6) * 6, r: 9 + hash(y, 7) * 6, h: 150 + hash(y, 8) * 140 });
+    for (let x = WX0 - 6; x < WX1 + 10; x += 15) PEAKS.push({ x: x + hash(x, 1) * 6, y: WY0 - 16 + hash(x, 2) * 5, r: 9 + hash(x, 3) * 6, h: 150 + hash(x, 4) * 140 });
+    for (let y = WY0 + 8; y < WY1 + 6; y += 15) PEAKS.push({ x: WX0 - 16 + hash(y, 5) * 5, y: y + hash(y, 6) * 6, r: 9 + hash(y, 7) * 6, h: 150 + hash(y, 8) * 140 });
     return PEAKS;
   }
   function mountains(objs, vr) {
@@ -1156,12 +1160,12 @@ const Scene = (() => {
     if (mode === 'town') liveTownObjs(objs, dt, ts);
     if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
     else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = S.out.pt; objs.push({ d: mx + my + 0.6, f: () => drawMeOut(mx, my, ts) }); }
-    const atPlace = S.work ? S.work.place : jailed() ? 'police' : null;
+    const atPlace = S.work ? S.work.place : jailed() ? 'police' : S.study ? 'school' : null;
     if (atPlace && mode === 'town' && VIEW_TOWN === myTown() && placePt(atPlace)) {   // at work (v0.14) or held by the police (v0.18)
-      const [wx, wy] = placePt(atPlace), jail = !S.work;
+      const [wx, wy] = placePt(atPlace), jail = !S.work && !S.study;
       objs.push({ d: wx + wy + 0.6, f: () => { const p = iso(wx, wy); drawPerson(p.x, p.y, cam.z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: jail ? 'tired' : energyLevel(), ts, seed: 3, pose: 'stand' });
         if (jail) for (let i = -2; i <= 2; i++) line(p.x + i * 3.4 * cam.z, p.y - 2 * cam.z, p.x + i * 3.4 * cam.z, p.y - 44 * cam.z, '#5b6470', 1.2 * cam.z);
-        if (cam.z > 0.3) nameTag(p, `${jail ? '🚔' : '💼'} ${S.me.name || ''}`, true); } });
+        if (cam.z > 0.3) nameTag(p, `${jail ? (S.study ? '📚' : '🚔') : '💼'} ${S.me.name || ''}`, true); } });
     }
     if (mode === 'town') parkedObjs(objs, ts);
     if (edit && edit.scope === 'yard') { const [ox, oy] = origin('me'); yardSpots(homeW(S.me), S.me).forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)')); }
@@ -1620,18 +1624,21 @@ const Scene = (() => {
   function mePos() {
     if (S.work && VIEW_TOWN === myTown() && placePt(S.work.place)) return placePt(S.work.place);
     if (S.jail && VIEW_TOWN === myTown() && placePt('police')) return placePt('police');
+    if (S.study && VIEW_TOWN === myTown() && placePt('school')) return placePt('school');
     if (outHere()) return S.out.pt;
     return gateOf('me');
   }
   const atHomeNow = () => !outHere() && !S.work && !S.jail;
   // Your car: in a car park somewhere (S.carAt) or in your drive.
-  const homeBay = () => { const [ox, oy] = origin('me'); return [ox + 1, oy + 10.2]; };
+  const homeBay = () => { const [ox, oy] = origin('me'), sp = driveOf(S.me).spots[0]; return [ox + sp[0], oy + sp[1]]; };
   // v0.22: where each car waits at home: the one you drive in the drive, the others in the garage's spaces
   function homeCarPt(i) {
-    const h = S.me, [ox, oy] = origin('me');
-    if (i === h.car || !h.garageLv) return homeBay();
-    const G = areaOf(h, 'garage'), slot = h.cars.filter((c, j) => j !== h.car).indexOf(h.cars[i]), bay = (G.w - 0.4) / garageCap(h);
-    return [ox + G.x + 0.2 + bay * (Math.max(0, slot) + 0.5), oy + G.y + G.d - 0.4];
+    const h = S.me, [ox, oy] = origin('me'), sl = carSlots(h), dr = sl.drive.find(([j]) => j === i);
+    if (dr) return [ox + dr[1][0], oy + dr[1][1]];
+    const slot = sl.garage.indexOf(i);
+    if (slot < 0 || !h.garageLv) return homeBay();
+    const G = areaOf(h, 'garage'), bay = (G.w - 0.4) / garageCap(h);
+    return [ox + G.x + 0.2 + bay * (slot + 0.5), oy + G.y + G.d - 0.4];
   }
   const doorPt = () => { const [ox, oy] = origin('me'), [fx, fy, fw, fd] = HOUSES[S.me.house].fp; return [ox + DOOR_X, oy + fy + fd + 0.7]; };
   const carPos = () => (S.carAt && S.carAt.town === VIEW_TOWN ? S.carAt.pt : homeBay());
@@ -1723,7 +1730,7 @@ const Scene = (() => {
   }
   function drawTrip(ts) {
     const z = cam.z, p = iso(trip.x, trip.y);
-    if (trip.inCar) { ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir(trip.car, trip.x, trip.y, trip.dir, ts); ctx.restore(); return; }
+    if (trip.inCar) { const off = (trip.h || 0) > 1 ? [0, 0] : trip.dir === '+x' ? [0, 0.45] : trip.dir === '-x' ? [0, -0.45] : trip.dir === '+y' ? [-0.45, 0] : [0.45, 0]; ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir(trip.car, trip.x + off[0], trip.y + off[1], trip.dir, ts); ctx.restore(); return; }   // v0.24: on the right
     drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
     carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
@@ -2537,6 +2544,23 @@ const Scene = (() => {
 
   // ---------- design mode ----------
   function editOrigin() { return edit && edit.scope === 'yard' ? origin('me') : [0, 0]; }
+  // v0.24: what's under your finger when you press in design mode: a thing, or (in the yard) an area you can drag
+  function editPress(sx, sy) {
+    const items = hits.filter(h => h.kind === 'item' && inside(h, sx, sy)), solid = items.filter(h => !h.flat), pick = (solid.length ? solid : items).pop();
+    if (pick) return { type: 'item', id: pick.id };
+    const ar = [...hits].reverse().find(h => h.kind === 'editArea' && inside(h, sx, sy));
+    if (ar) { const w = unIso(sx, sy), [ox, oy] = editOrigin(), A = ar.k === 'drive' ? driveOf(S.me) : areaOf(S.me, ar.k); return { type: 'area', k: ar.k, off: [w.x - ox - A.x, w.y - oy - A.y] }; }
+    return null;
+  }
+  function areaDropAt(pr, sx, sy) { const w = unIso(sx, sy), [ox, oy] = editOrigin(); return { x: Math.round(w.x - ox - pr.off[0]), y: Math.round(w.y - oy - pr.off[1]) }; }
+  const EDIT_AREAS = h => [...movables(h).filter(k => k !== 'pasture' || h.pastureLv).filter(k => k !== 'orchard' || h.orchardLv).filter(k => k !== 'pond' || h.pondLv), 'drive'];
+  function areaFits(k, x, y) {
+    const h = S.me, keep = h.areaAt ? JSON.parse(JSON.stringify(h.areaAt)) : null;
+    const r = moveArea(k, x, y, h);
+    if (keep) h.areaAt = keep; else delete h.areaAt;
+    YARD_SPOTS = {};
+    return r === 'ok';
+  }
   function holdOrigin(sx, sy) {
     const p = unIso(sx, sy), [ox, oy] = editOrigin(), it = edit.hold, def = itemDef(edit.scope, it.k);
     const [w, d] = it.rot ? [def.d, def.w] : [def.w, def.d];
@@ -2544,6 +2568,22 @@ const Scene = (() => {
   }
   function editOverlay(ts) {
     const z = cam.z, [ox, oy] = editOrigin();
+    if (edit.scope === 'yard') {   // v0.24: every area you can drag, outlined; the house you can tap to recolour
+      const h = S.me;
+      EDIT_AREAS(h).forEach(k => {
+        const A = k === 'drive' ? driveOf(h) : areaOf(h, k), sel = UI_EDIT_SEL === k;
+        ctx.save(); ctx.setLineDash([6 * z, 5 * z]); flatRect(ox + A.x, oy + A.y, A.w, A.d, sel ? 'rgba(239,125,60,.14)' : null, sel ? '#ef7d3c' : 'rgba(255,255,255,.75)', 0.3, (sel ? 2.4 : 1.4) * z); ctx.restore();
+        if (!edit.hold && !edit.areaDrag) hits.push({ kind: 'editArea', k, ...footRect(ox + A.x, oy + A.y, A.w, A.d, 10) });
+      });
+      const [fx, fy, fw, fd] = HOUSES[h.house].fp;
+      if (!edit.hold) hits.push({ kind: 'editHouse', ...footRect(ox + fx, oy + fy, fw, fd, 70) });
+      if (UI_EDIT_SEL === 'house') { ctx.save(); ctx.setLineDash([6 * z, 5 * z]); ctx.lineDashOffset = -ts / 60; flatRect(ox + fx - 0.2, oy + fy - 0.2, fw + 0.4, fd + 0.4, null, '#ef7d3c', 0.3, 2.4 * z); ctx.restore(); }
+      if (edit.areaDrag && hover) {
+        const pr = edit.areaDrag, o = areaDropAt(pr, hover.x, hover.y), A = pr.k === 'drive' ? driveOf(h) : areaOf(h, pr.k), ny = pr.k === 'drive' ? A.y : o.y;
+        const ok = pr.k === 'drive' ? driveFits(h, A.st, o.x) === 'ok' : areaFits(pr.k, o.x, o.y);
+        flatRect(ox + o.x, oy + ny, A.w, A.d, ok ? 'rgba(76,175,106,.35)' : 'rgba(229,72,77,.35)', ok ? '#4caf6a' : '#e5484d', 0.5, 2 * z);
+      }
+    }
     if (edit.sel) {
       const it = findItem(edit.scope, edit.sel);
       if (it) {
@@ -2735,11 +2775,13 @@ const Scene = (() => {
     lastTap = { x: sx, y: sy };
     useCam();
     if (edit) {
-      if (edit.hold) { hover = { x: sx, y: sy }; const o = holdOrigin(sx, sy); return onHit({ kind: 'place', x: o.x, y: o.y }); }
+      if (edit.hold) { hover = { x: sx, y: sy }; const o = holdOrigin(sx, sy); return onHit({ kind: 'drop', x: o.x, y: o.y }); }
       const items = hits.filter(h => h.kind === 'item' && inside(h, sx, sy));
       const solid = items.filter(h => !h.flat);
       const pick = (solid.length ? solid : items).pop();
       if (pick) return onHit({ kind: 'item', id: pick.id });
+      const ar = [...hits].reverse().find(h => (h.kind === 'editArea' || h.kind === 'editHouse') && inside(h, sx, sy));
+      if (ar) return onHit(ar);   // v0.24: a farm area, the drive, the garage or the house
       const w = unIso(sx, sy), [ox, oy] = edit.scope === 'yard' ? origin('me') : [0, 0];
       return onHit({ kind: 'deselect', lx: w.x - ox, ly: w.y - oy });   // where you tapped (v0.15: moving a farm area there)
     }
@@ -2749,6 +2791,7 @@ const Scene = (() => {
       const P = shopPlan(owner);
       if (h && h.kind === 'clerk') { shopWalk(P.till); return onHit(h); }   // v0.22: it opens at once; you walk over meanwhile
       if (h && h.kind === 'shopDoor') return shopWalk(P.door, () => onHit(h));
+      if (owner === 'cinema' && meS.sit && P.aisle) { const w2 = h && P.wares.find(x => x.id === h.id); meS.sit = false; meS.path = [[P.aisle[0], meS.y]]; meS.moving = true; meS.then = () => { if (w2) shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55], () => onHit(h)); }; return; }   // v0.24: along the row to the aisle first
       if (h) { const w2 = P.wares.find(x => x.id === h.id); meS.sit = false; if (['escalator', 'cinemaDoor', 'cinemaExit'].includes(w2.kind)) return shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55], () => onHit(h)); shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55]); return onHit(h); }
       const w0 = unIso(sx, sy);
       if (w0.x > 0 && w0.y > 0 && w0.x < P.RW && w0.y < P.RD) { meS.sit = false; shopWalk([w0.x, w0.y]); }
@@ -2819,7 +2862,7 @@ const Scene = (() => {
     cv.addEventListener('pointerdown', e => {
       cv.setPointerCapture(e.pointerId);
       ptrs.set(e.pointerId, pos(e));
-      if (ptrs.size === 1) { const p = pos(e); drag = { sx: p.x, sy: p.y, cx: cam.x, cy: cam.y, moved: false }; }
+      if (ptrs.size === 1) { const p = pos(e); drag = { sx: p.x, sy: p.y, cx: cam.x, cy: cam.y, moved: false, press: edit && !edit.hold ? editPress(p.x, p.y) : null }; }
       else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: cam.z }; drag = null; }
     });
     cv.addEventListener('pointermove', e => {
@@ -2832,11 +2875,19 @@ const Scene = (() => {
       } else if (drag) {
         const p = pos(e), dx = p.x - drag.sx, dy = p.y - drag.sy;
         if (Math.hypot(dx, dy) > 6) drag.moved = true;
-        if (drag.moved) { useCam(); cam.x = drag.cx + dx; cam.y = drag.cy + dy; fly = null; follow = false; dragging = true; clampCam(); }
+        if (drag.moved && drag.press) {   // v0.24: dragging a thing (or an area) in design mode
+          hover = p;
+          if (drag.press.type === 'item' && !edit.hold) { const it = findItem(edit.scope, drag.press.id); if (it) { edit.hold = { k: it.k, rot: it.rot, tint: it.tint, id: it.id }; edit.sel = null; edit.dragged = true; } }
+          if (drag.press.type === 'area') edit.areaDrag = drag.press;
+        } else if (drag.moved) { useCam(); cam.x = drag.cx + dx; cam.y = drag.cy + dy; fly = null; follow = false; dragging = true; clampCam(); }
       }
     });
     const end = e => {
-      if (drag && !drag.moved && ptrs.size === 1) { const p = pos(e); tap(p.x, p.y); }
+      if (drag && drag.moved && drag.press && ptrs.size === 1) {   // v0.24: let go of what you dragged
+        const p = pos(e); hover = p;
+        if (drag.press.type === 'item' && edit && edit.hold) { const o = holdOrigin(p.x, p.y); onHit({ kind: 'drop', x: o.x, y: o.y, dragged: true }); }
+        if (drag.press.type === 'area' && edit) { const o = areaDropAt(drag.press, p.x, p.y); edit.areaDrag = null; onHit({ kind: 'areaDrop', k: drag.press.k, x: o.x, y: o.y }); }
+      } else if (drag && !drag.moved && ptrs.size === 1) { const p = pos(e); tap(p.x, p.y); }
       ptrs.delete(e.pointerId);
       if (ptrs.size < 2) pinch = null;
       drag = null; dragging = false;
@@ -3320,6 +3371,7 @@ const Scene = (() => {
     getEdit: () => edit,
     hold(item) { if (edit) { edit.hold = item; edit.sel = null; } },
     select(id) { if (edit) edit.sel = id; },
+    editSel(k) { UI_EDIT_SEL = k; },
     go, goMany, flee, cancel: () => { cancel(me); cancel(meIn); },
     busy: () => me.jobs.length + (me.cur ? 1 : 0),
     wave(who) {

@@ -706,3 +706,7 @@ body.dark .use-note { background: #3a2f1c; color: #f2c27a; }
 .car-chip { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px; border-radius: 14px; border: 2px solid transparent; background: #fff8ee; font: inherit; font-size: 12px; color: inherit; }
 .car-chip.on { border-color: var(--accent); background: #fff1d8; }
 .car-chip .thumb { width: 72px; height: 48px; }
+/* v0.24: design mode */
+.tray-hint { padding: 2px 4px 6px; }
+.tray-item.on { outline: 2px solid var(--accent); }
+.drive-pic { display: flex; align-items: center; justify-content: center; height: 58px; }

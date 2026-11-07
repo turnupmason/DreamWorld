@@ -21,7 +21,7 @@ const STR = {
     expand_field: '扩建菜地', build_pasture: '建牧场', build_orchard: '建果园', build_pond: '挖鱼塘',
     home_of: '{name}的家', empty_lot: '空地 · 邀请朋友', street_name: '梧桐街',
     ctx_rank: '第 {n} 名 · 家产 🪙{v}', ctx_inside: '{house} · 室内', ctx_town: '{street} Lv{lv} · 全镇家产 🪙{v}',
-    ctx_edit_room: '设计室内：点家具挪动，点下面的物品摆放', ctx_edit_yard: '设计院子：点装饰挪动，点下面的物品摆放',
+    ctx_edit_room: '设计室内：按住拖动家具，点一下换颜色', ctx_edit_yard: '设计院子：按住拖动东西和地块，点房子、车道来换',
     fab_enter: '进屋', fab_exit: '出门', fab_design: '设计', fab_barn: '仓库', fab_center: '回中间', fab_rank: '排行',
     fab_peek: '进屋看看', fab_gift: '互动', fab_letter: '写信', fab_home: '回家',
     harvest_all: '一键收获', stop_jobs: '停下（还有 {n} 件）',
@@ -182,7 +182,7 @@ const STR = {
     expand_field: 'Expand field', build_pasture: 'Build pasture', build_orchard: 'Plant orchard', build_pond: 'Dig a pond',
     home_of: '{name}\'s home', empty_lot: 'Empty lot · invite a friend', street_name: 'Maple Street',
     ctx_rank: 'No. {n} · worth 🪙{v}', ctx_inside: '{house} · inside', ctx_town: '{street} Lv{lv} · town worth 🪙{v}',
-    ctx_edit_room: 'Design inside: tap furniture to move it, tap an item below to place it', ctx_edit_yard: 'Design the yard: tap decor to move it, tap an item below to place it',
+    ctx_edit_room: 'Design inside: drag furniture, tap a piece to recolour', ctx_edit_yard: 'Design the yard: drag things and areas, tap the house or drive to change them',
     fab_enter: 'Go in', fab_exit: 'Go out', fab_design: 'Design', fab_barn: 'Barn', fab_center: 'Center', fab_rank: 'Ranks',
     fab_peek: 'Peek in', fab_gift: 'Say hi', fab_letter: 'Write', fab_home: 'Home',
     harvest_all: 'Harvest all', stop_jobs: 'Stop ({n} left)',
@@ -913,4 +913,20 @@ Object.assign(STR.en, {
   shop_clothes: 'Clothing store', mall_1f: 'Mall · Ground floor', mall_2f: 'Mall · First floor', mall_up: 'Upstairs', mall_down: 'Downstairs', act_arcade: 'Arcade',
   cinema_tickets: 'Tickets', cinema_out: 'Exit', film_soon: 'The film starts soon', film_none: 'Buy a ticket at the booth upstairs', film_go: 'Ticket for {name}: find your seat', film_done: 'You watched {name}',
   food_had: 'Had it', food_new: 'Not tried yet', food_buy: 'Order 🪙{n}',
+});
+
+// ---------- v0.24 ----------
+Object.assign(STR.zh, {
+  tray_hint_yard: '按住任何东西、地块、车道或车库拖到新地方就能挪；点一下房子换墙和屋顶的颜色，点车道换样式', tray_hint_room: '按住家具拖到新地方就能挪；点一下家具换颜色',
+  tray_drag_it: '按住拖动就能挪', tray_drag_area: '按住拖动到新地方（放得下就放好了）', area_drive: '车道', free: '免费',
+  drive_note: '车道停 {n} 辆 + 车库 {g} 辆', drive_built: '{name}修好了', drive_no_room: '院子里放不下这种车道：先挪一挪东西', drive_cars: '车太多了，这种车道停不下',
+  in_garage: '在车库里', on_drive: '在车道上', garage_spaces: '车道 {d} 个车位 + 车库 {g} 个车位，你有 {n} 辆车', no_cars: '还没有车',
+  school_take: '上一节课 🪙{n}（{m} 分钟）', school_started: '开始上课，{m} 分钟后下课', school_busy: '正在上课，还有 {m}', school_in_class: '正在上课，还有 {m}',
+});
+Object.assign(STR.en, {
+  tray_hint_yard: 'Press and drag anything, a farm area, the drive or the garage to move it; tap the house to recolour it, the drive to change its design', tray_hint_room: 'Press and drag furniture to move it; tap a piece to recolour it',
+  tray_drag_it: 'Press and drag to move it', tray_drag_area: 'Press and drag it somewhere new (it stays if it fits)', area_drive: 'Drive', free: 'Free',
+  drive_note: '{n} on the drive + {g} in the garage', drive_built: 'Your {name} is built', drive_no_room: 'That drive won’t fit: move some things first', drive_cars: 'Too many cars for that drive',
+  in_garage: 'In the garage', on_drive: 'On the drive', garage_spaces: '{d} drive spaces + {g} garage spaces; you have {n} cars', no_cars: 'No cars yet',
+  school_take: 'Take a class 🪙{n} ({m} min)', school_started: 'Class has started: it ends in {m} min', school_busy: 'In class for {m} more', school_in_class: 'In class for {m} more',
 });

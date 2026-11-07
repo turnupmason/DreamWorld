@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.23.0';
+const VERSION = '0.24.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -20,7 +20,7 @@ const DELIVERY = { fee: 0.08, min: 15, minutes: 15 };   // delivery: 8% of the b
 const SMALL_ANIMALS = ['chicken', 'duck', 'rabbit'];   // v0.19: every store has a car park this deep in front, between the building and the road
 // v0.22: evening classes at the school: one a day; every few classes earn a certificate, and each certificate
 // raises the pay for every job a little (a slow way up, paid for with your own coins).
-const SCHOOL = { fee: 120, perCert: 3, certPay: 0.05, maxCerts: 4 };
+const SCHOOL = { fee: 120, perCert: 3, certPay: 0.05, maxCerts: 4, minutes: 45 };   // v0.24: a class lasts 45 minutes
 const POLICE = { witness: 0.08, strikes: 3, strikeDays: 7, fineMult: 5, fineMin: 80, fineMax: 400, jailMin: 30, bail: 150 };
 const STEP_GOAL = 6000;                  // starting step goal; it then follows your own last 7 days (see stepGoal())
 const STORAGE_KEY = 'mirror-town-proto-v3';
@@ -47,6 +47,15 @@ const GARAGE = [null,
   { cap: 4, style: 'modern', zh: '现代车库', en: 'Modern garage', cost: { coins: 7000, wood: 100 } },
   { cap: 5, style: 'showroom', zh: '豪华玻璃车库', en: 'Glass showroom garage', cost: { coins: 12000, wood: 150 } }];
 const garageSize = lv => ({ w: Math.ceil(0.4 + 1.8 * GARAGE[lv].cap), d: 3 });
+// v0.24: driveway designs. Every one reaches the road at the front of your lot; drag it along the front in design
+// mode. How many cars you can keep = the spaces on your drive + the spaces in your garage.
+const DRIVES = {
+  single: { zh: '单车位车道', en: 'Single drive', w: 2, d: 4, cap: 1, cost: 0 },
+  long:   { zh: '长车道（前后两辆）', en: 'Long drive (2 in a row)', w: 2, d: 7, cap: 2, cost: 600 },
+  curve:  { zh: '弯车道', en: 'Curved drive', w: 4, d: 6, cap: 2, cost: 1600, curve: true },
+  double: { zh: '双车位车道', en: 'Double drive', w: 4, d: 5, cap: 2, cost: 1800 },
+  triple: { zh: '三车位车道', en: 'Triple drive', w: 6, d: 5, cap: 3, cost: 4000 },
+};
 const DOOR_X = 3.5;
 const MAILBOX = [4, 13];                 // every home has a mailbox by the gate
 
