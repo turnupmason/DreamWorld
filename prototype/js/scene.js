@@ -696,7 +696,7 @@ const Scene = (() => {
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
-    if (me.lot === h.id && !meInLake() && !(trip && mode === 'town') && !S.work) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
+    if (me.lot === h.id && !meInLake() && !(trip && mode === 'town') && !S.work && !S.live) objs.push({ d: ox + oy + me.y + me.x, f: () => drawMe(ox, oy, ts, focus) });
   }
   function liveBadge(p, live, mine) {
     const z = cam.z, w = WORKOUTS[live.type];
@@ -926,6 +926,42 @@ const Scene = (() => {
       }
     }
   }
+  // A live workout in town (v0.16): mini-you laps the park, swims in the lake, trains at the gym, does yoga on the lawn.
+  let liveU = 0;
+  function liveSpotTown() {
+    if (!S.live) return null;
+    const type = S.live.type, L = curveSamples().park;
+    if (['walk', 'run', 'wheel', 'cycle'].includes(type) && L.length) { const i = Math.floor(liveU) % L.length; return [L[i][0], L[i][1]]; }
+    if (type === 'swim') return swimSpot();
+    if (type === 'yoga') return [TL.park.x + 12, TL.park.y + 20];
+    const g = placePt('gym'); return g ? [g[0] + 0.8, g[1] + 0.4] : [TL.park.x + 12, TL.park.y + 20];
+  }
+  function liveTownObjs(objs, dt, ts) {
+    if (!S.live || VIEW_TOWN !== myTown() || S.work) return;
+    const type = S.live.type, z = cam.z, L = curveSamples().park, a = { face: 1 };
+    let x, y, moving = false;
+    if (['walk', 'run', 'wheel', 'cycle'].includes(type) && L.length) {
+      liveU = (liveU + dt * ({ run: 3.2, cycle: 5, walk: 1.8, wheel: 1.8 }[type]) / 0.8) % L.length;
+      const i = Math.floor(liveU), p0 = L[i], p1 = L[(i + 1) % L.length], k = liveU - i;
+      x = p0[0] + (p1[0] - p0[0]) * k; y = p0[1] + (p1[1] - p0[1]) * k; faceTo(a, p1[0] - p0[0], p1[1] - p0[1]); moving = true;
+    } else [x, y] = liveSpotTown();
+    objs.push({ d: x + y + 0.5, f: () => {
+      const p = iso(x, y);
+      drawPerson(p.x, p.y, z, { look: S.me.look, face: a.face, view: moving && type !== 'cycle' ? a.view : null, turn: a.turn, moving, phase: ts / 90, energy: energyLevel(), ts, seed: 3, pose: WORKOUT_POSE[type] });
+      liveBadge(p, S.live, true);
+    } });
+  }
+  // Where each public place is (where you walk to).
+  function placePt(key) {
+    const shop = TL.shops.find(([k]) => k === key), P = TL.park, F = TL.fields[0], K = TL.lake, C = TL.centre;
+    if (shop) return [shop[1] + 3, shop[2] + 6.3];
+    if (key === 'plaza') return [TL.plaza.x + LOT_W / 2, TL.plaza.y + LOT_D + 0.8];
+    if (key === 'park') return [P.x + 20.7, P.y + 14.7];
+    if (key === 'fields') return [F.x + Math.min(F.w / 2, 10), F.y - 0.6];
+    if (key !== 'lake') return null;
+    const a = Math.atan2((C.y + C.d / 2 - K.y) / K.ry, (C.x + C.w / 2 - K.x) / K.rx), m = K.sea ? 1 + 1.6 / K.ry : 1 + 1.2 / Math.min(K.rx, K.ry);
+    return [K.x + Math.cos(a) * K.rx * m, K.y + Math.sin(a) * K.ry * m];
+  }
   // Where a road crosses water: a bridge (stone edges and a white railing on both sides).
   function bridges(vr) {
     const z = cam.z;
@@ -1080,7 +1116,8 @@ const Scene = (() => {
     if (meInLake()) { const [ox, oy] = origin(me.lot); objs.push({ d: ox + oy + me.x + me.y, f: () => drawMe(ox, oy, ts, false) }); }
     // people who are online right now, out walking: to the square, the park, the lake, and home again
     if (z > 0.055) walkers(objs, dt, ts);
-    if (trip && mode === 'town' && !S.work) objs.push({ d: trip.x + trip.y + 0.6, f: () => drawTrip(ts) });
+    if (mode === 'town') liveTownObjs(objs, dt, ts);
+    if (trip && mode === 'town' && !S.work && !S.live) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
     if (S.work && mode === 'town' && VIEW_TOWN === myTown()) {   // at work (v0.14): your townie at the door of the workplace
       const [wx, wy] = Scene.placePoint(S.work.place);
       objs.push({ d: wx + wy + 0.6, f: () => { const p = iso(wx, wy); drawPerson(p.x, p.y, cam.z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand' }); if (cam.z > 0.3) nameTag(p, `💼 ${S.me.name || ''}`, true); } });
@@ -1254,7 +1291,7 @@ const Scene = (() => {
     }
     lotObjects(h, ox, oy, objs, ts, dt, opt);
     // swimming with no pond or pool: an inflatable pool in the front yard
-    if ((mine ? S.live : seesLive(h) && h.live) && (mine ? S.live.type : h.live.type) === 'swim' && liveSpot('swim', h).swim === 'tub') objs.push({ d: ox + oy + TUB.x + TUB.y - 0.6, f: () => drawTub(ox + TUB.x, oy + TUB.y, ts) });
+    if (!mine && seesLive(h) && h.live && h.live.type === 'swim' && liveSpot('swim', h).swim === 'tub') objs.push({ d: ox + oy + TUB.x + TUB.y - 0.6, f: () => drawTub(ox + TUB.x, oy + TUB.y, ts) });
     if (edit && edit.scope === 'yard') yardSpots(homeW(S.me), S.me).forEach(([x, y]) => tile(ox + x, oy + y, 'rgba(255,255,255,.12)', 'rgba(255,255,255,.55)'));
     const w = weatherNow().kind;
     if (w === 'snow') { ctx.fillStyle = 'rgba(250,252,255,.35)'; ctx.fillRect(0, 0, W, H); }
@@ -1350,6 +1387,34 @@ const Scene = (() => {
     NET = { id: TL.id, H, V, nodes, on };
     return NET;
   }
+  // For cars (v0.16): the same crossings plus every ramp and the expressway between ramps (marked fast).
+  let CARNET = null;
+  function carNet() {
+    if (CARNET && CARNET.id === TL.id) return CARNET;
+    const N0 = roadNet(), nodes = N0.nodes.map(n => ({ x: n.x, y: n.y, e: n.e.slice(), h: 0 })), on = new Map([...N0.on].map(([r, ids]) => [r, ids.slice()]));
+    const Hw = TL.highway, deckIds = [];
+    const add = (x, y, h, hw) => { nodes.push({ x, y, h, hw, e: [] }); return nodes.length - 1; };
+    const link = (a, b) => { nodes[a].e.push(b); nodes[b].e.push(a); };
+    (Hw ? Hw.ramps : []).forEach(R => {
+      const S2 = smoothPts(R, 1.6), ids = S2.map((p, k) => add(p[0], p[1], p[2], k === 0));
+      for (let k = 1; k < ids.length; k++) link(ids[k - 1], ids[k]);
+      deckIds.push(ids[0]);
+      // the foot of the ramp joins its avenue: a new crossing on that road, linked to its neighbours
+      const foot = ids[ids.length - 1], fp = nodes[foot], v = N0.V.find(r => Math.abs(r.x - fp.x) < 1.6 && fp.y >= r.a - 1.5 && fp.y <= r.b + 1.5);
+      if (!v) return;
+      fp.x = v.x; fp.y = clamp(fp.y, v.a, v.b);
+      const list = on.get(v) || [], below = list.filter(i => nodes[i].y > fp.y).sort((i, j) => nodes[i].y - nodes[j].y)[0], above = list.filter(i => nodes[i].y <= fp.y).sort((i, j) => nodes[j].y - nodes[i].y)[0];
+      if (below !== undefined) link(foot, below);
+      if (above !== undefined) link(foot, above);
+      list.push(foot); on.set(v, list);
+    });
+    deckIds.sort((i, j) => nodes[i].x - nodes[j].x);
+    for (let k = 1; k < deckIds.length; k++) link(deckIds[k - 1], deckIds[k]);
+    CARNET = { id: TL.id, H: N0.H, V: N0.V, nodes, on };
+    return CARNET;
+  }
+  // How long a leg takes compared with a local street (the expressway is faster, ramps a little).
+  const legCost = (a, b) => Math.hypot(b.x - a.x, b.y - a.y) / (a.hw && b.hw ? TRIP_SPEED.highway : a.h > 0 || b.h > 0 ? 1.5 : 1);
   // The closest point on any road.
   function nearestRoad(N, p) {
     let best = null, bd = 1e9;
@@ -1366,11 +1431,11 @@ const Scene = (() => {
   }
   // A route along the roads from a to b (shortest way through the crossings); on the sidewalk unless foot is false.
   function route(a, b, foot = true) {
-    const r = routeMid(a, b);
+    const r = routeMid(a, b, !foot);
     return foot ? [...toSidewalk(roadNet(), r.slice(0, -1)), r[r.length - 1]] : r;
   }
-  function routeMid(a, b) {
-    const N = roadNet(), A = nearestRoad(N, a), B = nearestRoad(N, b);
+  function routeMid(a, b, car = false) {
+    const N = car && TL.highway ? carNet() : roadNet(), A = nearestRoad(N, a), B = nearestRoad(N, b);
     if (!A || !B) return [b];
     const out = [A.pt];
     if (A.r !== B.r) {
@@ -1383,11 +1448,11 @@ const Scene = (() => {
         if (u < 0) break;
         done[u] = true;
         if (ends.has(u)) { const tot = dist[u] + Math.hypot(ns[u].x - B.pt[0], ns[u].y - B.pt[1]); if (tot < best) { best = tot; goal = u; } }
-        ns[u].e.forEach(v => { const nd = dist[u] + Math.hypot(ns[v].x - ns[u].x, ns[v].y - ns[u].y); if (nd < dist[v]) { dist[v] = nd; prev[v] = u; } });
+        ns[u].e.forEach(v => { const nd = dist[u] + legCost(ns[u], ns[v]); if (nd < dist[v]) { dist[v] = nd; prev[v] = u; } });
       }
       if (goal < 0) return [b];
       const chain = [];
-      for (let u = goal; u >= 0; u = prev[u]) chain.unshift([ns[u].x, ns[u].y]);
+      for (let u = goal; u >= 0; u = prev[u]) chain.unshift(ns[u].h || ns[u].hw ? [ns[u].x, ns[u].y, ns[u].h || 0, ns[u].hw ? 1 : 0] : [ns[u].x, ns[u].y]);
       out.push(...chain);
     }
     out.push(B.pt, b);
@@ -1435,14 +1500,22 @@ const Scene = (() => {
   // You set off from the gate of the home you're at. A car follows the roads to the road in front of where you're
   // going and parks at the roadside (and at the end of their drive, seen from their home); on foot you walk right up.
   let trip = null, parked = null;
-  const tripFrom = () => (me.lot && lotOf(me.lot) && townOf(me.lot) === VIEW_TOWN ? gateOf(me.lot) : gateOf('me'));
-  function tripPath(to, how) { return how === 'walk' ? route(tripFrom(), to) : route(tripFrom(), to, false).slice(0, -1); }
-  const pathLen = pts => { let d = 0, [x, y] = tripFrom(); pts.forEach(([a, b]) => { d += Math.abs(a - x) + Math.abs(b - y); x = a; y = b; }); return d; };
+  // Where you set off from (v0.16): where you are now in town (the last place you went to, or your workplace),
+  // otherwise the gate of the home you're at. By car: from where the car is parked, if it's in this town.
+  function tripFrom(how) {
+    if (how && how !== 'walk' && parked && parked.town === VIEW_TOWN) return parked.at;
+    if (S.work && VIEW_TOWN === myTown() && placePt(S.work.place)) return placePt(S.work.place);
+    if (trip && trip.arrived && trip.town === VIEW_TOWN) return [trip.x, trip.y];
+    return me.lot && lotOf(me.lot) && townOf(me.lot) === VIEW_TOWN ? gateOf(me.lot) : gateOf('me');
+  }
+  function tripPath(to, how) { return how === 'walk' ? route(tripFrom(how), to) : route(tripFrom(how), to, false).slice(0, -1); }
+  // Travel time in "local street" units: expressway legs count less (v0.16).
+  const pathLen = (pts, how) => { let d = 0, [x, y] = tripFrom(how), hw = false; pts.forEach(([a, b, h = 0, f = 0]) => { const L = Math.hypot(a - x, b - y); d += L / (f && hw ? TRIP_SPEED.highway : h > 0 ? 1.5 : 1); hw = !!f; x = a; y = b; }); return d; };
   function startTrip(to, how, car, done, dest) {
     TL = layoutOf(VIEW_TOWN);
-    const [x, y] = tripFrom();
+    const [x, y] = tripFrom(how), path = tripPath(to, how);
     if (how !== 'walk') parked = null;   // the car leaves from where it was parked
-    trip = { town: VIEW_TOWN, how, car, x, y, path: tripPath(to, how), done, dest, face: 1, phase: 0, moving: true, dir: '+y', arrived: false };
+    trip = { town: VIEW_TOWN, how, car, x, y, path, done, dest, face: 1, phase: 0, moving: true, dir: '+y', arrived: false };
     cancel(me); fly = null;
     return trip;
   }
@@ -1450,11 +1523,14 @@ const Scene = (() => {
     if (!trip) return;
     if (trip.town !== VIEW_TOWN || mode !== 'town') { trip = null; return; }
     if (trip.arrived) return;
-    let left = (TRIP_SPEED[trip.how] || 3) * dt;
+    const base = (TRIP_SPEED[trip.how] || 3) * dt;
+    let left = 1;   // the share of this frame's travel still to go
     while (left > 0 && trip.path.length) {
-      const [tx, ty] = trip.path[0], dx = tx - trip.x, dy = ty - trip.y, d = Math.hypot(dx, dy);
+      const [tx, ty, th = 0, fast = 0] = trip.path[0], dx = tx - trip.x, dy = ty - trip.y, d = Math.hypot(dx, dy);
+      const sp = base * (fast && trip.hw ? TRIP_SPEED.highway : th > 0 || (trip.h || 0) > 0 ? 1.5 : 1), go = sp * left;
       if (d > 0.01) { trip.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); faceTo(trip, dx, dy); }
-      if (d <= left) { trip.x = tx; trip.y = ty; trip.path.shift(); left -= d; } else { trip.x += dx / d * left; trip.y += dy / d * left; left = 0; }
+      if (d <= go) { trip.x = tx; trip.y = ty; trip.h = th; trip.hw = !!fast; trip.path.shift(); left -= d / sp; }
+      else { const k = go / d; trip.x += dx * k; trip.y += dy * k; trip.h = (trip.h || 0) + (th - (trip.h || 0)) * k; left = 0; }
     }
     trip.phase += dt * (trip.how === 'walk' ? 11 : 7);
     if (!trip.path.length) {
@@ -1470,7 +1546,7 @@ const Scene = (() => {
   }
   function drawTrip(ts) {
     const z = cam.z, p = iso(trip.x, trip.y);
-    if (trip.how !== 'walk' && !trip.arrived) { drawCarDir(trip.car, trip.x, trip.y, trip.dir, ts); return; }
+    if (trip.how !== 'walk' && !trip.arrived) { ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir(trip.car, trip.x, trip.y, trip.dir, ts); ctx.restore(); return; }
     drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
   }
@@ -1801,7 +1877,7 @@ const Scene = (() => {
     const useIt = usingId && room.items.find(x => x.id === usingId), useK = useIt && FURN[useIt.k].use;
     const bedD = useK === 'sleep' && !(trS && trS.pose === 'walk') ? useIt.x + useIt.y + itemSize('room', useIt).reduce((a, b) => a + b) / 2 + 0.02 : 0;   // in bed: right after the bed
     const meD = clipR ? clipR.x + clipR.y + 1.4 : onFlight && upR ? upR.x + upR.y + 1.38 : bedD || meIn.x + meIn.y + (meIn.seat || useK === 'sit' ? 0.7 : 0);
-    if (!(S.work && owner === 'me')) objs.push({ d: meD, f: () => {
+    if (!((S.work || S.live) && owner === 'me')) objs.push({ d: meD, f: () => {
       const p = iso(meIn.x, meIn.y), pose = trS ? trS.pose : meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
       const it = meIn.useId && room.items.find(x => x.id === meIn.useId), lift = meIn.lift || 0;
       ctx.save();
@@ -1882,7 +1958,7 @@ const Scene = (() => {
     const lk = S.live ? S.live.type + S.live.start : null;
     if (lk !== liveKey) {
       liveKey = lk; cancel(me); cancel(meIn);
-      if (lk && mode === 'home' && owner === me.lot) follow = true;
+      // v0.16: the workout happens in town (liveTownObjs), not at home
       if (!lk) { follow = false; me.livePose = null; meIn.livePose = null; if (me.y >= LOT_D || inLake(...lakeWorld())) { me.x = 3.5; me.y = 14.6; me.path = planPath(me, lotNav(h), 3.5, 12.5, 2) || []; } }
     }
     if (S.live) {
@@ -2051,6 +2127,7 @@ const Scene = (() => {
       if (w.x >= P.x && w.x < P.x + P.w && w.y >= P.y && w.y < P.y + P.d) return onHit({ kind: 'place', key: 'park' });
       if (TL.fields.some(F => w.x >= F.x && w.x < F.x + F.w && w.y >= F.y && w.y < F.y + F.d)) return onHit({ kind: 'place', key: 'fields' });
       if (((w.x - K.x) / (K.rx + (K.sea ? 4 : 1))) ** 2 + ((w.y - K.y) / (K.ry + (K.sea ? 4 : 1))) ** 2 < 1) return onHit({ kind: 'place', key: 'lake' });
+      if (w.x > WX0 && w.x < WX1 && w.y > WY0 && w.y < WY1) return onHit({ kind: 'spot', x: w.x, y: w.y });   // v0.16: anywhere else in town: go there
       return;
     }
     const [ox, oy] = origin(owner), lx = w.x - ox, ly = w.y - oy, h = homeOf(owner);
@@ -2377,6 +2454,18 @@ const Scene = (() => {
     try { THUMB[kind](k, o, w, h); } catch (e) { console.error(e); }
     [ctx, cam, GLOWS, NIGHT] = saved;
     if (o.canvas) return null;
+    // v0.16: centre what was drawn in the picture (cars, animals, things all sit in the middle of their circle)
+    if (!['commune', 'good', 'house'].includes(kind)) try {
+      const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data;
+      let x0 = c.width, x1 = -1, y0 = c.height, y1 = -1;
+      for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) if (d[(y * c.width + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      const dx = Math.round(c.width / 2 - (x0 + x1) / 2), dy = Math.round(c.height / 2 - (y0 + y1) / 2);
+      if (x1 > x0 && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+        const c2 = document.createElement('canvas'); c2.width = c.width; c2.height = c.height;
+        c2.getContext('2d').drawImage(c, dx, dy * 0.6);   // a little lower than the exact middle looks right in a circle
+        const url2 = c2.toDataURL(); thumbCache.set(id, url2); return url2;
+      }
+    } catch (e) { /* keep it as drawn */ }
     const url = c.toDataURL();
     thumbCache.set(id, url);
     return url;
@@ -2430,20 +2519,14 @@ const Scene = (() => {
     // Going somewhere in town (v0.12). to: a world point (a gate or a place); how: walk / bike / car.
     travel(to, how, car, done, dest, place) { if (mode !== 'town') return false; startTrip(to, how, car, done, dest); trip.place = place || null; return true; },
     // Public places (v0.12): where each one is (where you walk to), and whether you're there now.
-    placePoint(key) {
-      TL = layoutOf(VIEW_TOWN);
-      const shop = TL.shops.find(([k]) => k === key), P = TL.park, F = TL.fields[0], K = TL.lake, C = TL.centre;
-      if (shop) return [shop[1] + 3, shop[2] + 6.3];
-      if (key === 'plaza') return [TL.plaza.x + LOT_W / 2, TL.plaza.y + LOT_D + 0.8];
-      if (key === 'park') return [P.x + 20.7, P.y + 14.7];
-      if (key === 'fields') return [F.x + Math.min(F.w / 2, 10), F.y - 0.6];
-      const a = Math.atan2((C.y + C.d / 2 - K.y) / K.ry, (C.x + C.w / 2 - K.x) / K.rx), m = K.sea ? 1 + 1.6 / K.ry : 1 + 1.2 / Math.min(K.rx, K.ry);
-      return [K.x + Math.cos(a) * K.rx * m, K.y + Math.sin(a) * K.ry * m];
-    },
+    placePoint(key) { TL = layoutOf(VIEW_TOWN); return placePt(key); },
     here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : trip && trip.arrived && trip.town === VIEW_TOWN ? trip.place : null; },
     resting() { return mode === 'interior' && owner === 'me' && !!meIn.useId && !!(homeOf('me').room.items.concat(...(homeOf('me').ups || []).map(u => u.items)).find(i => i.id === meIn.useId && FURN[i.k].use === 'sleep')); },
     arriveAt(pt, place) { if (mode !== 'town') return; trip = { town: VIEW_TOWN, how: 'walk', x: pt[0], y: pt[1], path: [], arrived: true, moving: false, place, face: 1, phase: 0 }; flyTo(pt[0], pt[1], Math.max(cam.z, 0.5)); },
-    tripTime(to, how) { if (!S) return 0; TL = layoutOf(VIEW_TOWN); return Math.max(1, Math.round(pathLen(tripPath(to, how)) / (TRIP_SPEED[how] || 3))); },
+    tripTime(to, how) { if (!S) return 0; TL = layoutOf(VIEW_TOWN); return Math.max(1, Math.round(pathLen(tripPath(to, how), how) / (TRIP_SPEED[how] || 3))); },
+    liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
+    lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
+    tripPlan(to, how) { TL = layoutOf(VIEW_TOWN); return tripPath(to, how); },   // for testing
     tripNow() { return trip && !trip.arrived ? { how: trip.how } : null; },
     endTrip() { trip = null; },
     finishTrip() { if (!trip || trip.arrived) return; trip.path = trip.path.slice(-1); const [x, y] = trip.path[0]; trip.x = x; trip.y = y; },
@@ -2461,7 +2544,7 @@ const Scene = (() => {
       useCam();
       if (m === 'interior') { meIn.room = null; if (!wasInterior) frameView(true); }
       else if (!wasInterior) frameView(false);
-      follow = !!S.live && m === 'home' && o === me.lot;
+      follow = false;
     },
     view: () => ({ mode, owner }),
     tapAt: () => lastTap,

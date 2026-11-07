@@ -20,7 +20,7 @@ ios/
     └── Assets.xcassets          App 图标（占位图，正式上线前换成设计好的）
 ```
 
-`prototype/` 在工程里是「文件夹引用」（蓝色文件夹），路径 `../prototype`，不用手动复制。
+`prototype/` 在工程里是「文件夹引用」（蓝色文件夹），路径 `../prototype`，不用手动复制。所以 App 里的游戏和网页版永远一样：网页版每次更新，Mac 上 `git pull` 后重新编译，App 就是最新的。
 
 ## 在 Mac 上第一次运行（Mason）
 

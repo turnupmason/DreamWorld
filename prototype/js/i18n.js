@@ -750,3 +750,7 @@ Object.assign(STR.en, {
   area_note: 'Pick an area, then tap its new spot in the yard (its top-left corner). It can’t cover the house, drive, path or anything else, or block the way.',
   area_tap_new: 'Tap the new spot for the {name}', area_moved: '{name} moved', area_no_room: 'It doesn’t fit there (it would cover the house, the path or something else)',
 });
+
+// ---------- v0.16 ----------
+Object.assign(STR.zh, { go_here: '去这里', go_here_short: '那里', live_at: '迷你的你正在{place}运动', live_see: '去看看' });
+Object.assign(STR.en, { go_here: 'Go here', go_here_short: 'there', live_at: 'Mini-you is working out at the {place}', live_see: 'Watch' });

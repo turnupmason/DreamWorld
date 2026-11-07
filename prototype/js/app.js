@@ -253,7 +253,9 @@ function renderOverlay() {
   lb.hidden = !S.live || ed;
   if (S.live) {
     const w = WORKOUTS[S.live.type];
-    lb.innerHTML = `<div><b>${w.e} ${t('live_now', { name: nm(w), n: Math.floor(liveMin()) })}</b>${S.live.hr ? ` · ❤️ ${S.live.hr}` : ''}</div><span>${t('live_mini')}</span>`;
+    const where = placeInfo(LIVE_PLACE[S.live.type] || 'park');
+    lb.innerHTML = `<div><b>${w.e} ${t('live_now', { name: nm(w), n: Math.floor(liveMin()) })}</b>${S.live.hr ? ` · ❤️ ${S.live.hr}` : ''}</div><span>${t('live_at', { place: `${where.e} ${nm(where)}` })}</span>
+      <button class="btn small" data-act="seeLive">👀 ${t('live_see')}</button>`;
   }
 }
 function overlaySig() {
@@ -1155,12 +1157,12 @@ const ACT = {
       const r = quitShift(); snack(`💼 ${t('job_quit_done', { n: r.pay })}`);
     }
     closeSheet();
-    const T = goTarget(a), arrive = () => { UI.tripTo = null; if (a.id) ACT.visit(a.id); else { openSheet('place', a.place); arrivedFx(a.place); } refresh(); };
+    const T = goTarget(a), arrive = () => { UI.tripTo = null; if (a.id) ACT.visit(a.id); else if (a.place) { openSheet('place', a.place); arrivedFx(a.place); } refresh(); };
     if (how === 'now' && a.place === 'market') loadCargo(S.me.cars[S.me.car] ? 'car' : 'walk');
-    if (how === 'now' && a.place) {   // straight there: you're standing at the place in town
+    if (how === 'now' && (a.place || a.spot)) {   // straight there: you're standing at the place in town
       if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
       if (UI.tab !== 'town') UI.tab = 'town';
-      syncView(); Scene.arriveAt(T.pt, a.place);
+      syncView(); Scene.arriveAt(T.pt, a.place || null);
       return arrive();
     }
     if (how === 'now') return arrive();
@@ -1174,6 +1176,8 @@ const ACT = {
     if (kind !== 'walk') Sound.play('select');
   },
   tripFast() { Scene.finishTrip(); },
+  // v0.16: watch mini-you work out in town
+  seeLive() { if (UI.tab !== 'town') { UI.visit = null; UI.tab = 'town'; syncView(); } const p = Scene.liveAt(); if (p) Scene.lookAt(p[0], p[1]); },
   // jobs and the clinic (v0.14)
   jobApply(key) {
     if (S.job && S.job.place !== key && !confirm(t('job_switch_q', { old: nm(JOBS[S.job.place]) }))) return;
@@ -1507,6 +1511,7 @@ function onSceneHit(h) {
     return tip('furn', h.k, nm(d), sub);
   }
   if (k === 'lot') { ACT.goTo(h.owner); return refresh(); }
+  if (k === 'spot') { if (VIEW_TOWN !== myTown()) return; closeSheet(); openSheet('go', { spot: [h.x, h.y] }); return refresh(); }   // v0.16: anywhere in town
   if (k === 'emptyLot') return openSheet('invite');
   if (k === 'plaza') return openSheet('place', 'plaza');
   const ed = Scene.getEdit();
@@ -2011,6 +2016,7 @@ function panelWorld() {
 }
 // Where a trip goes: a home's gate or a public place (its name for the card and the context bar).
 function goTarget(a) {
+  if (a.spot) return { e: '📍', name: t('go_here'), short: t('go_here_short'), pt: a.spot };
   if (a.place) { const P = placeInfo(a.place); return { e: P.e, name: nm(P), short: nm(P), pt: Scene.placePoint(a.place) }; }
   const h = homeOf(a.id);
   return { e: '🏡', name: t('home_of', { name: homeName(h) }), short: t('home_of', { name: homeName(h) }), pt: Scene.gate(a.id) };

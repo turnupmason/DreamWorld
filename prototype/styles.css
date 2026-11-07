@@ -658,3 +658,6 @@ body.dark .flood-note { background: #1f3342; color: #a9d2ec; }
 body.dark .pill.work { background: #3a2f1c; color: #f2c27a; }
 body.dark .pill.sick { background: #3a2222; }
 .tray-areas { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+/* v0.16: the world's regions in tidy rows (all visible, no sideways scrolling) */
+.sub-cats.one-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; overflow: visible; flex-wrap: wrap; }
+.sub-cats.one-row .sub { justify-content: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; padding-left: 6px; padding-right: 6px; }

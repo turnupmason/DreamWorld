@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.15.0';
+const VERSION = '0.16.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -80,7 +80,8 @@ const START_LOTS = { me: ['maple', 6], li: ['maple', 0, 5], wang: ['cherry', 0],
 // Buying land: each parcel next to your home costs more than the last. Moving to another street costs its land.
 const LAND = { parcel: 600, grow: 1.35, move: 500, refund: 0.5 };
 // Going somewhere in town (v0.12): tiles per second on foot, by bike, by car (sped up so trips take seconds).
-const TRIP_SPEED = { walk: 3, bike: 6, car: 10 };
+// Cars and bikes on the expressway go `highway` times faster (v0.16); on foot you only use local streets.
+const TRIP_SPEED = { walk: 3, bike: 6, car: 10, highway: 2.5 };
 
 // ---------- crops ----------
 // grow: minutes to ripen. seed: price. yield: units per plot. sell: per unit. n: plants per plot. rare: only from real-life goals.
@@ -481,6 +482,9 @@ const FRIEND_POOL = [
 
 // What the townie does while the real you is working out ("mini me").
 const WORKOUT_POSE = { walk: 'walk', run: 'run', cycle: 'bike', swim: 'swim', strength: 'lift', yoga: 'yoga', hiit: 'jacks', dance: 'dance', wheel: 'walk' };
+// Where mini-you goes in town while Apple Watch records a workout (v0.16): laps round the park, the lake (or the sea)
+// for a swim, the gym for strength, HIIT and dance, the park lawn for yoga.
+const LIVE_PLACE = { walk: 'park', run: 'park', wheel: 'park', cycle: 'park', swim: 'lake', strength: 'gym', hiit: 'gym', dance: 'gym', yoga: 'park' };
 // Fruit stages and the plaza use minutes too; the game converts with MIN where it needs milliseconds.
 
 // ---------- pets (v0.8) ----------
@@ -743,8 +747,11 @@ function buildLayout(id, flip) {
   const av = south ? V.slice().sort((a, b) => b[3] - a[3])[0] : V.slice().sort((a, b) => a[1] - b[1])[0];
   const hy = south ? WORLD.y1 + 9 : WORLD.y0 - 9, ax = av ? (av[0] + av[2]) / 2 : (WORLD.x0 + WORLD.x1) / 2, ay = av ? (south ? av[3] : av[1]) : (south ? WORLD.y1 : WORLD.y0);
   const sg = south ? -1 : 1, HH = 38;
-  const ramp = dir => [[ax + dir * 22, hy, HH], [ax + dir * 13, hy + sg * 0.6, HH * 0.78], [ax + dir * 6, hy + sg * 2.6, HH * 0.45], [ax + dir * 2, hy + sg * 5.6, HH * 0.18], [ax, ay - sg * 0.2, 0]];
-  const highway = { pts: [[WORLD.x0 - 60, hy, HH], [WORLD.x1 + 60, hy, HH]], ramps: [ramp(-1), ramp(1)], h: HH };
+  const ramp = (rx, ry, dir) => [[rx + dir * 22, hy, HH], [rx + dir * 13, hy + sg * 0.6, HH * 0.78], [rx + dir * 6, hy + sg * 2.6, HH * 0.45], [rx + dir * 2, hy + sg * 5.6, HH * 0.18], [rx, ry - sg * 0.2, 0]];
+  // v0.16: an interchange at every avenue that reaches this edge of town (so cars can take the expressway across town)
+  const edgeAv = V.filter(r => (south ? r[3] >= WORLD.y1 - 3 : r[1] <= WORLD.y0 + 3));
+  const ramps = (edgeAv.length ? edgeAv : av ? [av] : []).flatMap(r => { const rx = (r[0] + r[2]) / 2, ry = south ? r[3] : r[1]; return [ramp(rx, ry, -1), ramp(rx, ry, 1)]; });
+  const highway = { pts: [[WORLD.x0 - 60, hy, HH], [WORLD.x1 + 60, hy, HH]], ramps, h: HH, y: hy };
   const H2 = roads.filter(r => r[2] - r[0] >= r[3] - r[1]), wEnd = H2.slice().sort((a, b) => a[0] - b[0])[0], eEnd = H2.slice().sort((a, b) => b[2] - a[2])[0];
   const wy = (wEnd[1] + wEnd[3]) / 2, ey = (eEnd[1] + eEnd[3]) / 2, wx = wEnd[0], ex = eEnd[2];
   const curves = [
