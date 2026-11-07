@@ -17,7 +17,7 @@ function freshDay() {
     date: dayKey(now()),
     // health for today (from Apple Health in the app; from the console in the prototype)
     steps: 0, pushes: 0, kcal: 0, exMin: 0, standH: 0, mindful: 0, workouts: [],
-    focusMin: 0, distractMin: 0, actions: 0, steals: 0, restDay: false, liked: {},
+    focusMin: 0, distractMin: 0, actions: 0, steals: 0, restDay: false, liked: {}, chased: {},
     earned: { coins: 0, wood: 0 },
     paid: { stepBlocks: 0, goal: false, rings: {}, workouts: {}, mindful: 0, sleep: false },
   };
@@ -444,8 +444,19 @@ function stealable(h, i, who = 'me') {
   const f = h.fields[i];
   return isRipe(f) && !f.thieves.includes(who) && f.left > stealKeep(f.crop);
 }
+// Caught by a guard dog: you pay the owner a small fine (twice what you tried to take, 🪙10–60) and that dog
+// won't let you in again today. It's a prank with a price, not a loss of anything you grew.
+function dogFine(value) { return clamp(Math.round(value * 2), STEAL_FINE[0], STEAL_FINE[1]); }
+function caught(fid, value) {
+  const f = friendById(fid), fine = Math.min(S.me.coins, dogFine(value));
+  S.me.coins -= fine; f.coins += fine;
+  S.today.chased = S.today.chased || {};
+  S.today.chased[fid] = true;
+  return { r: 'dog', fine };
+}
 // Shared checks for every kind of sneaking. Returns an error code or null.
-function sneakCheck() {
+function sneakCheck(fid) {
+  if (fid && S.today.chased && S.today.chased[fid]) return 'chased';
   if (S.today.steals >= STEAL_CAP) return 'limit';
   if (!useAction()) return 'cap';
   S.today.steals++;
@@ -456,9 +467,9 @@ function steal(fid, i) {
   if (!isRipe(f)) return { r: 'no' };
   if (f.thieves.includes('me')) return { r: 'done' };
   if (f.left <= stealKeep(f.crop)) return { r: 'empty' };
-  const err = sneakCheck(); if (err) return { r: err };
+  const err = sneakCheck(fid); if (err) return { r: err };
   f.thieves.push('me');
-  if (hasGuardDog(h) && Math.random() < 0.35) return { r: 'dog' };
+  if (hasGuardDog(h) && Math.random() < 0.35) return caught(fid, stealSize(f.crop) * CROPS[f.crop].sell);
   const n = Math.min(f.left - stealKeep(f.crop), stealSize(f.crop));
   f.left -= n;
   addBarn(S.me, f.crop, n);
@@ -470,9 +481,9 @@ function stealProduct(fid, aid) {
   a.thieves = a.thieves || [];
   if (a.thieves.includes('me')) return { r: 'done' };
   if ((a.stolen || 0) >= ANIMALS[a.k].n - 1) return { r: 'empty' };
-  const err = sneakCheck(); if (err) return { r: err };
+  const err = sneakCheck(fid); if (err) return { r: err };
   a.thieves.push('me');
-  if (hasGuardDog(h) && Math.random() < 0.35) return { r: 'dog' };
+  if (hasGuardDog(h) && Math.random() < 0.35) return caught(fid, GOODS[ANIMALS[a.k].prod].sell);
   a.stolen = (a.stolen || 0) + 1;
   addBarn(S.me, ANIMALS[a.k].prod, 1);
   return { r: 'ok', k: ANIMALS[a.k].prod, n: 1 };
@@ -483,9 +494,9 @@ function stealFruit(fid, i) {
   t.thieves = t.thieves || [];
   if (t.thieves.includes('me')) return { r: 'done' };
   if ((t.stolen || 0) >= Math.floor(TREES[t.k].n / 2)) return { r: 'empty' };
-  const err = sneakCheck(); if (err) return { r: err };
+  const err = sneakCheck(fid); if (err) return { r: err };
   t.thieves.push('me');
-  if (hasGuardDog(h) && Math.random() < 0.35) return { r: 'dog' };
+  if (hasGuardDog(h) && Math.random() < 0.35) return caught(fid, GOODS[TREES[t.k].fruit].sell);
   t.stolen = (t.stolen || 0) + 1;
   addBarn(S.me, TREES[t.k].fruit, 1);
   return { r: 'ok', k: TREES[t.k].fruit, n: 1 };
@@ -498,14 +509,14 @@ function friendStealsFromMe(fid) {
   if (crops.length && (!eggs.length || Math.random() < 0.6)) {
     const f = S.me.fields[rand(crops)];
     f.thieves.push(fid);
-    if (dog) return addFeed({ kind: 'caught', from: fid, k: f.crop });
+    if (dog) { const n = dogFine(stealSize(f.crop) * CROPS[f.crop].sell); S.me.coins += n; return addFeed({ kind: 'caught', from: fid, k: f.crop, n }); }
     const n = Math.min(f.left - stealKeep(f.crop), stealSize(f.crop));
     f.left -= n;
     return addFeed({ kind: 'stole', from: fid, k: f.crop, n });
   }
   const a = rand(eggs);
   a.thieves = [...(a.thieves || []), fid];
-  if (dog) return addFeed({ kind: 'caught', from: fid, k: ANIMALS[a.k].prod });
+  if (dog) { const n = dogFine(GOODS[ANIMALS[a.k].prod].sell); S.me.coins += n; return addFeed({ kind: 'caught', from: fid, k: ANIMALS[a.k].prod, n }); }
   a.stolen = (a.stolen || 0) + 1;
   return addFeed({ kind: 'stole', from: fid, k: ANIMALS[a.k].prod, n: 1 });
 }
@@ -698,10 +709,14 @@ function stairsRects(h, lv) {
   if (n < 2) return [];
   lv = Math.min(lv === undefined ? lvOf(h) : lv, n - 1);
   const [rw] = roomSize(h), out = [];
-  if (lv < n - 1) out.push({ kind: 'up', x: rw - 2, y: 0, w: 2, d: 1 });
-  if (lv > 0) out.push({ kind: 'down', x: rw - 4, y: 0, w: 2, d: 1 });
+  // the flight up runs along the back wall, rising to the right; you step onto it from the tile on its left
+  if (lv < n - 1) out.push({ kind: 'up', x: rw - 2, y: 0, w: 2, d: 1, ax: rw - 3, ay: 0 });
+  // the way down is the opening right in front of it; you step in from the tile in front of its right end
+  if (lv > 0) out.push({ kind: 'down', x: rw - 2, y: 1, w: 2, d: 1, ax: rw - 1, ay: 2 });
   return out;
 }
+// Tiles the stairs need: the stairs themselves plus the free tile you step on from.
+const stairsTiles = (h, lv) => stairsRects(h, lv).flatMap(r => [r, { x: r.ax, y: r.ay, w: 1, d: 1 }]);
 const hasStairs = h => floorsOf(h) > 1;
 const overlaps = (r, x, y, w, d) => x < r.x + r.w && x + w > r.x && y < r.y + r.d && y + d > r.y;
 // Your townie must be able to reach everything: from the front door (ground floor) or the top of the stairs
@@ -712,7 +727,7 @@ function roomReachable(h, lv, items) {
   const solid = items.filter(it => !FURN[it.k].flat), st = stairsRects(h, lv);
   solid.forEach(it => { const [w, d] = itemSize('room', it); block(it.x, it.y, w, d); });
   st.forEach(r => block(r.x, r.y, r.w, r.d));
-  const down = st.find(r => r.kind === 'down'), entry = down ? [down.x + 1, down.y + down.d] : [0, rd - 1];
+  const down = st.find(r => r.kind === 'down'), entry = down ? [down.ax, down.ay] : [0, rd - 1];
   const seen = new Uint8Array(rw * rd), q = [];
   const push = (x, y) => { if (x >= 0 && y >= 0 && x < rw && y < rd && g[y * rw + x] && !seen[y * rw + x]) { seen[y * rw + x] = 1; q.push([x, y]); } };
   push(entry[0], entry[1]);
@@ -725,7 +740,7 @@ function roomReachable(h, lv, items) {
     return false;
   };
   return solid.every(it => { const [w, d] = itemSize('room', it); return nextTo(it.x, it.y, w, d); })
-    && st.every(r => ok(r.x, r.y + r.d) || ok(r.x + 1, r.y + r.d));
+    && st.every(r => ok(r.ax, r.ay));
 }
 let PLACE_WHY = '';   // why the last canPlace said no: 'space' or 'block' (would block the way)
 function floorCost(h, n = floorsOf(h) + 1) {
@@ -781,7 +796,7 @@ function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
   if (scope === 'room') {
     const [rw, rd] = roomSize(h);
     if (x < 0 || y < 0 || x + w > rw || y + d > rd) return false;
-    if (stairsRects(h, lv).some(r => overlaps(r, x, y, w, d))) return false;
+    if (stairsTiles(h, lv).some(r => overlaps(r, x, y, w, d))) return false;
   } else {
     const lw = homeW(h);
     for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) if (yardReserved(x + i, y + j, lw)) return false;

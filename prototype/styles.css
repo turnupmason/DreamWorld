@@ -351,7 +351,7 @@ body.ob-mode .hud, body.ob-mode .tabbar, body.ob-mode .ctxbar, body.ob-mode .fab
 
 /* ================= v0.5 look: rounded type, soft cards, clearer hierarchy ================= */
 :root {
-  --font: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --font: "MT Nunito", "MT Round", ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --shadow: 0 2px 12px rgba(90, 60, 20, .07), 0 0 0 1px rgba(120, 90, 40, .05);
   --shadow-up: 0 8px 26px rgba(70, 45, 10, .16);
   --chip: #f1e9da;

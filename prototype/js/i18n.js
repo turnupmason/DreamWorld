@@ -48,7 +48,7 @@ const STR = {
     land_pond_new: '挖鱼塘，最多 {n} 条鱼，每 {m} 分钟来一条', land_pond_sub: '扩建到最多 {n} 条', land_pond_max: '最多 {n} 条，已满级',
     note_land: '地买了就一直是你的。菜地、牧场、果园、鱼塘越大，能种能养的越多。',
     furn_sub: '占 {w}×{d} 格', owned_n: '有 {n} 个', makes: '每 {d} 产 {e}',
-    use_sit: '能坐', use_run: '能跑步', use_bike: '能骑', use_lift: '能举铁', use_box: '能打拳', use_yoga: '能练瑜伽',
+    use_sit: '能坐', use_sleep: '能躺下睡觉', use_run: '能跑步', use_bike: '能骑', use_lift: '能举铁', use_box: '能打拳', use_yoga: '能练瑜伽',
     note_furn: '买了会自动摆进屋里。进屋点家具，小人会走过去坐下或运动；点「设计」可以重新摆、旋转、换颜色。',
     note_yard: '买了会自动摆在院子里，点「设计」可以挪位置。蜂箱会产蜂蜜。',
     car_sub: '停在你家车道上', car_sub_two: '两轮，停在车道上', car_driving: '正在用', car_drive: '换这辆', note_cars: '点车道上的车可以换颜色。',
@@ -208,7 +208,7 @@ const STR = {
     land_pond_new: 'Dig a pond: up to {n} fish, one every {m} min', land_pond_sub: 'Expand to {n} fish', land_pond_max: 'Up to {n} fish, maxed',
     note_land: 'Land is yours for good. Bigger fields, pastures, orchards and ponds hold more.',
     furn_sub: '{w}×{d} tiles', owned_n: '{n} owned', makes: '{e} every {d}',
-    use_sit: 'sit', use_run: 'run on it', use_bike: 'ride it', use_lift: 'lift', use_box: 'box', use_yoga: 'yoga',
+    use_sit: 'sit', use_sleep: 'lie down and sleep', use_run: 'run on it', use_bike: 'ride it', use_lift: 'lift', use_box: 'box', use_yoga: 'yoga',
     note_furn: 'New furniture places itself. Inside, tap furniture and your townie walks over to sit or work out; "Design" lets you move, rotate and recolor.',
     note_yard: 'New decor places itself in the yard; "Design" lets you move it. Beehives make honey.',
     car_sub: 'Parks in your driveway', car_sub_two: 'Two wheels, parks in your driveway', car_driving: 'In use', car_drive: 'Use this', note_cars: 'Tap the vehicle in your driveway to repaint it.',
@@ -428,6 +428,18 @@ Object.assign(STR.en, {
   w_effect_snow: '❄️ Snowing: the whole town turns white.', w_effect_fog: 'Foggy, hard to see far.', w_effect_storm: '⛈️ Thunderstorm: crops grow faster, stay inside.',
   w_real_toggle: 'Use the real weather where I am', w_real_note: 'Only a rough location (about 10 km) is used to look up the weather. It is never saved or shared.',
   w_fail: 'No weather right now, using the town’s', w_denied: 'No location permission, using the town’s weather', con_weather: 'Weather',
+});
+
+// ---------- v0.7 ----------
+Object.assign(STR.zh, {
+  set_music: '背景音乐', set_sfx: '音效',
+  snack_dog_fine: '被{name}家的狗抓到了！赔了 TA 🪙{n}，今天不能再去 TA 家偷了 🐕', snack_chased: '{name}家的狗今天记住你了，明天再来吧',
+  feed_caught_fine: '{name} 想来偷{e}，被你家的狗抓到了，赔了你 🪙{n} 🐕',
+});
+Object.assign(STR.en, {
+  set_music: 'Music', set_sfx: 'Sound effects',
+  snack_dog_fine: 'Caught by {name}’s dog! You paid them 🪙{n} and can’t sneak in again today 🐕', snack_chased: '{name}’s dog remembers you today. Come back tomorrow',
+  feed_caught_fine: '{name} tried to sneak {e}, got caught by your dog and paid you 🪙{n} 🐕',
 });
 
 const LETTER_TPL = {

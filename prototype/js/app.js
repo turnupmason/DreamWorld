@@ -41,7 +41,7 @@ function feedText(it) {
   if (it.kind === 'msg') return t('feed_msg', { name, msg: t(it.msgKey) });
   if (it.kind === 'join') return t('feed_join', { name, gift: giftText(it.gift) });
   if (it.kind === 'stole') return t('feed_stole', { name, n: it.n, e: goodE(it.k) });
-  if (it.kind === 'caught') return t('feed_caught', { name, e: goodE(it.k) });
+  if (it.kind === 'caught') return it.n ? t('feed_caught_fine', { name, e: goodE(it.k), n: it.n }) : t('feed_caught', { name, e: goodE(it.k) });
   if (it.kind === 'letter') return t('feed_letter', { name });
   return '';
 }
@@ -507,10 +507,12 @@ function panelReal() {
     ${souvCard()}
     <div class="card"><h3>⌚ ${t('devices_title')}</h3><p class="muted">${t('devices_text')}</p></div>
     ${privacyCard()}
-    <div class="card"><h3>⚙️ ${t('settings')}</h3>
+    <div class="card privacy-card"><h3>⚙️ ${t('settings')}</h3>
       <div class="row between"><span>${t('language')}</span><span>
         <button class="chip ${S.lang === 'zh' ? 'on' : ''}" data-act="lang" data-arg="zh">中文</button>
-        <button class="chip ${S.lang === 'en' ? 'on' : ''}" data-act="lang" data-arg="en">English</button></span></div></div>`;
+        <button class="chip ${S.lang === 'en' ? 'on' : ''}" data-act="lang" data-arg="en">English</button></span></div>
+      <label class="row between toggle-row"><span>🎵 ${t('set_music')}</span><input type="checkbox" class="switch" data-act="toggleMusic" ${S.music !== false ? 'checked' : ''}></label>
+      <label class="row between toggle-row"><span>🔊 ${t('set_sfx')}</span><input type="checkbox" class="switch" data-act="toggleSfx" ${S.sfx !== false ? 'checked' : ''}></label></div>`;
 }
 
 // Privacy and pressure: what friends can see of you, and calm mode (no ranking, no friends' fitness).
@@ -545,6 +547,7 @@ function panelFeed() {
 
 // ---------- sheets ----------
 function openSheet(type, arg) {
+  if (type === 'souvenir') Sound.play('chime');
   UI.sheet = { type, arg };
   renderSheet();
   const compact = ['friend', 'field', 'animal', 'car', 'tree'].includes(type);
@@ -852,7 +855,7 @@ function renderWidget() {
 function result(code, onOk) {
   if (code === 'ok') { onOk(); if (actionsLeft() === 0) setTimeout(() => openSheet('cap'), 700); }
   else if (code === 'cap') openSheet('cap');
-  else if (code === 'poor') snack(t('snack_poor'));
+  else if (code === 'poor') { snack(t('snack_poor')); Sound.play('oops'); }
   else if (code === 'nopasture') snack(t('no_pasture'));
   else if (code === 'noorchard') snack(t('no_orchard'));
   else if (code === 'full') snack(t('snack_full'));
@@ -881,24 +884,27 @@ function hiveJob(id) {
 }
 function plantJob(i, crop) {
   return { tg: { kind: 'field', i }, o: { pose: 'crouch', dur: 700, valid: () => !S.me.fields[i] && S.me.seeds[crop] > 0,
-    done: after(() => result(plant(i, crop), () => Scene.floatField(i, '🌱'))) } };
+    done: after(() => result(plant(i, crop), () => { Scene.floatField(i, '🌱'); Sound.play('plant'); })) } };
 }
 function harvestField(i) {
   const r = harvest(i);
   if (!r) return;
   tutDone('harvest');
+  Sound.play('pop');
   Scene.floatField(i, `+${r.n} ${CROPS[r.crop].e}`);
   snack(t('snack_harvest', { n: r.n, e: CROPS[r.crop].e }));
 }
 function collectFrom(id) {
   const r = collectAnimal(id);
   if (!r) return;
+  Sound.play('pop');
   if (r.type === 'baby') { Scene.floatAnimal('me', id, '🍼'); snack(t(r.placed ? 'snack_baby' : 'snack_baby_barn', { name: nm(ANIMALS[r.k].baby) })); }
   else { Scene.floatAnimal('me', id, `+${r.n} ${GOODS[r.k].e}`); snack(t('snack_prod', { n: r.n, e: GOODS[r.k].e })); }
 }
 function pickTree(i) {
   const r = collectTree(i);
   if (!r) return;
+  Sound.play('pop');
   Scene.floatMe(`+${r.n} ${GOODS[r.k].e}`);
   snack(t('snack_prod', { n: r.n, e: GOODS[r.k].e }));
 }
@@ -906,22 +912,28 @@ function goFish() {
   if (fishCount() < 1) return snack(t('snack_no_fish'));
   walkDo({ kind: 'pond' }, { pose: 'fish', dur: 2600, done: after(() => {
     const r = catchFish();
+    Sound.play('splash');
     if (r) { Scene.floatMe(`+1 ${GOODS[r.k].e}`); snack(t('snack_fish', { e: GOODS[r.k].e, name: nm(GOODS[r.k]) })); }
   }) });
 }
 // Sneaking at a friend's: walk over crouched, then try.
 function sneakDo(tg, fn, pose = 'crouch') {
+  const fid = Scene.view().owner;
+  if (S.today.chased && S.today.chased[fid]) { Sound.play('oops'); return snack(t('snack_chased', { name: fname(fid) })); }
   if (S.today.steals >= STEAL_CAP) return snack(t('snack_steal_limit', { n: STEAL_CAP }));
   if (actionsLeft() <= 0) return openSheet('cap');
   walkDo(tg, { sneak: true, pose, dur: 900, done: after(fn) });
 }
 function stealResult(fid, r) {
-  if (r.r === 'ok') { Scene.floatMe(`+${r.n} ${goodE(r.k)}`); snack(t('snack_stole', { n: r.n, e: goodE(r.k) })); }
+  if (r.r === 'ok') { Scene.floatMe(`+${r.n} ${goodE(r.k)}`); snack(t('snack_stole', { n: r.n, e: goodE(r.k) })); Sound.play('sneak'); }
   else if (r.r === 'dog') {
-    Scene.floatMe('🐕💢'); snack(t('snack_dog', { name: fname(fid) }));
+    // caught: the dog barks and chases you out, you pay the owner, and you can't come back today
+    Scene.floatMe(`🐕💢 -🪙${r.fine}`); snack(t('snack_dog_fine', { name: fname(fid), n: r.fine }));
+    Sound.play('bark'); setTimeout(() => Sound.play('bark'), 700);
     const dog = friendById(fid).animals.find(a => ANIMALS[a.k].guard);
     Scene.flee(dog && dog.id);
-  } else if (r.r === 'limit') snack(t('snack_steal_limit', { n: STEAL_CAP }));
+  } else if (r.r === 'chased') snack(t('snack_chased', { name: fname(fid) }));
+  else if (r.r === 'limit') snack(t('snack_steal_limit', { n: STEAL_CAP }));
   else if (r.r === 'cap') openSheet('cap');
   else if (r.r === 'empty') snack(t('steal_keep'));
   else if (r.r === 'done') snack(t('steal_done'));
@@ -958,8 +970,8 @@ function afterTimeJump(events) {
     if (Math.random() < 0.5) notify(friendEvent());
   }
 }
-function goInside() { setLevel(0); if (UI.tab === 'home') UI.inside = true; else UI.visitInside = true; syncView(); refresh(); }
-function goOutside() { setLevel(0); if (UI.tab === 'home') UI.inside = false; else UI.visitInside = false; syncView(); refresh(); }
+function goInside() { Sound.play('door'); setLevel(0); if (UI.tab === 'home') UI.inside = true; else UI.visitInside = true; syncView(); refresh(); }
+function goOutside() { Sound.play('door'); setLevel(0); if (UI.tab === 'home') UI.inside = false; else UI.visitInside = false; syncView(); refresh(); }
 function switchFloor(lv) { setLevel(lv); Scene.levelChanged(); refresh(); }
 function newDraft(to) { UI.draft = { to: to || (UI.visit || friendIds()[0] || null), paper: PAPERS[0].id, text: '', gift: -1 }; }
 
@@ -971,6 +983,7 @@ const ACT = {
   collect: () => openSheet('collect'),
   collectAll() {
     if (!S.pending.length) return;
+    Sound.play('coins');
     const r = sumRewards(S.pending);
     addReward(r); S.pending = [];
     closeSheet();
@@ -1001,6 +1014,7 @@ const ACT = {
   },
   buildFloor() { openSheet('floor'); },
   buildFloorNow() {
+    Sound.play('build');
     result(buyFloor(), () => {
       const n = floorsOf(S.me);
       closeSheet();
@@ -1050,13 +1064,14 @@ const ACT = {
   openShop(cat) { closeSheet(); UI.shop = cat; setTab('shop'); },
   shopCat(c) { UI.shop = c; $('#panel').scrollTop = 0; },
   shopSub(s) { UI.sub = UI.sub || {}; UI.sub[UI.shop] = s; },
-  buySeed(arg) { const [k, n] = arg.split('|'); result(buySeed(k, +n), () => snack(t('snack_seed', { e: CROPS[k].e, n }))); },
+  buySeed(arg) { const [k, n] = arg.split('|'); result(buySeed(k, +n), () => { snack(t('snack_seed', { e: CROPS[k].e, n })); Sound.play('buy'); }); },
   buyTree(k) { result(buyTree(k), () => snack(t('snack_tree', { name: nm(TREES[k]) }))); },
   buyAnimal(k) { result(buyAnimal(k), () => snack(t('snack_animal', { name: nm(ANIMALS[k].baby) }))); },
   buyLand(kind) { result(buyLand(kind), () => snack(t('snack_land_' + kind))); },
   buyItem(arg) {
     const [scope, k] = arg.split('|'), r = buyItem(scope, k);
-    if (r.r === 'poor') return snack(t('snack_poor'));
+    if (r.r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    Sound.play('buy');
     snack(t(r.item ? (scope === 'room' ? 'snack_furn' : 'snack_yard') : 'snack_stored', { name: nm(itemDef(scope, k)) }));
   },
   buyCar(k) { result(buyCar(k), () => snack(t('snack_car', { name: nm(CARS[k]) }))); },
@@ -1119,6 +1134,8 @@ const ACT = {
     setLevel(0); UI.visit = null; UI.tab = 'home'; UI.inside = false; Scene.moveHome(); syncView(); Scene.recenter();
   },
   weatherInfo: () => openSheet('weather'),
+  toggleMusic() { S.music = S.music === false; Sound.setMusic(S.music !== false); },
+  toggleSfx() { S.sfx = S.sfx === false; Sound.setSfx(S.sfx !== false); },
   weatherReal() { S.weatherReal = !S.weatherReal; if (S.weatherReal) realWeather(true); else snack(t('w_sim_src')); },
   simWeather(k) { S.weather = k === 'auto' ? null : { kind: k, temp: simWeather().temp, forced: true }; snack(`${WEATHER_E[weatherNow().kind]} ${t('w_' + weatherNow().kind)}`); },
   giftScroll() { const el = $('#giftSec'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
@@ -1146,6 +1163,7 @@ const ACT = {
   draftGift(i) { UI.draft.gift = +i; },
   tpl(i) { UI.draft.text = (UI.draft.text ? UI.draft.text + ' ' : '') + LETTER_TPL[curLang()].mine[+i]; },
   sendLetter() {
+    Sound.play('paper');
     const d = UI.draft, ta = $('#draftText');
     if (ta) d.text = ta.value.trim();
     if (!d.to) return;
@@ -1502,6 +1520,11 @@ document.addEventListener('input', e => {
 });
 
 Scene.init($('#town'), onSceneHit);
+// Sound can only start after the first touch (browser and iPhone rule).
+document.addEventListener('pointerdown', () => {
+  Sound.start();
+  if (S) { Sound.setMusic(S.music !== false); Sound.setSfx(S.sfx !== false); }
+}, { once: false, passive: true });
 setInterval(() => {
   if (!S) return;
   if (checkDay() && !S.onboarding) { snack(t('snack_new_day')); refresh(); }
@@ -1514,6 +1537,7 @@ setInterval(() => {
   if (UI.sheet && ['field', 'animal', 'tree'].includes(UI.sheet.type)) renderSheet();
   if (UI.tab === 'real' && S.live) renderPanel();
   rainGrow(1000);
+  Sound.ambience(NIGHT > 0.5, weatherNow().kind);
   if (S.weatherReal && (!S.weather || !S.weather.real || now() - S.weather.at > 30 * MIN) && Date.now() - weatherTried > 5 * MIN) realWeather(false);
 }, 1000);
 // Friends stay active in the background, but rarely (no spam).

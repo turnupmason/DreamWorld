@@ -62,9 +62,16 @@ function skeleton(pose, o) {
       break;
     }
     case 'sit': {
-      k.lift = -2;
-      k.legs[0] = { h: [-1.2, -10], k: [4.2, -8.3], f: [4.6, 0] };
-      k.legs[1] = { h: [1.2, -10], k: [5.6, -8.3], f: [6, 0] };
+      const sh = o.seatH;   // seat height: hips on the seat, thighs level, feet down on the floor
+      if (sh) {
+        k.lift = sh + 1 - 10;
+        k.legs[0] = { h: [-1.2, -10], k: [4.6, -(sh + 1)], f: [5.2, 0] };
+        k.legs[1] = { h: [1.2, -10], k: [6, -(sh + 1)], f: [6.6, 0] };
+      } else {
+        k.lift = -2;
+        k.legs[0] = { h: [-1.2, -10], k: [4.2, -8.3], f: [4.6, 0] };
+        k.legs[1] = { h: [1.2, -10], k: [5.6, -8.3], f: [6, 0] };
+      }
       k.arms[0].e = [1.2, -15]; k.arms[0].h = [3.6, -11.5]; k.arms[1].e = [2.6, -15]; k.arms[1].h = [5, -11.5];
       break;
     }
@@ -129,6 +136,9 @@ function drawPerson(sx, sy, s, o) {
   const L = o.look, ts = o.ts || 0, seed = o.seed || 0, energy = o.energy || 'good';
   const pose = o.pose || (o.moving ? 'walk' : 'stand');
   if (pose === 'swim') return drawSwimmer(sx, sy, s, o);
+  if (pose === 'lie') return drawLying(sx, sy, s, o);
+  // walking straight towards the camera or away from it: a real front / back view, legs stepping in place
+  if ((o.view === 'front' || o.view === 'back') && L.mob !== 'wheel' && ['walk', 'run', 'stand', 'sneak'].includes(pose)) return drawPersonFront(sx, sy, s, o, pose);
   if (L.mob === 'wheel') { ellipse(sx, sy, 9 * s, 3.6 * s, 'rgba(0,0,0,.18)'); return drawWheelPerson(sx, sy, s, o, pose); }
   if (pose === 'bike') { ellipse(sx, sy, 12 * s, 3.6 * s, 'rgba(0,0,0,.18)'); return drawRider(sx, sy, s, o); }
   const k = skeleton(pose, o);
@@ -185,6 +195,102 @@ function drawProp(k, ts, B) {
   if (k.prop === 'notes') { const u = (ts / 900) % 1; ctx.save(); ctx.globalAlpha = 1 - u; ctx.font = '8px sans-serif'; ctx.fillStyle = '#6b5bd0'; ctx.fillText('♪', 6, -34 - u * 10); ctx.fillText('♫', -10, -30 - ((u + 0.5) % 1) * 10); ctx.restore(); }
 }
 
+// Front / back view (o.view): symmetric body; when walking, the legs step up and down and the arms swing,
+// so the townie walks towards you (or away) instead of sliding sideways.
+function drawPersonFront(sx, sy, s, o, pose) {
+  const L = o.look, ts = o.ts || 0, seed = o.seed || 0, energy = o.energy || 'good', back = o.view === 'back';
+  const moving = pose !== 'stand', run = pose === 'run', ph = o.phase || 0, sw = moving ? Math.sin(ph) : 0;
+  const tired = energy === 'tired' || energy === 'exhausted';
+  const bounce = moving ? Math.abs(Math.cos(ph)) * (run ? 2 : tired ? 0.6 : 1.1) : (energy === 'great' && !o.wave ? Math.max(0, Math.sin(ts / 240 + seed)) * 2.5 : 0);
+  const pants = L.pants || '#4a5a78', shirt = L.shirt, skin = L.skin, step = run ? 3.2 : 2.2;
+  ellipse(sx, sy, 8 * s, 3.4 * s, 'rgba(0,0,0,.18)');
+  local(sx, sy, s, 1, () => {
+    ctx.translate(0, -bounce);
+    // legs: the lifted one bends its knee
+    [[-1, -sw], [1, sw]].forEach(([side, u]) => {
+      const lift = Math.max(0, u) * step, hip = [side * 2.1, -10], foot = [side * 2.3, -lift + bounce], knee = [side * 2.4, -5 - lift * 0.8 + bounce * 0.5];
+      ctx.beginPath(); ctx.moveTo(hip[0], hip[1]); ctx.lineTo(knee[0], knee[1]); ctx.lineTo(foot[0], foot[1] - 1);
+      ctx.strokeStyle = u > 0 ? shade(pants, -0.12) : pants; ctx.lineWidth = 3.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+      rrect(foot[0] - 1.9, foot[1] - 1.7, 3.8, 2.2, 1, '#3b3028');
+    });
+    // arms swing forward and back, opposite to the legs
+    const arm = (side, u) => {
+      const sh = [side * 5, -20.6], hand = [side * (5.8 + Math.abs(u) * 0.4), -12.2 + u * (run ? 2.6 : 1.6)], el = [side * 5.9, -16.3 + u * 0.8];
+      line(sh[0], sh[1], el[0], el[1], shade(shirt, -0.08), 3.2);
+      line(el[0], el[1], hand[0], hand[1], skin, 2.5); circle(hand[0], hand[1], 1.7, skin);
+    };
+    if (L.hair === 'long' && back) rrect(-5.6, -31, 11.2, 13, 4.5, L.hairCol);
+    // torso
+    ctx.beginPath(); ctx.moveTo(-5.4, -9.5); ctx.lineTo(-5.6, -20.5); ctx.quadraticCurveTo(-5.6, -23.6, -2, -23.6); ctx.lineTo(2, -23.6); ctx.quadraticCurveTo(5.6, -23.6, 5.6, -20.5); ctx.lineTo(5.4, -9.5); ctx.closePath();
+    ctx.fillStyle = shirt; ctx.fill();
+    rrect(-5.4, -11.6, 10.8, 2.6, 1, shade(pants, -0.05));
+    if (back) line(0, -21.5, 0, -11.8, shade(shirt, -0.12), 0.8);
+    else { ctx.beginPath(); ctx.moveTo(-2.4, -23.4); ctx.quadraticCurveTo(0, -21.2, 2.4, -23.4); ctx.strokeStyle = shade(shirt, 0.35); ctx.lineWidth = 1; ctx.stroke(); }
+    arm(-1, sw); arm(1, -sw);
+    if (o.wave) { const w = Math.sin(ts / 140) * 2; line(5, -20.6, 7.5, -25, shirt, 3.2); line(7.5, -25, 8.5 + w, -31, skin, 2.5); circle(8.5 + w, -31, 1.7, skin); }
+    headFront(0, -30.2 + (energy === 'exhausted' ? 1.2 : 0), L, energy, ts, seed, back);
+  });
+  sleepyZ(sx, sy, s, energy, ts, seed, 40 + bounce);
+}
+function headFront(cx, cy, L, energy, ts, seed, back) {
+  const r = 6.8, hc = L.hairCol, ink = '#2a2018';
+  if (back) {
+    circle(cx, cy, r, L.skin);
+    ctx.fillStyle = hc; ctx.beginPath(); ctx.arc(cx, cy, r + 0.5, Math.PI * 0.86, Math.PI * 2.14); ctx.closePath(); ctx.fill();
+    ellipse(cx, cy + 2.2, r * 0.86, r * 0.6, hc);
+    ellipse(cx - r + 0.4, cy + 0.8, 1.2, 1.8, shade(L.skin, -0.06)); ellipse(cx + r - 0.4, cy + 0.8, 1.2, 1.8, shade(L.skin, -0.06));
+    if (L.hair === 'bun') { circle(cx, cy - r - 2.2, 3.4, hc); circle(cx, cy - r - 2.2, 1.2, shade(hc, 0.15)); }
+    if (L.hair === 'curly') for (let k = 0; k <= 9; k++) { const a = Math.PI * 0.85 + k / 9 * Math.PI * 1.3; circle(cx + Math.cos(a) * (r + 0.4), cy + Math.sin(a) * (r + 0.4), 2.5, hc); }
+    return;
+  }
+  if (L.hair === 'long') rrect(cx - r - 0.8, cy - 2, 2 * r + 1.6, 11, 3, hc);
+  circle(cx, cy, r, L.skin);
+  ellipse(cx - r + 0.3, cy + 0.6, 1.2, 1.8, shade(L.skin, -0.06)); ellipse(cx + r - 0.3, cy + 0.6, 1.2, 1.8, shade(L.skin, -0.06));
+  ctx.fillStyle = hc;
+  ctx.beginPath(); ctx.arc(cx, cy, r + 0.5, Math.PI * 1.02, Math.PI * 1.98); ctx.closePath(); ctx.fill();
+  if (L.hair === 'short') { ellipse(cx - 2.2, cy - 4.4, 3.6, 2.2, hc, null, 0, 0.25); ellipse(cx + 2.4, cy - 4.6, 3.4, 2, hc, null, 0, -0.25); }
+  if (L.hair === 'long') { ellipse(cx, cy - 4.6, 5.8, 2.6, hc); rrect(cx - r - 0.6, cy - 3, 2.6, 9, 1.3, hc); rrect(cx + r - 2, cy - 3, 2.6, 9, 1.3, hc); }
+  if (L.hair === 'bun') { circle(cx, cy - r - 2.4, 3.3, hc); ellipse(cx, cy - 4.6, 5.4, 2.2, hc); }
+  if (L.hair === 'curly') for (let k = 0; k <= 7; k++) { const a = Math.PI + k / 7 * Math.PI; circle(cx + Math.cos(a) * (r + 0.4), cy + Math.sin(a) * (r + 0.4) - 0.4, 2.5, hc); }
+  const blink = Math.sin(ts / 1700 + seed * 5) > 0.985, yawn = energy === 'tired' && Math.sin(ts / 2600 + seed) > 0.93;
+  const eyes = [-2.4, 2.4];
+  if (energy === 'exhausted') {
+    eyes.forEach(x => ellipse(cx + x, cy + 1.8, 1.6, 0.8, 'rgba(110,80,140,.35)'));
+    ctx.strokeStyle = ink; ctx.lineWidth = 0.9; ctx.lineCap = 'round';
+    eyes.forEach(x => { ctx.beginPath(); ctx.arc(cx + x, cy - 0.2, 1.2, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); });
+  } else if (energy === 'tired' || blink) {
+    eyes.forEach(x => { ellipse(cx + x, cy + 0.6, 1.05, 0.6, ink); line(cx + x - 1.4, cy + 0.1, cx + x + 1.4, cy + 0.1, shade(L.skin, -0.25), 0.8); });
+  } else {
+    eyes.forEach(x => ellipse(cx + x, cy + 0.3, 0.95, 1.2, ink));
+    if (energy === 'great') eyes.forEach(x => circle(cx + x + 0.3, cy - 0.1, 0.35, '#fff'));
+  }
+  if (energy === 'great' || energy === 'good') [-4.3, 4.3].forEach(x => ellipse(cx + x, cy + 2.8, 1.4, 0.85, 'rgba(240,120,120,.35)'));
+  ctx.strokeStyle = '#8a4a3a'; ctx.lineWidth = 0.9; ctx.lineCap = 'round';
+  if (yawn) { ellipse(cx, cy + 3.6, 1.2, 1.5, '#7a3a2a'); return; }
+  ctx.beginPath();
+  if (energy === 'great') ctx.arc(cx, cy + 2.4, 2, 0.1 * Math.PI, 0.9 * Math.PI);
+  else if (energy === 'good') ctx.arc(cx, cy + 2.8, 1.3, 0.2 * Math.PI, 0.8 * Math.PI);
+  else if (energy === 'tired') { ctx.moveTo(cx - 0.9, cy + 4); ctx.lineTo(cx + 0.9, cy + 4); }
+  else ctx.arc(cx, cy + 5.2, 1.3, 1.2 * Math.PI, 1.8 * Math.PI);
+  ctx.stroke();
+}
+// Lying in bed (o.dir: which way the head points on screen, in radians). Eyes closed, a few z's.
+function drawLying(sx, sy, s, o) {
+  const L = o.look, ts = o.ts || 0;
+  local(sx, sy, s, 1, () => {
+    ctx.rotate(o.dir || 0);
+    // the body lies along +x here, head at +x
+    rrect(-9, -4.2, 13, 8.4, 4, L.shirt);
+    line(-9, -1.8, -16, -1.8, L.pants || '#4a5a78', 3.4); line(-9, 1.8, -16, 1.8, shade(L.pants || '#4a5a78', -0.12), 3.4);
+    circle(9.6, 0, 6.6, L.skin);
+    ctx.fillStyle = L.hairCol; ctx.beginPath(); ctx.arc(9.6, 0, 7, -Math.PI * 0.5, Math.PI * 0.5); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#2a2018'; ctx.lineWidth = 0.9; ctx.lineCap = 'round';
+    [-2.2, 2.2].forEach(y => { ctx.beginPath(); ctx.arc(8.2, y, 1.1, 0.6 * Math.PI, 1.4 * Math.PI); ctx.stroke(); });
+  });
+  const ph = (ts / 1500) % 1;
+  ctx.save(); ctx.globalAlpha = 1 - ph; ctx.font = `bold ${(8 + ph * 5) * s}px sans-serif`; ctx.fillStyle = '#5b6b8c'; ctx.textAlign = 'center';
+  ctx.fillText('z', sx + (8 + ph * 8) * s, sy - (14 + ph * 14) * s); ctx.restore();
+}
 // Mood shows on the face only: eyes, mouth, dark circles. Body shape never changes.
 // back: seen from behind (walking away): hair, an ear and the nape, no face.
 function backHead(cx, cy, L, r) {
@@ -316,6 +422,13 @@ function drawSwimmer(sx, sy, s, o) {
 }
 
 // ---------- crops ----------
+// Each crop's colour when ripe, for drawing fields from far away.
+const CROP_COL = {
+  wheat: '#e9c46a', carrot: '#f08a3c', potato: '#c9a36a', onion: '#d9a37c', garlic: '#efe9dc', cabbage: '#a3d468', broccoli: '#4f9a3e',
+  sweetpotato: '#b5543c', tomato: '#e5483b', cucumber: '#5aa04a', eggplant: '#7b4a9c', chili: '#d93a2b', corn: '#f2c94c', pepper: '#e8a33a',
+  strawberry: '#e0344a', blueberry: '#4f63c9', watermelon: '#3f9a46', grape: '#7d4aa3', melon: '#c9d36a', tulip: '#ef6f8c', rose: '#d6334f',
+  sunflower: '#f2c230', pumpkin: '#f08a24',
+};
 const PLANT_SPOTS = {
   1: [[0.5, 0.52]], 2: [[0.34, 0.36], [0.66, 0.64]],
   3: [[0.3, 0.3], [0.72, 0.42], [0.42, 0.74]], 4: [[0.28, 0.28], [0.72, 0.28], [0.28, 0.72], [0.72, 0.72]],

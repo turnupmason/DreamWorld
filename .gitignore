@@ -15,3 +15,6 @@ xcuserdata/
 *.xcuserstate
 DerivedData/
 build/
+
+# source fonts for tools/make_fonts.py (large; download them, see prototype/fonts/FONTS-LICENSE.md)
+tools/font-src/

@@ -24,7 +24,12 @@ const Scene = (() => {
   const gwOf = h => homeW(h) + 1;            // ... and the side path
   const far = () => cam.z < 0.2;             // zoomed far out: simple houses, no animals or people
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const SEAT = { sofa: 7, armchair: 7, chair: 6, rocker: 6, beanbag: 3, bed: 9, sleepbag: 3, spinbike: 9, treadmill: 5 };
+  const SEAT = { spinbike: 9, treadmill: 5 };                                   // standing / riding on a machine
+  const SEAT_H = { sofa: 10, armchair: 10, chair: 11.5, rocker: 10, beanbag: 6 }; // seat height: hips here, feet on the floor
+  const LIE_H = { bed: 13.5, singlebed: 12.5, bunkbed: 14.5, sleepbag: 6 };      // lying: on top of the mattress
+  const LIE_HEAD = { bed: 0.38, singlebed: 0.36, bunkbed: 0.36, sleepbag: 0.3 };  // where the head goes (on the pillow)
+  // Which way your head points when lying: towards the pillow (the back of the bed).
+  const lieDir = it => (it ? (it.rot ? Math.atan2(-16, -32) : Math.atan2(-16, 32)) : 0);
 
   // Your townie outside (lot-local coordinates on lot `lot`) and inside (room coordinates).
   const me = { x: DOOR_X, y: 12.5, lot: 'me', path: [], face: 1, phase: 0, moving: false, jobs: [], cur: null, act: null, sneak: false };
@@ -90,14 +95,17 @@ const Scene = (() => {
     cam.z = nz; centerOn(nx, ny);
     if (Math.abs(fly.z - nz) < 0.003 && Math.hypot(fly.wx - nx, fly.wy - ny) < 0.05) { cam.z = fly.z; centerOn(fly.wx, fly.wy); fly = null; }
   }
+  // The camera stays over the town (not out over the woods), and can't zoom out past the whole town filling the screen.
   function clampCam() {
     if (mode === 'interior') return;
-    const c = unIso(W / 2, H / 2), x = clamp(c.x, WX0 + 3, WX1 - 3), y = clamp(c.y, WY0 + 3, WY1 - 3);
+    if (cam.z < minWorldZoom()) { const c0 = unIso(W / 2, H / 2); cam.z = minWorldZoom(); centerOn(c0.x, c0.y); }
+    const c = unIso(W / 2, H / 2), x = clamp(c.x, WORLD.x0 + 4, WORLD.x1 - 4), y = clamp(c.y, WORLD.y0 + 4, WORLD.y1 - 4);
     if (x !== c.x || y !== c.y) centerOn(x, y);
   }
+  function minWorldZoom() { return Math.max(0.06, W / ((WORLD.x1 - WORLD.x0 + WORLD.y1 - WORLD.y0) * 32) * 1.25); }
   function zoomAt(px, py, z) {
     const [lo, hi] = ZOOM[mode === 'interior' ? 'interior' : 'world'];
-    z = clamp(z, lo, hi);
+    z = clamp(z, mode === 'interior' ? lo : Math.max(lo, minWorldZoom()), hi);
     const w = unIso(px, py);
     cam.z = z;
     cam.x = px - (w.x - w.y) * TW / 2 * z;
@@ -163,10 +171,19 @@ const Scene = (() => {
   const viewLv = h => Math.min(LEVEL, floorsOf(h) - 1);
   const viewRoom = h => roomAt(h, viewLv(h));
   // Where you stand to take the stairs: in front of the foot of the flight up, or in front of the opening down.
+  // Where you stand before taking the stairs: on the free tile next to them.
   function stairsSpot(h, kind) {
     const s = stairsRects(h, viewLv(h)).find(r => r.kind === kind) || stairsRects(h, viewLv(h))[0];
     if (!s) return [0.6, roomSize(h)[1] * 0.9, 1];
-    return s.kind === 'up' ? [s.x + 0.5, s.y + s.d + 0.45, 1, true] : [s.x + 1.5, s.y + s.d + 0.45, -1, true];
+    return s.kind === 'up' ? [s.ax + 0.5, s.ay + 0.5, 1] : [s.ax + 0.5, s.ay + 0.45, -1, true];
+  }
+  // Turn towards where we're going. Mostly up or down the screen: a full front / back view; otherwise the 3/4 view
+  // facing left or right (back of the head when going up the screen).
+  function faceTo(a, dx, dy) {
+    const sx = dx - dy, sy = dx + dy;
+    if (Math.abs(sx) > 0.02) a.face = sx > 0 ? 1 : -1;
+    if (Math.abs(sy) > 0.02) a.back = sy < 0;
+    if (Math.abs(sx) + Math.abs(sy) > 0.02) a.view = Math.abs(sx) < Math.abs(sy) * 0.45 ? (sy > 0 ? 'front' : 'back') : null;
   }
   function bfsFrom(N, sx, sy) {
     const { g, gw, gh, wall } = N, prev = new Int32Array(gw * gh).fill(-1), start = sy * gw + sx;
@@ -178,7 +195,8 @@ const Scene = (() => {
         const nx = cx + dx, ny = cy + dy;
         if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
         const n = ny * gw + nx;
-        if (prev[n] !== -1 || !g[n] || wall(cx, cy, nx, ny)) continue;
+        // blocked tiles can't be entered, except while still getting out of the one you start on (bed, sofa)
+        if (prev[n] !== -1 || (!g[n] && g[c]) || wall(cx, cy, nx, ny)) continue;
         prev[n] = c; q.push(n);
       }
     }
@@ -229,9 +247,7 @@ const Scene = (() => {
     if (!a.path.length) { a.moving = false; return; }
     const [tx, ty] = a.path[0], dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy), st = speed * dt;
     if (dist <= st) { a.x = tx; a.y = ty; a.path.shift(); } else { a.x += dx / dist * st; a.y += dy / dist * st; }
-    // turn towards where we're going: left/right on screen, and our back to the camera when walking up the screen
-    if (Math.abs(dx - dy) > 0.02) a.face = dx - dy > 0 ? 1 : -1;
-    if (Math.abs(dx + dy) > 0.02) a.back = dx + dy < 0;
+    faceTo(a, dx, dy);
     a.phase += dt * (4 + speed * 3.5);
     a.moving = true;
   }
@@ -264,7 +280,7 @@ const Scene = (() => {
     if (!j) return;
     if (j.valid && !j.valid()) { a.cur = null; return; }
     if (a.spot && a.spot[2]) a.face = a.spot[2];
-    a.back = !!(a.spot && a.spot[3]);
+    a.back = !!(a.spot && a.spot[3]); a.view = null;
     if (j.start) j.start(a);
     if (j.dur > 0) a.act = { job: j, pose: j.pose, until: ts + j.dur };
     else { a.cur = null; if (j.done) j.done(); }
@@ -416,15 +432,58 @@ const Scene = (() => {
   }
   const footRect = (x, y, w, d, hgt) => ({ x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: iso(x, y).y - hgt * cam.z, y1: iso(x + w, y + d).y });
 
+  // A crop seen from further away: three neat rows, green while growing, the crop's own colour when ripe.
+  function cropRows(fl, x, y) {
+    const st = cropStage(fl), col = st === 4 ? CROP_COL[fl.crop] || '#f2b33d' : ['#8cc95f', '#78bf52', '#62b048', '#55a240'][st];
+    for (let r = 0; r < 3; r++) flatRect(x + 0.14, y + 0.18 + r * 0.27, 0.72, 0.15, col, null, 1 + st * 1.4);
+  }
+  // Houses away from the camera are drawn once into a picture (per zoom step and time of day) and reused:
+  // they keep every detail but cost almost nothing to draw. Night window glows are kept with the picture.
+  const HOUSE_SPR = new Map();
+  function drawHouseCached(h, ox, oy) {
+    const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, ex = floorsOf(h) - H.floors[0];
+    const zb = Math.round(Math.log(cam.z) / Math.log(1.15)), zq = Math.pow(1.15, zb), nb = NIGHT > 0.65 ? 2 : NIGHT > 0.25 ? 1 : 0;
+    const key = `${h.house}|${h.wall}|${h.roof}|${ex}|${zb}|${nb}`;
+    let s = HOUSE_SPR.get(key);
+    if (!s) {
+      const dpr = Math.min(2, window.devicePixelRatio || 1), topPx = (HOUSE_H[H.id] || 120) + ex * 40 + 50;
+      const wpx = (w + d + 2) * 32 * zq, hpx = ((w + d + 2) * 16 + topPx) * zq;
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.ceil(wpx * dpr)); c.height = Math.max(1, Math.ceil(hpx * dpr));
+      const saved = [ctx, cam, GLOWS, NIGHT];
+      ctx = c.getContext('2d'); ctx.scale(dpr, dpr); GLOWS = []; NIGHT = nb * 0.5;
+      cam = { x: 0, y: 0, z: zq };
+      const L = iso(fx - 1, fy + d + 1).x, T = iso(fx, fy).y - topPx * zq;
+      cam.x = -L; cam.y = -T;
+      let r = null;
+      try { r = drawHouse(h, 0, 0, 0); } catch (e) { console.error(e); }
+      const glows = GLOWS.slice();
+      [ctx, cam, GLOWS, NIGHT] = saved;
+      s = { c, w: wpx, h: hpx, ax: -L, ay: -T, glows, r: r || { x0: 0, x1: wpx, y0: 0, y1: hpx, top: 0 } };
+      HOUSE_SPR.set(key, s);
+      if (HOUSE_SPR.size > 300) HOUSE_SPR.delete(HOUSE_SPR.keys().next().value);
+    }
+    const o = iso(ox, oy), k = cam.z / zq, X = o.x - s.ax * k, Y = o.y - s.ay * k;
+    ctx.drawImage(s.c, X, Y, s.w * k, s.h * k);
+    if (NIGHT > 0.05) s.glows.forEach(g => GLOWS.push({ x: X + g.x * k, y: Y + g.y * k, r: g.r * k, a: g.a }));
+    return { x0: X + s.r.x0 * k, x1: X + s.r.x1 * k, y0: Y + s.r.y0 * k, y1: Y + s.r.y1 * k, top: Y + s.r.top * k };
+  }
   function lotObjects(h, ox, oy, objs, ts, dt, opt) {
     const z = cam.z, f = fine(), focus = opt.focus;
     const [fx, fy, hw, hd] = HOUSES[h.house].fp;
-    if (far()) {   // seen from far away: just the house and the crops as colour
-      objs.push({ d: ox + oy + fx + fy + (hw + hd) / 2, f: () => { const r = drawHouseFar(h, ox, oy); opt.houseTop = { x: iso(ox + fx + hw / 2, oy + fy + hd / 2).x, y: r }; } });
+    if (far()) {   // seen from far away: the real house (pre-drawn), tidy crop rows, round fruit trees; no animals or people
+      objs.push({ d: ox + oy + fx + fy + (hw + hd) / 2, f: () => { const r = drawHouseCached(h, ox, oy); opt.houseTop = { x: iso(ox + fx + hw / 2, oy + fy + hd / 2).x, y: r.top }; } });
+      h.fields.forEach((fl, i) => { if (!fl) return; const [x, y] = fieldPos(i); objs.push({ d: ox + oy + x + y + 1, f: () => cropRows(fl, ox + x, oy + y) }); });
+      h.trees.forEach((t, i) => {
+        if (!t || i >= orchardSlots(h)) return;
+        const [sx, sy] = ORCHARD_SLOTS[i];
+        objs.push({ d: ox + oy + sx + sy + 1, f: () => { const c = iso(ox + sx + 0.5, oy + sy + 0.5); circle(c.x, c.y - 26 * z, 15 * z, '#5aa04a'); circle(c.x - 4 * z, c.y - 30 * z, 8 * z, '#7cbf5a'); } });
+      });
+      if (h.pondLv) objs.push({ d: ox + oy + AREA.pond.x + AREA.pond.y + 0.5, f: () => drawPond(ox + AREA.pond.x, oy + AREA.pond.y, AREA.pond.w, AREA.pond.d, 0, ts) });
       return;
     }
     objs.push({ d: ox + oy + fx + fy + (hw + hd) / 2, f: () => {
-      const r = drawHouse(h, ox, oy, ts);
+      const r = cam.z < 0.42 ? drawHouseCached(h, ox, oy) : drawHouse(h, ox, oy, ts);
       if (focus) hits.push({ kind: 'house', owner: h.id, ...r });
       opt.houseTop = { x: iso(ox + fx + hw / 2, oy + fy + hd / 2).x, y: r.top };
     } });
@@ -447,7 +506,7 @@ const Scene = (() => {
       const [x, y] = fieldPos(i);
       objs.push({ d: ox + oy + x + y + 1, f: () => {
         if (f) drawCropTile(ox + x, oy + y, fl, ts, i * 1.31 + ox);
-        else { const c = iso(ox + x + 0.5, oy + y + 0.5), st = cropStage(fl); ellipse(c.x, c.y - 2 * z * st, (3 + st * 2) * z * 4, (2 + st) * z * 3, st === 4 ? '#f2b33d' : '#6cbf4a'); }
+        else cropRows(fl, ox + x, oy + y);
       } });
     });
     // orchard
@@ -537,7 +596,7 @@ const Scene = (() => {
       if (!live) { if (e.y >= LOT_D && !e.path.length) e.path = planPath(e, lotNav(h), 3.5, 12.5, 2) || []; wander(e, dt, speedOf(h), en => randomWalk(en, lotNav(h))); }
       objs.push({ d: ox + oy + e.x + e.y, f: () => {
         const p = iso(ox + e.x, oy + e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && !e.wave, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && !e.wave, view: e.wave > performance.now() ? null : e.view, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() });
         if (live && f) liveBadge(p, h.live, false);
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
@@ -559,7 +618,7 @@ const Scene = (() => {
   }
   function drawMe(ox, oy, ts, focus) {
     const z = cam.z, p = iso(ox + me.x, oy + me.y), pose = mePose();
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() });
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() });
     if (S.live) liveBadge(p, S.live, true);
     if (focus) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
     if (mode === 'home' && !S.live && (me.jobs.length || me.cur)) {   // little marker on where you're heading
@@ -591,6 +650,7 @@ const Scene = (() => {
     for (const st of Object.values(STREETS)) if (inRectXY(x, y, st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1)) return true;
     for (const r of ROADS) if (inRectXY(x, y, r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1)) return true;
     const P = LANDMARKS.park, F = LANDMARKS.fields;
+    if (inRectXY(x, y, RIVER.x - 1, WY0, RIVER.x + RIVER.w + 1, LAKE.y)) return true;
     if (inRectXY(x, y, 66, -3, 113, 31) || inRectXY(x, y, P.x - 1, P.y - 1, P.x + P.w + 1, P.y + P.d + 1) || inRectXY(x, y, F.x - 1, F.y - 1, F.x + F.w + 1, F.y + F.d + 1)) return true;
     return ((x - LAKE.x) / (LAKE.rx + 3)) ** 2 + ((y - LAKE.y) / (LAKE.ry + 3)) ** 2 < 1;
   }
@@ -614,9 +674,43 @@ const Scene = (() => {
     for (const s of scenery()) {
       if (s.x < vr.x0 || s.x > vr.x1 || s.y < vr.y0 || s.y > vr.y1) continue;
       if (!s.tree) { if (!lod) objs.push({ d: s.x + s.y, f: s.w < 0.5 ? () => drawRock(s.x, s.y, s.w) : () => drawBushWild(s.x, s.y, s.w) }); continue; }
-      if (thin && s.w > 0.55) continue;
-      objs.push({ d: s.x + s.y, f: lod ? () => { const c = iso(s.x, s.y); circle(c.x, c.y - 20 * z, (thin ? 20 : 14) * z, s.w < 0.45 ? '#38905a' : '#4f9a4b'); } : () => drawWildTree(s.x, s.y, s.w, ts) });
+      if (thin && s.w > 0.6) continue;
+      // from far away: round canopies with a light top, so the woods read as a forest, not dots
+      objs.push({ d: s.x + s.y, f: lod ? () => {
+        const c = iso(s.x, s.y), r = (thin ? 22 : 15) * z, dark = s.w < 0.45 ? '#2f8050' : '#3f8c45';
+        circle(c.x, c.y - r * 1.3, r, dark); circle(c.x - r * 0.3, c.y - r * 1.6, r * 0.62, s.w < 0.45 ? '#4a9d63' : '#5aa552');
+      } : () => drawWildTree(s.x, s.y, s.w, ts) });
     }
+  }
+  // Mountains behind the woods (north and west) so the edge of the world looks like a valley, not a blank.
+  let PEAKS = null;
+  function peaks() {
+    if (PEAKS) return PEAKS;
+    PEAKS = [];
+    for (let x = WX0 - 6; x < WX1 + 10; x += 15) PEAKS.push({ x: x + hash(x, 1) * 6, y: WY0 - 6 + hash(x, 2) * 5, r: 9 + hash(x, 3) * 6, h: 150 + hash(x, 4) * 140 });
+    for (let y = WY0 + 8; y < WY1 + 6; y += 15) PEAKS.push({ x: WX0 - 6 + hash(y, 5) * 5, y: y + hash(y, 6) * 6, r: 9 + hash(y, 7) * 6, h: 150 + hash(y, 8) * 140 });
+    return PEAKS;
+  }
+  function mountains(objs, vr) {
+    peaks().forEach(m => {
+      if (m.x < vr.x0 - 20 || m.x > vr.x1 + 20 || m.y < vr.y0 - 20 || m.y > vr.y1 + 20) return;
+      objs.push({ d: m.x + m.y - 30, f: () => {
+        const z = cam.z, c = iso(m.x, m.y), hw = m.r * 34 * z, H = m.h * z, top = { x: c.x + hw * 0.08, y: c.y - H };
+        poly([{ x: c.x - hw, y: c.y }, top, { x: c.x + hw * 0.08, y: c.y + hw * 0.12 }], '#8e9c86');
+        poly([{ x: c.x + hw * 0.08, y: c.y + hw * 0.12 }, top, { x: c.x + hw, y: c.y }], '#6d7a67');
+        const sn = 0.3, a = lerp(top, { x: c.x - hw, y: c.y }, sn), b = lerp(top, { x: c.x + hw, y: c.y }, sn);
+        poly([a, top, b, { x: (top.x + b.x) / 2, y: b.y - H * 0.04 }, { x: top.x, y: a.y + H * 0.05 }, { x: (top.x + a.x) / 2, y: a.y - H * 0.05 }], '#f4f6f8');
+        ellipse(c.x, c.y, hw * 1.05, hw * 0.28, 'rgba(60,110,60,.35)');
+      } });
+    });
+  }
+  // A river from the mountains down into Mirror Lake (the avenue crosses it on a bridge).
+  const RIVER = { x: 176, w: 2.4 };
+  function river(vr) {
+    if (RIVER.x > vr.x1 + 2 || RIVER.x + RIVER.w < vr.x0 - 2) return;
+    flatRect(RIVER.x - 0.4, WY0, RIVER.w + 0.8, LAKE.y - WY0, '#c9b88f');
+    flatRect(RIVER.x, WY0, RIVER.w, LAKE.y - WY0, '#5aa7d6');
+    if (cam.z > 0.12) for (let y = Math.max(WY0, Math.floor(vr.y0)); y < Math.min(LAKE.y, vr.y1); y += 3) { const a = iso(RIVER.x + 0.6, y + (performance.now() / 900) % 3), b = iso(RIVER.x + 0.6, y + 0.8 + (performance.now() / 900) % 3); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.5)', 1.2 * cam.z); }
   }
   const boxVisible = (x0, y0, x1, y1, vr) => !(x1 < vr.x0 || x0 > vr.x1 || y1 < vr.y0 || y0 > vr.y1);
   // Town centre: paved square, the town hall plaza, shops along the avenue.
@@ -685,6 +779,8 @@ const Scene = (() => {
     flatRect(WORLD.x0, WORLD.y0, WORLD.x1 - WORLD.x0, WORLD.y1 - WORLD.y0, '#a6d47f');
     Object.values(STREETS).forEach(st => { if (boxVisible(st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1, vr)) flatRect(st.x - 0.6, st.y - 0.6, st.n * PARCEL + 1.2, LOT_D + 0.6, NEIGHBORHOODS[st.nb].grass); });
     const objs = [], tops = [], out = { hall: null, shops: mode === 'town' ? [] : null }, lv = townLevel(rankTotal());
+    river(vr);
+    mountains(objs, vr);
     lakeSide(objs, vr, ts);
     park(objs, vr, ts);
     farmland(objs, vr, ts);
@@ -731,15 +827,18 @@ const Scene = (() => {
     if (edit && edit.scope === 'yard') { editOverlay(ts); return; }
     if (mode === 'town') {
       const rk = ranking();
-      if (z < 0.17) AREA_LABELS.forEach(([key, x, y]) => { const c = iso(x, y); pill(t(key), c.x, c.y, 'rgba(59,49,37,.82)', '#fff', `800 ${z < 0.09 ? 12 : 14}px ${UI_FONT},${EMOJI_FONT}`, z < 0.09 ? 22 : 26); });
+      // label sizes follow the zoom, so zoomed far out the names don't cover the town
+      const fs = Math.round(clamp(7 + z * 40, 9, 13)), small = Math.round(clamp(6 + z * 30, 8.5, 11));
+      if (z < 0.17) AREA_LABELS.forEach(([key, x, y]) => { const c = iso(x, y); pill(t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs}px ${UI_FONT},${EMOJI_FONT}`, fs + 9); });
       tops.forEach(tp => {
-        if (tp.land) { if (z > 0.1 && tp.land.n >= CORE_PARCELS) hits.push({ kind: 'land', st: tp.land.st, p: tp.land.p, n: tp.land.n, pri: 1, ...pill(`🏷️ ${t('land_lot', { n: tp.land.n * PARCEL })}`, tp.x, tp.y, 'rgba(255,246,226,.95)', '#a9773f', `700 11px ${UI_FONT},${EMOJI_FONT}`, 20) }); return; }
+        if (tp.land) { if (z > 0.11 && tp.land.n >= CORE_PARCELS) hits.push({ kind: 'land', st: tp.land.st, p: tp.land.p, n: tp.land.n, pri: 1, ...pill(`🏷️ ${t('land_lot', { n: tp.land.n * PARCEL })}`, tp.x, tp.y, 'rgba(255,246,226,.95)', '#a9773f', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8) }); return; }
         const top = tp.opt.houseTop;
         if (!top) return;
-        if (tp.npc) { if (z > 0.1) hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(homeName(tp.h), top.x, top.y - 4, 'rgba(255,255,255,.78)', '#6b5f50', `600 10.5px ${UI_FONT}`, 19) }); return; }
+        if (tp.npc) { if (z > 0.11) hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(homeName(tp.h), top.x, top.y - 4, 'rgba(255,255,255,.78)', '#6b5f50', `600 ${small}px ${UI_FONT}`, small + 8) }); return; }
+        if (z < 0.08 && tp.h.id !== 'me') return;
         const i = rk.findIndex(r => r.h.id === tp.h.id), medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`, mine = tp.h.id === 'me';
         const label = S.calm ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode: names only
-        hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 11px ${UI_FONT},${EMOJI_FONT}`, 21) });
+        hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 9) });
       });
       if (out.hall) { const { x: px, y: py } = LANDMARKS.plaza; hits.push({ kind: 'plaza', pri: 1, ...pill(`🏛️ ${t('street_name')} Lv${lv}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) }); }
       return;
@@ -815,7 +914,7 @@ const Scene = (() => {
     });
     ctx.restore();
     if (w === 'storm') {
-      if (flash <= 0 && Math.random() < dt * 0.15) flash = 1;
+      if (flash <= 0 && Math.random() < dt * 0.15) { flash = 1; if (typeof Sound !== 'undefined') setTimeout(() => Sound.play('thunder'), 400 + Math.random() * 900); }
       if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.5})`; ctx.fillRect(0, 0, W, H); flash -= dt * 3; }
     }
   }
@@ -850,7 +949,7 @@ const Scene = (() => {
   function drawOpening(s) {
     const z = cam.z;
     flatRect(s.x, s.y, s.w, s.d, '#3c2f25');
-    for (let k = 0; k < 6; k++) flatRect(s.x + 0.12 + k * (s.w - 0.24) / 6, s.y + 0.08, (s.w - 0.24) / 6 - 0.04, s.d - 0.16, shade('#6b4f39', -k * 0.08));
+    for (let k = 0; k < 6; k++) flatRect(s.x + 0.12 + k * (s.w - 0.24) / 6, s.y + 0.08, (s.w - 0.24) / 6 - 0.04, s.d - 0.16, shade('#6b4f39', -(5 - k) * 0.1));
     const c = iso(s.x + s.w / 2, s.y + s.d / 2);
     if (!edit) hits.push({ kind: 'stairs', dir: -1, pri: 1, x0: c.x - 40 * z, x1: c.x + 40 * z, y0: c.y - 30 * z, y1: c.y + 16 * z });
   }
@@ -870,10 +969,12 @@ const Scene = (() => {
     if (!r) return false;
     cancel(meIn); meIn.anim = null;
     const spot = stairsSpot(h, r.kind);
+    // up: from the tile left of the flight, step by step up to the top (the height follows each step);
+    // down: from the tile in front of the opening, into it and down out of sight
     const climb = () => {
       meIn.anim = dir > 0
-        ? { pts: [[r.x + 0.3, 0.55, 0], [r.x + 1.85, 0.55, STAIR_H]], fade: 'out', speed: 1.5 }
-        : { pts: [[r.x + 1.7, 0.55, 0], [r.x + 0.3, 0.55, -STAIR_DOWN]], clip: r, fade: 'out', speed: 1.5 };
+        ? { pts: [[r.x - 0.1, 0.5, 0], [r.x + 1.85, 0.5, STAIR_H]], flight: r, fade: 'out', speed: 1.3 }
+        : { pts: [[r.x + 1.7, r.y + 0.5, 0], [r.x + 0.3, r.y + 0.5, -STAIR_DOWN]], clip: r, fade: 'out', speed: 1.3 };
       meIn.anim.done = () => { onSwitch(); arriveStairs(dir, onArrive); };
     };
     meIn.jobs.push({ key: 'stairs', spot: () => spot, dur: 0, reach: 1.6, done: climb, fail: climb });
@@ -885,8 +986,9 @@ const Scene = (() => {
     floorFade = performance.now();
     const r = rs.find(s => s.kind === (dir > 0 ? 'down' : 'up'));
     if (!r) { [meIn.x, meIn.y, meIn.face] = stairsSpot(h); if (onArrive) onArrive(); return; }
-    if (dir > 0) { meIn.x = r.x + 0.3; meIn.y = 0.55; meIn.lift = -STAIR_DOWN; meIn.anim = { pts: [[r.x + 1.7, 0.55, 0], [r.x + 1.5, r.y + r.d + 0.45, 0]], clip: r, fade: 'in', speed: 1.5 }; }
-    else { meIn.x = r.x + 1.85; meIn.y = 0.55; meIn.lift = STAIR_H; meIn.anim = { pts: [[r.x + 0.3, 0.55, 0], [r.x + 0.5, r.y + r.d + 0.45, 0]], fade: 'in', speed: 1.5 }; }
+    // from below: rise out of the opening and step off in front of it; from above: walk down the flight step by step
+    if (dir > 0) { meIn.x = r.x + 0.3; meIn.y = r.y + 0.5; meIn.lift = -STAIR_DOWN; meIn.anim = { pts: [[r.x + 1.7, r.y + 0.5, 0], [r.ax + 0.5, r.ay + 0.45, 0]], clip: r, fade: 'in', speed: 1.3 }; }
+    else { meIn.x = r.x + 1.85; meIn.y = 0.5; meIn.lift = STAIR_H; meIn.anim = { pts: [[r.x - 0.1, 0.5, 0], [r.ax + 0.5, r.ay + 0.5, 0]], flight: r, fade: 'in', speed: 1.3 }; }
     meIn.anim.done = onArrive;
   }
   // Moves along the stairs animation; the height changes evenly with the distance walked.
@@ -894,15 +996,19 @@ const Scene = (() => {
     const an = a.anim;
     const [tx, ty, tl] = an.pts[0], dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy), st = an.speed * dt;
     a.lift = a.lift || 0;
-    if (dist <= st) { a.x = tx; a.y = ty; a.lift = tl; an.pts.shift(); }
-    else { const k = st / dist; a.x += dx * k; a.y += dy * k; a.lift += (tl - a.lift) * k; }
-    if (Math.abs(dx - dy) > 0.02) a.face = dx - dy > 0 ? 1 : -1;
-    if (Math.abs(dx + dy) > 0.02) a.back = dx + dy < 0;
+    if (dist <= st) { a.x = tx; a.y = ty; if (!an.flight) a.lift = tl; an.pts.shift(); }
+    else { const k = st / dist; a.x += dx * k; a.y += dy * k; if (!an.flight) a.lift += (tl - a.lift) * k; }
+    if (an.flight) {   // on the flight: stand on the step under your feet (7 steps of 12 px)
+      const f = an.flight, n = 7, on = a.x - f.x, target = on < 0 ? 0 : Math.min(STAIR_H, (Math.floor(on / (f.w / n)) + 1) * STAIR_H / n);
+      a.lift += (target - a.lift) * Math.min(1, dt * 22);
+      if (target !== an.lastStep) { an.lastStep = target; if (typeof Sound !== 'undefined') Sound.play('step'); }
+    }
+    faceTo(a, dx, dy);
     a.phase += dt * 11; a.moving = true;
     an.t = (an.t || 0) + dt;
     if (an.fade === 'in') a.alpha = Math.min(1, an.t / 0.35);
     else a.alpha = an.pts.length === 1 ? Math.min(1, Math.hypot(an.pts[0][0] - a.x, an.pts[0][1] - a.y) / 0.6) : 1;
-    if (!an.pts.length) { a.anim = null; a.moving = false; a.lift = 0; a.alpha = 1; if (an.done) an.done(); }
+    if (!an.pts.length) { a.anim = null; a.moving = false; a.lift = 0; a.alpha = 1; a.view = null; if (an.done) an.done(); }
   }
   function renderInterior(ts, dt) {
     const h = homeOf(owner), [rw, rd] = roomSize(h), z = cam.z, WH = 92, lv = viewLv(h), room = roomAt(h, lv), top = floorsOf(h) - 1;
@@ -972,15 +1078,17 @@ const Scene = (() => {
       wander(e, dt, speedOf(h) * 0.7, en => randomWalk(en, roomNav(h), 4, 99));
       objs.push({ d: e.x + e.y, f: () => {
         const p = iso(e.x, e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && e.moving, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: 1, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && e.moving, view: e.moving ? e.view : null, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: 1, wave: e.wave > performance.now() });
         if (!edit) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
       } });
     }
     if (meIn.room !== owner) { cancel(meIn); meIn.anim = null; meIn.room = owner; meIn.lv = lv; meIn.x = 0.6; meIn.y = rd * 0.9; meIn.face = 1; }
     if (meIn.lv !== lv) { cancel(meIn); meIn.anim = null; meIn.lv = lv; meIn.seat = 0; meIn.useId = null; [meIn.x, meIn.y, meIn.face] = stairsSpot(h); }
     // on the stairs: after the steps but before their railing (inside the opening: before its railing)
-    const onStairs = meIn.anim && meIn.y < 1, clipR = onStairs && meIn.anim.clip;
-    const meD = clipR ? clipR.x + clipR.y + 1.4 : onStairs && upR ? upR.x + upR.y + 1.38 : meIn.x + meIn.y + (meIn.seat ? 0.7 : 0);
+    const an = meIn.anim, clipR = an && an.clip && meIn.y < an.clip.y + an.clip.d ? an.clip : null, onFlight = an && an.flight && meIn.y < 1 && meIn.x > an.flight.x - 0.2;
+    const useIt = meIn.useId && room.items.find(x => x.id === meIn.useId), useK = useIt && FURN[useIt.k].use;
+    const bedD = useK === 'sleep' ? useIt.x + useIt.y + itemSize('room', useIt).reduce((a, b) => a + b) / 2 + 0.02 : 0;   // in bed: right after the bed
+    const meD = clipR ? clipR.x + clipR.y + 1.4 : onFlight && upR ? upR.x + upR.y + 1.38 : bedD || meIn.x + meIn.y + (meIn.seat || useK === 'sit' ? 0.7 : 0);
     objs.push({ d: meD, f: () => {
       const p = iso(meIn.x, meIn.y), pose = meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
       const it = meIn.useId && room.items.find(x => x.id === meIn.useId), lift = meIn.lift || 0;
@@ -990,7 +1098,11 @@ const Scene = (() => {
         const r = meIn.anim.clip, a = iso(r.x - 0.2, r.y + r.d), b = iso(r.x + r.w, r.y + r.d);
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(b.x, b.y - 400); ctx.lineTo(a.x, a.y - 400); ctx.closePath(); ctx.clip();
       }
-      drawPerson(p.x, p.y - ((meIn.seat || 0) + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint });
+      // sitting: hips on the seat, feet on the floor; lying: on the mattress, then the quilt goes back over you
+      const sitH = pose === 'sit' && useK === 'sit' ? SEAT_H[useIt.k] || 9 : 0, lieH = pose === 'lie' ? LIE_H[useIt.k] || 10 : 0;
+      const yOff = sitH ? 0 : lieH || meIn.seat || 0;
+      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: meIn.moving ? meIn.view : null, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
+      if (pose === 'lie' && useIt) drawBedQuilt(useIt);
       ctx.restore();
       if (S.live) liveBadge(p, S.live, true);
       if (!edit) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
@@ -1082,6 +1194,10 @@ const Scene = (() => {
   function useSpot(it) {
     const [w, d] = itemSize('room', it), use = FURN[it.k].use;
     if (use === 'lift' || use === 'box') return [it.x + w / 2 - 0.1, it.y + d + 0.35, 1];
+    if (use === 'sleep') {   // head on the pillow (the body is drawn 0.27 tiles behind the head); a double bed: one side
+      const hy = (LIE_HEAD[it.k] || 0.35) + 0.27, side = it.k === 'bed' ? 0.55 : null;
+      return it.rot ? [it.x + hy, it.y + (side || d / 2), 1] : [it.x + (side || w / 2), it.y + hy, 1];
+    }
     const face = use === 'sit' || use === 'bike' ? (it.rot ? 1 : -1) : use === 'run' ? (it.rot ? -1 : 1) : 1;
     return [it.x + w / 2, it.y + d / 2, face];
   }
@@ -1260,7 +1376,7 @@ const Scene = (() => {
       if (!it) return false;
       const use = FURN[it.k].use, sp = useSpot(it);
       spot = () => sp;
-      pose = { sit: 'sit', run: 'run', bike: 'bike', lift: 'lift', box: 'box', yoga: 'yoga' }[use];
+      pose = { sit: 'sit', sleep: 'lie', run: 'run', bike: 'bike', lift: 'lift', box: 'box', yoga: 'yoga' }[use];
       dur = Infinity;
       start = a => { if (use !== 'lift' && use !== 'box') { a.x = sp[0]; a.y = sp[1]; } a.seat = SEAT[it.k] || 0; a.useId = it.id; if (use === 'run') a.phase = 0; };
     }

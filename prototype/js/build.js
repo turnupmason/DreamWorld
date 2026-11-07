@@ -210,11 +210,11 @@ const CAR_SPEC = {
   convertible: { len: 2.0, wid: 0.9,  body: 7,   cab: [0.7, 0.6],   cabH: 0, open: true },
   suv:         { len: 1.9, wid: 0.95, body: 12,  cab: [0.2, 1.38],  cabH: 10, rack: true },
   jeep:        { len: 1.8, wid: 0.95, body: 12,  cab: [0.25, 1.15], cabH: 10, lift: 3, lights: true, big: true },
-  sports:      { len: 1.9, wid: 0.92, body: 6.5, cab: [0.55, 0.72], cabH: 6, spoiler: true },
+  sports:      { len: 1.9, wid: 0.92, sleek: 'coupe' },
   pickup:      { len: 2.0, wid: 0.95, body: 11,  cab: [1.0, 0.66],  cabH: 9, bed: true },
   luxury:      { len: 2.3, wid: 0.92, body: 8.5, cab: [0.6, 1.05],  cabH: 7.5, chrome: true },
-  muscle:      { len: 2.0, wid: 0.95, body: 7.5, cab: [0.7, 0.62],  cabH: 6, stripes: true, spoiler: true },
-  supercar:    { len: 2.0, wid: 1.0,  body: 5.5, cab: [0.62, 0.66], cabH: 5, spoiler: true, low: true },
+  muscle:      { len: 2.15, wid: 0.96, sleek: 'muscle' },
+  supercar:    { len: 2.05, wid: 1.02, sleek: 'super' },
   minivan:     { len: 2.1, wid: 0.95, body: 10,  cab: [0.25, 1.6],  cabH: 12 },
   boxtruck:    { len: 2.4, wid: 1.0,  body: 7,   cab: [1.6, 0.72],  cabH: 12, cargo: [0.05, 1.5, 24] },
 };
@@ -230,6 +230,7 @@ function drawCar(c, x, y, ts) {
   if (c.k === 'camper') return drawCamper(c, x, y);
   if (c.k === 'tractor') return drawTractor(c, x, y, ts);
   const s = CAR_SPEC[c.k] || CAR_SPEC.mini, cx = x + (1 - s.wid) / 2, base = 3.5 + (s.lift || 0);
+  if (s.sleek) return drawSleekCar(c, cx, y, s, ts);
   const ctr = iso(cx + s.wid / 2, y + s.len / 2);
   ellipse(ctr.x, ctr.y + 2 * z, (s.wid + s.len) * 15 * z, (s.wid + s.len) * 7 * z, 'rgba(0,0,0,.2)');
   const b = box(cx, y, s.wid, s.len, s.body, col, base);
@@ -263,6 +264,58 @@ function drawCar(c, x, y, ts) {
   carWheel(b.right, 0, 0.2, s.big); carWheel(b.right, 0, 0.8, s.big);
   if (NIGHT > 0.3) { const p = wallPt(b.left, base, 0.5, 5); glow(p.x, p.y + 10 * z, 40 * z); }
   return { x0: iso(cx, y + s.len).x - 4, x1: iso(cx + s.wid, y).x + 4, y0: iso(cx, y).y - (top + s.cabH + 6) * z, y1: iso(cx + s.wid, y + s.len).y + 4 };
+}
+// A box whose top is shorter than its bottom along the car (sloped windscreen / nose / rear window).
+// f0: how far the top is pulled in at the back (y side), f1 at the front (+y side). Draws front, side and top.
+function slope(x, y, w, d, h, base, f0, f1, cols, side = 0.05) {
+  const z = cam.z, P = (px, py, hh) => up(iso(px, py), (base + hh) * z);
+  const b = [P(x, y, 0), P(x + w, y, 0), P(x + w, y + d, 0), P(x, y + d, 0)];
+  const t = [P(x + side, y + f0, h), P(x + w - side, y + f0, h), P(x + w - side, y + d - f1, h), P(x + side, y + d - f1, h)];
+  poly([b[3], b[2], t[2], t[3]], cols.front, 'rgba(0,0,0,.08)', 0.6);
+  poly([b[2], b[1], t[1], t[2]], cols.side, 'rgba(0,0,0,.08)', 0.6);
+  poly(t, cols.top, 'rgba(0,0,0,.06)', 0.6);
+  return { b, t };
+}
+// Sports car, muscle car and supercar each get their own silhouette.
+function drawSleekCar(c, x, y, s, ts) {
+  const z = cam.z, col = c.color, w = s.wid, L = s.len, glass = '#273544', glassHi = '#3d5468';
+  const ctr = iso(x + w / 2, y + L / 2);
+  ellipse(ctr.x, ctr.y + 2 * z, (w + L) * 15 * z, (w + L) * 7 * z, 'rgba(0,0,0,.22)');
+  const wheel = (u, big, wide) => {
+    const p = up(lerp(iso(x + w, y + L), iso(x + w, y), u), 0), k = big ? 1.3 : 1.1;
+    ellipse(p.x, p.y, 3.6 * z * k * (wide ? 1.15 : 1), 4.6 * z * k, '#222', null, 0, -0.45);
+    ellipse(p.x, p.y, 1.9 * z * k, 2.4 * z * k, s.sleek === 'super' ? '#f2c230' : '#c9ced4', null, 0, -0.45);
+  };
+  if (s.sleek === 'super') {
+    // low wedge: the nose dips almost to the ground, cabin far back and tiny, big rear wing
+    const body = slope(x, y, w, L, 6, 2.6, 0.05, 0.75, { front: shade(col, -0.05), side: shade(col, -0.18), top: shade(col, 0.12) });
+    wallRect([iso(x + w, y + L), iso(x + w, y)], 2.6, 0.55, 0.85, 1, 4.6, '#1d1d20');   // side air intake
+    flatRect(x + 0.18, y + L - 0.62, w - 0.36, 0.08, '#fff6c8', null, 4.4);            // slim headlights
+    slope(x + 0.12, y + 0.45, w - 0.24, 0.85, 4.6, 8.6, 0.3, 0.42, { front: glass, side: glassHi, top: shade(col, -0.05) }, 0.1);
+    [0.12, 0.85].forEach(u => box(x + 0.1 + u * (w - 0.28), y + 0.12, 0.06, 0.06, 6, '#222', 8.6));
+    box(x + 0.02, y + 0.04, w - 0.04, 0.24, 1.6, shade(col, -0.3), 14.6);
+    wheel(0.18, true, true); wheel(0.78, true, false);
+  } else if (s.sleek === 'muscle') {
+    // long flat hood with a scoop, cabin set back, chrome bumper, twin racing stripes, fat rear tyres
+    const b = box(x, y, w, L, 8, col, 3.5);
+    wallRect(b.left, 3.5, 0, 1, 0, 2, '#e8edf2');
+    wallRect(b.left, 3.5, 0.08, 0.2, 4, 6.5, '#fff6c8'); wallRect(b.left, 3.5, 0.8, 0.92, 4, 6.5, '#fff6c8');
+    wallRect(b.left, 3.5, 0.32, 0.68, 3, 6, shade(col, -0.5));
+    flatRect(x + w * 0.36, y, w * 0.1, L, '#fffaf0', null, 11.5); flatRect(x + w * 0.54, y, w * 0.1, L, '#fffaf0', null, 11.5);
+    slope(x + 0.08, y + 0.32, w - 0.16, 0.78, 7, 11.5, 0.12, 0.26, { front: glass, side: glassHi, top: col });
+    flatRect(x + w * 0.36, y + 0.44, w * 0.1, 0.4, '#fffaf0', null, 18.5); flatRect(x + w * 0.54, y + 0.44, w * 0.1, 0.4, '#fffaf0', null, 18.5);
+    box(x + w * 0.3, y + L - 0.75, w * 0.4, 0.32, 3, '#2d2d2d', 11.5);                  // hood scoop
+    wheel(0.2, true, true); wheel(0.8, false, false);
+  } else {
+    // rounded coupe: sloped nose and tail, glass bubble in the middle, little ducktail
+    slope(x, y, w, L, 7, 3.2, 0.25, 0.4, { front: shade(col, -0.05), side: shade(col, -0.18), top: shade(col, 0.1) });
+    flatRect(x + 0.15, y + L - 0.5, 0.2, 0.08, '#fff6c8', null, 8); flatRect(x + w - 0.35, y + L - 0.5, 0.2, 0.08, '#fff6c8', null, 8);
+    slope(x + 0.1, y + 0.55, w - 0.2, 0.8, 5.5, 10.2, 0.25, 0.3, { front: glass, side: glassHi, top: shade(col, 0.05) }, 0.08);
+    box(x + 0.08, y + 0.22, w - 0.16, 0.12, 1.4, shade(col, -0.25), 10.2);
+    wheel(0.2, false, false); wheel(0.8, false, false);
+  }
+  if (NIGHT > 0.3) { const p = iso(x + w / 2, y + L); glow(p.x, p.y + 4 * z, 40 * z); }
+  return { x0: iso(x, y + L).x - 4, x1: iso(x + w, y).x + 4, y0: iso(x, y).y - 26 * z, y1: iso(x + w, y + L).y + 4 };
 }
 function drawCamper(c, x, y) {
   const z = cam.z, cx = x - 0.02, wid = 1.05, len = 2.5, col = c.color;
@@ -364,6 +417,17 @@ function legs(x, y, w, d, h, col, inset = 0.1) {
     .forEach(([lx, ly]) => box(lx, ly, 0.08, 0.08, h, col));
 }
 const WOOD = '#b07a4a', DARKWOOD = '#7a4f2e';
+// The quilt again, drawn over someone lying in bed so they're tucked in.
+function drawBedQuilt(it) {
+  const k = it.k, rot = it.rot, tint = it.tint || '#8d99a6', [w, d] = furnSize(k, rot), x = it.x, y = it.y;
+  if (k === 'bed') { if (rot) box(x + 0.78, y + 0.08, w - 0.86, d - 0.16, 5, tint, 9); else box(x + 0.08, y + 0.78, w - 0.16, d - 0.86, 5, tint, 9); }
+  else if (k === 'singlebed' || k === 'bunkbed') {
+    const q = rot ? [x + 0.72, y + 0.1, w - 0.82, d - 0.2] : [x + 0.1, y + 0.72, w - 0.2, d - 0.82];
+    box(q[0], q[1], q[2], q[3], 4, tint, (k === 'bunkbed' ? 4 : 2) + 7);
+  } else if (k === 'sleepbag') {
+    if (rot) flatRect(x + 0.6, y + 0.1, w - 0.7, d - 0.2, shade(tint, 0.15), null, 6.2); else flatRect(x + 0.1, y + 0.6, w - 0.2, d - 0.7, shade(tint, 0.15), null, 6.2);
+  }
+}
 function drawFurn(it, x, y, ts) {
   const k = it.k, rot = it.rot, tint = it.tint || '#8d99a6', [w, d] = furnSize(k, rot), z = cam.z;
   const B = (bx, by, bw, bd, h, col, base, o) => box(bx, by, bw, bd, h, col, base, o);
