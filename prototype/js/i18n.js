@@ -618,7 +618,7 @@ Object.assign(STR.zh, {
   host_no: '{name}说：现在不太方便，下次吧。', host_cant_off: '{name}现在不在线，上线了再问吧。', host_cant_away: '{name}去别人家串门了，回家了再问吧。',
   host_yes_snack: '{name}答应了，这次做客可以随便坐 😊', host_wave: '打招呼', host_waved: '{name}也朝你挥了挥手',
   st_home: '在家', st_out: '出门了', st_off: '不在线', local_time: '当地 {t}',
-  go_sub: '从你现在的地方出发，沿着马路走；开车更快：先去取车，停进停车场再走过去。', go_walk: '走过去', go_drive: '开车去', go_ride: '骑车去', go_now: '直接到', go_now_sub: '一下就到',
+  go_sub: '从你现在的地方出发，沿着马路走；开车更快：先去取车，停进停车场再走过去。', go_walk: '走过去', go_drive: '开车去', go_ride: '骑车去', go_now: '直接到', go_now_sub: '一下就到', go_stop: '停下', go_stopped: '停在这里了，可以点别的地方再出发',
   go_secs: '约 {n} 秒', go_no_car: '还没有车', go_on_way: '在去{to}的路上…',
   area_canal: '运河', area_beach: '海滩', area_river: '河畔', area_fjord: '峡湾', area_harbour: '港口', area_terrace: '山坡梯田',
 });
@@ -630,7 +630,7 @@ Object.assign(STR.en, {
   host_no: '{name}: Not right now, maybe next time.', host_cant_off: '{name} is offline. Ask when they’re back online.', host_cant_away: '{name} is out visiting. Ask when they’re back home.',
   host_yes_snack: '{name} said yes: sit anywhere this visit 😊', host_wave: 'Wave', host_waved: '{name} waved back',
   st_home: 'at home', st_out: 'out', st_off: 'offline', local_time: 'local time {t}',
-  go_sub: 'From where you are, along the roads. Driving is faster: fetch your car, park in the car park, walk in.', go_walk: 'Walk', go_drive: 'Drive', go_ride: 'Ride', go_now: 'Go now', go_now_sub: 'Right away',
+  go_sub: 'From where you are, along the roads. Driving is faster: fetch your car, park in the car park, walk in.', go_walk: 'Walk', go_drive: 'Drive', go_ride: 'Ride', go_now: 'Go now', go_now_sub: 'Right away', go_stop: 'Stop', go_stopped: 'Stopped here. Tap anywhere to set off again',
   go_secs: 'about {n} s', go_no_car: 'No car yet', go_on_way: 'On the way to {to}…',
   area_canal: 'Canals', area_beach: 'Beach', area_river: 'Riverside', area_fjord: 'Fjord', area_harbour: 'Harbour', area_terrace: 'Hillside terraces',
 });

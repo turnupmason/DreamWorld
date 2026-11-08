@@ -229,7 +229,7 @@ function renderOverlay() {
     c = `<div class="ctx-main">${S2.e} ${nm(S2)}${B.items.length ? ` · 🛒 ${B.items.length}` : ''}</div>${B.items.length ? `<button class="btn small primary" data-act="goTill">💳 ${t('checkout_short')}</button>` : ''}<button class="btn small" data-act="leaveStore">🚪 ${t('store_leave')}</button>`;
   } else if (!UI.visit && Scene.tripNow()) {   // on the way somewhere (v0.12)
     const tr = Scene.tripNow();
-    c = `<div class="ctx-main">${tr.kind === 'stroll' ? `🌳 ${t('go_strolling')}` : tr.kind === 'chat' ? `🚶 ${t('go_to_chat', { name: esc(UI.tripTo || '') })}` : tr.toCar ? `🚶 ${t('go_to_car')}` : `${{ walk: '🚶', bike: '🚲', car: '🚗' }[tr.how]} ${t('go_on_way', { to: esc(UI.tripTo || '') })}`}</div><button class="btn small" data-act="tripFast">⚡ ${t('go_now')}</button>`;
+    c = `<div class="ctx-main">${tr.kind === 'stroll' ? `🌳 ${t('go_strolling')}` : tr.kind === 'chat' ? `🚶 ${t('go_to_chat', { name: esc(UI.tripTo || '') })}` : tr.toCar ? `🚶 ${t('go_to_car')}` : `${{ walk: '🚶', bike: '🚲', car: '🚗' }[tr.how]} ${t('go_on_way', { to: esc(UI.tripTo || '') })}`}</div><button class="btn small" data-act="tripStop">✋ ${t('go_stop')}</button><button class="btn small" data-act="tripFast">⚡ ${t('go_now')}</button>`;
   } else if (UI.visit) {
     const h = homeOf(UI.visit), fr = isFriend(h.id), street = streetsOf(townOf(h.id))[lotOf(h.id).st];
     const tw = townOf(h.id), away = visitingNow(h.id), on = isOnline(h.id) && !away;
@@ -1370,6 +1370,7 @@ const ACT = {
   findMe() {
     closeSheet();
     if (UI.inStore) { Scene.pingMe(); return; }
+    if (Scene.tripNow() && UI.tab === 'town' && !UI.visit && Scene.followTrip()) { Scene.pingMe(); return; }   // v0.29: on the way: the view follows you again
     if (S.out && S.out.place && STORES[S.out.place] && STORES[S.out.place].cats.length && S.out.town === myTown() && UI.lastStore === S.out.place) { ACT.enterStore(S.out.place); Scene.pingMe(); return; }
     const out = S.work || S.jail || (S.out && S.out.town === myTown());
     if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
@@ -1514,6 +1515,7 @@ const ACT = {
     else if (kind !== 'walk') Sound.play('select');
   },
   tripFast() { Scene.finishTrip(); },
+  tripStop() { if (Scene.stopTrip()) { UI.tripTo = null; snack(`✋ ${t('go_stopped')}`); save(); refresh(); } },   // v0.29: stop right where you are
   // v0.20: walk into the store (a real store: walk round, tap what you like, pay the shopkeeper)
   enterStore(k, wareId) {
     if (!STORES[k] || !STORES[k].cats.length) return;

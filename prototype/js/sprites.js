@@ -404,7 +404,6 @@ function torsoSide(C, top, sway, back) {
   if (!C.dress) pRect(-4.1, -10.9, 8.6, 3.8, 1.7, C.pants);
   if (C.dress) skirtShape(sh, sway); else if (C.skirt) skirtShape(C.pants, sway);
   pShape(sh, 0.25, (top + bot) / 2, 8.8, bot - top + 1, () => torsoPath(top, bot, 3.9, 4.2, 0.5));
-  if (C.top === 'hoodie') pEll(-3.4 + sway * 0.4, top + 1.3, 3.2, 2.4, shade(sh, -0.1));   // the hood behind the neck
   if (INK) return;
   ctx.save(); torsoPath(top, bot, 3.9, 4.2, 0.5); ctx.clip();
   rrect(-6, top - 1, 3.2, 16, 1, shade(sh, -0.1));                    // the back is in shade

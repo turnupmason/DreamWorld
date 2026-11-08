@@ -507,7 +507,7 @@ body.dark { --bg: #1c1916; --ink: #f2ece3; --muted: #a89e8f; --card: #2a2622; --
   --shadow: 0 2px 12px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.04); --shadow-up: 0 8px 26px rgba(0,0,0,.5);
   background: #0f0d0b; color: var(--ink); }
 body.dark .screen { background: var(--bg); }
-body.dark .hud { background: linear-gradient(#26221e, #1f1b18); box-shadow: 0 3px 12px rgba(0,0,0,.4); }
+body.dark .hud:not(.ava) { background: linear-gradient(#26221e, #1f1b18); box-shadow: 0 3px 12px rgba(0,0,0,.4); }
 body.dark .panel { background: linear-gradient(#1f1b18, #1a1714); }
 body.dark .sheet { background: linear-gradient(#27231f, #1f1b18); box-shadow: 0 -10px 30px rgba(0,0,0,.45); }
 body.dark .sheet .grab { background: #4a4239; }

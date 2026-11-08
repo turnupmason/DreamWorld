@@ -85,7 +85,7 @@ const Scene = (() => {
       return;
     }
     // the first screens: drift slowly over the street
-    if (trip && !trip.arrived && mode === 'town' && !dragging) {   // on the way somewhere: the view goes with you
+    if (trip && !trip.arrived && mode === 'town' && !dragging && !trip.camFree) {   // on the way somewhere: the view goes with you (until you drag it, v0.29)
       const c = unIso(W / 2, H / 2), k = 1 - Math.exp(-dt * 4);
       if (cam.z < 0.42) cam.z += (0.5 - cam.z) * k;
       centerOn(c.x + (trip.x - c.x) * k, c.y + (trip.y - c.y) * k);
@@ -788,15 +788,23 @@ const Scene = (() => {
     });
     if (z < 0.25) return;
     // zebra crossings: across each road just beside every road that joins it
+    // (v0.29: across a paved road beside a country road too, and at a road's dead end: people only cross on these)
     roads.forEach(a => {
-      if (a[4] === 'dirt' || !horiz(a)) return;
+      if (!horiz(a)) return;
       roads.forEach(b => {
-        if (b[4] === 'dirt' || horiz(b) || b[2] < a[0] - 0.5 || b[0] > a[2] + 0.5 || b[3] < a[1] - 0.5 || b[1] > a[3] + 0.5) return;
-        const swA = SIDEWALK[a[4]], y0 = a[1] + swA, y1 = a[3] - swA;
-        [b[0] - 0.75, b[2] + 0.15].forEach(x => { if (x < a[0] || x + 0.6 > a[2]) return; for (let k = 0; k < 5; k++) { const yy = y0 + (y1 - y0) * (k + 0.2) / 5; flatRect(x, yy, 0.6, (y1 - y0) / 5 * 0.55, 'rgba(255,255,255,.8)'); } });
-        const swB = SIDEWALK[b[4]], x0 = b[0] + swB, x1 = b[2] - swB;
-        [a[1] - 0.75, a[3] + 0.15].forEach(y => { if (y < b[1] || y + 0.6 > b[3]) return; for (let k = 0; k < 5; k++) { const xx = x0 + (x1 - x0) * (k + 0.2) / 5; flatRect(xx, y, (x1 - x0) / 5 * 0.55, 0.6, 'rgba(255,255,255,.8)'); } });
+        if (horiz(b) || b[2] < a[0] - 0.5 || b[0] > a[2] + 0.5 || b[3] < a[1] - 0.5 || b[1] > a[3] + 0.5) return;
+        if (a[4] !== 'dirt') { const swA = SIDEWALK[a[4]], y0 = a[1] + swA, y1 = a[3] - swA;
+          [b[0] - 0.75, b[2] + 0.15].forEach(x => { if (x < a[0] || x + 0.6 > a[2]) return; for (let k = 0; k < 5; k++) { const yy = y0 + (y1 - y0) * (k + 0.2) / 5; flatRect(x, yy, 0.6, (y1 - y0) / 5 * 0.55, 'rgba(255,255,255,.8)'); } }); }
+        if (b[4] !== 'dirt') { const swB = SIDEWALK[b[4]], x0 = b[0] + swB, x1 = b[2] - swB;
+          [a[1] - 0.75, a[3] + 0.15].forEach(y => { if (y < b[1] || y + 0.6 > b[3]) return; for (let k = 0; k < 5; k++) { const xx = x0 + (x1 - x0) * (k + 0.2) / 5; flatRect(xx, y, (x1 - x0) / 5 * 0.55, 0.6, 'rgba(255,255,255,.8)'); } }); }
       });
+    });
+    footNet().deadEnds.forEach(D => {
+      if (D.h ? D.x < vr.x0 - 1 || D.x > vr.x1 + 1 : D.y < vr.y0 - 1 || D.y > vr.y1 + 1) return;
+      for (let k = 0; k < 5; k++) {
+        if (D.h) { const yy = D.y0 + (D.y1 - D.y0) * (k + 0.2) / 5; flatRect(D.x - 0.3, yy, 0.6, (D.y1 - D.y0) / 5 * 0.55, 'rgba(255,255,255,.8)'); }
+        else { const xx = D.x0 + (D.x1 - D.x0) * (k + 0.2) / 5; flatRect(xx, D.y - 0.3, (D.x1 - D.x0) / 5 * 0.55, 0.6, 'rgba(255,255,255,.8)'); }
+      }
     });
   }
   // v0.19: every store's car park and the car parks by the other places
@@ -1211,7 +1219,7 @@ const Scene = (() => {
     if (mode === 'town') signalObjs(objs, vr);   // v0.22
     if (mode === 'town') liveTownObjs(objs, dt, ts);
     if (mode === 'town' && cam.z > 0.2 && VIEW_TOWN === myTown()) parkPeople(objs, ts);   // v0.25
-    if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.x + trip.y + 0.6 + ((trip.h || 0) > 4 ? 3 : 0), f: () => drawTrip(ts) });
+    if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.inCar ? carDepth(trip.x, trip.y, trip.dir, trip.h || 0) : trip.x + trip.y + 0.6, f: () => drawTrip(ts) });
     else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = S.out.pt; objs.push({ d: mx + my + 0.6, f: () => drawMeOut(mx, my, ts) }); }
     const atPlace = S.work ? S.work.place : jailed() ? 'police' : S.study ? 'school' : null;
     if (atPlace && mode === 'town' && VIEW_TOWN === myTown() && placePt(atPlace)) {   // at work (v0.14) or held by the police (v0.18)
@@ -1550,8 +1558,7 @@ const Scene = (() => {
   }
   // A route along the roads from a to b (shortest way through the crossings); on the sidewalk unless foot is false.
   function route(a, b, foot = true) {
-    const r = routeMid(a, b, !foot);
-    return foot ? [...toSidewalk(roadNet(), r.slice(0, -1)), r[r.length - 1]] : r;
+    return foot ? footRoute(a, b) : routeMid(a, b, true);   // v0.29: on foot along the sidewalks and over the zebras
   }
   function routeMid(a, b, car = false) {
     const N = car && TL.highway ? carNet() : roadNet(), A = nearestRoad(N, a), B = nearestRoad(N, b);
@@ -1584,6 +1591,112 @@ const Scene = (() => {
     }
     out.push(B.pt, b);
     return out;
+  }
+  // ---------- on foot (v0.29): along the sidewalks on both sides, across a road only on a zebra crossing ----------
+  // Each road has two sidewalk lines. Where two roads meet, the sidewalk stops at the corner if the other road carries
+  // on past it (you cross on the zebra beside the junction); a road's dead end gets a crossing of its own. Nodes are
+  // the corners, the ends of the zebras and the ends of the lines.
+  let FOOT = null;
+  function footNet() {
+    if (FOOT && FOOT.id === TL.id) return FOOT;
+    const H = [], V = [], lines = [], zebras = [], corners = [];
+    // a country (dirt) road has no sidewalks or zebras: you walk down the middle and cross where you like
+    TL.roads.forEach(r => { const dirt = r[4] === 'dirt', sw = dirt ? (r[3] - r[1] + r[2] - r[0]) : SIDEWALK[r[4]] || 0.35; (r[2] - r[0] >= r[3] - r[1] ? H : V).push({ x0: r[0], y0: r[1], x1: r[2], y1: r[3], sw, dirt, ends: [false, false] }); });
+    const mk = (h, c, a, b) => { const L = { h, c, a, b, cuts: [], stops: [a, b] }; lines.push(L); return L; };
+    H.forEach(R => { if (R.dirt) { const L = mk(true, (R.y0 + R.y1) / 2, R.x0, R.x1); R.s = [L, L]; } else R.s = [mk(true, R.y0 + R.sw / 2, R.x0, R.x1), mk(true, R.y1 - R.sw / 2, R.x0, R.x1)]; });
+    V.forEach(R => { if (R.dirt) { const L = mk(false, (R.x0 + R.x1) / 2, R.y0, R.y1); R.s = [L, L]; } else R.s = [mk(false, R.x0 + R.sw / 2, R.y0, R.y1), mk(false, R.x1 - R.sw / 2, R.y0, R.y1)]; });
+    H.forEach(A => V.forEach(B => {
+      if (B.x1 < A.x0 - 0.5 || B.x0 > A.x1 + 0.5 || A.y1 < B.y0 - 0.5 || A.y0 > B.y1 + 0.5) return;   // they don't meet (same test as the zebras drawn)
+      const [T, Bo] = A.s, [Lf, Rt] = B.s, xL = Lf.c, xR = Rt.c, yT = T.c, yB = Bo.c;
+      T.stops.push(xL, xR); Bo.stops.push(xL, xR); Lf.stops.push(yT, yB); Rt.stops.push(yT, yB);
+      // the corners join the sidewalks round them (not a corner on the far side of a road that only starts there)
+      const skT = B.y0 > A.y0 + A.sw + 0.05, skB = B.y1 < A.y1 - A.sw - 0.05, skL = A.x0 > B.x0 + B.sw + 0.05, skR = A.x1 < B.x1 - B.sw - 0.05;
+      if (!skT && !skL) corners.push([T, xL, Lf, yT]);
+      if (!skT && !skR) corners.push([T, xR, Rt, yT]);
+      if (!skB && !skL) corners.push([Bo, xL, Lf, yB]);
+      if (!skB && !skR) corners.push([Bo, xR, Rt, yB]);
+      // where the other road carries on past this side (far enough for a zebra), you cross on the zebra, not here
+      const zA = [B.x0 - 0.45, B.x1 + 0.45].map(x => !A.dirt && x - 0.3 >= A.x0 && x + 0.3 <= A.x1), zB = [A.y0 - 0.45, A.y1 + 0.45].map(y => !B.dirt && y - 0.3 >= B.y0 && y + 0.3 <= B.y1);
+      if (zB[0]) T.cuts.push([xL, xR]);
+      if (zB[1]) Bo.cuts.push([xL, xR]);
+      if (zA[0]) Lf.cuts.push([yT, yB]);
+      if (zA[1]) Rt.cuts.push([yT, yB]);
+      if (B.x0 <= A.x0 + 0.5) A.ends[0] = true;
+      if (B.x1 >= A.x1 - 0.5) A.ends[1] = true;
+      if (A.y0 <= B.y0 + 0.5) B.ends[0] = true;
+      if (A.y1 >= B.y1 - 0.5) B.ends[1] = true;
+      [B.x0 - 0.45, B.x1 + 0.45].forEach((x, k) => { if (!zA[k]) return; T.stops.push(x); Bo.stops.push(x); zebras.push([[x, yT], [x, yB]]); });
+      [A.y0 - 0.45, A.y1 + 0.45].forEach((y, k) => { if (!zB[k]) return; Lf.stops.push(y); Rt.stops.push(y); zebras.push([[xL, y], [xR, y]]); });
+    }));
+    const deadEnds = [];   // a crossing at each free end of a road (drawn as a zebra too)
+    H.forEach(R => R.ends.forEach((on, k) => { if (on || R.dirt) return; const x = k ? R.x1 - 0.75 : R.x0 + 0.75; R.s[0].stops.push(x); R.s[1].stops.push(x); zebras.push([[x, R.s[0].c], [x, R.s[1].c]]); deadEnds.push({ h: true, x, y0: R.y0 + R.sw, y1: R.y1 - R.sw }); }));
+    V.forEach(R => R.ends.forEach((on, k) => { if (on || R.dirt) return; const y = k ? R.y1 - 0.75 : R.y0 + 0.75; R.s[0].stops.push(y); R.s[1].stops.push(y); zebras.push([[R.s[0].c, y], [R.s[1].c, y]]); deadEnds.push({ h: false, y, x0: R.x0 + R.sw, x1: R.x1 - R.sw }); }));
+    const nodes = [], key = new Map();
+    const node = (x, y) => { const k = Math.round(x * 20) + ',' + Math.round(y * 20); if (!key.has(k)) { key.set(k, nodes.length); nodes.push({ x, y, e: [] }); } return key.get(k); };
+    const link = (i, j) => { if (i === j) return; const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y); nodes[i].e.push([j, d]); nodes[j].e.push([i, d]); };
+    const cut = (L, lo, hi) => { const m = (lo + hi) / 2; return L.cuts.some(([p, q]) => m > Math.min(p, q) + 0.01 && m < Math.max(p, q) - 0.01); };
+    lines.forEach(L => {
+      L.pos = [...new Set(L.stops.map(v => Math.round(clamp(v, L.a, L.b) * 100) / 100))].sort((p, q) => p - q);
+      L.ids = L.pos.map(v => (L.h ? node(v, L.c) : node(L.c, v)));
+      for (let i = 1; i < L.pos.length; i++) if (!cut(L, L.pos[i - 1], L.pos[i])) link(L.ids[i - 1], L.ids[i]);
+    });
+    zebras.forEach(([p, q]) => link(node(p[0], p[1]), node(q[0], q[1])));
+    const r2 = v => Math.round(v * 100) / 100;
+    corners.forEach(([Lh, x, Lv, y]) => link(node(r2(clamp(x, Lh.a, Lh.b)), Lh.c), node(Lv.c, r2(clamp(y, Lv.a, Lv.b)))));   // (a road can end a little short of the other one's sidewalk)
+    // where two roads join end to end with different widths, step from one sidewalk onto the other
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+      const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+      if (d > 0.01 && d < 0.6 && !nodes[i].e.some(([k]) => k === j)) link(i, j);
+    }
+    FOOT = { id: TL.id, lines, nodes, zebras, deadEnds, cut };
+    return FOOT;
+  }
+  function footRoute(a, b) {
+    const F = footNet(), ns = F.nodes, n = ns.length;
+    const snap = p => {
+      let best = null;
+      F.lines.forEach(L => {
+        let v = clamp(L.h ? p[0] : p[1], L.a, L.b);
+        const c = L.cuts.find(([x, y]) => v > Math.min(x, y) && v < Math.max(x, y));
+        if (c) v = Math.abs(v - c[0]) < Math.abs(v - c[1]) ? c[0] : c[1];   // not in the middle of a junction
+        const q = L.h ? [v, L.c] : [L.c, v], d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        if (!best || d < best.d - 1e-6) best = { L, v, q, d };
+      });
+      return best;
+    };
+    const A = snap(a), B = snap(b);
+    if (!A || !B) return [b];
+    const extra = new Map(), add = (i, j, d) => { [[i, j], [j, i]].forEach(([u, v]) => { if (!extra.has(u)) extra.set(u, []); extra.get(u).push([v, d]); }); };
+    const attach = (S, t) => {
+      const P = S.L.pos; let i = 0;
+      while (i < P.length - 2 && P[i + 1] < S.v) i++;
+      if (!F.cut(S.L, P[i], P[i + 1])) { add(t, S.L.ids[i], Math.abs(S.v - P[i])); add(t, S.L.ids[i + 1], Math.abs(P[i + 1] - S.v)); }
+      else add(t, S.L.ids[Math.abs(S.v - P[i]) < Math.abs(S.v - P[i + 1]) ? i : i + 1], 0);
+    };
+    attach(A, n); attach(B, n + 1);
+    const lo = Math.min(A.v, B.v), hi = Math.max(A.v, B.v);
+    if (A.L === B.L && !A.L.cuts.some(([p, q]) => Math.max(p, q) > lo + 0.01 && Math.min(p, q) < hi - 0.01)) add(n, n + 1, hi - lo);
+    // Dijkstra with a small binary heap
+    const dist = new Float64Array(n + 2).fill(1e9), prev = new Int32Array(n + 2).fill(-1), heap = [[0, n]];
+    dist[n] = 0;
+    const push = it => { heap.push(it); let k = heap.length - 1; while (k > 0) { const pa = (k - 1) >> 1; if (heap[pa][0] <= heap[k][0]) break; [heap[pa], heap[k]] = [heap[k], heap[pa]]; k = pa; } };
+    const pop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) { heap[0] = last; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m; } }
+      return top;
+    };
+    while (heap.length) {
+      const [d, u] = pop();
+      if (d > dist[u]) continue;
+      if (u === n + 1) break;
+      const es = (u < n ? ns[u].e : []).concat(extra.get(u) || []);
+      for (const [v, w] of es) if (d + w < dist[v]) { dist[v] = d + w; prev[v] = u; push([d + w, v]); }
+    }
+    if (dist[n + 1] >= 1e9) return [b];
+    const chain = [];
+    for (let u = prev[n + 1]; u >= 0 && u !== n; u = prev[u]) chain.unshift([ns[u].x, ns[u].y]);
+    const out = [A.q, ...chain, B.q, b];
+    return out.filter((q, i) => i === 0 || Math.hypot(q[0] - out[i - 1][0], q[1] - out[i - 1][1]) > 0.01);
   }
   // A home's gate: on the road right in front of it.
   const gateOf = id => { const [ox, oy] = origin(id), N = roadNet(), n = nearestRoad(N, [ox + 3.5, oy + LOT_D + 0.6]); return n ? toSidewalk(N, [n.pt])[0] : [ox + 3.5, oy + LOT_D + 1]; };
@@ -1701,6 +1814,21 @@ const Scene = (() => {
   }
   // ---------- traffic (v0.21): other people's cars driving between the places in town ----------
   let CARS_OUT = { town: null, list: [], next: 0 };
+  // Cars keep right. v0.29: when two pass each other, the one in the lane nearer the camera must be drawn last, or the
+  // far one shows through it. Sorting by the middle of the car isn't enough (they're side by side but one is a little
+  // ahead), so the lane counts extra.
+  const LANE = { '+x': [0, 0.45], '-x': [0, -0.45], '+y': [-0.45, 0], '-y': [0.45, 0] };
+  const carDepth = (x, y, dir, h = 0) => { const o = LANE[dir] || [0, 0]; return x + y + 0.6 + (h > 1 ? 0 : (o[0] + o[1]) * 2.1) + (h > 4 ? 3 : 0); };
+  // v0.29: a car waits behind the one in front of it in its lane (a queue at the lights doesn't pile into one car)
+  const DIRV = { '+x': [1, 0], '-x': [-1, 0], '+y': [0, 1], '-y': [0, -1] };
+  function blocked(x, y, dir, h, others) {
+    const v = DIRV[dir];
+    return !!v && others.some(o => {
+      if (o.dir !== dir || Math.abs((o.h || 0) - (h || 0)) > 2) return false;
+      const dx = o.x - x, dy = o.y - y, ahead = dx * v[0] + dy * v[1], side = Math.abs(dx * v[1] - dy * v[0]);
+      return ahead > 0.05 && ahead < 2.7 && side < 0.35;
+    });
+  }
   function traffic(objs, dt, ts) {
     if (CARS_OUT.town !== VIEW_TOWN) CARS_OUT = { town: VIEW_TOWN, list: [], next: 0 };
     const now2 = performance.now(), kinds = Object.keys(CARS).filter(k => !CARS[k].excl && CARS[k].kind !== 'two' && k !== 'tractor');
@@ -1719,13 +1847,14 @@ const Scene = (() => {
     CARS_OUT.list = CARS_OUT.list.filter(c => {
       let go = 6 * dt;
       if (c.path.length && !c.h && mustStop(c.x, c.y, c.path[0][0], c.path[0][1])) go = 0;   // v0.22: red light
+      if (go && c.path.length && blocked(c.x, c.y, c.dir, c.h, [...CARS_OUT.list.filter(o => o !== c && o.alpha > 0.3), ...(trip && trip.inCar && !trip.arrived && trip.town === VIEW_TOWN ? [trip] : [])])) go = 0;
       while (go > 0 && c.path.length) { const [tx, ty, th = 0] = c.path[0], dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy); if (d > 0.01) c.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); if (d <= go) { c.x = tx; c.y = ty; c.h = th; c.path.shift(); go -= d; } else { c.x += dx / d * go; c.y += dy / d * go; c.h += (th - c.h) * (go / d); go = 0; } }
       if (c.police && !c.path.length) { const b = TL.places[Math.floor(Math.random() * TL.places.length)], np = b && route([c.x, c.y], b, false); if (np && np.length > 2) c.path = np.slice(1); }   // v0.25: the patrol never ends
       c.alpha = c.path.length ? Math.min(1, c.alpha + dt * 2) : c.alpha - dt * 2;
       if (c.alpha <= 0 && !c.path.length) return false;
       // keep to the right-hand side of the road
-      const off = c.dir === '+x' ? [0, 0.45] : c.dir === '-x' ? [0, -0.45] : c.dir === '+y' ? [-0.45, 0] : [0.45, 0];
-      objs.push({ d: c.x + c.y + 0.6 + ((c.h || 0) > 4 ? 3 : 0), f: () => { ctx.save(); ctx.globalAlpha = Math.max(0, c.alpha); ctx.translate(0, -(c.h || 0) * cam.z); drawCarDir(c.car, c.x + off[0], c.y + off[1], c.dir, ts);
+      const off = LANE[c.dir] || [0, 0.45];
+      objs.push({ d: carDepth(c.x, c.y, c.dir, c.h || 0), f: () => { ctx.save(); ctx.globalAlpha = Math.max(0, c.alpha); ctx.translate(0, -(c.h || 0) * cam.z); drawCarDir(c.car, c.x + off[0], c.y + off[1], c.dir, ts);
         if (c.police) {   // a light bar on the roof, flashing red and blue
           const z2 = cam.z, lp = up(iso(c.x + off[0], c.y + off[1]), 16 * z2), on = Math.floor(ts / 260) % 2;
           ctx.save(); ctx.globalAlpha *= 0.35; circle(lp.x - 4 * z2, lp.y, 7 * z2, on ? '#ff4d4d' : 'rgba(0,0,0,0)'); circle(lp.x + 4 * z2, lp.y, 7 * z2, on ? 'rgba(0,0,0,0)' : '#3b7bff'); ctx.restore();
@@ -1745,13 +1874,14 @@ const Scene = (() => {
   const outHere = () => !!(S && S.out && S.out.town === VIEW_TOWN);
   // Where you're standing in this town right now.
   function mePos() {
+    if (trip && !trip.arrived && trip.town === VIEW_TOWN) return [trip.x, trip.y];   // v0.29: on the way: right where you are
     if (S.work && VIEW_TOWN === myTown() && placePt(S.work.place)) return placePt(S.work.place);
     if (S.jail && VIEW_TOWN === myTown() && placePt('police')) return placePt('police');
     if (S.study && VIEW_TOWN === myTown() && placePt('school')) return placePt('school');
     if (outHere()) return S.out.pt;
     return gateOf('me');
   }
-  const atHomeNow = () => !outHere() && !S.work && !S.jail;
+  const atHomeNow = () => !(trip && !trip.arrived) && !outHere() && !S.work && !S.jail;
   // Your car: in a car park somewhere (S.carAt) or in your drive.
   const homeBay = () => { const [ox, oy] = origin('me'), sp = driveOf(S.me).spots[0]; return [ox + sp[0], oy + sp[1]]; };
   // v0.22: where each car waits at home: the one you drive in the drive, the others in the garage's spaces
@@ -1764,7 +1894,7 @@ const Scene = (() => {
     return [ox + G.x + 0.2 + bay * (slot + 0.5), oy + G.y + G.d - 0.4];
   }
   const doorPt = () => { const [ox, oy] = origin('me'), [fx, fy, fw, fd] = HOUSES[S.me.house].fp; return [ox + DOOR_X, oy + fy + fd + 0.7]; };
-  const carPos = () => (S.carAt && S.carAt.town === VIEW_TOWN ? S.carAt.pt : homeBay());
+  const carPos = () => (trip && !trip.arrived && trip.inCar ? [trip.x, trip.y] : S.carAt && S.carAt.town === VIEW_TOWN ? S.carAt.pt : homeBay());
   // Where a car parks: a bay in the store's car park, the car park by a place, a friend's drive, your own drive.
   const PARK_OF = { plaza: 'centre', bakery: 'centre', cafe: 'centre', market: 'centre', gym: 'centre', library: 'centre', post: 'centre', clinic: 'centre', park: 'park', lake: 'lake', fields: 'fields' };
   function lotBay(L) { const [, x, y, w, d, f] = L; return { pt: [x + w / 2, y + d / 2], dir: f === 'N' ? '+y' : f === 'E' ? '-x' : f === 'W' ? '+x' : '-y' }; }
@@ -1797,10 +1927,31 @@ const Scene = (() => {
   // Travel time in "local street" units: expressway legs count less (v0.16).
   const legLen = L => { let d = 0, [x, y] = L.from, hw = false; L.path.forEach(([a, b, h = 0, f = 0]) => { const q = Math.hypot(a - x, b - y); d += q / (f && hw ? TRIP_SPEED.highway : h > 0 ? 1.5 : 1); hw = !!f; x = a; y = b; }); return d; };
   const tripSecs = legs => legs.reduce((t, L) => t + legLen(L) / (TRIP_SPEED[L.how] || 3), 0);
+  // v0.29: stop on the way (to go somewhere else instead, or just to stay): you stay right where you are. A car pulls
+  // over to the kerb (after coming down off the flyover), and you get out beside it. Still walking out to your car at
+  // home: you just go back in.
+  const KERB = { '+x': [0, 1], '-x': [0, -1], '+y': [-1, 0], '-y': [1, 0] };
+  function stopTripHere() {
+    if (!trip || trip.arrived) return false;
+    const L = trip.legs[trip.li];
+    if (trip.fromHome && trip.li === 0 && L && L.toCar) { trip = null; S.trip = null; S.out = null; return true; }
+    while ((trip.h || 0) > 0.01 && trip.path.length) { const q = trip.path.shift(); trip.x = q[0]; trip.y = q[1]; trip.h = q[2] || 0; }
+    trip.h = 0;
+    let pt = [trip.x, trip.y];
+    if (trip.inCar) {
+      const k = KERB[trip.dir] || [0, 1], c = [trip.x + k[0] * 0.75, trip.y + k[1] * 0.75];
+      S.carAt = { town: trip.town, pt: c, dir: trip.dir, id: null, place: null };
+      pt = [c[0] + k[0] * 0.6, c[1] + k[1] * 0.6];
+    }
+    S.out = { town: trip.town, pt, place: null, id: null };
+    S.trip = null; trip = null;
+    return true;
+  }
   function startTrip(to, how, car, done, dest, place) {
-    if (trip && !trip.arrived) finishTripNow(true);
+    if (trip && !trip.arrived) stopTripHere();   // v0.29: from where you are now (not back to where you set off)
+    const fromHome = atHomeNow();
     const legs = planTrip(to, how, dest, place), L0 = legs[0], [x, y] = L0.from;
-    trip = { town: VIEW_TOWN, legs, li: 0, how: L0.how, inCar: !!L0.car, car, x, y, path: L0.path.slice(), done, dest, place, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now() };
+    trip = { town: VIEW_TOWN, legs, li: 0, how: L0.how, inCar: !!L0.car, car, x, y, path: L0.path.slice(), done, dest, place, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now(), fromHome };
     if (L0.car) S.carAt = null;   // the car pulls out of where it was parked
     S.trip = { to, how, dest: dest || null, place: place || null, town: VIEW_TOWN };   // if the app closes on the way, you still get there
     if (S.out) S.out = { ...S.out, place: null };   // you've left where you were
@@ -1839,6 +1990,8 @@ const Scene = (() => {
     if (trip.arrived) return;
     if (trip.inCar && trip.path.length && !trip.h && mustStop(trip.x, trip.y, trip.path[0][0], trip.path[0][1]) && (trip.waited = (trip.waited || 0) + dt) < 7) return;   // v0.22: red light
     if (trip.inCar && trip.path.length && !mustStop(trip.x, trip.y, trip.path[0][0], trip.path[0][1])) trip.waited = 0;
+    if (trip.inCar && trip.path.length && CARS_OUT.town === trip.town && blocked(trip.x, trip.y, trip.dir, trip.h || 0, CARS_OUT.list.filter(o => o.alpha > 0.3))) { if ((trip.carWait = (trip.carWait || 0) + dt) < 6) return; }   // v0.29: behind another car
+    else trip.carWait = 0;
     const base = (TRIP_SPEED[trip.how] || 3) * dt * (trip.how === 'walk' && isFed() ? 1 + MALL.fed.walk : 1);
     let left = 1;   // the share of this frame's travel still to go
     while (left > 0 && trip.path.length) {
@@ -2138,10 +2291,9 @@ const Scene = (() => {
       [0.25, 0.5, 0.75].forEach((u, i) => { const p2 = wallPt(b.left, 0, u, 8 + (i % 2) * 6); emoji(e, p2.x, p2.y, 9 * z); });
       const tp = iso(x + 0.5, y + 0.5); emoji(e, tp.x, tp.y - 26 * z, 12 * z);
     }
-    else if (w.kind === 'car') {   // on a turntable that slowly turns, under a spotlight
-      ellipse(c.x, c.y + 3 * z, 44 * z, 22 * z, '#b9c1ca'); ellipse(c.x, c.y + 1 * z, 42 * z, 21 * z, '#dfe5eb'); ellipse(c.x, c.y + 1 * z, 34 * z, 17 * z, `rgba(255,255,255,${0.35 + 0.2 * Math.sin(ts / 800 + x)})`);
-      const dirs = ['+y', '+x', '-y', '-x'], dir = dirs[Math.floor(ts / 2600 + x * 0.7) % 4];
-      drawCarDir({ k: w.k, color: CARS[w.k].look || CAR_COLORS[0] }, x + w.w / 2, y + w.d / 2, dir, ts);
+    else if (w.kind === 'car') {   // on a display stand under a spotlight (v0.29: standing still, all facing the same way)
+      ellipse(c.x, c.y + 3 * z, 44 * z, 22 * z, '#b9c1ca'); ellipse(c.x, c.y + 1 * z, 42 * z, 21 * z, '#dfe5eb'); ellipse(c.x, c.y + 1 * z, 34 * z, 17 * z, 'rgba(255,255,255,.45)');
+      drawCarDir({ k: w.k, color: CARS[w.k].look || CAR_COLORS[0] }, x + w.w / 2, y + w.d / 2, '+y', 0);
     }
     else if (w.kind === 'house') {   // v0.21: a real little model of the house on a round stand, its lights coming on and off
       const i = +w.k, H = HOUSES[i], [fx, fy, fw, fd] = H.fp, sc = 0.3, cx = x + w.w / 2, cy = y + w.d / 2;
@@ -2996,6 +3148,7 @@ const Scene = (() => {
       if (pinch && ptrs.size === 2) {
         const [a, b] = [...ptrs.values()];
         useCam(); zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d);
+        if (trip && !trip.arrived) trip.camFree = true;
       } else if (drag) {
         const p = pos(e), dx = p.x - drag.sx, dy = p.y - drag.sy;
         if (Math.hypot(dx, dy) > 6) drag.moved = true;
@@ -3003,7 +3156,7 @@ const Scene = (() => {
           hover = p;
           if (drag.press.type === 'item' && !edit.hold) { const it = findItem(edit.scope, drag.press.id); if (it) { edit.hold = { k: it.k, rot: it.rot, tint: it.tint, id: it.id }; edit.sel = null; edit.dragged = true; } }
           if (drag.press.type === 'area') edit.areaDrag = drag.press;
-        } else if (drag.moved) { useCam(); cam.x = drag.cx + dx; cam.y = drag.cy + dy; fly = null; follow = false; dragging = true; clampCam(); }
+        } else if (drag.moved) { useCam(); cam.x = drag.cx + dx; cam.y = drag.cy + dy; fly = null; follow = false; dragging = true; if (trip && !trip.arrived) trip.camFree = true; clampCam(); }
       }
     });
     const end = e => {
@@ -3438,11 +3591,15 @@ const Scene = (() => {
     travel(to, how, car, done, dest, place, pick) { if (mode !== 'town') return false; TRIP_CAR = pick === undefined ? null : pick; try { startTrip(to, how, car, done, dest, place); } finally { TRIP_CAR = null; } return true; },
     mePoint() { if (!S) return null; TL = layoutOf(myTown()); const keep = VIEW_TOWN; return S.work || S.jail || (S.out && S.out.town === myTown()) ? (VIEW_TOWN === myTown() ? mePos() : null) : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })(); },
     pingMe() { PING = performance.now(); },
+    // v0.29: on the way somewhere: the view goes with you again (after you dragged it away); stop where you are
+    followTrip() { if (!trip || trip.arrived || mode !== 'town') return false; trip.camFree = false; return true; },
+    stopTrip() { return stopTripHere(); },
     // v0.25: walk up to someone in town (a person out walking or someone in the park), then have a chat
     canWalkUp(id) { return mode === 'town' && VIEW_TOWN === myTown() && !S.work && !S.study && !jailed() && !!(parkList().find(p => p.id === id) || (WALK.town === VIEW_TOWN && WALK.list.find(w => w.id === id))); },
     walkUp(id, done) {
       const pp = parkList().find(p => p.id === id), w = !pp && WALK.town === VIEW_TOWN && WALK.list.find(x => x.id === id);
       if (mode !== 'town' || (!pp && !w)) { if (done) done(); return; }
+      stopTripHere();   // v0.29: from where you are now
       if (w) { w.path = []; w.stay = Math.max(w.stay || 0, 14); w.moving = false; }   // they stop for you
       const pt = pp ? [pp.x, pp.y] : [w.x, w.y], stand = [pt[0] + 0.15, pt[1] + 1.05], from = mePos();   // just in front of them
       const inPark = q => { const P = TL.park; return q[0] > P.x && q[0] < P.x + P.w && q[1] > P.y && q[1] < P.y + P.d; };
@@ -3454,6 +3611,7 @@ const Scene = (() => {
     parkFolk() { return parkList().map(p => ({ id: p.id, work: !!p.work, boss: !!p.boss })); },
     stroll(done) {   // v0.25: a lap of the park's jogging path, then back where you started
       if (mode !== 'town' || !TL.parkLoop) { if (done) done(); return; }
+      stopTripHere();
       const loop = smoothPts(TL.parkLoop, 1.2).map(p => [p[0], p[1]]), from = mePos();
       let k0 = 0, bd = 1e9; loop.forEach((p, i) => { const d = Math.hypot(p[0] - from[0], p[1] - from[1]); if (d < bd) { bd = d; k0 = i; } });
       const lap = [...loop.slice(k0), ...loop.slice(0, k0), loop[k0], from];
