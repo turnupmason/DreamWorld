@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.30.0';
+const VERSION = '0.31.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -1138,6 +1138,54 @@ const JOB_REL = { finish: 4, quit: -6, max: 100 };
 // sleep. Sick: walks slower and real-life rewards are a bit smaller. Medicine from the clinic plus a rest in bed
 // cures it; otherwise it passes after a couple of days.
 const SICK = { base: 0.03, overwork: 0.08, overworkDays: 5, lowSleep: 0.06, lowSleepScore: 60, longShift: 0.1, walk: 0.6, earn: 0.75, days: 2, medicine: 60, restSec: 20 };
+// ---------- getting along with people, like The Sims (v0.31) ----------
+// Friendship with each person runs from -30 to 100; where it starts depends on who they are. It never wears off
+// by itself (no pressure), and a failed joke only costs a little.
+const REL_LEVELS = [
+  { min: -30, e: '😬', zh: '有点尴尬', en: 'Awkward' }, { min: 0, e: '🙂', zh: '陌生人', en: 'Stranger' }, { min: 10, e: '👋', zh: '认识', en: 'Acquaintance' },
+  { min: 30, e: '😊', zh: '朋友', en: 'Friend' }, { min: 60, e: '💛', zh: '好朋友', en: 'Good friend' }, { min: 85, e: '💖', zh: '最好的朋友', en: 'Best friend' },
+];
+const REL_START = { friend: 40, family: 55, work: 10, other: 0 };
+// Everyone has two traits: they decide which things go down well (likes) or badly (dislikes).
+const TRAITS = {
+  cheerful: { e: '😄', zh: '开朗', en: 'Cheerful', likes: ['greet', 'chat', 'highfive'], dislikes: [] },
+  goofball: { e: '🤪', zh: '爱逗乐', en: 'Goofball', likes: ['joke', 'face', 'tickle', 'tease'], dislikes: ['deep'] },
+  shy:      { e: '🙈', zh: '害羞', en: 'Shy', likes: ['ask', 'interest'], dislikes: ['hug', 'tickle', 'face'] },
+  bookworm: { e: '📚', zh: '书呆子', en: 'Bookworm', likes: ['interest', 'deep'], dislikes: ['face', 'tease'] },
+  sporty:   { e: '⚽', zh: '运动迷', en: 'Sporty', likes: ['highfive', 'plans'], dislikes: [] },
+  foodie:   { e: '🍰', zh: '吃货', en: 'Foodie', likes: ['gift'], dislikes: [] },
+  serious:  { e: '🧐', zh: '认真', en: 'Serious', likes: ['ask', 'interest', 'compliment'], dislikes: ['joke', 'face', 'tease'] },
+  warm:     { e: '🤗', zh: '热心', en: 'Warm', likes: ['hug', 'compliment', 'deep'], dislikes: [] },
+};
+// What people like to talk about (two each; you have three).
+const INTERESTS = {
+  sport: { e: '⚽', zh: '运动', en: 'sport' }, music: { e: '🎵', zh: '音乐', en: 'music' }, food: { e: '🍕', zh: '美食', en: 'food' }, books: { e: '📚', zh: '看书', en: 'books' },
+  games: { e: '🎮', zh: '游戏', en: 'games' }, pets: { e: '🐶', zh: '宠物', en: 'pets' }, garden: { e: '🌱', zh: '种花种菜', en: 'gardening' }, art: { e: '🎨', zh: '画画', en: 'art' },
+  travel: { e: '✈️', zh: '旅行', en: 'travel' }, movies: { e: '🎬', zh: '电影', en: 'movies' },
+};
+// The things you can do with someone, in groups (like The Sims' menu). min: the friendship it needs; base: how likely
+// it goes well; up / down: friendship if it goes well / badly; social / fun: your needs when it goes well.
+const SOCIAL_CATS = [['friendly', '😊'], ['funny', '😂'], ['deep', '💭'], ['gift', '🎁'], ['mischief', '😜']];
+const SOCIALS = {
+  greet:      { cat: 'friendly', e: '👋', zh: '打招呼', en: 'Say hi', min: -30, base: 0.95, up: 2, down: 0, social: 3, wave: true },
+  chat:       { cat: 'friendly', e: '💬', zh: '闲聊', en: 'Chat', min: -30, base: 0.85, up: 4, down: -1, social: 8 },
+  ask:        { cat: 'friendly', e: '❓', zh: '问问近况', en: 'Ask how they are', min: 0, base: 0.85, up: 5, down: -1, social: 8 },
+  compliment: { cat: 'friendly', e: '💐', zh: '夸一夸', en: 'Compliment', min: 10, base: 0.75, up: 7, down: -3, social: 8 },
+  highfive:   { cat: 'friendly', e: '✋', zh: '击掌', en: 'High five', min: 10, base: 0.8, up: 5, down: -2, social: 6, wave: true },
+  hug:        { cat: 'friendly', e: '🤗', zh: '拥抱', en: 'Hug', min: 30, base: 0.75, up: 9, down: -5, social: 12 },
+  joke:       { cat: 'funny', e: '😂', zh: '讲笑话', en: 'Tell a joke', min: 0, base: 0.65, up: 7, down: -4, social: 8, fun: 6 },
+  face:       { cat: 'funny', e: '🤪', zh: '做鬼脸', en: 'Pull a face', min: 10, base: 0.6, up: 6, down: -3, social: 6, fun: 8 },
+  tickle:     { cat: 'funny', e: '🤭', zh: '挠痒痒', en: 'Tickle', min: 60, base: 0.7, up: 8, down: -5, social: 8, fun: 10 },
+  interest:   { cat: 'deep', e: '🗨️', zh: '聊聊兴趣', en: 'Talk about a hobby', min: 0, base: 0.6, up: 6, down: -2, social: 10 },
+  deep:       { cat: 'deep', e: '🤫', zh: '说说心里话', en: 'Share something personal', min: 60, base: 0.75, up: 10, down: -4, social: 14 },
+  plans:      { cat: 'deep', e: '📅', zh: '约去公园', en: 'Meet up in the park', min: 30, base: 0.8, up: 6, down: -2, social: 6 },
+  gift:       { cat: 'gift', e: '🎁', zh: '送礼物', en: 'Give a gift', min: -30, base: 1, up: 6, down: 0, social: 6 },
+  tease:      { cat: 'mischief', e: '😜', zh: '开个玩笑', en: 'Playful tease', min: 30, base: 0.5, up: 5, down: -6, social: 4, fun: 6 },
+};
+// How likely it goes well: base + their mood today + friendship × relBy, a liked thing +likeBy, a disliked one
+// dislikeBy, a hobby you share +shareBy (one they don't care about −noShare), the same thing again today −boredBy
+// each time after `boring`. sec: how long the two of you take over it.
+const SOCIAL = { moodBy: { great: 0.1, good: 0, meh: -0.1, grumpy: -0.25 }, relBy: 0.002, likeBy: 0.2, dislikeBy: -0.3, shareBy: 0.3, noShare: 0.15, boring: 2, boredBy: 0.15, likedUp: 3, foodieUp: 6, workRel: { boss: 2, mate: 1 }, sec: 3 };
 // ---------- inside every building (v0.30) ----------
 // Every building in town can be walked into, and what's inside does something. sec: how long your townie stays at it.
 // The fun / social counts once a day each (the gym: up to `max` workouts a day, on any machine).

@@ -741,13 +741,42 @@ const SHEETS = {
       <p class="muted small">${t('loan_rule')}</p>
       ${chk === 'ok' ? `<button class="btn primary block" data-act="loanSign" data-arg="${wid}">✍️ ${t('loan_sign')}</button>` : `<p class="host-say">${t('loan_no_' + chk)}</p>`}`;
   },
-  person(id) {   // v0.25: someone in town: talk to them (helps your social need; once a day each), or go to their home
-    const wp = S.job ? workPeople(S.job.place).find(p => p.id === id) : null, h = wp ? null : homeOf(id), name = wp ? nm(wp.name) : homeName(h), look = wp ? wp.look : h.look;
-    const done = (S.chatDay || {})[id + '@' + today()], rel = (S.rel || {})[id] || 0, out = (S.out && S.out.town === myTown()) || S.work;
+  person(id) {   // v0.25 / v0.31: someone in town: walk over and get talking (like The Sims), or go to their home
+    const w = whoIs(id);
+    if (!w) return '';
+    const wp = w.wp, h = wp ? null : homeOf(id), out = (S.out && S.out.town === myTown()) || S.work, near = canSocial(id);
     const role = wp ? (wp.boss ? `💼 ${t('boss')} · ${nm(JOBS[S.job.place])}` : `💼 ${t('coworker')} · ${nm(JOBS[S.job.place])}`) : isFriend(id) ? `💛 ${t('friend')}` : h && h.fam ? `👪 ${t('family')}` : t('neighbour');
-    return `<div class="profile">${avatar(look, 'xl')}<div class="grow"><div class="profile-name">${esc(name)}</div><div class="muted small">${role}</div><div class="muted small">${t('rel_level', { n: rel })}</div></div></div>
-      ${out || Scene.canWalkUp(id) ? `<button class="btn primary block" data-act="${wp ? 'chatWork' : 'chat'}" data-arg="${id}" ${done ? 'disabled' : ''}>💬 ${done ? t('chat_done') : t(Scene.canWalkUp(id) ? 'chat_walk_btn' : 'chat_btn')}</button>` : `<p class="muted">${t('chat_go_out')}</p>`}
+    return `<div class="profile">${avatar(w.look, 'xl')}<div class="grow"><div class="profile-name">${esc(w.name)}</div><div class="muted small">${role}</div><div class="muted small">${t('soc_rel')} ${relTag(id)}</div></div></div>
+      ${near ? `<button class="btn primary block" data-act="socialOpen" data-arg="${id}">💬 ${t('soc_talk', { name: esc(w.name) })}</button>` : out || Scene.canWalkUp(id) ? `<button class="btn primary block" data-act="${wp ? 'chatWork' : 'chat'}" data-arg="${id}">💬 ${t(Scene.canWalkUp(id) ? 'chat_walk_btn' : 'chat_btn')}</button>` : `<p class="muted">${t('chat_go_out')}</p>`}
       ${wp ? `<p class="muted small">${t(wp.boss ? 'chat_boss_note' : 'chat_mate_note')}</p>` : `<button class="btn block gap-top" data-act="goTo" data-arg="${id}">🏡 ${t('visit')}</button>`}`;
+  },
+  // v0.31: getting along with someone, like The Sims: how well you get on, their mood today, their traits and hobbies
+  // (once you know them), and things to do together, in groups; some need you to be closer friends first.
+  social(id) {
+    const w = whoIs(id);
+    if (!w) return '';
+    const v = relOf(id), lv = relLevel(v), md = moodOf(id), T = traitsOf(id), K = knownOf(id), near = canSocial(id);
+    const cat = UI.socCat || 'friendly', busy = UI.socBusy && UI.socBusy > Date.now(), lo = REL_LEVELS[0].min, span = 100 - lo;
+    const pct = (v - lo) / span * 100, zero = -lo / span * 100;
+    const bar = `<div class="relbar"><i class="${v < 0 ? 'neg' : ''}" style="left:${Math.min(zero, pct)}%;width:${Math.abs(pct - zero)}%"></i><u style="left:${zero}%"></u></div>`;
+    const traits = traitsKnown(id) ? T.map(k => `<span class="chip">${TRAITS[k].e} ${nm(TRAITS[k])}</span>`).join('') : `<span class="muted small">❔ ${t('soc_unknown')}</span>`;
+    const ints = K.int.length ? K.int.map(k => `<span class="chip">${INTERESTS[k].e} ${nm(INTERESTS[k])}</span>`).join('') : `<span class="muted small">❔ ${t('soc_ask_hobby')}</span>`;
+    const tabs = SOCIAL_CATS.map(([c, e]) => `<button class="chip ${c === cat ? 'on' : ''}" data-act="socCat" data-arg="${c}">${e} ${t('soc_cat_' + c)}</button>`).join('');
+    let grid;
+    if (cat === 'gift') {
+      const items = Object.keys(S.me.barn).filter(k => !k.startsWith('baby_') && S.me.barn[k] > 0).slice(0, 9);
+      grid = items.length ? items.map(k => { const b = barnInfo(k); return `<button class="act-tile" data-act="social" data-arg="${id}|gift|${k}" ${busy || !near ? 'disabled' : ''}><span>${b.e}</span><b>${b.name}</b><i>×${S.me.barn[k]}</i></button>`; }).join('') : `<p class="muted">${t('soc_gift_none')}</p>`;
+    } else grid = Object.entries(SOCIALS).filter(([, A]) => A.cat === cat).flatMap(([k, A]) => k !== 'interest' ? [[k, A]] : [...new Set([...myInterests(), ...K.int])].map(tp => [k, A, tp])).map(([k, A, tp]) => { const lock = socialLocked(id, k);
+      if (tp) return `<button class="act-tile" data-act="social" data-arg="${id}|interest|${tp}" ${busy || !near ? 'disabled' : ''}><span>${INTERESTS[tp].e}</span><b>${t('soc_talk_about', { topic: nm(INTERESTS[tp]) })}</b>${K.int.includes(tp) ? `<i>💛 ${t('soc_they_like_short')}</i>` : ''}</button>`;
+      return `<button class="act-tile" data-act="social" data-arg="${id}|${k}" ${busy || lock || !near ? 'disabled' : ''}><span>${lock ? '🔒' : A.e}</span><b>${nm(A)}</b>${lock ? `<i>${t('soc_lock', { level: nm(relLevel(A.min)) })}</i>` : ''}</button>`; }).join('');
+    const last = UI.socLast && UI.socLast.id === id ? `<div class="soc-last ${UI.socLast.ok ? 'ok' : 'bad'}">${UI.socLast.html}</div>` : '';
+    return `<div class="profile">${avatar(w.look, 'xl')}<div class="grow"><div class="profile-name">${esc(w.name)} <span>${MOOD_E[md]}</span></div>
+        <div class="muted small">${lv.e} ${nm(lv)} · ${v} · ${t('smood_' + md)}</div>${bar}</div></div>
+      <div class="soc-info"><div><span class="muted small">${t('soc_traits')}</span>${traits}</div><div><span class="muted small">${t('soc_likes')}</span>${ints}</div><div class="muted small">${t('soc_my_likes')} ${myInterests().map(k => INTERESTS[k].e).join(' ')}</div></div>
+      ${last}${busy ? `<p class="muted center soc-wait">💬 …</p>` : ''}
+      <div class="soc-cats">${tabs}</div>
+      <div class="act-grid">${grid}</div>
+      ${near ? '' : `<p class="muted small center gap-top">${t('soc_need_near', { name: esc(w.name) })}</p>`}`;
   },
   garage() {   // v0.24: which car is where (drive, garage, parked out) and which one you drive
     const h = S.me, sl = carSlots(h), where = i => (i === h.car && S.carAt ? `📍 ${S.carAt.place ? nm(placeInfo(S.carAt.place)) : t('away_street')}` : sl.garage.includes(i) ? `🅿️ ${t('in_garage')}` : `🚗 ${t('on_drive')}`);
@@ -1004,6 +1033,7 @@ const SHEETS = {
         <div class="profile-name">${name}</div><div class="profile-tags"><span>${st}</span>${tm}</div></div></div>
       <div class="card"><b>🏠 ${t('house_rules_title')}</b><p class="muted">${t('house_rules_desc')}</p></div>
       ${body}
+      ${on && !away ? `<button class="btn primary block gap-top" data-act="socialOpen" data-arg="${id}">💬 ${t('soc_talk', { name })}</button>` : ''}
       <div class="row gap-top">
         <button class="btn grow" data-act="waveHost" data-arg="${id}">👋 ${t('host_wave')}</button>
         ${fr ? `<button class="btn grow" data-act="compose" data-arg="${id}">✉️ ${t('write_letter')}</button><button class="btn grow" data-act="friendSheet" data-arg="${id}">⋯</button>` : ''}
@@ -1391,10 +1421,40 @@ const ACT = {
     Sound.play('coins'); save();
     snack(house ? `🏦 ${t('loan_house_ok', { name: nm(HOUSES[k]) })}` : `🏦 ${t('loan_car_ok', { name: nm(CARS[k]), m: DELIVERY.minutes })}`);
   },
-  chat(id, here) { if (!here && Scene.canWalkUp(id)) { closeSheet(); UI.tripTo = homeName(homeOf(id)); Scene.walkUp(id, () => ACT.chat(id, true)); return refresh(); }   // walk over first, then talk
-    const r = chatWith(id); if (r === 'ok') { Sound.play('chime'); snack(`💬 ${t('chat_ok', { name: homeName(homeOf(id)) })}`); save(); } else snack(t('chat_done')); renderSheet(); },
-  chatWork(id, here) { if (!here && Scene.canWalkUp(id)) { closeSheet(); UI.tripTo = nm((workPeople(S.job.place).find(x => x.id === id) || {}).name); Scene.walkUp(id, () => ACT.chatWork(id, true)); return refresh(); }
-    const p = workPeople(S.job.place).find(x => x.id === id), r = chatWork(id); if (r === 'ok') { Sound.play('chime'); snack(`💬 ${t(p.boss ? 'chat_boss_ok' : 'chat_ok', { name: nm(p.name) })}`); save(); } else snack(t('chat_done')); renderSheet(); },
+  chat(id, here) { if (!here && Scene.canWalkUp(id)) { closeSheet(); UI.tripTo = (whoIs(id) || {}).name || ''; Scene.walkUp(id, () => ACT.chat(id, true)); return refresh(); }   // walk over first, then talk
+    ACT.socialOpen(id); },
+  chatWork(id, here) { ACT.chat(id, here); },
+  // v0.31: the things you do with someone (like The Sims): your bubble, a moment, their reaction, then what came of it
+  socialOpen(id) { UI.talk = id; UI.socLast = null; closeSheet(); openSheet('social', id); refresh(); },
+  socCat(c) { UI.socCat = c; renderSheet(); },
+  social(arg) {
+    const [id, act, g] = arg.split('|'), w = whoIs(id), A = SOCIALS[act];
+    if (!w || !A || (UI.socBusy && UI.socBusy > Date.now())) return;
+    if (!canSocial(id)) return snack(t('soc_need_near', { name: w.name }));
+    const r = doSocial(id, act, g);
+    if (r.r === 'locked') return snack(`🔒 ${t('soc_lock', { level: nm(relLevel(A.min)) })}`);
+    if (r.r === 'nogift') return snack(t('soc_gift_none'));
+    if (r.r !== 'ok') return;
+    const fun = ['joke', 'face', 'tickle', 'tease'].includes(act), warm = ['hug', 'deep', 'gift'].includes(act);
+    const react = r.ok ? (r.liked || r.shared ? '🤩' : fun ? '😂' : warm ? '🥰' : '😄') : r.disliked ? '😣' : '😒';
+    const say = act === 'interest' ? INTERESTS[r.topic].e : act === 'gift' ? barnInfo(g).e : A.e;
+    Scene.socialAnim(id, say, react, !!A.wave);
+    UI.socBusy = Date.now() + SOCIAL.sec * 1000; Sound.play('pop'); save(); renderSheet();
+    setTimeout(() => {
+      UI.socBusy = 0;
+      const name = esc(w.name), d = r.d ? ` <b>${r.d > 0 ? '+' : ''}${r.d}</b>` : '';
+      let msg;
+      if (act === 'interest') msg = r.shared ? t(r.ok ? 'soc_share' : 'soc_bad', { name, topic: nm(INTERESTS[r.topic]) }) : t(r.ok ? 'soc_polite' : 'soc_noshare', { name, topic: nm(INTERESTS[r.topic]), their: nm(INTERESTS[r.tells]) });
+      else if (act === 'gift') msg = t('soc_gift_ok', { name, item: barnInfo(g).name });
+      else if (act === 'plans' && r.ok) msg = t('soc_plans_ok', { name });
+      else msg = r.ok ? t(r.liked ? 'soc_love' : 'soc_ok', { name }) : t(r.bored ? 'soc_bored' : 'soc_bad', { name });
+      UI.socLast = { id, ok: r.ok, html: `${react} ${msg}${d}` };
+      Sound.play(r.ok ? 'chime' : 'oops');
+      if (r.up) setTimeout(() => { Sound.play('levelup'); snack(`🎉 ${t('soc_levelup', { name: w.name, level: nm(r.up) })}`); }, 300);
+      if (UI.sheet && UI.sheet.type === 'social') renderSheet();
+      refresh();
+    }, SOCIAL.sec * 1000);
+  },
   cook() { const r = cookMeal(); if (r === 'ok') { Sound.play('collect'); snack(`🍳 ${t('cook_ok')}`); save(); } else snack(t(r === 'nokitchen' ? 'cook_need_kitchen' : 'cook_need_food')); renderSheet(); },
   snackBuy() { const r = buySnack(); if (r === 'ok') { Sound.play('collect'); snack(`🥐 ${t('snack_ok')}`); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },
   // v0.22: show me where my townie is (in a store, out in town, at work, at home)
@@ -1534,6 +1594,7 @@ const ACT = {
       refresh();
     };
     if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
+    UI.talk = null;   // v0.31
     if (UI.tab !== 'town') UI.tab = 'town';
     syncView();
     // v0.19: "straight there" goes the same way (by car if you have one), it just skips the time on the road
@@ -2606,7 +2667,7 @@ function placeBody(key) {
       const wp = p.work && S.job ? workPeople(S.job.place).find(x => x.id === p.id) : null, h = wp ? null : homeOf(p.id), done = (S.chatDay || {})[p.id + '@' + day];
       if (!wp && !h) return '';
       return `<div class="list-item">${avatar(wp ? wp.look : h.look)}<div class="grow"><b>${esc(wp ? nm(wp.name) : homeName(h))}</b> <span class="muted small">${wp ? '💼 ' + t(wp.boss ? 'boss' : 'coworker') : isFriend(p.id) ? '💛' : ''}</span></div>
-        <button class="btn small" data-act="${wp ? 'chatWork' : 'chat'}" data-arg="${p.id}" ${done ? 'disabled' : ''}>💬 ${done ? '✓' : t('chat_btn')}</button></div>`; }).join('');
+        <button class="btn small" data-act="${wp ? 'chatWork' : 'chat'}" data-arg="${p.id}">💬 ${t('chat_btn')}</button></div>`; }).join('');
     return `<p>${t('pl_park_people', { n: Scene.parkFolk().length || Math.max(2, Math.round(onlineIn(VIEW_TOWN) * 0.04)) })}</p>${btn('walk', dogs ? `🐕 ${t('pl_walk_dog')}` : `🚶 ${t('pl_stroll_lap', { f: NEED_GAIN.stroll })}`, !(dogs && P.park))}
       ${who ? `<div class="muted small gap-top">${t('pl_park_here')}</div><div class="card">${who}</div>` : ''}`;
   }
@@ -2984,12 +3045,15 @@ function playMovie() {
 const SPOT_E = { 'bakery|case': '🥐', 'bakery|oven': '🔥', 'bakery|table': '🍽️', 'cafe|menu': '☕', 'cafe|table': '💬', 'cafe|sofa': '🛋️', 'clinic|bed': '🛏️', 'clinic|scale': '🩺', 'clinic|pharmacy': '💊',
   'library|featured': '⭐', 'library|table': '📖', 'gym|treadmill': '🏃', 'gym|spinbike': '🚴', 'gym|dumbbells': '🏋️', 'gym|boxing': '🥊', 'gym|yogamat': '🧘', 'post|boxes': '📬', 'post|cards': '💌',
   'school|desk': '✏️', 'plaza|board': '🏆', 'police|board': '📋', 'firestation|truck': '🚒', 'gas|shelf': '🍫', 'gas|fridge': '🥤' };
+// v0.31: you can do things with someone when you've walked over to them, are round at their home, or work with them
+function canSocial(id) { return UI.talk === id || UI.visit === id || (!!S.work && String(id).startsWith('work_')); }
+function relTag(id) { const lv = relLevel(relOf(id)); return `${lv.e} ${nm(lv)}`; }
 function snackBtn(key) { return `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${key === 'cafe' ? '☕' : '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`; }
 function workmates(key) {
   const at = S.work && S.work.place === key, day = today();
   return `<div class="muted small gap-top">${t('job_people')}</div>${workPeople(key).map(p => { const done = (S.chatDay || {})[p.id + '@' + day];
-    return `<div class="list-item">${avatar(p.look)}<div class="grow"><b>${esc(nm(p.name))}</b> <span class="muted small">${t(p.boss ? 'boss' : 'coworker')} · ${t('rel_level', { n: (S.rel || {})[p.id] || 0 })}</span></div>
-      ${at ? `<button class="btn small" data-act="chatWork" data-arg="${p.id}" ${done ? 'disabled' : ''}>💬 ${done ? '✓' : t('chat_btn')}</button>` : ''}</div>`; }).join('')}${at ? '' : `<div class="muted small">${t('job_people_note')}</div>`}`;
+    return `<div class="list-item">${avatar(p.look)}<div class="grow"><b>${esc(nm(p.name))}</b> <span class="muted small">${t(p.boss ? 'boss' : 'coworker')} · ${relTag(p.id)}</span></div>
+      ${at ? `<button class="btn small" data-act="socialOpen" data-arg="${p.id}">💬 ${t('chat_btn')}</button>` : ''}</div>`; }).join('')}${at ? '' : `<div class="muted small">${t('job_people_note')}</div>`}`;
 }
 function needBars() {
   const n = needs();
@@ -3032,7 +3096,7 @@ function phoneScreen(arg) {
   } else if (scr === 'person') {
     const w = whoIs(a); if (!w) return phoneScreen('contacts');
     const called = (S.chatDay || {})['call_' + a + '@' + today()], met = (S.chatDay || {})['meet_' + a + '@' + today()], here = VIEW_TOWN === myTown() && townOf(a.startsWith('work_') ? 'me' : a) === myTown();
-    body = head(esc(w.name), 'contacts') + `<div class="ph-who">${avatar(w.look, 'xl')}<b>${esc(w.name)}</b><span class="ph-muted">${t('rel_level', { n: (S.rel || {})[a] || 0 })}</span></div>
+    body = head(esc(w.name), 'contacts') + `<div class="ph-who">${avatar(w.look, 'xl')}<b>${esc(w.name)}</b><span class="ph-muted">${t('soc_rel')} ${relTag(a)}</span></div>
       <div class="ph-acts"><button class="ph-btn go" data-act="phoneCall" data-arg="${a}">📞 ${t(called ? 'ph_call_again' : 'ph_call')}</button><button class="ph-btn" data-act="phone" data-arg="texts|${a}">💬 ${t('ph_text')}</button>
       ${here ? `<button class="ph-btn" data-act="phoneMeet" data-arg="${a}" ${met ? 'disabled' : ''}>🌳 ${t(met ? 'meet_done' : 'ph_meet')}</button>` : ''}${!w.wp ? `<button class="ph-btn" data-act="goTo" data-arg="${a}">🏡 ${t('visit')}</button>` : ''}</div>
       <p class="ph-muted small">${t('ph_person_note', { c: NEED_GAIN.call, x: NEED_GAIN.text })}</p>`;

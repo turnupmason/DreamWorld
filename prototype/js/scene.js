@@ -708,7 +708,8 @@ const Scene = (() => {
       if (!live) { if (e.y >= LOT_D && !e.path.length) e.path = planPath(e, lotNav(h), 3.5, 12.5, 2) || []; wander(e, dt, speedOf(h), en => randomWalk(en, lotNav(h))); }
       objs.push({ d: ox + oy + e.x + e.y, f: () => {
         const p = iso(ox + e.x, oy + e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && !e.wave, view: e.wave > performance.now() ? null : e.view, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() });
+        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && !e.wave, view: e.wave > performance.now() ? null : e.view, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() || chatWave(h.id) });
+        if (chatting(h.id)) chatBubble(p.x + 12 * z, p.y - 56 * z, z, false, ts);   // v0.31
         if (live && f) liveBadge(p, h.live, false);
         else if (focus && z > 0.55) nameTag(p, homeName(h), isOnline(h.id));
         if (focus) hits.push({ kind: 'avatar', owner: h.id, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
@@ -731,7 +732,8 @@ const Scene = (() => {
   }
   function drawMe(ox, oy, ts, focus) {
     const z = cam.z, p = iso(ox + me.x, oy + me.y), pose = mePose();
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, turn: me.turn, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() });
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, turn: me.turn, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() || (chatting() && !!CHAT.e && !!CHAT.wave) });
+    if (chatting() && CHAT.e) chatBubble(p.x - 12 * z, p.y - 56 * z, z, true, ts);   // v0.31
     if (S.live) liveBadge(p, S.live, true);
     if (focus) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
     if (mode === 'home' && !S.live && (me.jobs.length || me.cur)) {   // little marker on where you're heading
@@ -1729,9 +1731,9 @@ const Scene = (() => {
         const riding = w.bike && w.path.length, o = riding ? { '+x': [0, 0.85], '-x': [0, -0.85], '+y': [-0.85, 0], '-y': [0.85, 0] }[w.cdir || '+x'] : [0, 0], p = iso(w.x + o[0], w.y + o[1]);
         ctx.save(); ctx.globalAlpha = w.alpha;
         if (riding) { drawPerson(p.x, p.y, z, { look: w.h.look, face: w.cdir === '+x' || w.cdir === '-y' ? 1 : -1, energy: 'good', ts, seed: w.x, pose: 'bike', phase: w.phase, bikeCol: w.bikeCol }); }   // v0.25: on a bike, at the right-hand edge of the road
-        else drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: !w.moving && Math.sin(ts / 900 + w.x) > 0.7 });
+        else drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: chatWave(w.id) || (!w.moving && !chatting(w.id) && Math.sin(ts / 900 + w.x) > 0.7) });
         ctx.restore();
-        if (chatting(w.id)) emoji(Math.floor(ts / 700) % 2 ? '😄' : '💬', p.x + 10 * z, p.y - 64 * z, 15 * z);   // v0.25: talking with you
+        if (chatting(w.id)) chatBubble(p.x + 12 * z, p.y - 58 * z, z, false, ts);   // v0.25: talking with you
         if (z > 0.3) pill(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z));
         else if (z > 0.12) circle(p.x, p.y - 48 * z, Math.max(2, 3.5 * z), '#34c759', '#fff', 1);
         if (z > 0.2) hits.push({ kind: 'person', id: w.id, pri: 2, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 46 * z, y1: p.y + 4 });   // v0.25: talk to them
@@ -1742,6 +1744,26 @@ const Scene = (() => {
   // v0.25: people in the park: on the benches and on the lawn, chatting; your boss or a coworker now and then
   let PARK_PEOPLE = [], CHAT = null;   // who's in the park now; who you're talking to (and until when)
   const chatting = id => CHAT && CHAT.until > performance.now() && (id === undefined || CHAT.id === id);
+  // v0.31: a speech bubble over someone you're talking with: you say your bit (the thing you're doing), then they react
+  // (😄 when it went well, 😒 when it didn't). Before v0.31 (and after walking up to someone) it just alternates.
+  function chatBubble(x, y, z, mine, ts) {
+    if (!CHAT) return;
+    const el = performance.now() - (CHAT.t0 || 0);
+    let e;
+    if (!CHAT.e) e = mine ? (Math.floor(ts / 700) % 2 ? '💬' : '😊') : (Math.floor(ts / 700) % 2 ? '😄' : '💬');
+    else if (mine) e = el < 1700 ? CHAT.e : null;
+    else e = el > 1300 ? CHAT.react : el > 500 ? '…' : null;
+    if (!e) return;
+    const s = Math.max(0.6, z), w = 30 * s, h = 24 * s, bx = x, by = y - h / 2, pop = Math.min(1, (CHAT.e ? (mine ? el : el - (e === '…' ? 500 : 1300)) : 300) / 180);
+    ctx.save(); ctx.translate(bx, by); ctx.scale(pop, pop);
+    ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 9 * s); ctx.moveTo(-5 * s, h / 2 - 1); ctx.lineTo(mine ? -8 * s : 8 * s, h / 2 + 7 * s); ctx.lineTo(4 * s, h / 2 - 1); ctx.closePath();
+    ctx.fillStyle = '#ffffff'; ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 4 * s; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(60,45,35,.25)'; ctx.lineWidth = 1; ctx.stroke();
+    if (e === '…') { ctx.fillStyle = '#8a8478'; ctx.font = `800 ${14 * s}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('…', 0, -2 * s); }
+    else emoji(e, 0, 8 * s, 15 * s);
+    ctx.restore();
+  }
+  const chatWave = id => chatting(id) && !!CHAT.e && !!CHAT.wave;
   // who's in the park right now (worked out from the time, so it's the same whether you're looking or not)
   function parkList() {
     if (VIEW_TOWN !== myTown() || !TL.park) return [];
@@ -1758,9 +1780,9 @@ const Scene = (() => {
     const list = PARK_PEOPLE = parkList();
     list.forEach(pp => objs.push({ d: pp.x + pp.y + 0.3, f: () => {
       const z = cam.z, q = iso(pp.x, pp.y);
-      drawPerson(q.x, q.y, z, { look: pp.look, face: pp.i % 2 ? -1 : 1, view: 'front', turn: [pp.i % 2 ? -0.6 : 0.6, 1], energy: 'good', ts, seed: pp.i, pose: 'stand', wave: Math.sin(ts / 1100 + pp.i) > 0.85 });
+      drawPerson(q.x, q.y, z, { look: pp.look, face: pp.i % 2 ? -1 : 1, view: 'front', turn: [pp.i % 2 ? -0.6 : 0.6, 1], energy: 'good', ts, seed: pp.i, pose: 'stand', wave: chatWave(pp.id) || (!chatting(pp.id) && Math.sin(ts / 1100 + pp.i) > 0.85) });
       if (z > 0.35) { if (pp.work) pill(pp.boss ? `💼 ${t('boss')}` : `💼 ${t('coworker')}`, q.x, q.y - 50 * z - 12, '#fff1d6', '#9a5b12', `800 ${Math.max(9, 10 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(14, 17 * z)); else if (Math.sin(ts / 1500 + pp.i) > 0.6) emoji('💬', q.x + 9 * z, q.y - 44 * z, 10 * z); }
-      if (chatting(pp.id)) emoji(Math.floor(ts / 700) % 2 ? '😄' : '💬', q.x + 10 * z, q.y - 50 * z, 15 * z);
+      if (chatting(pp.id)) chatBubble(q.x + 12 * z, q.y - 56 * z, z, false, ts);
       hits.push({ kind: 'person', id: pp.id, work: !!pp.work, pri: 2, x0: q.x - 12 * z, x1: q.x + 12 * z, y0: q.y - 46 * z, y1: q.y + 4 });
     } }));
   }
@@ -2019,8 +2041,8 @@ const Scene = (() => {
   // You, standing where you are out in town.
   function drawMeOut(x, y, ts) {
     const z = cam.z, p = iso(x, y);
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand', wave: chatting() && Math.floor(ts / 900) % 2 === 0 });
-    if (chatting()) emoji(Math.floor(ts / 700) % 2 ? '💬' : '😊', p.x - 10 * z, p.y - 50 * z, 15 * z);
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand', wave: chatting() && (CHAT.e ? !!CHAT.wave : Math.floor(ts / 900) % 2 === 0) });
+    if (chatting()) chatBubble(p.x - 12 * z, p.y - 56 * z, z, true, ts);
     carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
   }
@@ -3808,6 +3830,8 @@ const Scene = (() => {
     travel(to, how, car, done, dest, place, pick) { if (mode !== 'town') return false; TRIP_CAR = pick === undefined ? null : pick; try { startTrip(to, how, car, done, dest, place); } finally { TRIP_CAR = null; } return true; },
     mePoint() { if (!S) return null; TL = layoutOf(myTown()); const keep = VIEW_TOWN; return S.work || S.jail || (S.out && S.out.town === myTown()) ? (VIEW_TOWN === myTown() ? mePos() : null) : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })(); },
     pingMe() { PING = performance.now(); },
+    // v0.31: play a social moment with someone: your bubble (e), then theirs (react), for SOCIAL.sec seconds
+    socialAnim(id, e, react, wave) { CHAT = { id, t0: performance.now(), until: performance.now() + SOCIAL.sec * 1000 + 600, e, react, wave }; },
     // v0.30: inside a building: sit at / lie on / work out on something for a while, then done(); what you're doing now
     venueUse(id, secs, done, mate) { if (mode === 'shop' && VENUE_LOOK[owner]) venueUseNow(id, secs, done, mate); else if (done) done(); },
     venueBusy() { return mode === 'shop' && meS.use && meS.use.until ? Math.max(0, Math.ceil((meS.use.until - performance.now()) / 1000)) : 0; },

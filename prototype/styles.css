@@ -765,3 +765,20 @@ body.dark .use-note { background: #3a2f1c; color: #f2c27a; }
 .ph-device .up { color: #4cd964; font-weight: 800; } .ph-device .down { color: #ff7b7b; font-weight: 800; }
 .spark { display: block; flex: none; }
 .ph-card .spark { margin-top: 8px; width: 100%; height: auto; }
+
+/* v0.31: getting along with someone */
+.relbar { position: relative; height: 8px; border-radius: 4px; background: rgba(120, 100, 70, .14); margin-top: 6px; overflow: hidden; }
+.relbar i { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, #8fd694, #4cbf6b); border-radius: 4px; }
+.relbar i.neg { background: linear-gradient(90deg, #e5484d, #f59e8b); }
+.relbar u { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgba(60, 45, 35, .35); }
+.soc-info { display: grid; gap: 6px; margin: 10px 0 6px; }
+.soc-info > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.soc-info .chip { padding: 3px 9px; font-size: 12.5px; }
+.soc-cats { display: flex; gap: 6px; overflow-x: auto; margin: 10px 0 8px; padding-bottom: 2px; }
+.soc-cats .chip { flex: none; }
+.soc-cats .chip.on { background: #ef7d3c; color: #fff; }
+.soc-last { border-radius: 14px; padding: 10px 12px; margin: 8px 0; font-weight: 700; background: #eaf6ec; }
+.soc-last.bad { background: #fbeceb; }
+.soc-wait { animation: socpulse 1s ease-in-out infinite; }
+@keyframes socpulse { 50% { opacity: .4; } }
+body.dark .soc-last { background: #24382a; } body.dark .soc-last.bad { background: #3a2626; }

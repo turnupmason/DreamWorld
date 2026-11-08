@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -147,6 +147,18 @@ P('## 买东西带回家（v0.20）');
 P('');
 table(['项目', '数值'], [['拿在手上', `每件 ≤ ${D.BIG_VOL}，一共 ≤ ${D.HANDS_VOL}（1×1 家具 = 10，种子 10 包 = 1）`], ['后备箱', '按车的载货量'], ['送货上门', `账单 ${D.DELIVERY.fee * 100}%，至少 🪙${D.DELIVERY.min}，约 ${D.DELIVERY.minutes} 分钟`],
   ['吃饱', `${D.MALL.fed.hours} 小时：打工 +${D.MALL.fed.pay * 100}%，走路快 ${D.MALL.fed.walk * 100}%`], ['电影海报 / 玩偶 / 巨型泰迪熊', '家产 +60 / +40 / +300']]);
+P('## 和人相处（v0.31，像模拟人生）');
+P('');
+P(`关系值 ${D.REL_LEVELS[0].min} 到 100，不会自己掉。起点：朋友 ${D.REL_START.friend}、家人 ${D.REL_START.family}、同事老板 ${D.REL_START.work}、其他人 ${D.REL_START.other}。`);
+P('');
+table(['关系等级', '从多少起'], D.REL_LEVELS.map(l => [`${l.e} ${l.zh}`, l.min]));
+const catZh = { friendly: '友好', funny: '好玩', deep: '深聊', gift: '送礼', mischief: '恶作剧' };
+table(['互动', '分类', '要多少关系', '基础成功率', '成功关系', '失败关系', '社交', '娱乐'], Object.values(D.SOCIALS).map(a => [`${a.e} ${a.zh}`, catZh[a.cat], a.min, `${Math.round(a.base * 100)}%`, `+${a.up}`, a.down, `+${a.social}`, a.fun ? `+${a.fun}` : '']));
+P(`成功率 = 基础 + 对方今天的心情（很好 +${D.SOCIAL.moodBy.great * 100}%、不错 0、有点累 ${D.SOCIAL.moodBy.meh * 100}%、烦 ${D.SOCIAL.moodBy.grumpy * 100}%）+ 关系 × ${D.SOCIAL.relBy * 100}% + 对方性格喜欢的 +${D.SOCIAL.likeBy * 100}%（成功时关系再 +${D.SOCIAL.likedUp}）/ 不喜欢的 ${D.SOCIAL.dislikeBy * 100}% + 聊到共同爱好 +${D.SOCIAL.shareBy * 100}%（对方不感兴趣 −${D.SOCIAL.noShare * 100}%）；同一件事一天做到第 ${D.SOCIAL.boring + 1} 次起每次 −${D.SOCIAL.boredBy * 100}%。送礼一定成功，吃货多 +${D.SOCIAL.foodieUp}。和老板 / 同事成功：工作关系 +${D.SOCIAL.workRel.boss} / +${D.SOCIAL.workRel.mate}。`);
+P('');
+table(['性格', '喜欢', '不喜欢'], Object.values(D.TRAITS).map(tr => [`${tr.e} ${tr.zh}`, tr.likes.map(k => D.SOCIALS[k].zh).join('、'), tr.dislikes.map(k => D.SOCIALS[k].zh).join('、')]));
+P(`兴趣：${Object.values(D.INTERESTS).map(x => x.e + x.zh).join('、')}（每人两个，你有三个）。`);
+P('');
 P('## 楼里能做的事（v0.30）');
 P('');
 P(`能进去的地方：${D.VENUE_PLACES.map(k => D.PLACE_INFO[k] ? D.PLACE_INFO[k].zh : D.STORES[k].zh).join('、')}。下面这些每天各算一次（健身房每天最多 ${D.VENUE.gym.max} 次）。`);

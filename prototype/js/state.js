@@ -90,6 +90,11 @@ function migrate() {
     });
     RUNS.key = ''; S.roomyV = 1;
   }
+  if (S.relV !== 31) {   // v0.31: friendship starts where it should (friends 40, family 55…); what you'd built up on top is kept
+    S.rel = S.rel || {};
+    Object.keys(S.rel).forEach(id => { S.rel[id] = Math.min(100, REL_START[relKind(id)] + S.rel[id]); });
+    S.relV = 31;
+  }
   if (S.carParkV !== 27) { if (S.carAt && S.carAt.town === myTown()) S.carAt = null; S.carParkV = 27; }   // v0.27: the car parks in the town centre moved; a car parked out is back home
   if (S.layoutV !== 2) {   // v0.5: furniture must be reachable; re-arrange the simulated friends' rooms once
     S.friends.forEach(h => { for (let lv = 0; lv < floorsOf(h); lv++) relayoutRoom(h, lv); });
@@ -2090,6 +2095,60 @@ function chatWith(id) {
   S.chatDay[k] = 1; S.rel[id] = Math.min(100, (S.rel[id] || 0) + 5);
   addNeed('social', NEED_GAIN.chat);
   return 'ok';
+}
+// ---------- getting along with people, like The Sims (v0.31) ----------
+const hashStr = s => { let n = 7; for (const ch of String(s)) n = (n * 131 + ch.charCodeAt(0)) % 999983; return n; };
+function relKind(id) { if (String(id).startsWith('work_')) return 'work'; if (isFriend(id)) return 'friend'; return NPC_LOTS.some(l => l.id === id && l.fam) ? 'family' : 'other'; }
+function relOf(id) { const r = S.rel && S.rel[id]; return r === undefined ? REL_START[relKind(id)] : r; }
+const relLevel = v => [...REL_LEVELS].reverse().find(l => v >= l.min) || REL_LEVELS[0];
+const pickTwo = (keys, n) => { const a = keys[n % keys.length]; let b = keys[Math.floor(n / 7) % keys.length]; if (b === a) b = keys[(keys.indexOf(a) + 3) % keys.length]; return [a, b]; };
+const traitsOf = id => pickTwo(Object.keys(TRAITS), hashStr('t' + id));
+const interestsOf = id => pickTwo(Object.keys(INTERESTS), hashStr('i' + id));
+function myInterests() { const ks = Object.keys(INTERESTS), n = hashStr('me' + (S.created || 1)); return [...new Set([ks[n % ks.length], ks[Math.floor(n / 11) % ks.length], ks[Math.floor(n / 131) % ks.length]])]; }
+// their mood today (the same all day): great / good / meh / grumpy
+function moodOf(id) { const u = (hashStr(id + '@' + today()) % 100) / 100; return u < 0.3 ? 'great' : u < 0.75 ? 'good' : u < 0.95 ? 'meh' : 'grumpy'; }
+const MOOD_E = { great: '😄', good: '🙂', meh: '😐', grumpy: '😠' };
+// what you've found out about someone: their hobbies (from talking about them); traits show once you know them
+function knownOf(id) { S.known = S.known || {}; return S.known[id] = S.known[id] || { int: [] }; }
+const traitsKnown = id => relOf(id) >= REL_LEVELS[2].min || !!knownOf(id).met;
+function socialToday(id) { if (!S.social || S.social.day !== today()) S.social = { day: today(), n: {} }; return S.social.n[id] = S.social.n[id] || {}; }
+function socialLocked(id, act) { return relOf(id) < SOCIALS[act].min; }
+// How likely it is to go down well (0.05–0.97).
+function socialChance(id, act, topic) {
+  const A = SOCIALS[act], T = traitsOf(id), done = socialToday(id)[act] || 0;
+  let p = A.base + SOCIAL.moodBy[moodOf(id)] + relOf(id) * SOCIAL.relBy;
+  T.forEach(k => { if (TRAITS[k].likes.includes(act)) p += SOCIAL.likeBy; if (TRAITS[k].dislikes.includes(act)) p += SOCIAL.dislikeBy; });
+  if (act === 'interest' && topic) p += interestsOf(id).includes(topic) ? SOCIAL.shareBy : -SOCIAL.noShare;
+  if (done >= SOCIAL.boring) p -= SOCIAL.boredBy * (done - SOCIAL.boring + 1);
+  return act === 'gift' ? 1 : clamp(p, 0.05, 0.97);
+}
+// Do something with someone. g: for a gift, the barn item key. Returns what happened.
+function doSocial(id, act, g) {
+  const A = SOCIALS[act];
+  if (!A) return { r: 'no' };
+  if (socialLocked(id, act)) return { r: 'locked' };
+  if (act === 'gift' && !(S.me.barn[g] >= 1)) return { r: 'nogift' };
+  const before = relOf(id), T = traitsOf(id), mine = myInterests();
+  const topic = act === 'interest' ? (INTERESTS[g] ? g : mine[Math.floor(Math.random() * mine.length)]) : null;   // the hobby you bring up
+  const p = socialChance(id, act, topic), ok = Math.random() < p, day = socialToday(id);
+  day[act] = (day[act] || 0) + 1;
+  const liked = T.some(k => TRAITS[k].likes.includes(act)), disliked = T.some(k => TRAITS[k].dislikes.includes(act));
+  let d = ok ? A.up + (liked ? SOCIAL.likedUp : 0) : A.down;
+  if (act === 'gift') {
+    S.me.barn[g]--; if (!S.me.barn[g]) delete S.me.barn[g];
+    const h = homeOf(id); if (h && h.barn) addBarn(h, g, 1);
+    if (T.includes('foodie')) d += SOCIAL.foodieUp;
+  }
+  const K = knownOf(id); K.met = true;
+  let tells = null;   // talking hobbies: you find out theirs (a shared one, or they tell you what they'd rather talk about)
+  if (topic) { const th = interestsOf(id); if (th.includes(topic)) { if (!K.int.includes(topic)) K.int.push(topic); } else { tells = th.find(k => !K.int.includes(k)) || th[0]; if (!K.int.includes(tells)) K.int.push(tells); } }
+  S.rel = S.rel || {}; S.rel[id] = clamp(before + d, REL_LEVELS[0].min, 100);
+  addNeed('social', ok ? A.social : 2);
+  if (ok && A.fun) addNeed('fun', A.fun);
+  if (ok && act === 'plans') meetInPark(id);
+  const wp = ok && S.job && String(id).startsWith('work_') && workPeople(S.job.place).find(x => x.id === id);
+  if (wp) S.job.rel = Math.min(JOB_REL.max, S.job.rel + SOCIAL.workRel[wp.boss ? 'boss' : 'mate']);
+  return { r: 'ok', ok, d, liked: ok && liked, disliked: !ok && disliked, topic, tells, shared: !!topic && interestsOf(id).includes(topic), bored: !ok && (day[act] > SOCIAL.boring), up: relLevel(S.rel[id]).min > relLevel(before).min ? relLevel(S.rel[id]) : null };
 }
 function visitSocial(id) { S.chatDay = S.chatDay || {}; const k = 'visit_' + id + '@' + today(); if (S.chatDay[k]) return; S.chatDay[k] = 1; addNeed('social', NEED_GAIN.visit); }
 // your boss and two coworkers (made up from where you work, the same people every day)
