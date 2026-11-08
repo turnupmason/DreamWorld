@@ -2037,8 +2037,215 @@ const Scene = (() => {
   const SHOP_W = { market: 13, nursery: 17, ranch: 15, petshop: 13, furniture: 17, realty: 13, dealer: 17, mall: 17 };
   const SHOP_FLOOR = { market: ['#efe9dc', '#e6dfcf'], nursery: ['#d9cdb3', '#cfc2a6'], ranch: ['#d8c39a', '#ccb68b'], petshop: ['#eef1f6', '#e3e7ee'], furniture: ['#e6d3b8', '#dcc7a8'],
     realty: ['#efeae2', '#e5ded3'], dealer: ['#e9edf1', '#dfe4ea'], mall: ['#f2ede6', '#e8e1d8'] };
+  // ---------- inside every building (v0.30) ----------
+  // The bakery, café, clinic, library, gym, post office, school, town hall, police station, fire station and petrol
+  // station are real rooms you walk into, built like the stores: walls with the sign, the door at the front, someone
+  // behind the counter (tap them for the place's panel) and things to tap that do something (`spot`s: walk over, then
+  // the sheet for it opens; some you then sit at, lie on or work out on for a while: `use`).
+  const VENUE_LOOK = {
+    bakery:  { wall: '#fbeedd', roof: '#c9893a', floor: ['#f3e7d3', '#eadcc4'], till: '🥐', clerk: { shirt: '#ffffff', hat: 'beanie', hatCol: '#ffffff', top: 'tshirt' } },
+    cafe:    { wall: '#efe2d2', roof: '#6b4428', floor: ['#c9a27a', '#bf9670'], till: '☕', clerk: { shirt: '#3b3125', top: 'polo' } },
+    clinic:  { wall: '#f2f7f8', roof: '#38a3e0', floor: ['#eef3f4', '#e4ebec'], till: '📋', clerk: { shirt: '#9fd6d2', top: 'polo' } },
+    library: { wall: '#efe6d6', roof: '#7a4a2a', floor: ['#cfa97c', '#c59f72'], till: '📚', clerk: { shirt: '#6b5bd0', top: 'sweater' } },
+    gym:     { wall: '#eceff3', roof: '#e5484d', floor: ['#5b6470', '#545c67'], till: '🧴', clerk: { shirt: '#e5484d', top: 'tshirt', bottom: 'shorts', pants: '#2d2d2d', shoes: 'hightops' } },
+    post:    { wall: '#eef3fa', roof: '#2f6fb2', floor: ['#e9e6df', '#dfdbd2'], till: '📮', clerk: { shirt: '#2f6fb2', top: 'polo', hat: 'cap', hatCol: '#2f6fb2' } },
+    school:  { floor: ['#d9c3a0', '#cfb893'], till: '🍎', clerk: { shirt: '#8a5a36', top: 'jacket', inner: '#f4f4f0', hair: 'bun' } },
+    plaza:   { wall: '#f4efe4', roof: '#8a6a3a', floor: ['#ece6da', '#e2dbcd'], till: '🖋️', clerk: { shirt: '#2d2d2d', top: 'jacket', inner: '#f4f4f0' } },
+    police:  { floor: ['#e6e9ee', '#dce0e6'], till: '🚓', clerk: { shirt: '#24324f', top: 'polo', hat: 'cap', hatCol: '#24324f' } },
+    firestation: { floor: ['#b9bcc0', '#b1b4b8'], till: '🧯', clerk: { shirt: '#c9433b', top: 'jacket', inner: '#f2c230' } },
+    gas:     { floor: ['#eef0f2', '#e4e7ea'], till: '🥤', clerk: { shirt: '#e5484d', top: 'polo', hat: 'cap', hatCol: '#e5484d' } },
+  };
+  const venueLook = k => VENUE_LOOK[k] && { ...(STORES[k] || {}), ...(PLACE_INFO[k] || {}), wall: VENUE_LOOK[k].wall || (STORES[k] || {}).wall || '#f1f0ea', roof: VENUE_LOOK[k].roof || (STORES[k] || {}).roof || '#c9893a' };
+  const FOLK = i => (i % 2 ? AUDIENCE_LOOKS : TABLE_LOOKS)[i % 6];
+  function venuePlan(k) {
+    if (SHOPS[k]) return SHOPS[k];
+    const wares = [], decor = [];
+    let n = 0;
+    const spot = (key, x, y, w, d, ex = {}) => wares.push({ id: 'spot:' + key + ':' + n++, kind: 'spot', k: key, x, y, w, d, price: 0, ...ex });
+    const dec = (kind, x, y, w, d, ex = {}) => decor.push({ kind, x, y, w, d, ...ex });
+    const furn = (fk, x, y, ex = {}) => dec('furn', x, y, FURN[fk].w, FURN[fk].d, { k: fk, ...ex });
+    const who = (x, y, ex) => dec('person', x, y, 0.5, 0.5, ex);
+    let P;
+    if (k === 'bakery') {
+      dec('breadshelf', 0.4, 0.2, 5.4, 0.6);
+      spot('oven', 8.0, 0.3, 2.8, 1.3, { draw: 'oven', stand: [9.4, 2.4] });
+      spot('case', 1.2, 3.4, 3.2, 1.0, { draw: 'case', items: ['🥐', '🥖', '🍩', '🧁', '🥨'] });
+      spot('table', 1.4, 6.6, 1.3, 1.3, { draw: 'table', i: 1, stand: [2.05, 8.4], use: { at: [1.3, 7.25], pose: 'sit', face: 1, seatH: 7, prop: '🥐' } });
+      dec('table', 4.4, 6.8, 1.3, 1.3, { i: 0 });
+      furn('monstera', 10.8, 8.4); furn('plant', 0.4, 8.5);
+      P = { RW: 12, RD: 10, door: [6.5, 9.3], counter: { x: 7.6, y: 4.8, w: 3.2, d: 0.9 } };
+    } else if (k === 'cafe') {
+      spot('menu', 8.6, 0.12, 3.0, 0.2, { draw: 'menuboard', stand: [10.2, 3.95] });
+      dec('table', 1.4, 1.8, 1.3, 1.3, { i: 0 }); dec('table', 4.4, 1.8, 1.3, 1.3, { i: 2 }); dec('table', 1.4, 5.0, 1.3, 1.3, { i: 3 });
+      spot('table', 4.4, 5.0, 1.3, 1.3, { draw: 'table', i: 1, stand: [5.05, 6.8], use: { at: [4.3, 5.65], pose: 'sit', face: 1, seatH: 7, prop: '☕', mate: true } });
+      dec('rug', 7.8, 6.0, 3.6, 3.0, { col: '#b5563c', flat: true });
+      spot('sofa', 8.2, 7.2, 2, 1, { furn: 'sofa', tint: '#7a4a2a', stand: [9.2, 8.8], use: { at: [9.2, 7.65], pose: 'sit', face: 1, view: 'front', seatH: 8.5, prop: '🎧' } });
+      furn('coffeetable', 8.4, 6.2); furn('shelf', 0.3, 9.0); furn('monstera', 12.0, 9.6); furn('arclamp', 11.2, 6.6);
+      P = { RW: 13, RD: 11, door: [3, 10.3], counter: { x: 8.6, y: 2.4, w: 3.2, d: 0.9 } };
+    } else if (k === 'clinic') {
+      dec('glass', 7.0, 0.1, 0.15, 5.0); dec('glass', 7.0, 5.0, 2.2, 0.15); dec('glass', 11.4, 5.0, 2.5, 0.15);
+      spot('bed', 9.4, 0.9, 2.8, 1.1, { draw: 'exambed', stand: [10.8, 2.7], use: { at: [10.8, 1.45], pose: 'lie', lift: 10, dir: -2.68 } });
+      who(8.4, 2.4, { look: { shirt: '#ffffff', top: 'jacket', inner: '#9fd6d2', hair: 'short', hairCol: '#5b5f66', skin: '#f3c59f' }, face: 1, view: 'front', turn: [0.6, -0.4], prop: '🩺' });
+      dec('chairs', 1.0, 7.4, 3.8, 0.8, { n: 4, sat: [0, 2] });
+      spot('scale', 7.4, 7.2, 1.0, 1.0, { draw: 'healthpod', stand: [7.9, 8.8] });
+      spot('pharmacy', 10.4, 6.6, 3.0, 0.7, { draw: 'medshelf', stand: [11.9, 8.0] });
+      furn('plant', 0.4, 9.6); furn('monstera', 5.6, 0.4); dec('watercooler', 5.8, 7.6, 0.6, 0.6);
+      P = { RW: 14, RD: 11, door: [3, 10.3], counter: { x: 1.4, y: 3.2, w: 3.2, d: 0.9 } };
+    } else if (k === 'library') {
+      dec('bookwall', 0.4, 0.2, 13.2, 0.7);
+      dec('bookwall', 8.4, 3.0, 4.8, 0.8, { low: true }); dec('bookwall', 8.4, 5.6, 4.8, 0.8, { low: true });
+      spot('featured', 5.0, 2.4, 1.2, 0.9, { draw: 'bookstand', stand: [5.6, 4.0] });
+      dec('longtable', 1.0, 3.4, 2.4, 1.2, { readers: [0, 1] });
+      spot('table', 1.0, 6.6, 2.4, 1.2, { draw: 'longtable', readers: [], stand: [0.6, 8.4], use: { at: [0.55, 7.2], pose: 'sit', face: 1, seatH: 8, prop: '📖' } });
+      furn('armchair', 5.4, 9.6); furn('arclamp', 6.6, 9.4); furn('roundrug', 4.6, 8.6, { flat: true }); furn('plant', 0.4, 10.6);
+      P = { RW: 14, RD: 12, door: [3, 11.3], counter: { x: 9.6, y: 9.0, w: 3.2, d: 0.9 } };
+    } else if (k === 'gym') {
+      dec('mirrorwall', 0.3, 0.05, 14.4, 0.12);
+      const work = (fk, x, y, at, pose, ex = {}) => spot(fk, x, y, FURN[fk].w, FURN[fk].d, { furn: fk, tint: '#38a3e0', stand: ex.stand || [x + FURN[fk].w / 2, y + FURN[fk].d + 0.6], use: { at, pose, ...ex.use } });
+      work('treadmill', 1.0, 1.0, [1.5, 2.0], 'run', { use: { lift: 4, face: 1, moving: true } });
+      furn('treadmill', 2.6, 1.0); who(3.1, 2.0, { pose: 'run', lift: 4, face: 1, moving: true, look: 3 });
+      work('spinbike', 4.8, 1.3, [5.3, 1.8], 'bike', { use: { face: 1, moving: true } });
+      furn('spinbike', 6.2, 1.3); who(6.7, 1.8, { pose: 'bike', face: 1, moving: true, look: 4 });
+      work('dumbbells', 8.2, 1.0, [8.7, 2.4], 'lift', { stand: [8.7, 2.6], use: { face: 1 } });
+      work('boxing', 12.4, 1.4, [12.2, 2.5], 'box', { stand: [12.0, 2.9], use: { face: 1 } });
+      work('yogamat', 9.4, 5.0, [9.9, 6.0], 'yoga', { stand: [9.9, 7.4], use: { face: 1 } });
+      furn('yogamat', 11.0, 5.0, { tint: '#ec6aa8' }); who(11.5, 6.0, { pose: 'yoga', face: -1, look: 5 });
+      dec('lockers', 14.0, 6.0, 0.7, 3.4); dec('watercooler', 6.4, 9.6, 0.6, 0.6); furn('plant', 0.4, 6.0);
+      P = { RW: 15, RD: 12, door: [3, 11.3], counter: { x: 1.0, y: 8.6, w: 3.2, d: 0.9 } };
+    } else if (k === 'post') {
+      spot('boxes', 0.5, 0.15, 5.0, 0.5, { draw: 'poboxes', stand: [3.0, 1.6] });
+      dec('parcels', 6.4, 0.3, 5.0, 0.8);
+      spot('cards', 1.0, 5.2, 1.0, 1.0, { draw: 'cardrack', stand: [1.5, 6.8] });
+      dec('redbox', 10.6, 7.4, 0.8, 0.8); furn('plant', 0.4, 8.6); dec('scaletable', 4.0, 5.4, 1.4, 0.8);
+      P = { RW: 12, RD: 10, door: [3, 9.3], counter: { x: 6.6, y: 3.8, w: 3.6, d: 0.9 } };
+    } else if (k === 'school') {
+      dec('blackboard', 3.0, 0.1, 7.0, 0.15);
+      [[2.0, 4.4, 0], [5.0, 4.4, 1], [8.0, 4.4, 2], [11.0, 4.4, -1], [2.0, 6.8, 3], [5.0, 6.8, -1], [11.0, 6.8, 4]].forEach(([x, y, kid]) => dec('schooldesk', x, y, 1.2, 0.8, { kid }));
+      spot('desk', 8.0, 6.8, 1.2, 0.8, { draw: 'schooldesk', kid: -1, stand: [8.6, 8.5], use: { at: [8.6, 7.75], pose: 'sit', face: 1, seatH: 7, prop: '✏️' } });
+      furn('shelf', 0.3, 9.6); dec('globe', 12.6, 1.0, 0.8, 0.8); furn('plant', 12.8, 9.6);
+      P = { RW: 14, RD: 11, door: [3, 10.3], counter: { x: 5.2, y: 1.8, w: 3.2, d: 0.9 } };
+    } else if (k === 'plaza') {
+      spot('board', 4.5, 0.12, 5.0, 0.2, { draw: 'townboard', stand: [7.0, 1.6] });
+      dec('flag', 1.0, 0.6, 0.6, 0.6, { col: '#e5484d' }); dec('flag', 12.4, 0.6, 0.6, 0.6, { col: '#2f6fb2' });
+      dec('model', 4.6, 4.0, 3.0, 2.0);
+      dec('bench', 1.0, 6.4, 2.4, 0.6); dec('bench', 1.0, 8.4, 2.4, 0.6);
+      furn('monstera', 0.4, 0.4); furn('monstera', 13.0, 9.6); furn('bigrug', 5.6, 7.4, { flat: true });
+      P = { RW: 14, RD: 11, door: [7, 10.3], counter: { x: 9.6, y: 5.0, w: 3.2, d: 0.9 } };
+    } else if (k === 'police') {
+      dec('cell', 8.6, 0.3, 4.0, 3.4);
+      spot('board', 2.6, 0.12, 3.2, 0.2, { draw: 'noticeboard', stand: [4.2, 1.6] });
+      dec('officedesk', 6.0, 5.6, 2.0, 1.0); dec('officedesk', 9.6, 5.6, 2.0, 1.0);
+      who(7.0, 7.0, { pose: 'sit', seatH: 8, face: 1, view: 'back', look: { shirt: '#24324f', top: 'polo', hair: 'short', hairCol: '#1d1a17', skin: '#d39a6c' } });
+      furn('plant', 0.4, 8.6); dec('watercooler', 12.2, 8.6, 0.6, 0.6);
+      P = { RW: 13, RD: 10, door: [3, 9.3], counter: { x: 1.4, y: 4.2, w: 3.2, d: 0.9 } };
+    } else if (k === 'firestation') {
+      spot('truck', 1.2, 0.9, 2.2, 5.6, { draw: 'firetruck', stand: [4.2, 4.0] });
+      dec('lockers', 9.4, 0.3, 4.6, 0.7, { along: true, helmets: true }); dec('pole', 7.4, 2.4, 0.6, 0.6); dec('hosereel', 5.4, 0.4, 1.2, 0.6);
+      who(12.0, 2.6, { face: -1, view: 'front', turn: [-0.4, 1], look: { shirt: '#c9433b', top: 'jacket', inner: '#f2c230', hair: 'curly', hairCol: '#1d1a17', skin: '#9a6440', hat: 'cap', hatCol: '#f2c230' } });
+      dec('stripes', 0.8, 7.4, 3.0, 0.5, { flat: true });
+      P = { RW: 15, RD: 11, door: [6, 10.3], counter: { x: 9.8, y: 6.2, w: 3.2, d: 0.9 } };
+    } else {   // gas
+      spot('fridge', 0.4, 0.2, 3.6, 0.7, { draw: 'drinkfridge', stand: [2.2, 1.6] });
+      spot('shelf', 1.2, 3.2, 3.4, 0.8, { draw: 'snackshelf', stand: [2.9, 4.7] });
+      dec('coffeebar', 9.6, 0.3, 1.8, 0.7); furn('plant', 11.0, 7.6);
+      P = { RW: 12, RD: 9, door: [3, 8.3], counter: { x: 7.0, y: 4.4, w: 3.2, d: 0.9 } };
+    }
+    const solids = [...wares.map(w => [w.x, w.y, w.w, w.d]), ...decor.filter(d => !d.flat && d.kind !== 'person').map(d => [d.x, d.y, d.w, d.d])];
+    solids.push([P.counter.x, P.counter.y - 1.1, P.counter.w, P.counter.d + 1.1]);
+    P = { k, n: wares.length, wares, decor, venue: true, ...P };
+    P.clerk = [P.counter.x + 1.6, P.counter.y - 0.6]; P.till = [P.counter.x + 1.6, P.counter.y + 1.55];
+    P.nav = navFor(P.RW, P.RD, solids);
+    SHOPS[k] = P;
+    return P;
+  }
+  // A person placed in a room (not you): standing, sitting, working out.
+  function roomPerson(d, ts, i) {
+    const z = cam.z, p = iso(d.x, d.y), L = typeof d.look === 'object' ? { skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', ...d.look } : FOLK(d.look || i);
+    drawPerson(p.x, p.y - (d.lift || 0) * z, z, { look: L, face: d.face || 1, view: d.view || null, turn: d.turn, energy: 'good', ts, seed: i + 11, pose: d.pose || 'stand', moving: !!d.moving, phase: ts / (d.pose === 'bike' ? 120 : 80) + i, noBike: true, seatH: d.seatH, matCol: '#ec6aa8' });
+    if (d.prop && z > 0.35) emoji(d.prop, p.x + 10 * z, p.y - 22 * z, 9 * z);
+  }
+  function drawVenueDecor(d, ts, i = 0) {
+    const z = cam.z, { x, y } = d, c = iso(x + d.w / 2, y + d.d / 2);
+    const tops = (b, items, h) => items.forEach((e, k) => { const q = up(iso(x + (k + 0.5) * d.w / items.length, y + d.d / 2), (h + 6) * z); emoji(e, q.x, q.y, 10 * z); });
+    switch (d.draw || d.kind) {
+      case 'furn': { drawFurn({ k: d.furn || d.k, rot: 0, tint: d.tint || (FURN[d.furn || d.k].tint ? TINTS[4] : null) }, x, y, ts); break; }
+      case 'person': roomPerson(d, ts, i); break;
+      case 'rug': flatRect(x, y, d.w, d.d, d.col || '#b5563c'); flatRect(x + 0.2, y + 0.2, d.w - 0.4, d.d - 0.4, null, 'rgba(255,255,255,.5)'); break;
+      case 'stripes': for (let k = 0; k < 6; k++) flatRect(x + k * d.w / 6, y, d.w / 12, d.d, k % 2 ? '#2d2d2d' : '#f2c230'); break;
+      case 'breadshelf': { const b = box(x, y, d.w, d.d, 46, '#b07a4a', 0, { top: '#c99a6b' }); [14, 28, 42].forEach(h => { wallRect(b.left, 0, 0.02, 0.98, h - 1, h, '#8a5a36'); ['🍞', '🥖', '🥐', '🍞', '🥯', '🥖'].forEach((e, k) => { const q = wallPt(b.left, 0, (k + 0.5) / 6, h + 1); emoji(e, q.x, q.y, 9 * z); }); }); break; }
+      case 'oven': { const b = box(x, y, d.w, d.d, 40, '#b5563c', 0, { top: '#9a4a34' }); wallRect(b.left, 0, 0.25, 0.75, 6, 26, '#2a1d18'); const fl = 0.6 + 0.4 * Math.sin(ts / 180); wallRect(b.left, 0, 0.3, 0.7, 7, 16, `rgba(255,${Math.round(120 + 60 * fl)},40,.9)`); const q = wallPt(b.left, 0, 0.5, 20); emoji('🍞', q.x, q.y, 9 * z); for (let k = 0; k < 2; k++) { const u = (ts / 1600 + k / 2) % 1, s0 = up(iso(x + d.w * 0.7, y + 0.3), (40 + u * 26) * z); circle(s0.x, s0.y, (3 + u * 5) * z, `rgba(240,240,240,${0.5 * (1 - u)})`); } break; }
+      case 'case': { const b = box(x, y, d.w, d.d, 18, '#e6dfd1', 0, { top: '#f6f1e8' }); tops(b, d.items || ['🥐'], 18); const g0 = up(iso(x, y + d.d), 18 * z), g1 = up(iso(x + d.w, y + d.d), 18 * z); poly([g0, g1, up(g1, 16 * z), up(g0, 16 * z)], 'rgba(200,230,250,.22)', 'rgba(255,255,255,.7)', 1); break; }
+      case 'table': drawDecor({ kind: 'table', x, y, w: d.w, d: d.d, i: d.i || 0 }, ts); break;
+      case 'menuboard': { const b = box(x, y, d.w, d.d, 30, '#2d2d2d', 40, { shadow: false }); wallRect(b.left, 40, 0.06, 0.94, 3, 27, '#3b3f46'); ['☕ 15', '🍵 15', '🥤 15'].forEach((s, k) => { const q = wallPt(b.left, 40, 0.5, 22 - k * 7); ctx.font = `700 ${Math.max(6, 7 * z)}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f4f1ea'; ctx.fillText(s, q.x, q.y); }); break; }
+      case 'glass': drawDecor(d, ts); break;
+      case 'bench': drawDecor(d, ts); break;
+      case 'chairs': { const n = d.n || 4, sw = d.w / n; for (let k = 0; k < n; k++) { box(x + k * sw + 0.05, y + 0.1, sw - 0.1, d.d - 0.2, 7, '#5aa2e0', 0, { top: '#7cb8ea' }); box(x + k * sw + 0.05, y, sw - 0.1, 0.15, 16, '#4a8fd0', 0, { shadow: false }); if ((d.sat || []).includes(k)) { const q = iso(x + k * sw + sw / 2, y + 0.45); drawPerson(q.x, q.y, z, { look: FOLK(k + 2), face: 1, view: 'front', turn: [0.2, 1], energy: k ? 'tired' : 'good', ts, seed: k, pose: 'stand' }); } } break; }
+      case 'exambed': { box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 8, '#c9cfd6', 0); box(x, y, d.w, d.d, 3, '#e8f4f6', 8, { top: '#f6fbfc' }); box(x + d.w - 0.6, y + 0.15, 0.45, d.d - 0.3, 2, '#ffffff', 11, { shadow: false }); box(x + 0.2, y - 0.1, d.w - 0.4, 0.1, 40, 'rgba(159,214,210,.5)', 0, { shadow: false, edge: null }); break; }
+      case 'healthpod': { const b = box(x + 0.15, y + 0.15, d.w - 0.3, d.d - 0.3, 4, '#d6dce2', 0, { top: '#eef2f5' }); box(x + 0.2, y + 0.1, 0.2, 0.2, 40, '#9aa3ad', 0, { shadow: false }); const q = up(iso(x + 0.3, y + 0.2), 44 * z); rrect(q.x - 9 * z, q.y - 7 * z, 18 * z, 12 * z, 2 * z, '#1b2a3a', '#9aa3ad', 0.8 * z); emoji('❤️', q.x, q.y + 3 * z, 7 * z); break; }
+      case 'medshelf': { const b = box(x, y, d.w, d.d, 44, '#ffffff', 0, { top: '#f4f4f0' }); [12, 26, 40].forEach(h => ['💊', '🧴', '🩹', '💊'].forEach((e, k) => { const q = wallPt(b.left, 0, (k + 0.5) / 4, h - 8); emoji(e, q.x, q.y, 8 * z); })); wallRect(b.left, 0, 0.35, 0.65, 34, 42, '#e5484d'); const q = wallPt(b.left, 0, 0.5, 38); emoji('➕', q.x, q.y + 3 * z, 7 * z); break; }
+      case 'watercooler': { box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 20, '#e6e9ee', 0); const q = up(iso(x + d.w / 2, y + d.d / 2), 20 * z); ellipse(q.x, q.y - 7 * z, 6 * z, 9 * z, 'rgba(120,190,230,.75)'); break; }
+      case 'bookwall': { const H = d.low ? 30 : 56, b = box(x, y, d.w, d.d, H, '#8a5a36', 0, { top: '#a46e40' }), cols = ['#e5484d', '#38a3e0', '#f2c230', '#34b27b', '#a46ef0', '#f59e0b', '#2f6fb2'], face = d.w > d.d ? b.left : b.right, len = Math.max(d.w, d.d);
+        for (let s = 0; s < (d.low ? 2 : 4); s++) { const h0 = 3 + s * 13; wallRect(face, 0, 0.01, 0.99, h0 + 11, h0 + 12.4, '#6b4428'); for (let k = 0; k < len * 6; k++) { const u0 = k / (len * 6), u1 = (k + 0.8) / (len * 6); wallRect(face, 0, u0, u1, h0, h0 + 8 + hash(k, s) * 3, cols[(k * 3 + s) % cols.length]); } } break; }
+      case 'bookstand': { box(x + 0.2, y + 0.2, d.w - 0.4, d.d - 0.4, 22, '#8a5a36', 0, { top: '#a46e40' }); const q = up(c, 30 * z); rrect(q.x - 12 * z, q.y - 9 * z, 24 * z, 16 * z, 2 * z, '#fffaf0', '#c9b98f', 1); line(q.x, q.y - 9 * z, q.x, q.y + 7 * z, '#c9b98f', 0.8 * z); emoji('⭐', q.x + 10 * z, q.y - 10 * z, 9 * z); break; }
+      case 'longtable': { const R = d.readers || []; R.forEach(r => { const q = iso(r ? x + d.w + 0.45 : x - 0.45, y + d.d / 2); drawPerson(q.x, q.y, z, { look: FOLK(r + 3), face: r ? -1 : 1, energy: 'good', ts, seed: r + 4, pose: 'sit', seatH: 8 }); });
+        [x - 0.75, x + d.w + 0.15].forEach(cx2 => box(cx2, y + d.d / 2 - 0.3, 0.6, 0.6, 8, '#a46e40', 0, { top: '#c99a6b' }));
+        box(x, y, d.w, d.d, 14, '#b07a4a', 0, { top: '#c99a6b' }); const q = up(iso(x + d.w / 2, y + d.d / 2), 14 * z); emoji('📚', q.x - 8 * z, q.y, 9 * z); const lp = up(iso(x + d.w - 0.3, y + 0.3), 14 * z); line(lp.x, lp.y, lp.x, lp.y - 12 * z, '#3b6b4a', 1.2 * z); ellipse(lp.x, lp.y - 13 * z, 5 * z, 2.5 * z, '#34b27b'); if (NIGHT > 0.2) glow(lp.x, lp.y - 12 * z, 30 * z, 0.6); break; }
+      case 'mirrorwall': { const b = box(x, y, d.w, d.d, 52, '#cfe6f2', 6, { top: '#e8f4fa', shadow: false }); for (let k = 0; k < 5; k++) wallRect(b.left, 6, k / 5 + 0.02, k / 5 + 0.06, 4, 48, 'rgba(255,255,255,.55)'); break; }
+      case 'lockers': { const along = d.along || d.w > d.d, b = box(x, y, d.w, d.d, 50, '#5a7a9a', 0, { top: '#6b8cab' }), face = along ? b.left : b.right, n = Math.round(Math.max(d.w, d.d) / 0.6);
+        for (let k = 0; k < n; k++) { wallRect(face, 0, k / n + 0.01, (k + 1) / n - 0.01, 2, 48, null, 'rgba(0,0,0,.25)', 0.8); const q = wallPt(face, 0, (k + 0.75) / n, 26); circle(q.x, q.y, 0.9 * z, '#d9dee4'); if (d.helmets && k % 2 === 0) { const hq = up(iso(along ? x + (k + 0.5) * 0.6 : x + d.w / 2, along ? y + d.d / 2 : y + (k + 0.5) * 0.6), 56 * z); ellipse(hq.x, hq.y, 5 * z, 3.5 * z, '#f2c230', '#b88a12', 0.6 * z); } } break; }
+      case 'poboxes': { const b = box(x, y, d.w, d.d, 48, '#c9a36a', 0, { top: '#d8b57e' }); for (let r = 0; r < 4; r++) for (let k = 0; k < 9; k++) { wallRect(b.left, 0, (k + 0.1) / 9, (k + 0.9) / 9, 6 + r * 10.5, 14.5 + r * 10.5, '#e8d3a8', '#a07a50', 0.6); const q = wallPt(b.left, 0, (k + 0.5) / 9, 10 + r * 10.5); circle(q.x, q.y, 0.7 * z, '#8a6a4a'); } const q = wallPt(b.left, 0, 0.5, 52); emoji('📬', q.x, q.y + 6 * z, 10 * z); break; }
+      case 'parcels': { const b = box(x, y, d.w, d.d, 46, '#9aa3ad', 0, { top: '#b9c1ca' }); [8, 22, 36].forEach((h, s) => { wallRect(b.left, 0, 0.01, 0.99, h - 1.5, h, '#6b737d'); for (let k = 0; k < 5; k++) if ((k + s) % 3) { wallRect(b.left, 0, k / 5 + 0.03, k / 5 + 0.17, h, h + 8 + (k % 2) * 3, '#c99a6b', '#a07a50', 0.6); } }); break; }
+      case 'cardrack': { box(x + 0.35, y + 0.35, 0.3, 0.3, 30, '#6b737d', 0); for (let k = 0; k < 3; k++) { const q = up(c, (14 + k * 8) * z); ['🌅', '🏖️', '🌸'].forEach((e, j) => emoji(e, q.x + (j - 1) * 8 * z, q.y + 4 * z, 8 * z)); } break; }
+      case 'redbox': { box(x + 0.15, y + 0.15, d.w - 0.3, d.d - 0.3, 26, '#e5484d', 0, { top: '#c9373c' }); const q = up(c, 30 * z); ellipse(q.x, q.y, 8 * z, 4 * z, '#c9373c'); break; }
+      case 'scaletable': { box(x, y, d.w, d.d, 14, '#b9c1ca', 0, { top: '#d6dce2' }); const q = up(c, 14 * z); emoji('📦', q.x, q.y, 10 * z); break; }
+      case 'blackboard': { const b = box(x, y, d.w, d.d, 34, '#8a5a36', 22, { shadow: false }); wallRect(b.left, 22, 0.02, 0.98, 2, 32, '#2f4a3a'); ['ABC', '1+1=2', '🌍'].forEach((s, k) => { const q = wallPt(b.left, 22, 0.2 + k * 0.3, 18); ctx.font = `700 ${Math.max(6, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f4f1ea'; ctx.fillText(s, q.x, q.y); }); break; }
+      case 'schooldesk': { box(x, y, d.w, d.d, 14, '#c99a6b', 0, { top: '#e6c79a' }); box(x + d.w / 2 - 0.3, y + d.d + 0.05, 0.6, 0.5, 8, '#5aa2e0', 0, { top: '#7cb8ea' }); if (d.kid >= 0) { const q = iso(x + d.w / 2, y + d.d + 0.15); drawPerson(q.x, q.y, z, { look: FOLK(d.kid + 1), face: 1, energy: 'good', ts, seed: d.kid, pose: 'sit', seatH: 7 }); } const q = up(iso(x + 0.4, y + 0.4), 14 * z); emoji('📓', q.x, q.y, 8 * z); break; }
+      case 'globe': { box(x + 0.25, y + 0.25, 0.3, 0.3, 14, '#8a5a36', 0); const q = up(c, 22 * z); circle(q.x, q.y, 8 * z, '#5aa2e0'); emoji('🌍', q.x, q.y + 6 * z, 14 * z); break; }
+      case 'townboard': { const b = box(x, y, d.w, d.d, 34, '#6b4428', 26, { shadow: false }); wallRect(b.left, 26, 0.03, 0.97, 2, 32, '#fffaf0'); const q = wallPt(b.left, 26, 0.5, 24); ctx.font = `800 ${Math.max(7, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#6b4428'; ctx.fillText(`🏆 ${t('fab_rank')}`, q.x, q.y); [0.25, 0.5, 0.75].forEach((u, k) => { const r = wallPt(b.left, 26, u, 12); rrect(r.x - 9 * z, r.y - 4 * z, 18 * z, 7 * z, 1.5 * z, ['#f2c230', '#c9cfd6', '#d9915a'][k]); }); break; }
+      case 'flag': { box(x + 0.25, y + 0.25, 0.1, 0.1, 64, '#9aa3ad', 0, { shadow: false }); const q = up(iso(x + 0.3, y + 0.3), 62 * z), wv = Math.sin(ts / 400 + x) * 2 * z; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.quadraticCurveTo(q.x + 10 * z, q.y - 3 * z + wv, q.x + 20 * z, q.y + wv); ctx.lineTo(q.x + 20 * z, q.y + 12 * z + wv); ctx.quadraticCurveTo(q.x + 10 * z, q.y + 9 * z + wv, q.x, q.y + 12 * z); ctx.closePath(); ctx.fillStyle = d.col; ctx.fill(); break; }
+      case 'model': { box(x, y, d.w, d.d, 14, '#b07a4a', 0, { top: '#9fd07a' }); [[0.3, 0.3, '#e5484d'], [1.2, 0.4, '#38a3e0'], [2.1, 0.3, '#f2c230'], [0.5, 1.2, '#34b27b'], [1.8, 1.2, '#a46ef0']].forEach(([dx, dy, col]) => { box(x + dx, y + dy, 0.5, 0.45, 7, '#f4efe4', 14, { top: col, shadow: false }); }); const g0 = up(iso(x, y + d.d), 14 * z), g1 = up(iso(x + d.w, y + d.d), 14 * z); poly([g0, g1, up(g1, 14 * z), up(g0, 14 * z)], 'rgba(200,230,250,.18)', 'rgba(255,255,255,.6)', 1); break; }
+      case 'cell': { flatRect(x, y, d.w, d.d, '#cfd5dc'); box(x + 0.3, y + 0.3, 1.8, 0.7, 8, '#8a919c', 0, { top: '#a8aeb6' }); for (let k = 0; k <= 16; k++) { const a = iso(x + k * d.w / 16, y + d.d), b2 = up(a, 46 * z); line(a.x, a.y, b2.x, b2.y, '#5b6470', 1.3 * z); } for (let k = 0; k <= 12; k++) { const a = iso(x, y + k * d.d / 12), b2 = up(a, 46 * z); line(a.x, a.y, b2.x, b2.y, '#5b6470', 1.3 * z); } const t0 = up(iso(x, y + d.d), 46 * z), t1 = up(iso(x + d.w, y + d.d), 46 * z), t2 = up(iso(x, y), 46 * z); line(t0.x, t0.y, t1.x, t1.y, '#5b6470', 2 * z); line(t0.x, t0.y, t2.x, t2.y, '#5b6470', 2 * z); break; }
+      case 'noticeboard': { const b = box(x, y, d.w, d.d, 28, '#8a5a36', 26, { shadow: false }); wallRect(b.left, 26, 0.03, 0.97, 2, 26, '#c99a6b'); [['📄', 0.2], ['🚲', 0.45], ['🐕', 0.7], ['📄', 0.88]].forEach(([e, u], k) => { const q = wallPt(b.left, 26, u, 14 + (k % 2) * 5); emoji(e, q.x, q.y + 5 * z, 9 * z); }); break; }
+      case 'officedesk': { box(x, y, d.w, d.d, 14, '#9aa3ad', 0, { top: '#d6dce2' }); const q = up(iso(x + d.w / 2, y + 0.3), 14 * z); rrect(q.x - 8 * z, q.y - 14 * z, 16 * z, 11 * z, 1.5 * z, '#2d2d2d'); rrect(q.x - 7 * z, q.y - 13 * z, 14 * z, 8 * z, 1 * z, '#5aa2e0'); break; }
+      case 'firetruck': { const L = d.d, b = box(x + 0.1, y, d.w - 0.2, L, 26, '#d63a3a', 4, { top: '#e5484d' }); box(x + 0.15, y + L - 1.6, d.w - 0.3, 1.5, 14, '#c9373c', 30, { top: '#e5484d' }); wallRect(b.right, 4, 0.02, 0.98, 12, 15, '#f4f1ea'); wallRect(b.left, 4, 0.1, 0.9, 14, 24, 'rgba(190,225,245,.8)');
+        [0.18, 0.78].forEach(u => { const q = wallPt(b.right, 0, u, 4); ellipse(q.x, q.y, 6 * z, 7 * z, '#2b2b2e'); ellipse(q.x, q.y, 2.5 * z, 3 * z, '#9aa3ad'); });
+        for (let k = 0; k < 6; k++) { const a = up(iso(x + d.w / 2, y + 0.4 + k * 0.6), 30 * z); line(a.x - 8 * z, a.y, a.x + 8 * z, a.y, '#c9cfd6', 1.4 * z); } { const a = up(iso(x + d.w / 2, y + 0.4), 30 * z), b2 = up(iso(x + d.w / 2, y + 3.4), 30 * z); line(a.x - 8 * z, a.y, b2.x - 8 * z, b2.y, '#c9cfd6', 1.4 * z); line(a.x + 8 * z, a.y, b2.x + 8 * z, b2.y, '#c9cfd6', 1.4 * z); }
+        const lb = up(iso(x + d.w / 2, y + L - 0.8), 46 * z), on = Math.floor(ts / 400) % 2; rrect(lb.x - 9 * z, lb.y - 2 * z, 18 * z, 4 * z, 1.5 * z, on ? '#ff4d4d' : '#8a2020'); break; }
+      case 'pole': { flatRect(x, y, d.w, d.d, '#2d2d2d'); const a = iso(x + d.w / 2, y + d.d / 2), b2 = up(a, 80 * z); line(a.x, a.y, b2.x, b2.y, '#d9dee4', 3 * z); line(a.x + 1 * z, a.y, b2.x + 1 * z, b2.y, 'rgba(255,255,255,.7)', 0.8 * z); break; }
+      case 'hosereel': { box(x, y, d.w, d.d, 22, '#8a919c', 0); const q = wallPt([iso(x, y + d.d), iso(x + d.w, y + d.d)], 0, 0.5, 12); ellipse(q.x, q.y, 9 * z, 9 * z, '#c9433b', '#8a2a24', 1.2 * z); ellipse(q.x, q.y, 3 * z, 3 * z, '#5b6470'); break; }
+      case 'drinkfridge': { const b = box(x, y, d.w, d.d, 50, '#d9dee4', 0, { top: '#eef2f5' }); wallRect(b.left, 0, 0.02, 0.98, 4, 46, 'rgba(160,210,240,.45)', '#ffffff', 1); [10, 22, 34].forEach(h => ['🥤', '🧃', '🧋', '🥛', '🥤', '🧃'].forEach((e, k) => { const q = wallPt(b.left, 0, (k + 0.5) / 6, h - 6); emoji(e, q.x, q.y, 8 * z); })); if (NIGHT > 0.2) glow(c.x, c.y - 26 * z, 40 * z, 0.4); break; }
+      case 'snackshelf': { const b = box(x, y, d.w, d.d, 34, '#f4f4f0', 0, { top: '#e6e9ee' }); [8, 20, 32].forEach(h => ['🍫', '🥨', '🍪', '🍬', '🥜'].forEach((e, k) => { const q = wallPt(b.left, 0, (k + 0.5) / 5, h - 6); emoji(e, q.x, q.y, 8 * z); })); break; }
+      case 'coffeebar': { box(x, y, d.w, d.d, 16, '#5b6470', 0, { top: '#9aa3ad' }); const q = up(c, 16 * z); emoji('☕', q.x - 6 * z, q.y, 10 * z); emoji('🍩', q.x + 8 * z, q.y + 2 * z, 9 * z); break; }
+      default: drawDecor(d, ts);
+    }
+  }
+  // You inside: walking, or sitting / lying / working out at something (meS.use).
+  function drawMeShop(z, ts) {
+    const U = meS.use;
+    if (U && !meS.moving) {
+      const p = iso(U.at[0], U.at[1]);
+      drawPerson(p.x, p.y - (U.lift || 0) * z, z, { look: S.me.look, face: U.face || 1, view: U.view || null, turn: U.turn || [0, -1], energy: energyLevel(), ts, seed: 3, pose: U.pose, moving: !!U.moving, phase: ts / (U.pose === 'bike' ? 120 : 80), noBike: true, seatH: U.seatH, dir: U.dir, matCol: '#38a3e0' });
+      if (U.mate) { const q = iso(U.at[0] + 1.5, U.at[1]); drawPerson(q.x, q.y, z, { look: U.mate, face: -1, energy: 'great', ts, seed: 9, pose: 'sit', seatH: 7 }); if (Math.floor(ts / 900) % 2) emoji('💬', q.x - 8 * z, q.y - 44 * z, 12 * z); else emoji('😄', p.x + 8 * z, p.y - 44 * z, 12 * z); }
+      if (U.prop) emoji(U.prop, p.x + 10 * z, p.y - (U.pose === 'lie' ? 14 : 20) * z - (U.lift || 0) * z, 10 * z);
+      const left = Math.max(0, (U.until - performance.now()) / 1000), tot = U.secs || 1;
+      if (U.until && z > 0.35) { const w = 34 * z, by = p.y - (54 + (U.lift || 0)) * z; rrect(p.x - w / 2, by, w, 5 * z, 2.5 * z, 'rgba(0,0,0,.25)'); rrect(p.x - w / 2, by, w * (1 - left / tot), 5 * z, 2.5 * z, '#6cbf73'); }
+      return;
+    }
+    const p2 = iso(meS.x, meS.y);
+    drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand' });
+    carryBox(p2, z);
+  }
+  // Sit at / work out on / lie on a thing for `secs` seconds (walking there first), then `done`.
+  function venueUseNow(id, secs, done, mate) {
+    const P = shopPlan(owner), w = P.wares.find(x => x.id === id || x.k === id);
+    if (!w || !w.use) { if (done) done(); return; }
+    shopWalk(w.stand || [w.x + w.w / 2, w.y + w.d + 0.55], () => {
+      meS.use = { ...w.use, secs, until: performance.now() + secs * 1000, done, mate: w.use.mate ? mate || FOLK(3) : null };
+    });
+  }
   function shopPlan(k) {
     if (MALL_FLOORS.includes(k)) return mallPlan(k);
+    if (VENUE_LOOK[k]) return venuePlan(k);
     const wares = storeWares(k);
     if (SHOPS[k] && SHOPS[k].n === wares.length) return SHOPS[k];
     const area = wares.reduce((t, w) => t + (w.w + 0.8) * (w.d + 1.5), 0), RW = clamp(Math.round(Math.sqrt(area) * 1.1) + 2, SHOP_W[k] || 13, 26), placed = [];   // v0.22: about square
@@ -2210,6 +2417,7 @@ const Scene = (() => {
   }
   // Walk to a point in the store (along the aisles), then do `then`.
   function shopWalk(to, then) {
+    meS.use = null;
     const P = shopPlan(owner), { g, gw, gd, GS } = P.nav, cell = (x, y) => [clamp(Math.floor(x / GS), 0, gw - 1), clamp(Math.floor(y / GS), 0, gd - 1)];
     const free = (i, j) => i >= 0 && j >= 0 && i < gw && j < gd && g[j * gw + i];
     let [ti, tj] = cell(to[0], to[1]);
@@ -2234,6 +2442,7 @@ const Scene = (() => {
     meS.path = out; meS.then = then || null; meS.moving = true;
   }
   function stepShop(dt) {
+    if (meS.use && meS.use.until && performance.now() > meS.use.until) { const f = meS.use.done; meS.use = null; if (f) setTimeout(f, 60); }   // v0.30
     if (!meS.path.length) { if (meS.moving) { meS.moving = false; const f = meS.then; meS.then = null; if (f) setTimeout(f, 120); } return; }
     let go = 3.4 * dt;
     while (go > 0 && meS.path.length) {
@@ -2261,7 +2470,13 @@ const Scene = (() => {
       P.npcs = [0, 1, 2].map(i => { const id = ids[(i * 5 + P.n) % Math.max(1, ids.length)], h = id && homeOf(id); return { look: h ? h.look : dressUp({ shirt: COLORS[i], skin: SKINS[i % SKINS.length], hair: HAIRS[i % HAIRS.length], hairCol: HAIR_COLORS[i], mob: 'walk' }, 'shop' + i), x: 2 + i * 3, y: P.RD - 2, path: [], wait: 1 + i * 2, face: 1, phase: 0 }; });
     }
     P.npcs.forEach((n, i) => {
-      if (n.wait > 0) { n.wait -= dt; n.moving = false; if (n.wait <= 0 && P.wares.length) { const w = P.wares[Math.floor(Math.random() * P.wares.length)]; n.path = shopPath(P, [n.x, n.y], [w.x + w.w / 2, w.y + w.d + 0.55]) || []; n.look2 = w; } }
+      if (n.wait > 0) { n.wait -= dt; n.moving = false; if (n.wait <= 0 && P.wares.length) {
+        const w = P.wares[Math.floor(Math.random() * P.wares.length)], mine = meS.use ? meS.use.at : !meS.moving ? [meS.x, meS.y] : null;
+        // v0.30: in a building, stand a little to one side, and not where you are
+        let to = [w.x + w.w / 2, w.y + w.d + 0.55];
+        if (P.venue) to = [w.x + w.w / 2 + (Math.random() - 0.5) * 1.6, w.y + w.d + 0.8 + Math.random() * 0.8];
+        if (mine && Math.hypot(to[0] - mine[0], to[1] - mine[1]) < 1.6) { n.wait = 1 + Math.random() * 2; }
+        else { n.path = shopPath(P, [n.x, n.y], to) || []; n.look2 = w; } } }
       else if (n.path.length) { let go = 2.2 * dt; while (go > 0 && n.path.length) { const [tx, ty] = n.path[0], dx = tx - n.x, dy = ty - n.y, d = Math.hypot(dx, dy); if (d > 0.01) faceTo(n, dx, dy); if (d <= go) { n.x = tx; n.y = ty; n.path.shift(); go -= d; } else { n.x += dx / d * go; n.y += dy / d * go; go = 0; } } n.phase += dt * 10; n.moving = true; if (!n.path.length) { n.wait = 3 + Math.random() * 5; n.view = 'back'; n.turn = [0, -1]; } }
       else n.wait = 1;
       objs.push({ d: n.x + n.y + 0.3, f: () => { const p2 = iso(n.x, n.y); drawPerson(p2.x, p2.y, cam.z, { look: n.look, face: n.face, back: n.back && n.moving, view: n.moving ? n.view : 'back', turn: n.moving ? n.turn : [-0.3, -1], moving: n.moving, phase: n.phase, energy: 'good', ts, seed: i + 7, pose: n.moving ? 'walk' : 'stand' }); } });
@@ -2276,7 +2491,8 @@ const Scene = (() => {
   function drawWare(w, ts) {
     const z = cam.z, { x, y } = w, c = iso(x + w.w / 2, y + w.d / 2);
     const plinth = (col = '#ffffff') => box(x - 0.05, y - 0.05, w.w + 0.1, w.d + 0.1, 2, col, 0, { edge: 'rgba(0,0,0,.06)' });
-    if (w.kind === 'furn') { plinth('#f7f2ea'); ctx.save(); ctx.translate(0, -2 * z); drawFurn({ k: w.k, rot: 0, tint: FURN[w.k].tint ? TINTS[4] : null }, x, y, ts); ctx.restore(); }
+    if (w.kind === 'spot') drawVenueDecor(w.furn ? { ...w, kind: 'furn' } : w, ts);   // v0.30: something to use inside a building
+    else if (w.kind === 'furn') { plinth('#f7f2ea'); ctx.save(); ctx.translate(0, -2 * z); drawFurn({ k: w.k, rot: 0, tint: FURN[w.k].tint ? TINTS[4] : null }, x, y, ts); ctx.restore(); }
     else if (w.kind === 'yard') { flatRect(x - 0.05, y - 0.05, w.w + 0.1, w.d + 0.1, '#b6e092'); const D = YARD[w.k]; if (D.w > 3 || D.d > 3) { box(x + 0.2, y + 0.2, w.w - 0.4, 0.3, 30, '#c99a6b'); pic('yard', w.k, {}, 120, 96, c.x - 34 * z, c.y - 58 * z, 68 * z, 54 * z); } else drawYardItem({ k: w.k, rot: 0, placed: now() }, x, y, ts); }
     else if (w.kind === 'tree') { ellipse(c.x, c.y, 16 * z, 8 * z, '#9a6a44'); const d = TREES[w.k]; drawFruitTree({ k: w.k, planted: now() - d.grow * MIN * 0.35, last: now() }, c.x, c.y, z * 0.8, ts, 1); }
     else if (w.kind === 'animal') {
@@ -2330,7 +2546,7 @@ const Scene = (() => {
     return { x0: iso(x, y + w.d).x - 4 * z, x1: iso(x + w.w, y).x + 4 * z, y0: c.y - 60 * z, y1: iso(x + w.w, y + w.d).y + 8 * z };
   }
   function renderShop(ts, dt) {
-    const P = shopPlan(owner), S2 = STORES[owner] || STORES.mall, z = cam.z, WH = P.dark ? 92 : 80, { RW, RD } = P, fl = SHOP_FLOOR[owner] || SHOP_FLOOR.market;
+    const VL = VENUE_LOOK[owner], P = shopPlan(owner), S2 = VL ? venueLook(owner) : STORES[owner] || STORES.mall, z = cam.z, WH = P.dark ? 92 : 80, { RW, RD } = P, fl = (VL && VL.floor) || SHOP_FLOOR[owner] || SHOP_FLOOR.market;
     stepShop(dt);
     if (P.floor) return renderMallFloor(P, S2, ts, dt, WH);
     // v0.22: outside the store: the pavement and car park in front, a road, grass and trees round it (no empty space)
@@ -2355,18 +2571,19 @@ const Scene = (() => {
     const objs = [];
     P.wares.forEach(w => { const q = iso(w.x + w.w / 2, w.y + w.d / 2); if (q.x < -120 || q.x > W + 120 || q.y < -60 || q.y > H + 200) return;   // v0.21: only what's on screen
       objs.push({ d: w.x + w.y + (w.w + w.d) / 2, f: () => { const r = drawWare(w, ts); if (r) hits.push({ kind: 'ware', id: w.id, wk: w.kind, k: w.k, ...r }); } }); });
+    (P.decor || []).forEach((dd, i) => objs.push({ d: dd.flat ? -1e4 + i : dd.kind === 'person' ? dd.x + dd.y + 0.3 : dd.x + dd.y + (dd.w + dd.d) / 2, f: () => drawVenueDecor(dd, ts, i) }));   // v0.30
     const C = P.counter;
-    objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: Math.sin(ts / 2300) > 0.75 ? null : 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
-      hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
-    objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#c99a6b', 0, { top: '#e6c79a' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji('💳', p2.x, p2.y, 9 * z); } });
+    objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: VL ? { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', top: 'polo', bottom: 'jeans', shoes: 'sneakers', hat: 'nohat', ...VL.clerk } : { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: Math.sin(ts / 2300) > 0.75 ? null : 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
+      hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${VL ? t('vrole_' + owner) : t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
+    objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#c99a6b', 0, { top: '#e6c79a' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji(VL ? VL.till : '💳', p2.x, p2.y, 9 * z); } });
     shoppers(P, objs, dt, ts);
-    objs.push({ d: meS.x + meS.y + 0.3, f: () => { const p2 = iso(meS.x, meS.y); drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand' }); carryBox(p2, z); } });
+    objs.push({ d: meS.use && !meS.moving ? meS.use.at[0] + meS.use.at[1] + 0.5 : meS.x + meS.y + 0.3, f: () => drawMeShop(z, ts) });
     { const dp = iso(P.door[0], RD - 0.45); hits.push({ kind: 'shopDoor', x0: dp.x - 30 * z, x1: dp.x + 30 * z, y0: dp.y - 14 * z, y1: dp.y + 14 * z }); }
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
-    { const S3 = STORES[owner], acc2 = S3.roof || '#c9893a', F1 = [iso(0, RD), iso(RW, RD)], F2 = [iso(RW, RD), iso(RW, 0)];
+    { const S3 = S2, acc2 = S3.roof || '#c9893a', F1 = [iso(0, RD), iso(RW, RD)], F2 = [iso(RW, RD), iso(RW, 0)];
       [F1, F2].forEach((F, k) => { wallRect(F, 0, 0, 1, 0, 5, shade(acc2, k ? -0.08 : -0.18)); wallRect(F, 0, 0, 1, 5, 6.2, '#ffffff'); });
       const du0 = (P.door[0] - 1.2) / RW, du1 = (P.door[0] + 1.2) / RW; wallRect(F1, 0, du0, du1, 0, 6.2, '#cfc9bd'); }
-    const dp = iso(P.door[0], RD - 0.2); pill(`🚪 ${t('store_leave')}`, dp.x, dp.y + 12 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z));
+    const dp = iso(P.door[0], RD - 0.2); pill(`🚪 ${t(VL ? 'venue_leave' : 'store_leave')}`, dp.x, dp.y + 12 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z));
   }
   const TABLE_LOOKS = [0, 1, 2, 3, 4, 5].map(i => dressUp({ shirt: COLORS[(i * 3) % COLORS.length], skin: SKINS[i % SKINS.length], hair: HAIRS[i % HAIRS.length], hairCol: HAIR_COLORS[i % HAIR_COLORS.length], mob: 'walk' }, 'diner' + i));
   const AUDIENCE_LOOKS = [0, 1, 2, 3, 4, 5, 6].map(i => dressUp({ shirt: COLORS[(i * 5) % COLORS.length], skin: SKINS[(i + 1) % SKINS.length], hair: HAIRS[(i + 2) % HAIRS.length], hairCol: HAIR_COLORS[(i + 1) % HAIR_COLORS.length], mob: 'walk' }, 'film' + i));
@@ -3068,7 +3285,7 @@ const Scene = (() => {
       if (h && h.kind === 'clerk') { shopWalk(P.till); return onHit(h); }   // v0.22: it opens at once; you walk over meanwhile
       if (h && h.kind === 'shopDoor') return shopWalk(P.door, () => onHit(h));
       if (owner === 'cinema' && meS.sit && P.aisle) { const w2 = h && P.wares.find(x => x.id === h.id); meS.sit = false; meS.path = [[P.aisle[0], meS.y]]; meS.moving = true; meS.then = () => { if (w2) shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55], () => onHit(h)); }; return; }   // v0.24: along the row to the aisle first
-      if (h) { const w2 = P.wares.find(x => x.id === h.id); meS.sit = false; if (['escalator', 'cinemaDoor', 'cinemaExit'].includes(w2.kind)) return shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55], () => onHit(h)); shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55]); return onHit(h); }
+      if (h) { const w2 = P.wares.find(x => x.id === h.id); meS.sit = false; if (['escalator', 'cinemaDoor', 'cinemaExit'].includes(w2.kind)) return shopWalk([w2.x + w2.w / 2, w2.y + w2.d + 0.55], () => onHit(h)); shopWalk(w2.stand || [w2.x + w2.w / 2, w2.y + w2.d + 0.55]); return onHit(h); }
       const w0 = unIso(sx, sy);
       if (w0.x > 0 && w0.y > 0 && w0.x < P.RW && w0.y < P.RD) { meS.sit = false; shopWalk([w0.x, w0.y]); }
       return;
@@ -3591,6 +3808,9 @@ const Scene = (() => {
     travel(to, how, car, done, dest, place, pick) { if (mode !== 'town') return false; TRIP_CAR = pick === undefined ? null : pick; try { startTrip(to, how, car, done, dest, place); } finally { TRIP_CAR = null; } return true; },
     mePoint() { if (!S) return null; TL = layoutOf(myTown()); const keep = VIEW_TOWN; return S.work || S.jail || (S.out && S.out.town === myTown()) ? (VIEW_TOWN === myTown() ? mePos() : null) : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })(); },
     pingMe() { PING = performance.now(); },
+    // v0.30: inside a building: sit at / lie on / work out on something for a while, then done(); what you're doing now
+    venueUse(id, secs, done, mate) { if (mode === 'shop' && VENUE_LOOK[owner]) venueUseNow(id, secs, done, mate); else if (done) done(); },
+    venueBusy() { return mode === 'shop' && meS.use && meS.use.until ? Math.max(0, Math.ceil((meS.use.until - performance.now()) / 1000)) : 0; },
     // v0.29: on the way somewhere: the view goes with you again (after you dragged it away); stop where you are
     followTrip() { if (!trip || trip.arrived || mode !== 'town') return false; trip.camFree = false; return true; },
     stopTrip() { return stopTripHere(); },
@@ -3648,7 +3868,7 @@ const Scene = (() => {
       mode = m; owner = o; edit = null;
       if (m !== 'town' && trip) finishTripNow(true);   // v0.19: leaving the town view, you still get there
       cv.style.background = '';
-      if (m === 'shop') { const P = shopPlan(o), at = (P.from && P.from[SHOP_FROM]) || P.door; meS.x = at[0]; meS.y = at[1] + 0.3; meS.path = []; meS.then = null; meS.moving = false; meS.face = 1; meS.sit = false; SHOP_FROM = o;
+      if (m === 'shop') { const P = shopPlan(o), at = (P.from && P.from[SHOP_FROM]) || P.door; meS.x = at[0]; meS.y = at[1] + 0.3; meS.path = []; meS.then = null; meS.moving = false; meS.face = 1; meS.sit = false; meS.use = null; SHOP_FROM = o;
         if (o === 'cinema' && FILM) { meS.x = P.door[0]; meS.y = P.door[1]; setTimeout(() => shopWalk(P.aisle, () => { meS.path = [P.seat]; meS.moving = true; meS.then = () => { meS.sit = true; meS.face = 1; if (FILM && !FILM.t0) FILM.t0 = performance.now(); }; }), 300); } }
       else if (m !== 'town' && m !== 'interior') moveToLot(o);
       useCam();

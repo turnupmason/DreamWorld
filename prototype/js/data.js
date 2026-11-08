@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.29.0';
+const VERSION = '0.30.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -1138,6 +1138,28 @@ const JOB_REL = { finish: 4, quit: -6, max: 100 };
 // sleep. Sick: walks slower and real-life rewards are a bit smaller. Medicine from the clinic plus a rest in bed
 // cures it; otherwise it passes after a couple of days.
 const SICK = { base: 0.03, overwork: 0.08, overworkDays: 5, lowSleep: 0.06, lowSleepScore: 60, longShift: 0.1, walk: 0.6, earn: 0.75, days: 2, medicine: 60, restSec: 20 };
+// ---------- inside every building (v0.30) ----------
+// Every building in town can be walked into, and what's inside does something. sec: how long your townie stays at it.
+// The fun / social counts once a day each (the gym: up to `max` workouts a day, on any machine).
+const VENUE = {
+  gym: { fun: 8, max: 3, sec: 12 },     // a workout on a treadmill, a bike, the weights, the bag or a mat
+  cafeChat: { social: 12, sec: 9 },     // sit down at a café table with someone you know
+  cafeSofa: { fun: 6, sec: 9 },         // put your feet up on the café sofa
+  libRead: { fun: 10, sec: 12 },        // sit down at the library table with a book
+  eat: { sec: 8 },                      // eat a pastry at a bakery table (a snack's own fill)
+  truck: { fun: 10, sec: 6 },           // a look round the fire engine (and a fire-safety tip)
+  checkup: { sec: 5 },                  // the clinic's health check: last night's sleep and today's steps
+};
+const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas'];
+// The fire station's tips, one a day.
+const FIRE_TIPS = [
+  { zh: '家里装一个烟雾报警器，每个月按一下试试。', en: 'Fit a smoke alarm at home and press its test button once a month.' },
+  { zh: '出门、睡觉前，看一眼炉灶关了没有。', en: 'Check the stove is off before you go out or go to bed.' },
+  { zh: '充电器和插线板别放在被子、沙发上。', en: 'Keep chargers and power strips off beds and sofas.' },
+  { zh: '和家人约好着火时在门外哪里集合。', en: 'Agree with your family where to meet outside if there’s a fire.' },
+  { zh: '衣服着火了：停下、趴下、打滚。', en: 'If your clothes catch fire: stop, drop and roll.' },
+  { zh: '浓烟往上走：逃生时弯下腰，用湿毛巾捂住口鼻。', en: 'Smoke rises: stay low and cover your nose and mouth with a damp cloth.' },
+];
 // How many other people are drawn at once (v0.11). Thousands can be in a community and hundreds at a popular
 // home; we draw only a few and say "+N more".
 const SHOW_LIMITS = { town: 10, home: 4, room: 3 };

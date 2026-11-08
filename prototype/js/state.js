@@ -2055,6 +2055,20 @@ function addNeed(k, v) { const n = needs(); n[k] = Math.max(0, Math.min(100, n[k
 const moodScore = () => { const n = needs(); return Math.round((n.hunger + n.social + n.fun) / 3); };
 const moodGood = () => moodScore() >= NEEDS.goodMood;
 // a bite at the café / bakery
+// ---------- inside the buildings (v0.30) ----------
+// What you've done inside today: S.venue = { day, n: { key: times } }.
+function venueToday() { if (!S.venue || S.venue.day !== today()) S.venue = { day: today(), n: {} }; return S.venue.n; }
+function venueLeft(key) { return (key === 'gym' ? VENUE.gym.max : 1) - (venueToday()[key] || 0); }
+// Do it: the fun / social it gives (once a day; the gym a few times), or 'done' if you already have today.
+function venueUse(key) {
+  if (venueLeft(key) <= 0) return 'done';
+  const V = VENUE[key] || {}, n = venueToday();
+  n[key] = (n[key] || 0) + 1;
+  if (V.fun) addNeed('fun', V.fun);
+  if (V.social) addNeed('social', V.social);
+  return 'ok';
+}
+const fireTip = () => FIRE_TIPS[Math.floor(now() / 86400000) % FIRE_TIPS.length];
 function buySnack() { if (S.me.coins < SNACK.price) return 'poor'; S.me.coins -= SNACK.price; addNeed('hunger', FOOD_FILL.snack); addNeed('social', NEED_GAIN.snackSocial); return 'ok'; }
 // cooking at home: two things from your barn (crops, eggs, milk, fruit...) and a kitchen or a stove
 function canCook(h = S.me) { return hasFurn(h, 'kitchen') || hasFurn(h, 'stove'); }

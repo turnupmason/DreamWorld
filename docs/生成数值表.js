@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -147,6 +147,12 @@ P('## 买东西带回家（v0.20）');
 P('');
 table(['项目', '数值'], [['拿在手上', `每件 ≤ ${D.BIG_VOL}，一共 ≤ ${D.HANDS_VOL}（1×1 家具 = 10，种子 10 包 = 1）`], ['后备箱', '按车的载货量'], ['送货上门', `账单 ${D.DELIVERY.fee * 100}%，至少 🪙${D.DELIVERY.min}，约 ${D.DELIVERY.minutes} 分钟`],
   ['吃饱', `${D.MALL.fed.hours} 小时：打工 +${D.MALL.fed.pay * 100}%，走路快 ${D.MALL.fed.walk * 100}%`], ['电影海报 / 玩偶 / 巨型泰迪熊', '家产 +60 / +40 / +300']]);
+P('## 楼里能做的事（v0.30）');
+P('');
+P(`能进去的地方：${D.VENUE_PLACES.map(k => D.PLACE_INFO[k] ? D.PLACE_INFO[k].zh : D.STORES[k].zh).join('、')}。下面这些每天各算一次（健身房每天最多 ${D.VENUE.gym.max} 次）。`);
+P('');
+table(['事情', '多久', '得到'], [['健身房任意器械', `${D.VENUE.gym.sec} 秒`, `娱乐 +${D.VENUE.gym.fun}`], ['咖啡馆坐下聊天', `${D.VENUE.cafeChat.sec} 秒`, `社交 +${D.VENUE.cafeChat.social}`], ['咖啡馆沙发听音乐', `${D.VENUE.cafeSofa.sec} 秒`, `娱乐 +${D.VENUE.cafeSofa.fun}`],
+  ['图书馆坐下看书', `${D.VENUE.libRead.sec} 秒`, `娱乐 +${D.VENUE.libRead.fun}`], ['面包店坐下吃点心', `${D.VENUE.eat.sec} 秒`, `就是买点心的饱腹`], ['消防站看消防车', `${D.VENUE.truck.sec} 秒`, `娱乐 +${D.VENUE.truck.fun}，一条防火小知识`], ['诊所健康检查', '马上', '昨晚睡眠分和今天步数（只有自己看得到）']]);
 P('## 手机：银行、贷款、股票（v0.26）');
 P('');
 table(['项目', '数值'], [['存款利息', `每天 ${D.BANK.rate * 100}%（最多算 🪙${D.BANK.interestCap.toLocaleString()}）`], ['首付', `${D.BANK.down * 100}%`],
