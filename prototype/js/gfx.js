@@ -31,9 +31,16 @@ function rgbOf(c) {
   return m ? m.slice(0, 3).map(Number) : [128, 128, 128];
 }
 // amt > 0 lightens towards white, < 0 darkens towards black.
+// (remembered: the same few colours get shaded thousands of times a second)
+const SHADE_MEMO = new Map();
 function shade(c, amt) {
+  const key = c + '|' + amt, hit = SHADE_MEMO.get(key);
+  if (hit !== undefined) return hit;
   const [r, g, b] = rgbOf(c), f = amt < 0 ? 0 : 255, k = Math.abs(amt);
-  return `rgb(${Math.round(r + (f - r) * k)},${Math.round(g + (f - g) * k)},${Math.round(b + (f - b) * k)})`;
+  const v = `rgb(${Math.round(r + (f - r) * k)},${Math.round(g + (f - g) * k)},${Math.round(b + (f - b) * k)})`;
+  if (SHADE_MEMO.size > 5000) SHADE_MEMO.clear();
+  SHADE_MEMO.set(key, v);
+  return v;
 }
 function rgba(c, a) { const [r, g, b] = rgbOf(c); return `rgba(${r},${g},${b},${a})`; }
 

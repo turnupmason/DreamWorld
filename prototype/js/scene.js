@@ -3251,10 +3251,12 @@ const Scene = (() => {
     // Round avatar: head and shoulders, big enough to stay sharp in the HUD and lists.
     face(k, o, w, h) {
       cam = { x: 0, y: 0, z: 1 };
-      const s = h / 22, g = ctx.createLinearGradient(0, 0, 0, h);
+      const s = h / 27, g = ctx.createLinearGradient(0, 0, 0, h);
       g.addColorStop(0, '#fff6e8'); g.addColorStop(1, '#ffe2c2');
       ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-      drawPerson(w / 2 - 0.4 * s, h * 0.52 + 30 * s, s, { look: o.look, face: 1, energy: o.energy || 'good', ts: 0, seed: 0 });
+      // v0.28: the bigger chibi head, looking straight at you (wheelchair users are drawn from the side)
+      if (o.look.mob === 'wheel') drawPerson(w / 2 - 1.2 * s, h * 0.55 + 31.2 * s, s, { look: o.look, face: 1, energy: o.energy || 'good', ts: 0, seed: 0 });
+      else drawPerson(w / 2, h * 0.55 + 27.6 * s, s, { look: o.look, face: 1, view: 'front', turn: [1, 1], energy: o.energy || 'good', ts: 0, seed: 0, pose: 'stand' });
     },
     // v0.18: a whole townie facing you, to show a body type or an outfit
     outfit(k, o, w, h) {
