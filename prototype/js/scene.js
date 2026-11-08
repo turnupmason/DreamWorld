@@ -1039,8 +1039,9 @@ const Scene = (() => {
   }
   // Where each public place is (where you walk to).
   function placePt(key) {
+    if (VENUE_HOME[key]) key = VENUE_HOME[key];   // v0.37: a floor of a tower
     const shop = TL.shops.find(([k]) => k === key), P = TL.park, F = TL.fields[0], K = TL.lake, C = TL.centre, st = (TL.stores || []).find(([k]) => k === key);
-    if (shop) return [shop[1] + 3, shop[2] + 6.3];
+    if (shop) return [shop[1] + (shop[3] || 6) / 2, shop[2] + (shop[4] || 5.5) + 0.8];
     if (st) return storeGeo(st).door;
     if (key === 'plaza') return [TL.plaza.x + LOT_W / 2, TL.plaza.y + LOT_D + 0.8];
     if (key === 'park') { const PP = parkPlan(); return [PP.cx + 0.2, PP.cy + 3.2]; }   // v0.32: by the fountain
@@ -1097,9 +1098,9 @@ const Scene = (() => {
     if (lv >= 3) deco.push(['flowers', 3, 7], ['flowers', 10, 7], ['lamp', 5, 10], ['lamp', 9, 10]);
     if (lv >= 5) deco.push(['flowers', 2, 10], ['flowers', 11, 10], ['tree', 6, 13], ['tree', 8, 13]);
     deco.forEach(([k, x, y]) => objs.push({ d: px + py + x + y + 1, f: () => drawYardItem({ k }, px + x, py + y, ts) }));
-    TL.shops.forEach(([k, x, y]) => objs.push({ d: x + y + 5.5, f: () => { const r = drawShop(k, x, y, ts); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
+    TL.shops.forEach(([k, x, y, w = 6, d = 5.5]) => objs.push({ d: x + y + (w + d) / 2, f: () => { const r = drawShop(k, x, y, ts, w, d); if (!edit) hits.push({ kind: 'shop', k, pri: 1, ...r }); } }));
     // trees along the edges of the square (not on the plaza or in front of a shop)
-    const free = (x, y) => !TL.roads.some(r => x > r[0] - 1 && x < r[2] + 1 && y > r[1] - 1 && y < r[3] + 1) && !(K && x > K.x - 1 && x < K.x + K.w + 1 && y > K.y - 1 && y < K.y + K.d + 1) && !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy]) => x > sx - 1.5 && x < sx + 7.5 && y > sy - 1.5 && y < sy + 7.5)
+    const free = (x, y) => !TL.roads.some(r => x > r[0] - 1 && x < r[2] + 1 && y > r[1] - 1 && y < r[3] + 1) && !(K && x > K.x - 1 && x < K.x + K.w + 1 && y > K.y - 1 && y < K.y + K.d + 1) && !(x > px - 1.5 && x < px + LOT_W + 1.5 && y > py - 1.5 && y < py + LOT_D + 1.5) && !TL.shops.some(([, sx, sy, sw = 6, sd = 5.5]) => x > sx - 1.5 && x < sx + sw + 1.5 && y > sy - 1.5 && y < sy + sd + 2)
       && !(TL.parks || []).some(([, qx, qy, qw, qd]) => x > qx - 1.2 && x < qx + qw + 1.2 && y > qy - 1.2 && y < qy + qd + 1.2);
     for (let x = C.x + 1.5; x < C.x + C.w - 1; x += 6.5) [C.y + C.d - 2, C.y + 1].forEach(y => { if (free(x, y)) objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }); });
   }
@@ -2292,6 +2293,16 @@ const Scene = (() => {
     police:  { floor: ['#e6e9ee', '#dce0e6'], till: '🚓', clerk: { shirt: '#24324f', top: 'polo', hat: 'cap', hatCol: '#24324f' } },
     firestation: { floor: ['#b9bcc0', '#b1b4b8'], till: '🧯', clerk: { shirt: '#c9433b', top: 'jacket', inner: '#f2c230' } },
     gas:     { floor: ['#eef0f2', '#e4e7ea'], till: '🥤', clerk: { shirt: '#e5484d', top: 'polo', hat: 'cap', hatCol: '#e5484d' } },
+    // v0.37
+    bank:       { wall: '#f1ece2', roof: '#2f5d50', floor: ['#ece8df', '#e1dccf'], till: '🏦', clerk: { shirt: '#2f5d50', top: 'jacket', inner: '#f4f4f0', hair: 'bun' } },
+    office:     { wall: '#eef1f4', roof: '#5b6c7d', floor: ['#c9ced6', '#bfc5ce'], till: '📇', clerk: { shirt: '#4a5a78', top: 'jacket', inner: '#f4f4f0', hair: 'long' } },
+    restaurant: { wall: '#2f2a33', roof: '#c9a24a', floor: ['#6b4428', '#5f3c23'], till: '🍷', clerk: { shirt: '#2d2d2d', top: 'jacket', inner: '#f4f4f0', hair: 'short' } },
+    hotel:      { wall: '#f4ead8', roof: '#b08d57', floor: ['#efe6d4', '#e4d8c2'], till: '🛎️', clerk: { shirt: '#8a2a34', top: 'jacket', inner: '#f4f4f0', hair: 'bun' } },
+    rooftop:    { wall: '#dfeef6', roof: '#38a3e0', floor: ['#e8dcc4', '#ded0b4'], till: '🍹', clerk: { shirt: '#38a3e0', top: 'polo', hair: 'short' } },
+    apartments: { wall: '#f2e6dc', roof: '#9a5a3c', floor: ['#d9cfc2', '#cfc4b6'], till: '🔑', clerk: { shirt: '#4a5a78', top: 'polo', hair: 'short' } },
+    bookstore:  { wall: '#efe6d4', roof: '#2f5d50', floor: ['#b88552', '#ad7c4a'], till: '📖', clerk: { shirt: '#c9893a', top: 'sweater', hair: 'curly' } },
+    salon:      { wall: '#f9f1f4', roof: '#2d2d2d', floor: ['#f4f4f0', '#2d2d2d'], till: '💈', clerk: { shirt: '#2d2d2d', top: 'tshirt', hair: 'long', hairCol: '#a46ef0' } },
+    florist:    { wall: '#f3f7ee', roof: '#ec6aa8', floor: ['#d9cdb4', '#cfc2a8'], till: '💐', clerk: { shirt: '#6cbf73', top: 'polo', hair: 'long' } },
   };
   const venueLook = k => VENUE_LOOK[k] && { ...(STORES[k] || {}), ...(PLACE_INFO[k] || {}), wall: VENUE_LOOK[k].wall || (STORES[k] || {}).wall || '#f1f0ea', roof: VENUE_LOOK[k].roof || (STORES[k] || {}).roof || '#c9893a' };
   const FOLK = i => (i % 2 ? AUDIENCE_LOOKS : TABLE_LOOKS)[i % 6];
@@ -2453,6 +2464,104 @@ const Scene = (() => {
       dec('table', 11.4, 8.2, 1.3, 1.3, { i: 0, crew: [{ shirt: '#c9433b', top: 'tshirt', hair: 'short', hairCol: '#6b4226', skin: '#f3c59f' }, { shirt: '#24324f', top: 'tshirt', hair: 'long', hairCol: '#2b1d14', skin: '#d39a6c' }], seats: [0, 2], menu: ['☕', '🍕', '🥪'] });
       dec('stripes', 0.8, 7.4, 3.0, 0.5, { flat: true });
       P = { RW: 15, RD: 11, door: [6, 10.3], counter: { x: 9.8, y: 6.2, w: 3.2, d: 0.9 } };
+    } else if (k === 'bank') {   // v0.37: the City Tower's ground floor
+      dec('banksign', 3.8, 0.05, 5.6, 0.1); dec('vault', 10.8, 0.05, 1.8, 0.1); dec('clock', 9.6, 0.05, 0.6, 0.1);
+      spot('lift', 0.8, 0.1, 1.8, 0.3, { draw: 'lift', stand: [1.7, 1.4] });
+      spot('teller', 4.0, 1.6, 6.4, 0.9, { draw: 'tellers', stand: [7.2, 3.4] });
+      [5.1, 7.2, 9.3].forEach((tx, j) => who(tx, 1.15, { staff: true, face: -1, view: 'front', turn: [-0.2, 1], look: { shirt: ['#2f5d50', '#4a5a78', '#2d2d2d'][j], top: 'jacket', inner: '#f4f4f0', hair: ['short', 'long', 'bun'][j], hairCol: HAIR_COLORS[j], skin: SKINS[(j + 1) % 4] } }));
+      dec('stanchions', 5.2, 4.0, 4.2, 1.2); guest(6.2, 4.45, back); guest(7.6, 4.5, back); guest(9.0, 4.45, back);
+      spot('atm', 0.25, 3.0, 0.7, 0.7, { draw: 'atm', stand: [1.4, 3.4] });
+      dec('column', 3.0, 5.4, 0.6, 0.6); dec('column', 10.4, 5.4, 0.6, 0.6);
+      spot('loans', 10.2, 6.8, 2.0, 1.0, { draw: 'officedesk', stand: [11.2, 8.5] }); who(11.2, 6.35, { staff: true, pose: 'sit', seatH: 8, sit: 'type', face: -1, look: { shirt: '#2d2d2d', top: 'jacket', inner: '#f4f4f0', hair: 'short', hairCol: '#5b5f66', skin: '#f3c59f' } });
+      furn('sofa', 0.8, 7.6, { tint: '#2f5d50' }); guest(1.4, 8.05, { pose: 'sit', seatH: 8.5, sit: 'phone', face: -1, dz: 0.5 }); guest(2.3, 8.05, { pose: 'sit', seatH: 8.5, sit: 'read', face: -1, dz: 0.5 });
+      who(12.4, 3.4, { staff: true, face: -1, view: 'front', turn: [-0.3, 1], look: { shirt: '#24324f', top: 'polo', hair: 'short', hairCol: '#1d1a17', skin: '#9a6440', hat: 'cap', hatCol: '#24324f' } });
+      furn('monstera', 12.2, 8.6); furn('plant', 0.4, 5.0);
+      P = { RW: 13, RD: 10, door: [6.5, 9.3], counter: { x: 2.0, y: 5.6, w: 3.0, d: 0.9 } };
+    } else if (k === 'office') {   // up in the tower: desks, a meeting room, a view
+      spot('lift', 0.8, 0.1, 1.8, 0.3, { draw: 'lift', stand: [1.7, 1.4] });
+      dec('whiteboard', 4.0, 0.05, 3.2, 0.1);
+      [[4.0, 2.6], [6.4, 2.6], [4.0, 5.2], [6.4, 5.2]].forEach(([dx, dy]) => { furn('desk', dx, dy); guest(dx + 1.0, dy + 1.35, { pose: 'sit', seatH: 9, sit: 'type', face: 1, back: true }); });
+      dec('glass', 9.2, 0.1, 0.15, 4.6); dec('glass', 9.2, 4.6, 4.6, 0.15);
+      dec('table', 10.8, 1.6, 1.3, 1.3, { i: 0, crew: [{ shirt: '#4a5a78', top: 'polo' }, { shirt: '#ec6aa8', top: 'sweater', hair: 'long' }, { shirt: '#f4f4f0', top: 'jacket', inner: '#2f6fb2', hair: 'bun' }], seats: [0, 1, 2], menu: ['📊', '☕', '💻'] });
+      dec('printer', 0.3, 5.0, 0.8, 0.7); dec('watercooler', 0.4, 6.4, 0.6, 0.6);
+      spot('coffee', 9.6, 6.4, 1.6, 0.7, { draw: 'coffeemaker', stand: [10.4, 7.8] });
+      spot('view', 12.6, 6.0, 0.5, 2.6, { draw: 'telescope', stand: [12.2, 7.3], use: { at: [12.3, 7.3], pose: 'stand', view: 'back', turn: [1, -0.3] } });
+      furn('plant', 0.4, 9.8); furn('monstera', 12.8, 9.6); furn('sofa', 4.4, 8.6, { tint: '#5b6470' }); guest(5.0, 9.05, { pose: 'sit', seatH: 8.5, sit: 'chat', face: -1, dz: 0.5 });
+      P = { RW: 14, RD: 11, door: [3, 10.3], counter: { x: 1.2, y: 8.0, w: 3.0, d: 0.9 }, sky: true };
+    } else if (k === 'restaurant') {   // the top of the tower: tables by the windows, a bar, a piano
+      spot('lift', 0.8, 0.1, 1.8, 0.3, { draw: 'lift', stand: [1.7, 1.4] });
+      const RM = ['🍝', '🍷', '🥩', '🍣', '🥗', '🍰'];
+      spot('table', 4.0, 1.4, 1.3, 1.3, { draw: 'table', i: 1, menu: RM, stand: [4.65, 3.2], use: { at: [3.9, 2.05], pose: 'sit', face: 1, seatH: 9, sit: 'eat', food: '🍝' } });
+      spot('date', 7.0, 1.4, 1.3, 1.3, { draw: 'table', i: 1, menu: RM, stand: [7.65, 3.2], use: { at: [6.9, 2.05], pose: 'sit', face: 1, seatH: 9, sit: 'eat', food: '🥩', mate: true } });
+      dec('table', 10.0, 1.4, 1.3, 1.3, { i: 0, menu: RM }); dec('table', 4.0, 4.6, 1.3, 1.3, { i: 3, menu: RM }); dec('table', 7.0, 4.6, 1.3, 1.3, { i: 5, menu: RM }); dec('table', 10.0, 4.6, 1.3, 1.3, { i: 2, menu: RM });
+      [[4.65, 2.05], [7.65, 2.05], [10.65, 2.05], [4.65, 5.25], [7.65, 5.25], [10.65, 5.25]].forEach(([px, py]) => dec('pendant', px, py, 0.1, 0.1, { air: true, col: '#c9a24a' }));
+      spot('bar', 0.3, 3.6, 0.9, 3.6, { draw: 'barcounter', stand: [2.2, 5.4], use: { at: [1.75, 5.4], pose: 'sit', face: -1, seatH: 10, sit: 'drink' } });
+      guest(1.75, 4.2, { pose: 'sit', seatH: 10, sit: 'drink', face: -1 });
+      furn('piano', 11.4, 8.0); who(12.4, 9.35, { staff: true, pose: 'sit', seatH: 8, sit: 'type', face: 1, back: true, look: { shirt: '#2d2d2d', top: 'jacket', inner: '#f4f4f0', hair: 'long', hairCol: '#2b1d14', skin: '#d39a6c' } });
+      dec('kitchenpass', 4.0, 8.4, 3.6, 0.8); who(5.8, 7.95, { staff: true, pose: 'work', face: -1, dz: -1, look: { shirt: '#ffffff', top: 'jacket', inner: '#ffffff', hat: 'beanie', hatCol: '#ffffff', hair: 'short', hairCol: '#2b1d14', skin: '#f3c59f' } });
+      who(8.6, 7.0, { staff: true, face: 1, view: 'front', turn: [0.3, 1], prop: '🍷', look: { shirt: '#ffffff', top: 'polo', bottom: 'jeans', pants: '#2d2d2d', hair: 'bun', hairCol: '#6b4226', skin: '#ffe0c4' } });
+      furn('monstera', 0.4, 9.8); furn('plant', 9.6, 9.8);
+      P = { RW: 14, RD: 11, door: [3, 10.3], counter: { x: 0.9, y: 7.6, w: 2.4, d: 0.9 }, sky: true, night: true };
+    } else if (k === 'hotel') {   // the lobby: the front desk, a chandelier, the lobby bar, a lounge for afternoon tea
+      dec('chandelier', 7.0, 5.0, 0.1, 0.1, { air: true });
+      spot('lift', 0.8, 0.1, 1.8, 0.3, { draw: 'lift', stand: [1.7, 1.4] });
+      dec('banksign', 4.2, 0.05, 5.0, 0.1, { label: 'HOTEL', col: '#b08d57' });
+      spot('bar', 10.4, 0.4, 3.2, 0.9, { draw: 'barcounter', along: true, stand: [11.4, 2.6], use: { at: [11.4, 1.95], pose: 'sit', face: 1, back: true, seatH: 10, sit: 'drink' } });
+      guest(12.6, 1.95, { pose: 'sit', seatH: 10, sit: 'chat', face: 1, back: true, dz: 0.3 });
+      dec('rug', 4.8, 4.0, 4.4, 3.0, { col: '#8a2a34', flat: true });
+      spot('tea', 5.4, 4.6, 2.0, 1.0, { furn: 'coffeetable', stand: [6.4, 6.6], use: { at: [5.0, 5.2], pose: 'sit', face: 1, seatH: 8.5, sit: 'drink' } });
+      furn('armchair', 4.4, 4.7, { tint: '#b08d57' }); furn('armchair', 7.6, 4.7, { tint: '#b08d57' }); guest(8.1, 5.2, { pose: 'sit', seatH: 8.5, sit: 'drink', face: -1, dz: 0.4 });
+      furn('sofa', 5.4, 6.4, { tint: '#8a2a34' }); guest(6.0, 6.85, { pose: 'sit', seatH: 8.5, sit: 'chat', face: -1, dz: 0.5 });
+      dec('luggage', 11.4, 6.6, 1.0, 0.6); who(12.3, 7.6, { staff: true, face: -1, view: 'front', turn: [-0.4, 1], look: { shirt: '#c0453a', top: 'jacket', inner: '#f2c230', hat: 'cap', hatCol: '#c0453a', hair: 'short', hairCol: '#2b1d14', skin: '#9a6440' } });
+      guest(10.8, 8.4, { face: 1, view: 'front', turn: [0.2, 1] });
+      furn('monstera', 0.4, 9.6); furn('monstera', 12.8, 9.6); furn('plant', 3.4, 0.4);
+      P = { RW: 14, RD: 11, door: [7, 10.3], counter: { x: 1.2, y: 4.2, w: 3.0, d: 0.9 } };
+    } else if (k === 'rooftop') {   // the hotel's roof: a pool, loungers, sunshades, the sky all round
+      spot('lift', 0.8, 0.1, 1.8, 0.3, { draw: 'lift', stand: [1.7, 1.4] });
+      spot('pool', 3.4, 1.4, 8.0, 4.2, { draw: 'pool', stand: [7.4, 6.2], use: { at: [6.4, 3.4], pose: 'swim', face: 1 } });
+      guest(5.0, 2.4, { walk: true, pose: 'swim', face: 1 }); guest(9.0, 4.5, { walk: true, pose: 'swim', face: -1 });
+      [[3.6, 7.0], [5.6, 7.0], [7.6, 7.0], [9.6, 7.0]].forEach(([lx, ly], j) => { if (j === 0) spot('lounger', lx, ly, 1.0, 2.0, { draw: 'lounger', stand: [lx + 1.4, ly + 1.0], use: { at: [lx + 0.5, ly + 1.0], pose: 'lie', lift: 6, dir: -2.68 } }); else { dec('lounger', lx, ly, 1.0, 2.0); if (j !== 2) guest(lx + 0.5, ly + 1.0, { pose: 'lie', lift: 6, dir: -2.68 }); } });
+      [[4.8, 9.4], [8.8, 9.4]].forEach(([ux, uy]) => dec('umbrella', ux, uy, 0.6, 0.6));
+      dec('barcart', 12.2, 2.4, 1.0, 0.7); who(12.4, 3.6, { staff: true, face: -1, view: 'front', turn: [-0.3, 1], prop: '🍹', look: { shirt: '#f2c230', top: 'tshirt', bottom: 'shorts', pants: '#2d2d2d', hair: 'curly', hairCol: '#2b1d14', skin: '#d39a6c' } });
+      furn('monstera', 0.4, 9.6); furn('monstera', 12.8, 9.6); furn('plant', 12.8, 0.4);
+      P = { RW: 14, RD: 11, door: [3, 10.3], counter: { x: 12.0, y: 5.6, w: 1.8, d: 0.9 }, sky: true, open: true };
+    } else if (k === 'apartments') {   // the lobby: the concierge, mailboxes, a lounge, parcel lockers, the lifts
+      dec('lift', 4.2, 0.1, 1.8, 0.3); dec('lift', 6.6, 0.1, 1.8, 0.3);
+      spot('mail', 0.3, 2.0, 0.6, 3.0, { draw: 'aptmail', stand: [1.5, 3.5] });
+      dec('parcels', 9.4, 0.3, 2.4, 0.8);
+      dec('rug', 4.6, 4.6, 3.6, 2.6, { col: '#5b6470', flat: true });
+      spot('lounge', 5.0, 5.0, 2, 1, { furn: 'sofa', tint: '#d98e6b', stand: [6.0, 6.8], use: { at: [5.5, 5.45], pose: 'sit', face: -1, seatH: 8.5, sit: 'chat', mate: true } });
+      furn('armchair', 7.4, 5.0, { tint: '#d98e6b' }); guest(7.9, 5.5, { pose: 'sit', seatH: 8.5, sit: 'read', face: -1, dz: 0.4 });
+      dec('bikerack', 10.4, 7.4, 1.8, 0.6); guest(9.6, 3.6, { face: 1, view: 'front', turn: [0.3, 1] }); guest(3.0, 7.8, { face: -1, view: 'front', turn: [-0.3, 1] });
+      furn('monstera', 0.4, 8.6); furn('plant', 11.4, 4.2);
+      P = { RW: 12, RD: 10, door: [6, 9.3], counter: { x: 1.4, y: 6.0, w: 3.0, d: 0.9 } };
+    } else if (k === 'bookstore') {   // shelves, tables of new books, armchairs to read in, and the shop cat
+      dec('bookwall', 0.4, 0.2, 10.2, 0.7); dec('bookwall', 0.25, 1.4, 0.7, 4.6, { low: true });
+      spot('table', 3.4, 2.4, 2.2, 1.2, { draw: 'booktable', stand: [4.5, 4.2], use: { at: [8.7, 6.65], pose: 'sit', face: -1, seatH: 8.5, sit: 'read' } });
+      dec('booktable', 6.6, 2.4, 2.2, 1.2); guest(7.6, 4.0, back); guest(2.0, 3.0, { face: -1, view: 'back', turn: [-1, -0.2] });
+      furn('armchair', 8.2, 6.2, { tint: '#2f5d50' }); furn('armchair', 5.6, 6.6, { tint: '#2f5d50' }); guest(6.1, 7.1, { pose: 'sit', seatH: 8.5, sit: 'read', face: 1, dz: 0.4 }); furn('arclamp', 9.4, 6.0);
+      dec('bookcat', 3.2, 6.4, 1.0, 0.8); furn('roundrug', 6.2, 6.0, { flat: true });
+      furn('plant', 10.2, 1.4); furn('plant', 0.4, 7.6);
+      P = { RW: 11, RD: 9, door: [3, 8.3], counter: { x: 7.4, y: 4.6, w: 2.8, d: 0.9 } };
+    } else if (k === 'salon') {   // three chairs at the mirrors, sinks to wash your hair, products, somewhere to wait
+      [[1.2, 0], [3.8, 1], [6.4, 2]].forEach(([cx3, j]) => {
+        dec('mirror', cx3, 0.05, 1.6, 0.1);
+        if (j === 0) spot('chair', cx3 + 0.3, 1.0, 1.0, 1.0, { draw: 'salonchair', stand: [cx3 + 0.8, 2.6], use: { at: [cx3 + 0.8, 1.55], pose: 'sit', face: 1, back: true, seatH: 10, sit: 'lean' } });
+        else { dec('salonchair', cx3 + 0.3, 1.0, 1.0, 1.0); guest(cx3 + 0.8, 1.55, { pose: 'sit', seatH: 10, sit: j === 1 ? 'phone' : 'lean', face: 1, back: true, dz: 0.4 });
+          who(cx3 + 1.45, 2.05, { staff: true, pose: 'work', face: -1, dz: 0.6, look: { shirt: ['#2d2d2d', '#ec6aa8'][j - 1], top: 'tshirt', hair: ['curly', 'long'][j - 1], hairCol: ['#b5462e', '#e9cf7a'][j - 1], skin: SKINS[j] } }); }
+      });
+      dec('sinks', 0.25, 3.4, 0.8, 2.4); dec('products', 8.6, 0.3, 1.0, 0.6);
+      dec('bench', 5.6, 5.8, 2.4, 0.6); guest(6.4, 6.25, { pose: 'sit', seatH: 7, sit: 'read', face: -1, dz: 0.4 });
+      furn('plant', 9.2, 6.6); furn('monstera', 0.4, 6.4);
+      P = { RW: 10, RD: 8, door: [3, 7.3], counter: { x: 6.8, y: 3.8, w: 2.4, d: 0.9 } };
+    } else if (k === 'florist') {   // buckets of flowers, pots on shelves, a cool cabinet, the florist making a bouquet
+      spot('buckets', 0.6, 3.4, 3.0, 1.0, { draw: 'buckets', stand: [2.1, 5.0] });
+      dec('potshelf', 0.4, 0.3, 4.0, 0.7); dec('flowerfridge', 5.0, 0.3, 2.4, 0.8);
+      dec('floraltable', 4.8, 3.0, 1.8, 0.9); who(5.7, 2.55, { staff: true, pose: 'work', face: -1, dz: -0.6, look: { shirt: '#6cbf73', top: 'tshirt', hair: 'bun', hairCol: '#c98a3c', skin: '#ffe0c4' } });
+      furn('plant', 7.8, 2.4); furn('bonsai', 3.8, 5.6);
+      guest(2.6, 2.8, { face: -1, view: 'back', turn: [-0.3, -1] });
+      furn('monstera', 8.0, 5.4); furn('plant', 0.4, 5.6);
+      P = { RW: 9, RD: 7, door: [3, 6.3], counter: { x: 5.8, y: 4.6, w: 2.4, d: 0.9 } };
     } else {   // gas
       spot('fridge', 0.4, 0.2, 3.6, 0.7, { draw: 'drinkfridge', stand: [2.2, 1.6] });
       dec('icefreezer', 4.6, 0.3, 1.6, 0.8); dec('slushie', 6.8, 0.3, 1.1, 0.7);
@@ -2466,6 +2575,8 @@ const Scene = (() => {
     const solids = [...wares.map(w => [w.x, w.y, w.w, w.d]), ...decor.filter(d => !d.flat && !d.air && !d.base && d.kind !== 'person').map(d => [d.x, d.y, d.w, d.d])];
     solids.push([P.counter.x, P.counter.y - 1.1, P.counter.w, P.counter.d + 1.1]);
     P = { k, n: wares.length, wares, decor, venue: true, ...P };
+    { const home = VENUE_HOME[k] || (BUILDING_FLOORS[k] ? k : null), fl = home && BUILDING_FLOORS[home];   // v0.37: coming up (or down) in the lift, you step out by the lift
+      if (fl) P.from = Object.fromEntries(fl.filter(f => f !== k).map(f => [f, [1.7, 1.5]])); }
     P.clerk = [P.counter.x + 1.6, P.counter.y - 0.6]; P.till = [P.counter.x + 1.6, P.counter.y + 1.55];
     P.nav = navFor(P.RW, P.RD, solids);
     SHOPS[k] = P;
@@ -2510,7 +2621,7 @@ const Scene = (() => {
   function roomPerson(d, ts, i) {
     const z = cam.z * (d.scale || 1), p = iso(d.x, d.y), id = d.cast ? castId('dec' + i + ':' + d.x, d.walk) : null;
     const L = id ? castLook(id, FOLK(i)) : typeof d.look === 'object' ? { skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', ...d.look } : FOLK(d.look || i);
-    drawPerson(p.x, p.y - (d.lift || 0) * z, z, { look: L, face: d.face || 1, back: !!d.back, view: d.view || null, turn: d.turn, energy: 'good', ts, seed: i + 11, pose: d.pose || 'stand', moving: !!d.moving, phase: ts / (d.pose === 'bike' ? 120 : d.pose === 'walk' ? 110 : 80) + i, noBike: true, seatH: d.seatH, sit: d.sit, matCol: '#ec6aa8' });
+    drawPerson(p.x, p.y - (d.lift || 0) * z, z, { look: L, face: d.face || 1, back: !!d.back, view: d.view || null, turn: d.turn, energy: 'good', ts, seed: i + 11, pose: d.pose || 'stand', moving: !!d.moving, phase: ts / (d.pose === 'bike' ? 120 : d.pose === 'walk' ? 110 : 80) + i, noBike: true, seatH: d.seatH, sit: d.sit, dir: d.dir, matCol: '#ec6aa8' });
     if (d.prop && z > 0.35) emoji(d.prop, p.x + 10 * z, p.y - 22 * z, 9 * z);
     if (id) folkSeen(id, d.x, d.y, p, z, ts);
     else if (d.staff) hits.push({ kind: 'clerk', x0: p.x - 14 * z, x1: p.x + 14 * z, y0: p.y - 48 * z, y1: p.y + 4 });
@@ -2694,6 +2805,72 @@ const Scene = (() => {
       case 'icefreezer': { const b = box(x, y, d.w, d.d, 16, '#ffffff', 0, { top: '#e8f4fa' }); const q0 = up(iso(x + 0.1, y + 0.1), 16 * z), q1 = up(iso(x + d.w - 0.1, y + 0.1), 16 * z), q2 = up(iso(x + d.w - 0.1, y + d.d - 0.1), 16 * z), q3 = up(iso(x + 0.1, y + d.d - 0.1), 16 * z); poly([q0, q1, q2, q3], 'rgba(160,210,240,.55)', 'rgba(255,255,255,.8)', 1); ['🍦', '🍨', '🍧', '🍦'].forEach((e, k) => { const q = up(iso(x + (k + 0.5) * d.w / 4, y + d.d / 2), 16 * z); emoji(e, q.x, q.y + 1 * z, 7 * z); }); wallRect(b.left, 0, 0.3, 0.7, 6, 10, '#38a3e0'); return true; }
       case 'atm': { box(x + 0.05, y + 0.05, d.w - 0.1, d.d - 0.1, 36, '#2f6fb2', 0, { top: '#3d82c9' }); const q = up(c, 30 * z); rrect(q.x - 5 * z, q.y - 4 * z, 10 * z, 7 * z, 1 * z, '#bfe6f7'); emoji('🏧', q.x, q.y + 10 * z, 7 * z); return true; }
       case 'magrack': { const b = box(x, y, d.w, d.d, 30, '#8a5a36', 0, { top: '#a46e40' }); for (let r = 0; r < 3; r++) for (let k = 0; k < 2; k++) wallRect(b.right, 0, k / 2 + 0.06, (k + 1) / 2 - 0.06, 4 + r * 9, 11 + r * 9, ['#e5484d', '#f2c230', '#38a3e0', '#34b27b', '#a46ef0', '#f59e0b'][r * 2 + k]); return true; }
+      // ----- v0.37: the new places -----
+      case 'banksign': { wallRect(F, 46, 0.02, 0.98, 0, 16, d.col || '#2f5d50'); txt(0.5, 54, d.label || (curLang() === 'zh' ? '镜像银行' : 'MIRROR BANK'), 8, '#f7e9b8'); return true; }
+      case 'vault': { const q = wallPt(F, 8, 0.5, 18); ellipse(q.x, q.y, 18 * z, 20 * z, '#9aa3ad', '#5b6470', 2 * z); ellipse(q.x, q.y, 13 * z, 14.5 * z, '#c9cfd6', '#7d848c', 1 * z); for (let k2 = 0; k2 < 6; k2++) { const a = k2 / 6 * Math.PI * 2 + t * 0.2; line(q.x, q.y, q.x + Math.cos(a) * 9 * z, q.y + Math.sin(a) * 10 * z, '#5b6470', 1.4 * z); } circle(q.x, q.y, 3 * z, '#5b6470'); return true; }
+      case 'lift': {   // lift doors in the back wall, with the floor numbers lit above
+        wallRect(F, 0, 0, 1, 0, 32, '#c9cfd6', '#9aa3ad', 1); wallRect(F, 0, 0.08, 0.49, 1, 29, '#dfe4e9'); wallRect(F, 0, 0.51, 0.92, 1, 29, '#dfe4e9');
+        wallRect(F, 0, 0.3, 0.7, 32, 37, '#1d1d22'); txt(0.5, 34.5, d.kind === 'spot' ? '▲ ▼' : String(1 + Math.floor(t / 3) % 9), 4.4, '#ff8a3d'); return true;
+      }
+      case 'tellers': {   // the bank's counter: wood below, glass above, a little window and a lamp at each place
+        const b = box(x, y, d.w, d.d, 16, '#6b4428', 0, { top: '#e8e2d6' });
+        const g0 = up(iso(x, y + d.d * 0.35), 16 * z), g1 = up(iso(x + d.w, y + d.d * 0.35), 16 * z); poly([g0, g1, up(g1, 22 * z), up(g0, 22 * z)], 'rgba(200,230,250,.25)', 'rgba(255,255,255,.75)', 1);
+        [0.17, 0.5, 0.83].forEach(u => { wallRect(b.left, 0, u - 0.06, u + 0.06, 6, 12, '#c9a24a'); const q = up(iso(x + u * d.w, y + d.d * 0.7), 16 * z); rrect(q.x - 2.5 * z, q.y - 2 * z, 5 * z, 2 * z, 0.5 * z, '#fffaf0'); });
+        return true;
+      }
+      case 'column': { box(x + 0.05, y + 0.05, d.w - 0.1, d.d - 0.1, 70, '#f4efe6', 0, { top: '#ffffff' }); box(x - 0.05, y - 0.05, d.w + 0.1, d.d + 0.1, 4, '#e2dbcd', 0); box(x - 0.05, y - 0.05, d.w + 0.1, d.d + 0.1, 4, '#e2dbcd', 66, { shadow: false }); return true; }
+      case 'whiteboard': { wallRect(F, 24, 0, 1, 0, 26, '#ffffff', '#9aa3ad', 1); [[0.15, 44, '📈'], [0.5, 42, 'Q4 ✓'], [0.8, 38, '💡']].forEach(([u, h, s2]) => txt(u, h, s2, 6, '#2f6fb2', 700)); wallLine(F, 24, 0.1, 6, 0.6, 14, '#e5484d', 0.8); return true; }
+      case 'printer': { box(x, y, d.w, d.d, 16, '#e8ecf0', 0, { top: '#c9cfd6' }); box(x + 0.15, y + 0.15, d.w - 0.3, d.d - 0.3, 3, '#ffffff', 16, { shadow: false }); return true; }
+      case 'telescope': { const a = iso(x + 0.25, y + 1.3), b2 = up(a, 26 * z); line(a.x - 5 * z, a.y, b2.x, b2.y, '#5b6470', 1.2 * z); line(a.x + 5 * z, a.y, b2.x, b2.y, '#5b6470', 1.2 * z); line(b2.x - 6 * z, b2.y + 2 * z, b2.x + 8 * z, b2.y - 4 * z, '#2d2d34', 3.4 * z); return true; }
+      case 'barcounter': {   // a bar with stools in front of it and bottles behind
+        const along = d.along || d.w > d.d, b = box(x, y, d.w, d.d, 20, '#3b3125', 0, { top: '#8a5a36' }), Fc = along ? b.left : b.right;
+        wallRect(Fc, 0, 0.02, 0.98, 14, 17, '#c9a24a');
+        for (let k2 = 0; k2 < 5; k2++) { const u = (k2 + 0.5) / 5, q = up(along ? iso(x + u * d.w, y + 0.2) : iso(x + 0.2, y + u * d.d), 20 * z); rrect(q.x - 1.2 * z, q.y - 7 * z, 2.4 * z, 7 * z, 1 * z, ['#34b27b', '#c9433b', '#f2c230', '#5b3a8a', '#2f6fb2'][k2]); }
+        const n = Math.round(Math.max(d.w, d.d) / 1.2); for (let k2 = 0; k2 < n; k2++) { const u = (k2 + 0.5) / n, s = along ? iso(x + u * d.w, y + d.d + 0.45) : iso(x + d.w + 0.45, y + u * d.d); line(s.x, s.y, s.x, s.y - 10 * z, '#2d2d2d', 1.4 * z); ellipse(s.x, s.y - 10 * z, 5.5 * z, 2.6 * z, '#c0453a'); }
+        return true;
+      }
+      case 'kitchenpass': { const b = box(x, y, d.w, d.d, 18, '#c9cfd6', 0, { top: '#e8ecf0' }); [0.2, 0.5, 0.8].forEach((u, k2) => { const q = up(iso(x + u * d.w, y + d.d / 2), 18 * z); ellipse(q.x, q.y, 6 * z, 2.5 * z, '#ffffff', '#c9cfd6', 0.6 * z); emoji(['🍝', '🥩', '🥗'][k2], q.x, q.y + 1 * z, 7 * z); }); const l = up(iso(x + d.w / 2, y + d.d / 2), 40 * z); line(l.x - 20 * z, l.y, l.x + 20 * z, l.y, '#5b6470', 1.2 * z); if (NIGHT > 0.2 || true) glow(l.x, l.y + 6 * z, 30 * z, 0.35); return true; }
+      case 'chandelier': { const top = up(c, 92 * z), m = up(c, 70 * z); line(top.x, top.y, m.x, m.y, '#c9a24a', 1 * z); for (let k2 = 0; k2 < 8; k2++) { const a = k2 / 8 * Math.PI * 2, q = { x: m.x + Math.cos(a) * 14 * z, y: m.y + Math.sin(a) * 5 * z }; line(m.x, m.y, q.x, q.y, '#c9a24a', 0.8 * z); circle(q.x, q.y - 2 * z, 2 * z, '#fff2c4'); } ellipse(m.x, m.y, 5 * z, 2.5 * z, '#c9a24a'); glow(m.x, m.y, 40 * z, NIGHT > 0.2 ? 0.7 : 0.3); return true; }
+      case 'luggage': { box(x, y, d.w, d.d, 3, '#c9a24a', 4, { top: '#8a2a34' }); [0.15, 0.85].forEach(u => { const a = up(iso(x + u * d.w, y + d.d / 2), 4 * z); line(a.x, a.y, a.x, a.y - 30 * z, '#c9a24a', 1.4 * z); }); const a = up(iso(x + 0.15 * d.w, y + d.d / 2), 34 * z), b2 = up(iso(x + 0.85 * d.w, y + d.d / 2), 34 * z); line(a.x, a.y, b2.x, b2.y, '#c9a24a', 1.6 * z); box(x + 0.15, y + 0.1, 0.4, 0.4, 10, '#2f6fb2', 7, { shadow: false }); box(x + 0.5, y + 0.15, 0.35, 0.3, 8, '#e5484d', 7, { shadow: false }); return true; }
+      case 'pool': {   // a pool with a tiled edge, lanes and moving light on the water
+        flatRect(x - 0.3, y - 0.3, d.w + 0.6, d.d + 0.6, '#f4efe6'); flatRect(x, y, d.w, d.d, '#3fb2d9');
+        for (let k2 = 0; k2 < 14; k2++) { const u = (k2 * 0.37 + t * 0.06) % 1, v = (k2 * 0.61) % 1, q = iso(x + u * d.w, y + v * d.d); ellipse(q.x, q.y, 7 * z, 1.6 * z, 'rgba(255,255,255,.35)'); }
+        [1, 2, 3].forEach(k2 => { const a = iso(x, y + k2 * d.d / 4), b2 = iso(x + d.w, y + k2 * d.d / 4); for (let s = 0; s < 16; s++) { const p0 = { x: a.x + (b2.x - a.x) * s / 16, y: a.y + (b2.y - a.y) * s / 16 }; circle(p0.x, p0.y, 1.2 * z, s % 2 ? '#ffffff' : '#e5484d'); } });
+        const ld = iso(x + d.w - 0.2, y + d.d * 0.5); line(ld.x, ld.y, ld.x, ld.y - 10 * z, '#c9cfd6', 1.2 * z); line(ld.x + 4 * z, ld.y + 2 * z, ld.x + 4 * z, ld.y - 8 * z, '#c9cfd6', 1.2 * z);
+        return true;
+      }
+      case 'lounger': { box(x + 0.15, y + 0.1, d.w - 0.3, d.d - 0.2, 4, '#e8e2d6', 0, { top: '#ffffff' }); box(x + 0.15, y + 0.1, d.w - 0.3, 0.5, 4, '#e8e2d6', 4, { top: '#ffffff', shadow: false }); const q = up(iso(x + d.w / 2, y + d.d * 0.7), 6 * z); rrect(q.x - 5 * z, q.y - 2 * z, 10 * z, 4 * z, 1.5 * z, '#38a3e0'); return true; }
+      case 'umbrella': { const a = iso(x + 0.3, y + 0.3), tp = up(a, 30 * z); ellipse(a.x, a.y, 4 * z, 1.8 * z, '#5b6470'); line(a.x, a.y, tp.x, tp.y, '#e8e2d6', 1.2 * z); for (let k2 = 0; k2 < 8; k2++) { const a0 = k2 / 8 * Math.PI * 2, a1 = (k2 + 1) / 8 * Math.PI * 2; pg([[tp.x, tp.y - 4 * z], [tp.x + Math.cos(a0) * 20 * z, tp.y + Math.sin(a0) * 7 * z + 3 * z], [tp.x + Math.cos(a1) * 20 * z, tp.y + Math.sin(a1) * 7 * z + 3 * z]], k2 % 2 ? '#ffffff' : '#f59e0b'); } return true; }
+      case 'barcart': { box(x, y, d.w, d.d, 14, '#c9a24a', 4, { top: '#fffaf0' }); [0.15, 0.85].forEach(u => { const q = iso(x + u * d.w, y + d.d); circle(q.x, q.y - 2 * z, 2 * z, '#2d2d2d'); }); const q = up(c, 18 * z); emoji('🍹', q.x - 4 * z, q.y, 7 * z); emoji('🥤', q.x + 5 * z, q.y + 1 * z, 7 * z); return true; }
+      case 'aptmail': { const b = box(x, y, d.w, d.d, 40, '#c9a36a', 0, { top: '#d8b57e' }); for (let r = 0; r < 4; r++) for (let k2 = 0; k2 < 5; k2++) wallRect(b.right, 0, (k2 + 0.1) / 5, (k2 + 0.9) / 5, 5 + r * 8.5, 12 + r * 8.5, '#e8d3a8', '#a07a50', 0.6); return true; }
+      case 'bikerack': { box(x, y + d.d / 2 - 0.05, d.w, 0.1, 6, '#9aa3ad', 0, { shadow: false }); [0.2, 0.55].forEach((u, k2) => { const q = iso(x + u * d.w + 0.3, y + d.d / 2 + 0.2); [-6, 6].forEach(o => ellipse(q.x + o * z, q.y - 6 * z, 5.5 * z, 5.5 * z, null, '#2d2d2d', 1.3 * z)); line(q.x - 6 * z, q.y - 6 * z, q.x + 6 * z, q.y - 8 * z, k2 ? '#38a3e0' : '#e5484d', 1.6 * z); }); return true; }
+      case 'booktable': { box(x, y, d.w, d.d, 14, '#8a5a36', 0, { top: '#a46e40' }); for (let k2 = 0; k2 < 6; k2++) { const q = up(iso(x + 0.25 + (k2 % 3) * d.w / 3, y + 0.3 + Math.floor(k2 / 3) * 0.55), 14 * z); rrect(q.x - 4 * z, q.y - 4 * z - (k2 % 2) * 1.5 * z, 8 * z, 4 * z, 0.6 * z, ['#e5484d', '#2f6fb2', '#f2c230', '#34b27b', '#a46ef0', '#f59e0b'][k2], 'rgba(0,0,0,.25)', 0.4 * z); } const q = up(iso(x + d.w / 2, y + d.d / 2), 16 * z); if (z > 0.4) pill(curLang() === 'zh' ? '新书' : 'NEW', q.x, q.y - 12 * z, '#e5484d', '#ffffff', `800 ${Math.max(7, 7 * z)}px ${UI_FONT}`, Math.max(11, 12 * z)); return true; }
+      case 'bookcat': { const q = iso(x + d.w / 2, y + d.d / 2); box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 8, '#2f6fb2', 0, { top: '#e5484d' }); drawAnimal('cat', 2, q.x, q.y - 6 * z, z * 1.3, { face: 1, ts, seed: 7, breed: 'tabby', moving: false, mood: 'happy' }); if (Math.sin(t * 0.7) > 0.3) emoji('💤', q.x + 10 * z, q.y - 22 * z, 7 * z); return true; }
+      case 'mirror': { wallRect(F, 12, 0.05, 0.95, 0, 25, 'rgba(210,235,250,.9)', '#2d2d2d', 1.4); wallLine(F, 12, 0.3, 4, 0.55, 22, 'rgba(255,255,255,.7)', 1); [0.15, 0.85].forEach(u => { const q = wallPt(F, 12, u, 27); circle(q.x, q.y, 2 * z, '#fff2c4'); }); return true; }
+      case 'salonchair': { const q = iso(x + d.w / 2, y + d.d / 2); ellipse(q.x, q.y, 9 * z, 4 * z, '#2d2d2d'); line(q.x, q.y, q.x, q.y - 6 * z, '#c9cfd6', 2 * z); box(x + 0.2, y + 0.2, d.w - 0.4, d.d - 0.4, 3, '#2d2d2d', 7, { top: '#3b3b44', shadow: false }); box(x + 0.2, y + 0.15, d.w - 0.4, 0.15, 14, '#2d2d2d', 10, { shadow: false }); return true; }
+      case 'sinks': { const b = box(x, y, d.w, d.d, 16, '#2d2d2d', 0, { top: '#3b3b44' }); [0.25, 0.75].forEach(v => { const q = up(iso(x + d.w / 2, y + v * d.d), 16 * z); ellipse(q.x, q.y, 6 * z, 3 * z, '#ffffff', '#c9cfd6', 0.6 * z); line(q.x - 3 * z, q.y - 3 * z, q.x - 3 * z, q.y - 9 * z, '#c9cfd6', 1 * z); }); return true; }
+      case 'products': { const b = box(x, y, d.w, d.d, 40, '#ffffff', 0, { top: '#f4f4f0' }); [8, 20, 32].forEach(h => [0, 1, 2].forEach(k2 => { const q = wallPt(b.left, 0, (k2 + 0.5) / 3, h - 6); rrect(q.x - 1.8 * z, q.y - 6 * z, 3.6 * z, 6 * z, 1 * z, ['#ec6aa8', '#a46ef0', '#38a3e0'][(k2 + h) % 3]); })); return true; }
+      case 'buckets': { for (let k2 = 0; k2 < 6; k2++) { const u = (k2 % 3 + 0.5) / 3, v = Math.floor(k2 / 3) ? 0.7 : 0.3, q = iso(x + u * d.w, y + v * d.d); ellipse(q.x, q.y - 2 * z, 7 * z, 3 * z, '#9aa3ad', '#5b6470', 0.6 * z); rrect(q.x - 6 * z, q.y - 10 * z, 12 * z, 9 * z, 2 * z, '#c9cfd6'); ['🌷', '🌹', '🌻', '🌼', '💐', '🌸'].slice(k2 % 3, k2 % 3 + 2).forEach((e, j) => emoji(e, q.x + (j ? 3 : -3) * z, q.y - 14 * z, 8 * z)); } return true; }
+      case 'potshelf': { const b = box(x, y, d.w, d.d, 36, '#a46e40', 0, { top: '#c99a6b' }); [8, 20, 32].forEach((h, r) => [0, 1, 2, 3, 4].forEach(k2 => { const q = wallPt(b.left, 0, (k2 + 0.5) / 5, h - 7); rrect(q.x - 2.5 * z, q.y - 4 * z, 5 * z, 4 * z, 1 * z, '#c0603c'); emoji(['🌱', '🌵', '🌿', '🪴', '🌺'][(k2 + r) % 5], q.x, q.y - 5 * z, 6 * z); })); return true; }
+      case 'flowerfridge': { const b = box(x, y, d.w, d.d, 46, '#e8ecf0', 0, { top: '#ffffff' }); wallRect(b.left, 0, 0.03, 0.97, 4, 42, 'rgba(160,210,240,.45)', '#ffffff', 1); [10, 24, 36].forEach((h, r) => [0, 1, 2, 3].forEach(k2 => { const q = wallPt(b.left, 0, (k2 + 0.5) / 4, h - 4); emoji(['🌹', '🌷', '💐', '🌸'][(k2 + r) % 4], q.x, q.y, 8 * z); })); return true; }
+      case 'floraltable': { box(x, y, d.w, d.d, 15, '#c99a6b', 0, { top: '#e6c79a' }); const q = up(iso(x + d.w * 0.4, y + d.d / 2), 15 * z); emoji('💐', q.x, q.y - 4 * z, 12 * z); const r0 = up(iso(x + d.w * 0.8, y + d.d * 0.3), 15 * z); line(r0.x - 4 * z, r0.y, r0.x + 6 * z, r0.y - 2 * z, '#ec6aa8', 1.4 * z); return true; }
+      case 'hangplant': { const top = up(c, 80 * z), pot = up(c, 58 * z); line(top.x, top.y, pot.x, pot.y, 'rgba(90,70,50,.6)', 0.7 * z); ellipse(pot.x, pot.y, 5 * z, 3 * z, '#c0603c'); for (let k2 = 0; k2 < 5; k2++) { const a = -0.8 + k2 * 0.4; line(pot.x, pot.y, pot.x + Math.sin(a) * 7 * z, pot.y + 8 * z + Math.abs(a) * 2 * z, '#4f9a4b', 1.4 * z); } circle(pot.x, pot.y - 2 * z, 4.5 * z, '#6cbf73'); return true; }
+      // ----- the supermarket -----
+      case 'produce': {   // a market stand with crates of fruit and veg, tilted towards you
+        box(x, y, d.w, d.d, 12, '#8a5a36', 0, { top: '#a46e40' });
+        const items = ['🍎', '🍌', '🥕', '🥦', '🍅', '🍇', '🍋', '🥬'];
+        for (let k2 = 0; k2 < 8; k2++) { const u = (k2 % 4 + 0.5) / 4, v = Math.floor(k2 / 4) ? 0.72 : 0.28, q = up(iso(x + u * d.w, y + v * d.d), 12 * z); rrect(q.x - 6 * z, q.y - 3 * z, 12 * z, 5 * z, 1 * z, '#c99a6b'); emoji(items[k2], q.x - 2 * z, q.y - 1 * z, 7 * z); emoji(items[k2], q.x + 3 * z, q.y, 7 * z); }
+        if (z > 0.4) { const q = up(c, 30 * z); pill(curLang() === 'zh' ? '🥬 生鲜' : '🥬 Fresh', q.x, q.y, '#34b27b', '#ffffff', `800 ${Math.max(8, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(12, 14 * z)); }
+        return true;
+      }
+      case 'grocery': {   // a supermarket aisle shelf, stocked both sides
+        const b = box(x, y, d.w, d.d, 34, '#f4f4f0', 0, { top: '#e8ecf0' }), cols = ['#e5484d', '#f2c230', '#38a3e0', '#34b27b', '#f59e0b', '#a46ef0', '#ec6aa8'];
+        [4, 13, 22, 31].forEach((h, r) => { wallRect(b.left, 0, 0.01, 0.99, h - 1, h, '#c9cfd6'); for (let k2 = 0; k2 < 10; k2++) wallRect(b.left, 0, k2 / 10 + 0.01, (k2 + 1) / 10 - 0.01, h - 7, h - 1, cols[(k2 * 3 + r + Math.round(x)) % cols.length]); });
+        return true;
+      }
+      case 'dairy': { const b = box(x, y, d.w, d.d, 46, '#e8ecf0', 0, { top: '#ffffff' }), along = d.w > d.d, Fd = along ? b.left : b.right; wallRect(Fd, 0, 0.02, 0.98, 4, 42, 'rgba(160,210,240,.5)', '#ffffff', 1); [10, 22, 34].forEach((h, r) => [0, 1, 2, 3, 4].forEach(k2 => { const q = wallPt(Fd, 0, (k2 + 0.5) / 5, h - 4); emoji(['🥛', '🧀', '🥚', '🧈', '🍦'][(k2 + r) % 5], q.x, q.y, 7 * z); })); if (NIGHT > 0.2) glow(c.x, c.y - 26 * z, 40 * z, 0.35); return true; }
+      case 'checkout': { const b = box(x, y, d.w, d.d, 15, '#5b6470', 0, { top: '#2d2d34' }); const q = up(iso(x + d.w * 0.75, y + d.d / 2), 15 * z); rrect(q.x - 4 * z, q.y - 8 * z, 8 * z, 6 * z, 1 * z, '#1b2a3a'); rrect(q.x - 3 * z, q.y - 7 * z, 6 * z, 4 * z, 0.5 * z, '#38d39f'); const p = up(iso(x + d.w * 0.3, y + d.d / 2), 15 * z); emoji('🛍️', p.x, p.y - 1 * z, 7 * z); const lt = up(iso(x + d.w - 0.1, y + 0.1), 40 * z), lb = iso(x + d.w - 0.1, y + 0.1); line(lb.x, lb.y, lt.x, lt.y, '#9aa3ad', 1 * z); rrect(lt.x - 4 * z, lt.y - 4 * z, 8 * z, 6 * z, 1.5 * z, '#e5484d'); return true; }
+      case 'cart': { const a = iso(x + 0.1, y + 0.1); [[0, 0], [14, 7], [0, 7], [14, 0]].forEach(([dx, dy]) => circle(a.x + (dx - 4) * z, a.y + dy * 0.4 * z, 1.4 * z, '#2d2d2d')); pg([[a.x - 6 * z, a.y - 14 * z], [a.x + 12 * z, a.y - 14 * z], [a.x + 10 * z, a.y - 3 * z], [a.x - 4 * z, a.y - 3 * z]], 'rgba(200,205,212,.7)', '#7d848c', 0.8 * z); emoji(['🥖', '🍎', '🥛'][Math.round(x) % 3], a.x + 3 * z, a.y - 13 * z, 7 * z); return true; }
     }
     return false;
   }
@@ -2791,12 +2968,24 @@ const Scene = (() => {
       placed.push({ ...w, x, y });
       x += w.w + 0.8; rowD = Math.max(rowD, w.d);
     });
-    const RD = Math.ceil(y + rowD + 4.6), counter = { x: RW - 4.4, y: RD - 2.9, w: 3.2, d: 0.9 };
-    const plan = { k, n: wares.length, RW, RD, wares: placed, counter, clerk: [counter.x + 1.6, counter.y - 0.6], till: [counter.x + 1.6, counter.y + 1.55], door: [3, RD - 0.7] };
+    let decor = [], extra = 0;
+    if (k === 'market') {   // v0.37: a real supermarket below the seeds: fresh food (buy groceries), aisles, the dairy fridge, more tills, trolleys, shoppers
+      const y0 = y + rowD + 1.6, dc = (kind, dx, dy, dw, dd, ex = {}) => decor.push({ kind, x: dx, y: dy, w: dw, d: dd, ...ex });
+      placed.push({ id: 'spot:groceries', kind: 'spot', k: 'groceries', draw: 'produce', x: 1, y: y0, w: 3.2, d: 1.4, price: 0, stand: [2.6, y0 + 2.0] });
+      dc('grocery', 5.0, y0, 3.6, 0.8); dc('grocery', 5.0, y0 + 2.4, 3.6, 0.8); if (RW >= 15) { dc('grocery', 9.4, y0, 3.6, 0.8); dc('grocery', 9.4, y0 + 2.4, 3.6, 0.8); }
+      dc('dairy', 0.3, y0 + 2.4, 0.7, 2.6);
+      dc('person', 6.2, y0 + 1.5, 0.5, 0.5, { cast: true, view: 'back', turn: [0.2, -1] }); dc('cart', 6.7, y0 + 1.3, 0.6, 0.4);
+      dc('person', 2.0, y0 + 2.3, 0.5, 0.5, { cast: true, face: -1, view: 'front', turn: [-0.3, 1] }); dc('cart', 2.4, y0 + 2.6, 0.6, 0.4);
+      extra = 5.2;
+    }
+    const RD = Math.ceil(y + rowD + 4.6 + extra), counter = { x: RW - 4.4, y: RD - 2.9, w: 3.2, d: 0.9 };
+    if (k === 'market') { decor.push({ kind: 'checkout', x: RW - 8.6, y: RD - 2.9, w: 2.4, d: 0.9 }, { kind: 'person', x: RW - 7.4, y: RD - 3.5, w: 0.5, d: 0.5, staff: true, face: -1, view: 'front', turn: [-0.2, 1], look: { shirt: '#3e7cc9', top: 'polo', hair: 'long', hairCol: '#6b4226', skin: '#d39a6c' } }, { kind: 'person', x: RW - 7.2, y: RD - 1.4, w: 0.5, d: 0.5, cast: true, view: 'back', turn: [0, -1] }, { kind: 'cart', x: RW - 6.6, y: RD - 1.5, w: 0.6, d: 0.4 }); }
+    const plan = { k, n: wares.length, RW, RD, wares: placed, decor, counter, clerk: [counter.x + 1.6, counter.y - 0.6], till: [counter.x + 1.6, counter.y + 1.55], door: [3, RD - 0.7] };
     // where you can walk: half-tile cells, not on anything on show or the counter
     const GS = 0.5, gw = Math.ceil(RW / GS), gd = Math.ceil(RD / GS), g = new Uint8Array(gw * gd).fill(1);
     const block = (bx, by, bw, bd) => { for (let j = Math.floor((by - 0.2) / GS); j < (by + bd + 0.2) / GS; j++) for (let i = Math.floor((bx - 0.2) / GS); i < (bx + bw + 0.2) / GS; i++) if (i >= 0 && j >= 0 && i < gw && j < gd) g[j * gw + i] = 0; };
     placed.forEach(w => block(w.x, w.y, w.w, w.d));
+    decor.filter(dd => dd.kind !== 'person' && dd.kind !== 'cart').forEach(dd => block(dd.x, dd.y, dd.w, dd.d));
     block(counter.x, counter.y - 1.1, counter.w, counter.d + 1.1);
     for (let i = 0; i < gw; i++) { g[i] = 0; g[(gd - 1) * gw + i] = 1; }
     for (let j = 0; j < gd; j++) { g[j * gw] = 0; g[j * gw + gw - 1] = 0; }
@@ -3102,6 +3291,9 @@ const Scene = (() => {
     FOLK_AT = {};   // v0.34: filled in as people are drawn
     if (P.floor) return renderMallFloor(P, S2, ts, dt, WH);
     // v0.22: outside the store: the pavement and car park in front, a road, grass and trees round it (no empty space)
+    // v0.37: up a tower there's no street: the sky, and the town far below
+    if (P.sky) skyOutside(RW, RD, ts);
+    else {
     ctx.fillStyle = shade(PAL.town, -0.02); ctx.fillRect(0, 0, W, H);
     flatRect(-14, -14, RW + 28, RD + 30, shade(PAL.town, -0.02));
     flatRect(-2.5, -2.5, RW + 5, RD + 9, '#d9d4ca');                     // pavement all round
@@ -3110,12 +3302,18 @@ const Scene = (() => {
     flatRect(-14, RD + 6.5, RW + 28, 3.4, '#8e959c');                    // the road
     for (let i = -13; i < RW + 13; i += 1.6) { const a2 = iso(i, RD + 8.2), b2 = iso(i + 0.8, RD + 8.2); line(a2.x, a2.y, b2.x, b2.y, 'rgba(255,255,255,.8)', 1.4 * z); }
     [[-4.5, -3], [-4, RD * 0.4], [-4.6, RD * 0.8], [RW * 0.3, -4.2], [RW * 0.7, -4.6], [RW + 4, -2], [RW + 4.4, RD * 0.5], [RW + 4, RD + 2]].forEach(([tx, ty], i) => drawWildTree(tx, ty, hash(i, 77), 0));
+    }
     for (let j = 0; j < RD; j++) for (let i = 0; i < RW; i++) tile(i, j, (i + j) % 2 ? fl[0] : fl[1]);
     const A = iso(0, 0), B = iso(RW, 0), D = iso(0, RD), wall = S2.wall || '#f1f0ea', acc = S2.roof || '#c9893a';
+    if (P.open) {   // v0.37: the roof: a glass railing all round instead of walls
+      [[D, A], [A, B]].forEach(F => { poly([F[0], F[1], up(F[1], 16 * z), up(F[0], 16 * z)], 'rgba(200,230,250,.3)', 'rgba(255,255,255,.8)', 1); line(up(F[0], 16 * z).x, up(F[0], 16 * z).y, up(F[1], 16 * z).x, up(F[1], 16 * z).y, '#c9cfd6', 2 * z); });
+    } else {
     poly([D, A, up(A, WH * z), up(D, WH * z)], shade(wall, -0.08)); poly([A, B, up(B, WH * z), up(A, WH * z)], wall);
     wallRect([D, A], 0, 0, 1, WH - 8, WH, acc); wallRect([A, B], 0, 0, 1, WH - 8, WH, shade(acc, 0.1));
-    for (let k = 1; k <= 3; k++) wallRect([D, A], 0, k / 4 - 0.08, k / 4 + 0.08, 30, 62, '#bfe6f7', '#fffaf0', 1.4);   // windows
-    { const F = [A, B], u0 = Math.max(0.2, 0.5 - 2.8 / RW), u1 = Math.min(0.8, 0.5 + 2.8 / RW);   // v0.21: a sign fixed to the back wall
+    if (P.sky) [[D, A], [A, B]].forEach((F, fi) => { const sk = NIGHT > 0.3 ? '#2a3360' : '#bfe6f7'; for (let k = 0; k < 6; k++) wallRect(F, 0, k / 6 + 0.012, (k + 1) / 6 - 0.012, 6, WH - 12, sk, '#e8ecf0', 1.2); });   // v0.37: floor-to-ceiling windows
+    else for (let k = 1; k <= 3; k++) wallRect([D, A], 0, k / 4 - 0.08, k / 4 + 0.08, 30, 62, '#bfe6f7', '#fffaf0', 1.4);   // windows
+    }
+    if (!P.open && !P.sky) { const F = [A, B], u0 = Math.max(0.2, 0.5 - 2.8 / RW), u1 = Math.min(0.8, 0.5 + 2.8 / RW);   // v0.21: a sign fixed to the back wall
       wallRect(F, 0, u0 - 0.006, u1 + 0.006, 39, 63, shade(acc, -0.25)); wallRect(F, 0, u0, u1, 40, 62, acc); wallRect(F, 0, u0 + 0.01, u1 - 0.01, 42, 60, shade(acc, 0.12));
       [u0 + 0.02, u1 - 0.02].forEach(u => { const q = wallPt(F, 0, u, 58); circle(q.x, q.y, 1.2 * z, '#e8e2d6'); });
       wallText(F, 0.5, 51, `${S2.e} ${nm(S2)}`, Math.max(9, 15 * z), '#ffffff'); }
@@ -3137,6 +3335,19 @@ const Scene = (() => {
       [F1, F2].forEach((F, k) => { wallRect(F, 0, 0, 1, 0, 5, shade(acc2, k ? -0.08 : -0.18)); wallRect(F, 0, 0, 1, 5, 6.2, '#ffffff'); });
       const du0 = (P.door[0] - 1.2) / RW, du1 = (P.door[0] + 1.2) / RW; wallRect(F1, 0, du0, du1, 0, 6.2, '#cfc9bd'); }
     const dp = iso(P.door[0], RD - 0.2); pill(`🚪 ${t(VL ? 'venue_leave' : 'store_leave')}`, dp.x, dp.y + 12 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z));
+  }
+  // v0.37: what you see from high up a tower: the sky (day or night) and the town's roofs far below
+  function skyOutside(RW, RD, ts) {
+    const night = NIGHT > 0.3, g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, night ? '#141a3a' : '#9fd3f2'); g.addColorStop(0.6, night ? '#2a3360' : '#d6ecf8'); g.addColorStop(1, night ? '#3d3a5c' : '#eef6fa');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    if (night) for (let k = 0; k < 40; k++) circle((k * 97.3) % W, (k * 53.1) % (H * 0.5), 0.8 + (k % 3) * 0.4, `rgba(255,255,255,${0.4 + 0.4 * Math.sin(ts / 700 + k)})`);
+    else for (let k = 0; k < 4; k++) { const cx = ((k * 211 + ts / 120) % (W + 200)) - 100, cy = 60 + k * 70; [0, 18, 34].forEach((o, j) => circle(cx + o, cy + (j % 2) * 4, 14 + j * 2, 'rgba(255,255,255,.75)')); }
+    for (let k = 0; k < 14; k++) {   // the town below
+      const bw = 30 + (k * 37) % 50, bh = 40 + (k * 53) % 120, bx = (k * 71) % (W + 60) - 30;
+      ctx.fillStyle = night ? 'rgba(40,46,80,.9)' : 'rgba(150,170,190,.45)'; ctx.fillRect(bx, H - bh, bw, bh);
+      if (night) for (let r = 0; r < bh / 12; r++) for (let c2 = 0; c2 < bw / 10; c2++) if (hash(k * 31 + r, c2) > 0.55) { ctx.fillStyle = 'rgba(255,220,140,.75)'; ctx.fillRect(bx + 3 + c2 * 10, H - bh + 4 + r * 12, 4, 5); }
+    }
   }
   const TABLE_LOOKS = [0, 1, 2, 3, 4, 5].map(i => dressUp({ shirt: COLORS[(i * 3) % COLORS.length], skin: SKINS[i % SKINS.length], hair: HAIRS[i % HAIRS.length], hairCol: HAIR_COLORS[i % HAIR_COLORS.length], mob: 'walk' }, 'diner' + i));
   const AUDIENCE_LOOKS = [0, 1, 2, 3, 4, 5, 6].map(i => dressUp({ shirt: COLORS[(i * 5) % COLORS.length], skin: SKINS[(i + 1) % SKINS.length], hair: HAIRS[(i + 2) % HAIRS.length], hairCol: HAIR_COLORS[(i + 1) % HAIR_COLORS.length], mob: 'walk' }, 'film' + i));

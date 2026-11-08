@@ -5,7 +5,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'prototype', 'js', 'data.
 const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FIELD_LEVELS, FIELD_COST, PASTURE, ORCHARD, POND, FISH_KINDS, FISH_EVERY,
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
-  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
+  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, CENTRE_NEW, TOWER_STOREYS, BUILDING_FLOORS, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
   PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL})`);
 const out = [];
 const P = s => out.push(s);
@@ -179,6 +179,20 @@ P(`能进去的地方：${D.VENUE_PLACES.map(k => D.PLACE_INFO[k] ? D.PLACE_INFO
 P('');
 table(['事情', '多久', '得到'], [['健身房任意器械', `${D.VENUE.gym.sec} 秒`, `娱乐 +${D.VENUE.gym.fun}`], ['咖啡馆坐下聊天', `${D.VENUE.cafeChat.sec} 秒`, `社交 +${D.VENUE.cafeChat.social}`], ['咖啡馆沙发听音乐', `${D.VENUE.cafeSofa.sec} 秒`, `娱乐 +${D.VENUE.cafeSofa.fun}`],
   ['图书馆坐下看书', `${D.VENUE.libRead.sec} 秒`, `娱乐 +${D.VENUE.libRead.fun}`], ['面包店坐下吃点心', `${D.VENUE.eat.sec} 秒`, `就是买点心的饱腹`], ['消防站看消防车', `${D.VENUE.truck.sec} 秒`, `娱乐 +${D.VENUE.truck.fun}，一条防火小知识`], ['诊所健康检查', '马上', '昨晚睡眠分和今天步数（只有自己看得到）']]);
+// v0.37: the new places in the town centre
+P('### v0.37 新地方（镇中心）');
+P('');
+P(`新楼按顺序摆在离镇政府最近的空地：${D.CENTRE_NEW.map(([k, w, d]) => `${D.PLACE_INFO[k].zh}（${w}×${d}）`).join('、')}（家乡镇放不下公寓楼）。高楼：${Object.entries(D.TOWER_STOREYS).map(([k, n]) => `${D.PLACE_INFO[k].zh} ${n} 层`).join('、')}。坐电梯能去的楼层：${Object.entries(D.BUILDING_FLOORS).map(([k, f]) => `${D.PLACE_INFO[k].zh}（${f.map(x => D.PLACE_INFO[x].zh).join(' → ')}）`).join('，')}。`);
+P('');
+const V2 = D.VENUE, gain = v => [v.hunger && `饱腹 +${v.hunger}`, v.fun && `娱乐 +${v.fun}`, v.social && `社交 +${v.social}`, v.rel && `关系 +${v.rel}`].filter(Boolean).join('，');
+table(['事情', '花多少', '多久', '得到'], [
+  ['空中餐厅：靠窗吃晚餐', `🪙${V2.dinner.price}`, `${V2.dinner.sec} 秒`, gain(V2.dinner)], ['空中餐厅：约朋友 / 家人吃饭（你请客）', `🪙${V2.date.price}`, `${V2.date.sec} 秒`, gain(V2.date)],
+  ['餐厅吧台 / 酒店大堂酒吧喝一杯', `🪙${V2.drink.price}`, `${V2.drink.sec} 秒`, gain(V2.drink)], ['酒店下午茶', `🪙${V2.tea.price}`, `${V2.tea.sec} 秒`, gain(V2.tea)],
+  ['屋顶泳池游泳（每天 ' + V2.swim.max + ' 次）', '免费', `${V2.swim.sec} 秒`, gain(V2.swim)], ['躺椅晒太阳（每天一次）', '免费', `${V2.sunbathe.sec} 秒`, gain(V2.sunbathe)],
+  ['写字楼看风景（每天一次）', '免费', `${V2.view.sec} 秒`, gain(V2.view)], ['公寓楼大堂和邻居聊天（每天一次）', '免费', `${V2.lounge.sec} 秒`, gain(V2.lounge)],
+  ['书店买一本坐下读', `🪙${V2.book.price}`, `${V2.book.sec} 秒`, gain(V2.book)], ['理发店剪头发（换发型、发色）', `🪙${V2.haircut.price}`, `${V2.haircut.sec} 秒`, '新发型'],
+  ['花店买一束花（放进仓库，送人关系多 +' + D.SOCIAL.bouquetUp + '）', `🪙${V2.bouquet.price}`, '马上', '一束花'], ['超市生鲜区买一袋菜（回家做饭）', `🪙${V2.groceries.price}`, '马上', Object.entries(V2.groceries.items).map(([k, n]) => `${D.CROPS[k] ? D.CROPS[k].zh : D.GOODS[k].zh} ×${n}`).join('、')],
+  ['银行柜台 / 取款机 / 贷款桌', '免费', '马上', '打开手机银行']]);
 P('## 手机：银行、贷款、股票（v0.26，v0.35 改成真实的银行）');
 P('');
 table(['项目', '数值'], [['存款利息', `年利率 ${+(D.BANK.rate * 100).toFixed(2)}%`],

@@ -2083,7 +2083,18 @@ const moodGood = () => moodScore() >= NEEDS.goodMood;
 // ---------- inside the buildings (v0.30) ----------
 // What you've done inside today: S.venue = { day, n: { key: times } }.
 function venueToday() { if (!S.venue || S.venue.day !== today()) S.venue = { day: today(), n: {} }; return S.venue.n; }
-function venueLeft(key) { return (key === 'gym' ? VENUE.gym.max : 1) - (venueToday()[key] || 0); }
+function venueLeft(key) { return ((VENUE[key] && VENUE[key].max) || 1) - (venueToday()[key] || 0); }
+// v0.37: things you pay for in the new places (dinner, a drink, afternoon tea, a book): as often as you like
+function venueBuy(key) {
+  const V = VENUE[key]; if (!V) return 'no';
+  if (S.me.coins < (V.price || 0)) return 'poor';
+  S.me.coins -= V.price || 0;
+  if (V.hunger) addNeed('hunger', V.hunger); if (V.fun) addNeed('fun', V.fun); if (V.social) addNeed('social', V.social);
+  return 'ok';
+}
+function buyBouquet() { const V = VENUE.bouquet; if (S.me.coins < V.price) return 'poor'; S.me.coins -= V.price; addBarn(S.me, 'bouquet', 1); return 'ok'; }
+function buyGroceries() { const V = VENUE.groceries; if (S.me.coins < V.price) return 'poor'; S.me.coins -= V.price; Object.entries(V.items).forEach(([k, n]) => addBarn(S.me, k, n)); return 'ok'; }
+function haircut(hair, hairCol) { const V = VENUE.haircut; if (S.me.coins < V.price) return 'poor'; S.me.coins -= V.price; S.me.look = { ...S.me.look, hair, hairCol }; return 'ok'; }
 // Do it: the fun / social it gives (once a day; the gym a few times), or 'done' if you already have today.
 function venueUse(key) {
   if (venueLeft(key) <= 0) return 'done';
@@ -2166,6 +2177,7 @@ function doSocial(id, act, g) {
     S.me.barn[g]--; if (!S.me.barn[g]) delete S.me.barn[g];
     const h = homeOf(id); if (h && h.barn) addBarn(h, g, 1);
     if (T.includes('foodie')) d += SOCIAL.foodieUp;
+    if (g === 'bouquet') d += SOCIAL.bouquetUp;   // v0.37: flowers
   }
   const K = knownOf(id); K.met = true;
   let tells = null;   // talking hobbies: you find out theirs (a shared one, or they tell you what they'd rather talk about)

@@ -884,10 +884,15 @@ const SHOP_LOOK = {
   library: { e: '📚', wall: '#efe3cf', awn: '#8a5a36', zh: '图书馆', en: 'Library' },
   post:    { e: '📮', wall: '#f3ead8', awn: '#2f6fb2', zh: '邮局', en: 'Post office' },
   clinic:  { e: '🏥', wall: '#f4f6f8', awn: '#e5484d', zh: '诊所', en: 'Clinic' },
+  // v0.37
+  bookstore: { e: '📖', wall: '#e9dcc4', awn: '#2f5d50', zh: '书店', en: 'Bookshop' },
+  salon:     { e: '💈', wall: '#f7eef2', awn: '#2d2d2d', zh: '理发店', en: 'Hair salon', pole: true },
+  florist:   { e: '💐', wall: '#f3f7ee', awn: '#ec6aa8', zh: '花店', en: 'Florist', flowers: true },
 };
 // A little shop facing +y: shop window, door, striped awning, a sign on the roof. Returns its tap box.
-function drawShop(k, x, y, ts) {
-  const L = SHOP_LOOK[k], z = cam.z, w = 6, d = 5.5, wh = 34;
+function drawShop(k, x, y, ts, w = 6, d = 5.5) {
+  if (TOWER_STOREYS[k]) return drawTower(k, x, y, w, d, ts);   // v0.37
+  const L = SHOP_LOOK[k], z = cam.z, wh = 34;
   const c = iso(x + w / 2, y + d / 2);
   ellipse(c.x, c.y + 6 * z, 100 * z, 50 * z, 'rgba(0,0,0,.07)');
   const b = box(x, y, w, d, wh, L.wall);
@@ -899,8 +904,66 @@ function drawShop(k, x, y, ts) {
   for (let i = 0; i < 10; i++) wallRect(b.left, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : L.awn);
   [0.3, 0.7].forEach(u => winFace(b.right, u, 0.09, 10, 24));
   box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(L.wall, -0.12), wh);
+  if (L.pole) { const q = wallPt(b.left, 0, 0.97, 8), st = (ts / 300) % 6; rrect(q.x - 2 * z, q.y - 16 * z, 4 * z, 16 * z, 2 * z, '#ffffff', '#9aa3ad', 0.6 * z); for (let k2 = 0; k2 < 4; k2++) { const yy = q.y - 16 * z + ((k2 * 4 + st) % 16) * z; line(q.x - 2 * z, yy, q.x + 2 * z, yy + 2 * z, k2 % 2 ? '#e5484d' : '#2f6fb2', 1.2 * z); } }   // v0.37: the barber's pole turns
+  if (L.flowers) for (let k2 = 0; k2 < 4; k2++) { const q = iso(x + 0.6 + k2 * 0.7, y + d + 0.35); ellipse(q.x, q.y - 2 * z, 4 * z, 2 * z, '#8a5a36'); emoji(['🌷', '🌻', '🌹', '💐'][k2], q.x, q.y - 3 * z, 8 * z); }   // buckets of flowers outside
   const s = up(iso(x + w / 2, y + d / 2), (wh + 5) * z);
   if (z > 0.12) pill(`${L.e} ${nm(L)}`, s.x, s.y, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
+  return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 24 * z, y1: iso(x + w, y + d).y };
+}
+// v0.37: the towers of the town centre (TOWER_STOREYS high): a glass office tower with the bank on the ground floor
+// and a restaurant at the top, a hotel with a pool on its roof, and an apartment block with balconies. Windows light
+// up at night (some of them). Returns the tap box.
+function drawTower(k, x, y, w, d, ts) {
+  const z = cam.z, n = TOWER_STOREYS[k] || 10, fh = k === 'apartments' ? 13 : 14, gh = 20, wh = gh + n * fh, c = iso(x + w / 2, y + d / 2), night = NIGHT > 0.3;
+  const lit = (i, j) => night && hash(i * 7 + j, k.length) > 0.45;
+  ellipse(c.x, c.y + 8 * z, (w + d) * 11 * z, (w + d) * 5.5 * z, 'rgba(0,0,0,.09)');
+  const look = k === 'tower' ? { wall: '#9fb6c9', frame: '#5b6c7d', glass: '#bfe1f2', ground: '#3b4b5c' }
+    : k === 'hotel' ? { wall: '#efe2cc', frame: '#b08d57', glass: '#a9cfe6', ground: '#8a5a36' }
+    : { wall: '#d98e6b', frame: '#9a5a3c', glass: '#cfe6f2', ground: '#7a4a32' };
+  const b = box(x, y, w, d, wh, look.wall, 0, { top: shade(look.wall, 0.12) });
+  // the ground floor: a lobby with big glass doors
+  [b.left, b.right].forEach((F, fi) => {
+    wallRect(F, 0, 0, 1, 0, gh, look.ground);
+    wallRect(F, 0, 0.06, 0.94, 2, gh - 3, night ? '#ffe39a' : look.glass, shade(look.ground, 0.25), 1);
+    if (fi === 0) { doorFace(F, 0.5, 0.12, gh - 4, '#2d2d34'); if (k === 'tower') [0.18, 0.82].forEach(u => wallRect(F, 0, u - 0.03, u + 0.03, 0, gh, '#e8ecf0')); }
+  });
+  // the storeys: glass curtain wall (the office tower) or rows of windows (the others), balconies on the apartments
+  const cols = Math.max(3, Math.round(w * 1.1));
+  for (let i = 0; i < n; i++) {
+    const h0 = gh + i * fh;
+    [b.left, b.right].forEach((F, fi) => {
+      if (k === 'tower') {
+        wallRect(F, 0, 0.02, 0.98, h0 + 1.5, h0 + fh - 1.5, lit(i, fi) ? '#ffe7a8' : shade(look.glass, (i % 3) * -0.04), null);
+        wallLine(F, 0, 0, h0, 1, h0, look.frame, 1);
+        if (z > 0.22) for (let j = 1; j < cols; j++) wallLine(F, 0, j / cols, h0, j / cols, h0 + fh, 'rgba(91,108,125,.55)', 0.7);
+      } else {
+        for (let j = 0; j < cols; j++) {
+          const u0 = (j + 0.2) / cols, u1 = (j + 0.8) / cols;
+          wallRect(F, 0, u0, u1, h0 + 3, h0 + fh - 2, lit(i * cols + j, fi) ? '#ffe7a8' : look.glass, '#ffffff', 0.6);
+          if (k === 'apartments' && z > 0.2 && (i + j) % 2 === 0) { wallRect(F, 0, u0 - 0.02, u1 + 0.02, h0 + 1, h0 + 4, '#f4efe6'); if (hash(i, j) > 0.7) { const q = wallPt(F, 0, (u0 + u1) / 2, h0 + 6); emoji('🪴', q.x, q.y, 5 * z); } }
+        }
+      }
+    });
+  }
+  // the roof: a parapet, and on top something different for each
+  box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(look.wall, -0.15), wh);
+  const roof = (u, v, h = 0) => up(iso(x + u * w, y + v * d), (wh + 3 + h) * z);
+  if (k === 'tower') {
+    box(x + w * 0.3, y + d * 0.3, w * 0.4, d * 0.4, 12, '#8796a6', wh + 3);
+    const a = roof(0.5, 0.5, 12), b2 = roof(0.5, 0.5, 42); line(a.x, a.y, b2.x, b2.y, '#9aa3ad', 1.4 * z); circle(b2.x, b2.y, 2 * z, Math.floor(ts / 700) % 2 ? '#ff4d4d' : '#8a2020');
+    const s0 = wallPt(b.left, 0, 0.5, wh - fh * 0.5); if (z > 0.18) { rrect(s0.x - 16 * z, s0.y - 4 * z, 32 * z, 8 * z, 2 * z, 'rgba(255,255,255,.85)'); emoji('🍽️', s0.x, s0.y + 3 * z, 6 * z); }
+  } else if (k === 'hotel') {   // a pool on the roof, with sunshades
+    const p0 = roof(0.15, 0.2), p1 = roof(0.85, 0.2), p2 = roof(0.85, 0.75), p3 = roof(0.15, 0.75);
+    poly([p0, p1, p2, p3], '#5cc6e8', '#ffffff', 1.2 * z);
+    for (let k2 = 0; k2 < 3; k2++) { const u = ((ts / 2600 + k2 / 3) % 1); const q = roof(0.2 + u * 0.6, 0.3 + k2 * 0.15); ellipse(q.x, q.y, 4 * z, 1.2 * z, 'rgba(255,255,255,.6)'); }
+    [[0.1, 0.9], [0.9, 0.9]].forEach(([u, v]) => { const q = roof(u, v), t2 = up(q, 12 * z); line(q.x, q.y, t2.x, t2.y, '#ddd', 1 * z); ellipse(t2.x, t2.y, 7 * z, 2.6 * z, '#f59e0b'); });
+    const s0 = wallPt(b.left, 0, 0.5, wh - 6); if (z > 0.15) { rrect(s0.x - 15 * z, s0.y - 4.5 * z, 30 * z, 9 * z, 2 * z, '#2d2d2d'); ctx.fillStyle = '#ffd36b'; ctx.font = `800 ${6 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('HOTEL', s0.x, s0.y + 0.3 * z); }
+  } else {   // the apartments: water tank and a little garden on the roof
+    box(x + w * 0.6, y + d * 0.15, w * 0.25, d * 0.25, 10, '#8a5a36', wh + 3); box(x + w * 0.58, y + d * 0.13, w * 0.29, d * 0.29, 3, '#6b4428', wh + 13);
+    [[0.25, 0.6], [0.4, 0.75]].forEach(([u, v]) => { const q = roof(u, v); circle(q.x, q.y - 4 * z, 4.5 * z, '#6cbf73'); });
+  }
+  const s = up(c, (wh + (k === 'tower' ? 48 : 22)) * z);
+  if (z > 0.1) pill(`${PLACE_INFO[k].e} ${nm(PLACE_INFO[k])}`, s.x, s.y, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
   return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 24 * z, y1: iso(x + w, y + d).y };
 }
 // A house seen from far away: walls and a roof in its colours, as many storeys tall as it has. Returns its top.

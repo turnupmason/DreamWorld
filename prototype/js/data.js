@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.36.0';
+const VERSION = '0.37.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -236,6 +236,7 @@ const GOODS = {
   alpacawool: { e: '🧶', zh: '羊驼毛', en: 'Alpaca wool',  sell: 48 },
   honey:      { e: '🍯', zh: '蜂蜜',   en: 'Honey',        sell: 20 },
   fish:       { e: '🐟', zh: '鲫鱼',   en: 'Fish',         sell: 12 },
+  bouquet:    { e: '💐', zh: '花束', en: 'Bouquet', sell: 20 },   // v0.37: from the florist; a gift people love
   bread:      { e: '🍞', zh: '面包',   en: 'Bread',        sell: 10 },   // baked at the bakery from 3 wheat (v0.12)
   shrimp:     { e: '🦐', zh: '河虾',   en: 'Shrimp',       sell: 18 },
   koi:        { e: '🐠', zh: '锦鲤',   en: 'Koi',          sell: 60 },
@@ -938,11 +939,23 @@ function buildLayout(id, flip) {
   const centre = box(B.centre), plaza = box(B.plaza, LOT_W), shops = B.shops.map(([k, x, y]) => [k, fx(x, 6), y]);
   const roads = B.roads.map(rect), lake = { ...B.lake, x: fx(B.lake.x) };
   // v0.14: a clinic in the first free spot of the town centre (v0.27: off the roads through it)
-  const busy = [[plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y]) => [x, y, x + 6, y + 5.5]), ...roads.map(r => r.slice(0, 4))];
+  const busy = [[plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y, w = 6, d = 5.5]) => [x, y, x + w, y + d]), ...roads.map(r => r.slice(0, 4))];
   fit: for (let yy = centre.y + 1; yy <= centre.y + centre.d - 6.5; yy += 0.5) for (let xx = centre.x + 1; xx <= centre.x + centre.w - 7; xx += 0.5) {
     if (busy.some(r => xx < r[2] + 1 && r[0] < xx + 7 && yy < r[3] + 1 && r[1] < yy + 6.5)) continue;
     shops.push(['clinic', xx, yy]); break fit;
   }
+  // v0.37: the new buildings (CENTRE_NEW), each as near the town hall as there's room, facing +y like the shops
+  { const pk = B.pocket ? box(B.pocket) : null, hx = plaza.x + LOT_W / 2, hy = plaza.y + LOT_D / 2;
+    const taken = [[plaza.x - 0.5, plaza.y - 0.5, plaza.x + LOT_W + 0.5, plaza.y + LOT_D + 1.5], ...shops.map(([, x, y]) => [x - 0.5, y - 0.5, x + 6.5, y + 7]), ...roads.map(r => [r[0] - 0.4, r[1] - 0.4, r[2] + 0.4, r[3] + 0.4]), ...(pk ? [[pk.x - 0.5, pk.y - 0.5, pk.x + pk.w + 0.5, pk.y + pk.d + 0.5]] : [])];
+    CENTRE_NEW.forEach(([k, w, d]) => {
+      let best = null, bd = 1e9;
+      for (let yy = centre.y + 0.5; yy + d + 1.2 <= centre.y + centre.d - 0.3; yy += 0.5) for (let xx = centre.x + 0.5; xx + w <= centre.x + centre.w - 0.5; xx += 0.5) {
+        const r = [xx, yy, xx + w, yy + d + 1.2];
+        if (taken.some(q => r[0] < q[2] && q[0] < r[2] && r[1] < q[3] && q[1] < r[3])) continue;
+        const dd = Math.hypot(xx + w / 2 - hx, yy + d / 2 - hy); if (dd < bd) { bd = dd; best = r; }
+      }
+      if (best) { shops.push([k, best[0], best[1], w, d]); taken.push([best[0] - 0.5, best[1] - 0.5, best[2] + 0.5, best[3] + 0.3]); }
+    }); }
   // v0.15: not only straight roads. An expressway on pillars runs past the edge of town (north, or south where the
   // sea is north) with ramps curving down to the avenue that reaches that edge (an interchange); country roads wind
   // out of town from the ends of the long roads; the park gets a winding jogging loop.
@@ -1036,7 +1049,7 @@ function buildLayout(id, flip) {
     if (best) { parks.push(best); busyRects.push([best[1], best[2], best[1] + best[3], best[2] + best[4]]); }
   };
   { const Pk = box(B.park), F0 = B.fields.length ? box(B.fields[0]) : null;
-    nearLot('centre', centre.x + centre.w / 2, centre.y + centre.d, [centre.x, centre.y, centre.w, centre.d, [[plaza.x - 1, plaza.y - 1, plaza.x + LOT_W + 1, plaza.y + LOT_D + 2], ...shops.map(([, x, y]) => [x - 0.5, y - 0.5, x + 6.5, y + 8]), ...roads.map(r => [r[0] - 0.5, r[1] - 0.5, r[2] + 0.5, r[3] + 0.5]), ...(B.pocket ? [(q => [q.x - 0.5, q.y - 0.5, q.x + q.w + 0.5, q.y + q.d + 0.5])(box(B.pocket))] : [])]]);
+    nearLot('centre', centre.x + centre.w / 2, centre.y + centre.d, [centre.x, centre.y, centre.w, centre.d, [[plaza.x - 1, plaza.y - 1, plaza.x + LOT_W + 1, plaza.y + LOT_D + 2], ...shops.map(([, x, y, w = 6, d = 5.5]) => [x - 0.5, y - 0.5, x + w + 0.5, y + d + 2.5]), ...roads.map(r => [r[0] - 0.5, r[1] - 0.5, r[2] + 0.5, r[3] + 0.5]), ...(B.pocket ? [(q => [q.x - 0.5, q.y - 0.5, q.x + q.w + 0.5, q.y + q.d + 0.5])(box(B.pocket))] : [])]]);
     nearLot('park', Pk.x + Pk.w / 2, Pk.y + Pk.d / 2, [Pk.x, Pk.y, Pk.w, Pk.d, []]);
     if (F0) nearLot('fields', F0.x + Math.min(F0.w / 2, 10), F0.y, [F0.x, F0.y, F0.w, F0.d, []]);
     nearLot('lake', lake.x, lake.y - lake.ry); }
@@ -1079,7 +1092,27 @@ const PLACE_INFO = {
   library: { e: '📚', zh: '图书馆', en: 'Library' },
   post:    { e: '📮', zh: '邮局', en: 'Post office' },
   clinic:  { e: '🏥', zh: '诊所', en: 'Clinic' },
+  // v0.37: new in the town centre: two towers (with a lift up to more floors), apartments and three little shops
+  tower:      { e: '🏢', zh: '中心大厦', en: 'City Tower' },
+  hotel:      { e: '🏨', zh: '酒店', en: 'Hotel' },
+  apartments: { e: '🏙️', zh: '公寓楼', en: 'Apartments' },
+  bookstore:  { e: '📖', zh: '书店', en: 'Bookshop' },
+  salon:      { e: '💈', zh: '理发店', en: 'Hair salon' },
+  florist:    { e: '💐', zh: '花店', en: 'Florist' },
+  // the floors inside the towers
+  bank:       { e: '🏦', zh: '银行', en: 'Bank' },
+  office:     { e: '💼', zh: '写字楼', en: 'Offices' },
+  restaurant: { e: '🍽️', zh: '空中餐厅', en: 'Sky restaurant' },
+  rooftop:    { e: '🏊', zh: '屋顶泳池', en: 'Rooftop pool' },
 };
+// v0.37: the new buildings of the town centre, [key, width, depth], placed in this order as close to the town hall as
+// there's room (every town has room for the first five; the apartments only where there's space left). A building
+// can hold several floors (BUILDING_FLOORS: you come in on the first and take the lift); VENUE_HOME: which building a
+// floor is in.
+const CENTRE_NEW = [['tower', 6, 6], ['hotel', 6, 6], ['bookstore', 5.5, 5], ['salon', 5, 4.5], ['florist', 5, 4.5], ['apartments', 6, 6]];
+const BUILDING_FLOORS = { tower: ['bank', 'office', 'restaurant'], hotel: ['hotel', 'rooftop'] };
+const VENUE_HOME = { bank: 'tower', office: 'tower', restaurant: 'tower', rooftop: 'hotel' };
+const TOWER_STOREYS = { tower: 14, hotel: 10, apartments: 16 };   // how tall they look from outside
 Object.entries(STORES).forEach(([k, s]) => { if (!PLACE_INFO[k]) PLACE_INFO[k] = { e: s.e, zh: s.zh, en: s.en }; });   // v0.17: stores are places too
 const HARVEST_GOAL = 30;          // the town fields: helps from everyone in town today; full = harvest festival
 const HELP_HARVEST = { wheat: 2 }; // helping once a day (uses 1 farm job) gives you this; the festival gives 1 bread
@@ -1127,6 +1160,7 @@ const JOBS = {
   post:    { zh: '邮递员', en: 'Postal worker', wage: 23, from: 8, to: 16 },
   gym:     { zh: '健身教练', en: 'Fitness coach', wage: 26, from: 10, to: 19 },
   clinic:  { zh: '诊所护士', en: 'Clinic nurse', wage: 40, from: 9, to: 18 },
+  office:  { zh: '公司职员', en: 'Office worker', wage: 34, from: 9, to: 17 },   // v0.37: in the City Tower
 };
 const JOB_RANKS = [{ zh: '新人', en: 'Newcomer', at: 0, pay: 1 }, { zh: '熟手', en: 'Skilled', at: 30, pay: 1.2 }, { zh: '主管', en: 'Supervisor', at: 70, pay: 1.45 }];
 const JOB_REL = { finish: 4, quit: -6, max: 100 };
@@ -1199,7 +1233,7 @@ const SOCIALS = {
 // How likely it goes well: base + their mood today + friendship × relBy, a liked thing +likeBy, a disliked one
 // dislikeBy, a hobby you share +shareBy (one they don't care about −noShare), the same thing again today −boredBy
 // each time after `boring`. sec: how long the two of you take over it.
-const SOCIAL = { moodBy: { great: 0.1, good: 0, meh: -0.1, grumpy: -0.25 }, relBy: 0.002, likeBy: 0.2, dislikeBy: -0.3, shareBy: 0.3, noShare: 0.15, boring: 2, boredBy: 0.15, likedUp: 3, foodieUp: 6, workRel: { boss: 2, mate: 1 }, sec: 3 };
+const SOCIAL = { moodBy: { great: 0.1, good: 0, meh: -0.1, grumpy: -0.25 }, relBy: 0.002, likeBy: 0.2, dislikeBy: -0.3, shareBy: 0.3, noShare: 0.15, boring: 2, boredBy: 0.15, likedUp: 3, foodieUp: 6, bouquetUp: 6, workRel: { boss: 2, mate: 1 }, sec: 3 };
 // ---------- inside every building (v0.30) ----------
 // Every building in town can be walked into, and what's inside does something. sec: how long your townie stays at it.
 // The fun / social counts once a day each (the gym: up to `max` workouts a day, on any machine).
@@ -1211,8 +1245,21 @@ const VENUE = {
   eat: { sec: 8 },                      // eat a pastry at a bakery table (a snack's own fill)
   truck: { fun: 10, sec: 6 },           // a look round the fire engine (and a fire-safety tip)
   checkup: { sec: 5 },                  // the clinic's health check: last night's sleep and today's steps
+  // v0.37 (paid ones can be done as often as you like; the others once a day, the pool twice)
+  dinner: { price: 38, hunger: 55, fun: 8, sec: 10 },           // the sky restaurant: dinner at a window table
+  date: { price: 76, hunger: 55, social: 18, fun: 8, rel: 3, sec: 12 },   // …or with someone you know (you pay for both)
+  drink: { price: 12, fun: 6, social: 4, sec: 8 },              // a drink at the restaurant bar or the hotel bar
+  tea: { price: 28, hunger: 30, fun: 6, sec: 10 },              // afternoon tea in the hotel lounge
+  swim: { fun: 12, max: 2, sec: 15 },                           // the hotel's rooftop pool
+  sunbathe: { fun: 6, sec: 10 },                                // a lounger by the pool
+  book: { price: 18, fun: 14, sec: 12 },                        // buy a book and read it in the bookshop's armchair
+  view: { fun: 6, sec: 8 },                                     // the view from the office windows
+  lounge: { social: 10, sec: 9 },                               // a chat with a neighbour in the apartments' lounge
+  haircut: { price: 45, sec: 10 },                              // a new hairstyle or colour
+  bouquet: { price: 35 },                                       // a bouquet to give someone (a gift they love)
+  groceries: { price: 40, items: { tomato: 2, potato: 2, egg: 2, milk: 1 } },   // a bag of groceries from the supermarket, to cook with
 };
-const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas'];
+const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas', 'tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist'];   // v0.37: + the new ones
 // The fire station's tips, one a day.
 const FIRE_TIPS = [
   { zh: '家里装一个烟雾报警器，每个月按一下试试。', en: 'Fit a smoke alarm at home and press its test button once a month.' },
