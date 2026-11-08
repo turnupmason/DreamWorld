@@ -1009,7 +1009,7 @@ const Scene = (() => {
     const type = S.live.type, L = curveSamples().park;
     if (['walk', 'run', 'wheel', 'cycle'].includes(type) && L.length) { const i = Math.floor(liveU) % L.length; return [L[i][0], L[i][1]]; }
     if (type === 'swim') return swimSpot();
-    if (type === 'yoga') return [TL.park.x + 12, TL.park.y + 20];
+    if (type === 'yoga') { const PP = parkPlan(); return [PP.cx - 4.5, PP.cy + 3.6]; }   // v0.32: on the lawn by the fountain
     const g = placePt('gym'); return g ? [g[0] + 0.8, g[1] + 0.4] : [TL.park.x + 12, TL.park.y + 20];
   }
   function liveTownObjs(objs, dt, ts) {
@@ -1043,7 +1043,7 @@ const Scene = (() => {
     if (shop) return [shop[1] + 3, shop[2] + 6.3];
     if (st) return storeGeo(st).door;
     if (key === 'plaza') return [TL.plaza.x + LOT_W / 2, TL.plaza.y + LOT_D + 0.8];
-    if (key === 'park') return [P.x + 20.7, P.y + 14.7];
+    if (key === 'park') { const PP = parkPlan(); return [PP.cx + 0.2, PP.cy + 3.2]; }   // v0.32: by the fountain
     if (key === 'fields') return [F.x + Math.min(F.w / 2, 10), F.y - 0.6];
     if (key !== 'lake') return null;
     const a = Math.atan2((C.y + C.d / 2 - K.y) / K.ry, (C.x + C.w / 2 - K.x) / K.rx), m = K.sea ? 1 + 1.6 / K.ry : 1 + 1.2 / Math.min(K.rx, K.ry);
@@ -1103,24 +1103,163 @@ const Scene = (() => {
       && !(TL.parks || []).some(([, qx, qy, qw, qd]) => x > qx - 1.2 && x < qx + qw + 1.2 && y > qy - 1.2 && y < qy + qd + 1.2);
     for (let x = C.x + 1.5; x < C.x + C.w - 1; x += 6.5) [C.y + C.d - 2, C.y + 1].forEach(y => { if (free(x, y)) objs.push({ d: x + y + 1, f: () => drawYardItem({ k: 'tree' }, x, y, ts) }); });
   }
-  // The park: lawns, crossing paths, a duck pond, a sports field, a playground, trees and benches.
+  // ---------- the park (v0.32) ----------
+  // A jogging loop round the edge; inside it two paths cross at a fountain, and the four lawns between them hold a duck
+  // pond (top left), tennis and basketball courts (top right), a football pitch (bottom right) and a playground with
+  // picnic tables (bottom left). People play on the courts and the pitch, kids bounce and slide, ducks paddle about,
+  // and an ice-cream cart stands by the fountain. Tap a court, the pond, the bench or the cart to do something there.
+  let PARK_PLAN = { id: '' };
+  function parkPlan() {
+    if (PARK_PLAN.id === TL.id) return PARK_PLAN;
+    const P = TL.park, L = TL.parkLoop || [], lx = L.map(p => p[0]), ly = L.map(p => p[1]);
+    const I = L.length ? { x0: Math.min(...lx) + 1.3, y0: Math.min(...ly) + 1.3, x1: Math.max(...lx) - 1.3, y1: Math.max(...ly) - 1.3 } : { x0: P.x + 3, y0: P.y + 3, x1: P.x + P.w - 3, y1: P.y + P.d - 3 };
+    const cx = (I.x0 + I.x1) / 2, cy = I.y0 + (I.y1 - I.y0) * 0.45, g = 1.7;
+    const q = { tl: [I.x0, I.y0, cx - g, cy - g], tr: [cx + g, I.y0, I.x1, cy - g], bl: [I.x0, cy + g, cx - g, I.y1], br: [cx + g, cy + g, I.x1, I.y1] };
+    const qw = k => q[k][2] - q[k][0], qh = k => q[k][3] - q[k][1], R = (x, y, w, d) => ({ x, y, w, d });
+    const pond = R(q.tl[0] + 0.4, q.tl[1] + 0.3, Math.min(9, qw('tl') - 3), Math.min(6, qh('tl') - 2.4));
+    let ten = R(0, 0, 10, 5), bb = R(0, 0, 7.5, 5);
+    const fitH = (a, b) => a.w + b.w + 1.2 <= qw('tr') - 0.4 && Math.max(a.d, b.d) <= qh('tr') - 0.5, fitV = (a, b) => Math.max(a.w, b.w) <= qw('tr') - 0.4 && a.d + b.d + 1.2 <= qh('tr') - 0.5;
+    if (!fitH(ten, bb) && !fitV(ten, bb)) { ten = R(0, 0, 9, 4.4); bb = R(0, 0, 6.4, 4.2); }
+    if (fitH(ten, bb)) { ten.x = q.tr[0] + 0.2; ten.y = q.tr[1] + 0.3; bb.x = ten.x + ten.w + 1.2; bb.y = ten.y; }
+    else if (fitV(ten, bb)) { ten.x = q.tr[0] + 0.2; ten.y = q.tr[1] + 0.2; bb.x = ten.x; bb.y = ten.y + ten.d + 1.2; }
+    else { ten.x = q.tr[0] + 0.2; ten.y = q.tr[1] + 0.2; bb = null; }
+    const fw = clamp(qw('br') - 1.2, 10, 15), fd = clamp(qh('br') - 1.2, 6.5, 9.5), pitch = R(q.br[0] + (qw('br') - fw) / 2, q.br[1] + (qh('br') - fd) / 2, fw, fd);
+    const play = R(q.bl[0] + 0.4, q.bl[1] + 0.3, Math.min(8.6, qw('bl') - 1), 4.6);
+    // no room for the basketball court by the tennis court: it goes under the playground instead of the picnic tables
+    if (!bb && play.y + play.d + 1.2 + 4.2 <= q.bl[3] - 0.3) bb = R(play.x, play.y + play.d + 1.2, 6.4, 4.2);
+    const picnic = (bb && bb.x === play.x ? [[bb.x + bb.w + 1.0, bb.y + 0.6], [bb.x + bb.w + 1.0, bb.y + 2.6]].filter(([x]) => x + 2 < q.bl[2]) : [[play.x + 0.8, play.y + play.d + 1.6], [play.x + 4.4, play.y + play.d + 2.4]]).filter(([, y]) => y + 1 < q.bl[3]);
+    const cart = R(cx + 2.9, cy + 0.85, 1.4, 0.9);
+    const bench = R(cx - 3.6, cy - 2.9, 1, 1), benches = [[pond.x + 1.2, pond.y + pond.d + 0.6], [pond.x + 5.2, pond.y + pond.d + 0.6]];
+    const flowers = [[cx - 3.1, cy + 1.8], [cx + 2.1, cy - 2.8], [cx - 2.2, cy + 2.4]];
+    const lamps = [[cx - 1.0, cy - 5.2], [cx + 0.95, cy + 5.2], [cx - 6.4, cy + 0.95], [cx + 6.4, cy - 1.0]];
+    const tramp = R(play.x + play.w - 2.4, play.y + 1.8, 2, 2);
+    // where you stand to do each thing, and what you do there
+    const spots = {
+      tennis: { r: ten, kind: 'watch', stand: [ten.x + ten.w / 2, ten.y + ten.d + 0.7], use: { pose: 'stand', view: 'back', turn: [-0.2, -1], cheer: true } },
+      basketball: bb && { r: bb, kind: 'watch', stand: [bb.x + bb.w / 2, bb.y + bb.d + 0.7], use: { pose: 'stand', view: 'back', turn: [-0.2, -1], cheer: true } },
+      soccer: { r: pitch, kind: 'watch', stand: [pitch.x + pitch.w / 2, pitch.y - 0.75], use: { pose: 'stand', view: 'front', turn: [0.3, 1], cheer: true } },
+      pond: { r: pond, kind: 'ducks', stand: [pond.x + pond.w / 2, pond.y + pond.d + 0.6], use: { pose: 'crouch', face: 1, prop: '🍞' } },
+      bench: { r: bench, kind: 'bench', stand: [bench.x + 0.5, bench.y + 1.3], use: { pose: 'sit', face: 1, seatH: 6, at: [bench.x + 0.35, bench.y + 0.6] } },
+      cart: { r: cart, kind: 'icecream', stand: [cart.x + 0.7, cart.y + cart.d + 0.6], use: { pose: 'stand', view: 'front', turn: [0.4, 1], prop: '🍦' } },
+      play: { r: play, kind: 'play', stand: [tramp.x + 1, tramp.y + tramp.d + 0.5], use: { pose: 'jacks', face: 1, lift: 6, at: [tramp.x + 1, tramp.y + 1.1] } },
+    };
+    PARK_PLAN = { id: TL.id, I, cx, cy, q, pond, ten, bb, pitch, play, tramp, picnic, cart, bench, benches, flowers, lamps, spots };
+    return PARK_PLAN;
+  }
+  const PLAYER = (shirt, i, ex = {}) => ({ shirt, skin: SKINS[i % SKINS.length], hair: HAIRS[(i + 1) % HAIRS.length], hairCol: HAIR_COLORS[i % HAIR_COLORS.length], mob: 'walk', body: 'regular', top: 'tshirt', bottom: 'shorts', pants: '#2d2d2d', shoes: 'sneakers', hat: 'nohat', ...ex });
+  const TEAMS = [0, 1, 2].map(i => PLAYER('#e5484d', i)).concat([3, 4, 5].map(i => PLAYER('#38a3e0', i)));
+  const TENNIS_P = [PLAYER('#f4f4f0', 2, { bottom: 'skirt', pants: '#f4f4f0', hair: 'bun' }), PLAYER('#f2c230', 5, { hat: 'cap', hatCol: '#f4f4f0' })];
+  const BALLERS = [PLAYER('#a46ef0', 1, { pants: '#a46ef0' }), PLAYER('#f59e0b', 4, { pants: '#2d2d2d', hat: 'beanie', hatCol: '#2d2d2d' })];
+  const KIDS = [0, 1].map(i => dressUp({ shirt: ['#ec6aa8', '#34b27b'][i], skin: SKINS[(i + 2) % SKINS.length], hair: ['bun', 'short'][i], hairCol: HAIR_COLORS[i + 2], mob: 'walk' }, 'kid' + i));
+  let TOWN_USE = null;   // what you're doing in the park right now (watching, feeding the ducks, on a bench…)
   function park(objs, vr, ts) {
     const P = TL.park;
     if (!boxVisible(P.x, P.y, P.x + P.w, P.y + P.d, vr)) return;
+    const z = cam.z, t = ts / 1000, PP = parkPlan(), { cx, cy, I } = PP;
+    const ball = (x, y, h, col = '#ffffff', r = 2.2) => { const p = iso(x, y); ellipse(p.x, p.y, r * 1.2 * z, r * 0.5 * z, 'rgba(0,0,0,.18)'); circle(p.x, p.y - h * z, r * z, col, 'rgba(0,0,0,.35)', 0.6 * z); };
+    const who = (x, y, look, o, s = 1) => objs.push({ d: x + y + 0.3, f: () => { const p = iso(x, y); drawPerson(p.x, p.y - (o.lift || 0) * z, z * s, { look, energy: 'good', ts, seed: x, ...o }); } });
+    const hitR = (k, r, h) => { const a = iso(r.x, r.y + r.d), b = iso(r.x + r.w, r.y), c0 = iso(r.x, r.y), c1 = iso(r.x + r.w, r.y + r.d); if (!edit) hits.push({ kind: 'parkSpot', k, pri: 2, x0: a.x, x1: b.x, y0: c0.y - h * z, y1: c1.y }); };
+    // the lawn, the paths across it, and the paved circle where they meet
     flatRect(P.x, P.y, P.w, P.d, '#9bd176');
-    flatRect(P.x, P.y + 14, P.w, 1.4, '#e6dccb'); flatRect(P.x + 20, P.y, 1.4, P.d, '#e6dccb');
-    drawPond(P.x + 4, P.y + 3, 10, 7, 6, ts);
-    const f = { x: P.x + 25, y: P.y + 18, w: 16, d: 10 };
-    flatRect(f.x, f.y, f.w, f.d, '#76bb54');
-    for (let k = 0; k < 8; k++) if (k % 2) flatRect(f.x + k * 2, f.y, 2, f.d, 'rgba(255,255,255,.08)');
-    flatRect(f.x + 0.4, f.y + 0.4, f.w - 0.8, f.d - 0.8, null, 'rgba(255,255,255,.9)', 0, 1.6 * cam.z);
-    flatRect(f.x + f.w / 2 - 0.04, f.y + 0.4, 0.08, f.d - 0.8, 'rgba(255,255,255,.9)');
-    const items = [['slide', P.x + 25, P.y + 4], ['swing', P.x + 29, P.y + 4], ['trampoline', P.x + 33, P.y + 4], ['bench', P.x + 16, P.y + 12], ['bench', P.x + 23, P.y + 12],
-      ['bench', P.x + 8, P.y + 16], ['lamp', P.x + 19, P.y + 13], ['lamp', P.x + 22, P.y + 16], ['flowers', P.x + 15, P.y + 4], ['flowers', P.x + 16, P.y + 4], ['picnic', P.x + 6, P.y + 20], ['picnic', P.x + 11, P.y + 22]];
-    for (let k = 0; k < 16; k++) items.push([k % 3 ? 'tree' : 'pine', P.x + 1 + (k * 7.3) % (P.w - 2), P.y + (k < 8 ? 0.4 : P.d - 1.4)]);
-    [[P.x + 3, P.y + 24], [P.x + 9, P.y + 26], [P.x + 15, P.y + 25], [P.x + 2, P.y + 17]].forEach(([x, y]) => items.push(['tree', x, y]));
+    flatRect(I.x0 - 1.4, cy - 0.7, I.x1 - I.x0 + 2.8, 1.4, '#e6dccb'); flatRect(cx - 0.7, I.y0 - 1.4, 1.4, I.y1 - I.y0 + 2.8, '#e6dccb');
+    { const pts = []; for (let k = 0; k < 32; k++) { const a = k / 32 * Math.PI * 2; pts.push(iso(cx + Math.cos(a) * 2.7, cy + Math.sin(a) * 2.7)); } poly(pts, '#ece2cf', 'rgba(150,130,100,.35)', 1); }
+    // the pond, with ducks (they swim over when you feed them)
+    const pd = PP.pond, feeding = TOWN_USE && TOWN_USE.k === 'pond';
+    drawPond(pd.x, pd.y, pd.w, pd.d, 6, ts);
+    for (let k = 0; k < 4; k++) {
+      let x = pd.x + pd.w / 2 + Math.cos(t * 0.25 + k * 1.6) * pd.w * 0.3, y = pd.y + pd.d / 2 + Math.sin(t * 0.25 + k * 1.6) * pd.d * 0.26, face = -Math.sin(t * 0.25 + k * 1.6) > 0 ? 1 : -1;
+      if (feeding) { x = pd.x + pd.w / 2 - 1.2 + k * 0.8 + Math.sin(t * 2 + k) * 0.15; y = pd.y + pd.d - 0.9 - (k % 2) * 0.5; face = k < 2 ? 1 : -1; }
+      objs.push({ d: x + y, f: () => { const p = iso(x, y); drawAnimal('duck', k === 3 ? 0 : 2, p.x, p.y + 3 * z, z * (k === 3 ? 0.55 : 0.8), { face, ts, seed: k, moving: true, phase: ts / 160 + k }); } });
+    }
+    hitR('pond', pd, 6);
+    // tennis: a blue court with white lines, a net, a fence behind; two players and the ball going back and forth
+    { const T = PP.ten, mx = T.x + T.w / 2;
+      flatRect(T.x - 0.5, T.y - 0.5, T.w + 1, T.d + 1, '#4f8f5a'); flatRect(T.x, T.y, T.w, T.d, '#3e7cc7');
+      flatRect(T.x, T.y, T.w, T.d, null, 'rgba(255,255,255,.9)', 0, 1.4 * z); flatRect(T.x, T.y + T.d * 0.15, T.w, T.d * 0.7, null, 'rgba(255,255,255,.75)', 0, 1 * z);
+      flatRect(T.x + T.w * 0.25, T.y + T.d * 0.15, T.w * 0.5, T.d * 0.7, null, 'rgba(255,255,255,.75)', 0, 1 * z); flatRect(T.x + T.w * 0.25, T.y + T.d / 2 - 0.03, T.w * 0.5, 0.06, 'rgba(255,255,255,.75)');
+      objs.push({ d: T.x + T.y - 1, f: () => { [[T.x - 0.5, T.y - 0.5, T.x + T.w + 0.5, T.y - 0.5], [T.x - 0.5, T.y - 0.5, T.x - 0.5, T.y + T.d + 0.5]].forEach(([a0, b0, a1, b1]) => { const A = iso(a0, b0), B = iso(a1, b1); poly([A, B, up(B, 22 * z), up(A, 22 * z)], 'rgba(70,90,80,.16)', null); line(up(A, 22 * z).x, up(A, 22 * z).y, up(B, 22 * z).x, up(B, 22 * z).y, '#5b6470', 1.2 * z); const n = Math.round(Math.hypot(a1 - a0, b1 - b0) / 1.6); for (let k = 0; k <= n; k++) { const q2 = iso(a0 + (a1 - a0) * k / n, b0 + (b1 - b0) * k / n); line(q2.x, q2.y, q2.x, q2.y - 22 * z, '#5b6470', 1 * z); } }); } });
+      objs.push({ d: mx + T.y + T.d / 2, f: () => { const A = iso(mx, T.y - 0.2), B = iso(mx, T.y + T.d + 0.2); [A, B].forEach(p => line(p.x, p.y, p.x, p.y - 9 * z, '#d9dee4', 1.4 * z)); poly([up(A, 3 * z), up(B, 3 * z), up(B, 8 * z), up(A, 8 * z)], 'rgba(255,255,255,.35)', null); line(up(A, 8 * z).x, up(A, 8 * z).y, up(B, 8 * z).x, up(B, 8 * z).y, '#ffffff', 1.2 * z); for (let k = 1; k < 8; k++) { const q2 = iso(mx, T.y - 0.2 + (T.d + 0.4) * k / 8); line(q2.x, q2.y - 3 * z, q2.x, q2.y - 8 * z, 'rgba(255,255,255,.5)', 0.6 * z); } } });
+      const per = 1.5, u = (t % (per * 2)) / per, ay = T.y + T.d / 2 + Math.sin(t * 1.3) * T.d * 0.28, by = T.y + T.d / 2 + Math.sin(t * 1.1 + 2) * T.d * 0.28;
+      who(T.x + 0.8, ay, TENNIS_P[0], { face: 1, pose: 'stand', moving: Math.abs(Math.cos(t * 1.3)) > 0.3, phase: t * 9, wave: u > 1.85 || u < 0.15 });
+      who(T.x + T.w - 0.8, by, TENNIS_P[1], { face: -1, pose: 'stand', moving: Math.abs(Math.cos(t * 1.1 + 2)) > 0.3, phase: t * 9 + 1, wave: u > 0.85 && u < 1.15 });
+      const k2 = u < 1 ? u : u - 1, fx = u < 1 ? T.x + 1.3 : T.x + T.w - 1.3, tx = u < 1 ? T.x + T.w - 1.3 : T.x + 1.3, fy = u < 1 ? ay : by, ty = u < 1 ? by : ay;
+      objs.push({ d: fx + (tx - fx) * k2 + fy + (ty - fy) * k2 + 0.4, f: () => ball(fx + (tx - fx) * k2, fy + (ty - fy) * k2, 16 + Math.sin(k2 * Math.PI) * 18, '#d8f25a', 1.6) });
+      hitR('tennis', T, 20); }
+    // basketball: an orange court, two hoops; one shoots, one guards
+    if (PP.bb) { const K = PP.bb, my = K.y + K.d / 2;
+      flatRect(K.x - 0.4, K.y - 0.4, K.w + 0.8, K.d + 0.8, '#7d848c'); flatRect(K.x, K.y, K.w, K.d, '#d8823f');
+      flatRect(K.x, K.y, K.w, K.d, null, 'rgba(255,255,255,.9)', 0, 1.3 * z); flatRect(K.x + K.w / 2 - 0.03, K.y, 0.06, K.d, 'rgba(255,255,255,.8)');
+      [K.x, K.x + K.w - 1.6].forEach(x => flatRect(x, my - 0.9, 1.6, 1.8, 'rgba(180,70,40,.35)', 'rgba(255,255,255,.8)', 0, 1 * z));
+      { const pts = []; for (let k = 0; k < 20; k++) { const a = k / 20 * Math.PI * 2; pts.push(iso(K.x + K.w / 2 + Math.cos(a) * 0.9, my + Math.sin(a) * 0.9)); } poly(pts, null, 'rgba(255,255,255,.8)', 1 * z); }
+      const hoop = (x, dir) => objs.push({ d: x + my - 0.5, f: () => { const b = iso(x, my), top = up(b, 34 * z); line(b.x, b.y, top.x, top.y, '#5b6470', 2 * z); const bd = up(iso(x + dir * 0.15, my), 34 * z); rrect(bd.x - 9 * z, bd.y - 7 * z, 18 * z, 12 * z, 1.5 * z, '#ffffff', '#5b6470', 0.8 * z); const rim = up(iso(x + dir * 0.6, my), 30 * z); ellipse(rim.x, rim.y, 6 * z, 2.4 * z, null, '#ff6b2d', 1.4 * z); for (let k = -2; k <= 2; k++) line(rim.x + k * 2.4 * z, rim.y + 1 * z, rim.x + k * 1.6 * z, rim.y + 7 * z, 'rgba(255,255,255,.75)', 0.6 * z); } });
+      hoop(K.x + 0.1, 1); hoop(K.x + K.w - 0.1, -1);
+      const per = 2.6, u = (t % per) / per, sx = K.x + 2.6 + Math.sin(t * 0.5) * 0.7, sy = my + Math.cos(t * 0.4) * K.d * 0.25;
+      who(sx, sy, BALLERS[0], { face: -1, pose: 'stand', moving: u < 0.55, phase: t * 8, wave: u > 0.5 && u < 0.62 });
+      who(sx - 1.0, sy + 0.4, BALLERS[1], { face: 1, pose: 'stand', moving: true, phase: t * 7, wave: u > 0.5 && u < 0.62 });
+      objs.push({ d: sx + sy + 0.5, f: () => { if (u < 0.55) ball(sx - 0.25, sy + 0.1, 4 + Math.abs(Math.sin(t * 9)) * 9, '#ff8a3d', 1.9); else { const k2 = (u - 0.55) / 0.45, hx = K.x + 0.7; ball(sx + (hx - sx) * k2, sy + (my - sy) * k2, 20 + (30 - 20) * k2 + Math.sin(k2 * Math.PI) * 26, '#ff8a3d', 1.9); } } });
+      hitR('basketball', K, 34); }
+    // the football pitch: striped grass, white lines, two goals; three a side chasing the ball
+    { const F = PP.pitch, mx = F.x + F.w / 2, my = F.y + F.d / 2;
+      flatRect(F.x - 0.5, F.y - 0.5, F.w + 1, F.d + 1, '#6fb44e');
+      for (let k = 0; k < 8; k++) if (k % 2) flatRect(F.x + k * F.w / 8, F.y, F.w / 8, F.d, 'rgba(255,255,255,.09)');
+      flatRect(F.x, F.y, F.w, F.d, null, 'rgba(255,255,255,.9)', 0, 1.4 * z); flatRect(mx - 0.03, F.y, 0.06, F.d, 'rgba(255,255,255,.9)');
+      { const pts = []; for (let k = 0; k < 24; k++) { const a = k / 24 * Math.PI * 2; pts.push(iso(mx + Math.cos(a) * 1.4, my + Math.sin(a) * 1.4)); } poly(pts, null, 'rgba(255,255,255,.9)', 1.2 * z); }
+      [F.x, F.x + F.w - 2].forEach(x => flatRect(x, my - 1.8, 2, 3.6, null, 'rgba(255,255,255,.9)', 0, 1.1 * z));
+      const goal = (x, dir) => objs.push({ d: x + my, f: () => { const a = iso(x, my - 1.1), b = iso(x, my + 1.1), a2 = iso(x - dir * 0.6, my - 1.1), b2 = iso(x - dir * 0.6, my + 1.1); poly([a2, b2, up(b2, 8 * z), up(a2, 8 * z)], 'rgba(255,255,255,.3)', null); poly([up(a, 14 * z), up(b, 14 * z), up(b2, 8 * z), up(a2, 8 * z)], 'rgba(255,255,255,.25)', null); [a, b].forEach(p => line(p.x, p.y, p.x, p.y - 14 * z, '#ffffff', 1.8 * z)); line(up(a, 14 * z).x, up(a, 14 * z).y, up(b, 14 * z).x, up(b, 14 * z).y, '#ffffff', 1.8 * z); } });
+      goal(F.x, 1); goal(F.x + F.w, -1);
+      const bp = s => [clamp(mx + Math.sin(s * 0.45) * F.w * 0.36 + Math.sin(s * 1.7) * 0.9, F.x + 0.8, F.x + F.w - 0.8), clamp(my + Math.sin(s * 0.7 + 1) * F.d * 0.3 + Math.cos(s * 1.3) * 0.5, F.y + 0.6, F.y + F.d - 0.6)];
+      const [bx, by] = bp(t);
+      [[0, 0.5, -0.6, 0.6], [1, 1.1, 0.7, -0.8], [3, 0.8, 0.5, 0.9], [4, 1.4, -0.8, -0.5]].forEach(([i, lag, ox, oy]) => { const [px, py] = bp(t - lag), x = clamp(px + ox, F.x + 0.5, F.x + F.w - 0.5), y = clamp(py + oy, F.y + 0.4, F.y + F.d - 0.4); who(x, y, TEAMS[i], { face: bx > x ? 1 : -1, pose: 'run', moving: true, phase: t * 11 + i }, 0.9); });
+      who(F.x + 0.6, clamp(by, my - 1, my + 1), TEAMS[2], { face: 1, pose: 'stand', wave: Math.abs(bx - F.x) < 2.5 }, 0.9);
+      who(F.x + F.w - 0.6, clamp(by, my - 1, my + 1), TEAMS[5], { face: -1, pose: 'stand', wave: Math.abs(bx - F.x - F.w) < 2.5 }, 0.9);
+      objs.push({ d: bx + by + 0.4, f: () => ball(bx, by, 2 + Math.abs(Math.sin(t * 4)) * 3, '#ffffff', 1.8) });
+      hitR('soccer', F, 14); }
+    // the playground: a soft orange mat, a slide, swings, a trampoline; two kids playing
+    { const Y = PP.play, tr = PP.tramp;
+      flatRect(Y.x, Y.y, Y.w, Y.d, '#e9875f'); flatRect(Y.x + 0.15, Y.y + 0.15, Y.w - 0.3, Y.d - 0.3, null, 'rgba(255,255,255,.45)', 0, 1 * z);
+      [['slide', Y.x + 0.5, Y.y + 0.4], ['swing', Y.x + 2.4, Y.y + 0.5], ['trampoline', tr.x, tr.y]].forEach(([k, x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k, rot: 0, placed: 0 }, x, y, ts) }));
+      const jump = !(TOWN_USE && TOWN_USE.k === 'play');
+      if (jump) who(tr.x + 1, tr.y + 1.1, KIDS[0], { pose: 'jacks', face: 1, lift: 6 }, 0.72);
+      const a = t * 0.6; who(Y.x + 2.2 + Math.cos(a) * 1.4, Y.y + 2.9 + Math.sin(a) * 0.9, KIDS[1], { face: -Math.sin(a) > 0 ? 1 : -1, pose: 'run', moving: true, phase: t * 12 }, 0.72);
+      hitR('play', Y, 20); }
+    // the fountain, the ice-cream cart, a bench by the fountain, benches by the pond, picnic tables, flowers and lamps
+    objs.push({ d: cx + cy + 1.4, f: () => drawDecor({ kind: 'fountain', x: cx - 1.4, y: cy - 1.4, w: 2.8, d: 2.8 }, ts) });
+    { const C = PP.cart; objs.push({ d: C.x + C.y + 1, f: () => {
+        const b = box(C.x, C.y, C.w, C.d, 12, '#f7c6d9', 4, { top: '#fbe3ec' }); [0.2, 0.8].forEach(u => { const q2 = wallPt(b.left, 0, u, 3); circle(q2.x, q2.y, 3 * z, '#5b6470'); });
+        const tp = up(iso(C.x + C.w / 2, C.y + C.d / 2), 16 * z); line(tp.x, tp.y, tp.x, tp.y - 22 * z, '#9aa3ad', 1.2 * z); const um = up(tp, 22 * z);
+        for (let k = 0; k < 6; k++) pg([[um.x, um.y - 4 * z], [um.x + Math.cos(k / 6 * Math.PI * 2) * 16 * z, um.y + Math.sin(k / 6 * Math.PI * 2) * 6 * z + 3 * z], [um.x + Math.cos((k + 1) / 6 * Math.PI * 2) * 16 * z, um.y + Math.sin((k + 1) / 6 * Math.PI * 2) * 6 * z + 3 * z]], k % 2 ? '#ffffff' : '#ec6aa8');
+        emoji('🍦', tp.x + 6 * z, tp.y + 2 * z, 11 * z); } });
+      who(C.x + 0.7, C.y - 0.35, PLAYER('#ffffff', 3, { bottom: 'jeans', pants: '#4a5a78', hat: 'cap', hatCol: '#ec6aa8' }), { face: 1, view: 'front', turn: [0.4, 1], pose: 'stand', wave: Math.sin(t * 0.8) > 0.9 });
+      hitR('cart', C, 30); }
+    const items = [['bench', PP.bench.x, PP.bench.y], ...PP.benches.map(([x, y]) => ['bench', x, y]), ...PP.picnic.map(([x, y]) => ['picnic', x, y]), ...PP.flowers.map(([x, y]) => ['flowers', x, y]), ...PP.lamps.map(([x, y]) => ['lamp', x - 0.5, y - 0.5])];
+    hitR('bench', PP.bench, 16);
+    // trees round the edge, outside the jogging loop
+    for (let k = 0; k < 16; k++) items.push([k % 3 ? 'tree' : 'pine', P.x + 1 + (k * 7.3) % (P.w - 2), P.y + (k < 8 ? 0.2 : P.d - 1.2)]);
+    for (let k = 0; k < 6; k++) items.push(['tree', P.x + (k % 2 ? P.w - 1.1 : 0.1), P.y + 4 + Math.floor(k / 2) * 9]);
     const underFly = (x, y) => (TL.flyovers || []).some(F => x > F.x0 - 1 && x < F.x1 + 1 && Math.abs(y + 0.5 - F.y) < 2.2);   // v0.27: nothing growing under the flyover
     items.filter(([, x, y]) => !onCarPark(x + 0.5, y + 0.5) && !underFly(x, y)).forEach(([k, x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k, rot: 0, placed: 0 }, x, y, ts) }));
+  }
+  // v0.32: do something in the park: walk there along the paths, then watch / feed / sit / bounce for `secs`, then done()
+  function parkUseNow(k, secs, done) {
+    const PP = parkPlan(), S0 = PP.spots[k];
+    if (!S0 || mode !== 'town') { if (done) done(); return false; }
+    stopTripHere(); TOWN_USE = null;
+    const from = mePos(), to = S0.stand, { cx, cy } = PP, onH = p => Math.abs(p[1] - cy) <= Math.abs(p[0] - cx);
+    const pa = onH(from) ? [from[0], cy] : [cx, from[1]], pb = onH(to) ? [to[0], cy] : [cx, to[1]];
+    const path = onH(from) === onH(to) ? [pa, pb, to] : [pa, [cx, cy], pb, to];
+    trip = { kind: 'park', town: VIEW_TOWN, legs: [{ how: 'walk', from, path }], li: 0, how: 'walk', inCar: false, car: null, x: from[0], y: from[1], path: path.slice(), dest: null, place: 'park', face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now(),
+      done: () => { TOWN_USE = { k, ...S0.use, at: S0.use.at || to, secs, until: performance.now() + secs * 1000, done }; } };
+    return true;
+  }
+  // you, doing it: the pose, what you're holding, a bar for how long is left
+  function drawTownUse(ts) {
+    const U = TOWN_USE, z = cam.z, p = iso(U.at[0], U.at[1]), cheer = U.cheer && Math.sin(ts / 260) > 0.3;
+    drawPerson(p.x, p.y - (U.lift || 0) * z, z, { look: S.me.look, face: U.face || 1, view: U.view || null, turn: U.turn, energy: energyLevel(), ts, seed: 3, pose: U.pose, seatH: U.seatH, wave: cheer });
+    if (U.prop) emoji(U.prop, p.x + 11 * z, p.y - (U.pose === 'crouch' ? 10 : 20) * z - (U.lift || 0) * z, 10 * z);
+    if (U.cheer && cheer) emoji('📣', p.x - 12 * z, p.y - 46 * z, 11 * z);
+    if (U.k === 'pond') for (let k = 0; k < 4; k++) { const u = ((ts / 700 + k / 4) % 1), q2 = iso(U.at[0] + 0.3 + u * 0.4 - k * 0.2, U.at[1] - 0.4 - u * 0.9); circle(q2.x, q2.y - (1 - u) * 10 * z, 1.1 * z, '#e9c46a'); }
+    if (z > 0.35) { const w = 34 * z, by = p.y - (56 + (U.lift || 0)) * z, left = Math.max(0, (U.until - performance.now()) / 1000); rrect(p.x - w / 2, by, w, 5 * z, 2.5 * z, 'rgba(0,0,0,.25)'); rrect(p.x - w / 2, by, w * (1 - left / U.secs), 5 * z, 2.5 * z, '#6cbf73'); }
+    nameTag(p, S.me.name || '🙂', true);
   }
   const onCarPark = (x, y) => (TL.parks || []).some(([, qx, qy, qw, qd]) => x > qx - 0.8 && x < qx + qw + 0.8 && y > qy - 0.8 && y < qy + qd + 0.8);
   // The big lake, with a wooden dock and a little boat.
@@ -1222,7 +1361,7 @@ const Scene = (() => {
     if (mode === 'town') liveTownObjs(objs, dt, ts);
     if (mode === 'town' && cam.z > 0.2 && VIEW_TOWN === myTown()) parkPeople(objs, ts);   // v0.25
     if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.inCar ? carDepth(trip.x, trip.y, trip.dir, trip.h || 0) : trip.x + trip.y + 0.6, f: () => drawTrip(ts) });
-    else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = S.out.pt; objs.push({ d: mx + my + 0.6, f: () => drawMeOut(mx, my, ts) }); }
+    else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = TOWN_USE ? TOWN_USE.at : S.out.pt; objs.push({ d: mx + my + 0.6, f: () => (TOWN_USE ? drawTownUse(ts) : drawMeOut(mx, my, ts)) }); }
     const atPlace = S.work ? S.work.place : jailed() ? 'police' : S.study ? 'school' : null;
     if (atPlace && mode === 'town' && VIEW_TOWN === myTown() && placePt(atPlace)) {   // at work (v0.14) or held by the police (v0.18)
       const [wx, wy] = placePt(atPlace), jail = !S.work && !S.study;
@@ -1653,7 +1792,23 @@ const Scene = (() => {
     FOOT = { id: TL.id, lines, nodes, zebras, deadEnds, cut };
     return FOOT;
   }
+  // v0.32: into or out of the park by the entrance on a road (where its paths meet the edge), then along the paths
+  function parkVia(p) {
+    const P = TL.park;
+    if (typeof parkPlan !== 'function' || !P || p[0] < P.x + 0.5 || p[0] > P.x + P.w - 0.5 || p[1] < P.y + 0.5 || p[1] > P.y + P.d - 0.5) return null;
+    const PP = parkPlan(), F = footNet(), gaps = [[PP.cx, P.y - 0.2, 'v'], [PP.cx, P.y + P.d + 0.2, 'v'], [P.x - 0.2, PP.cy, 'h'], [P.x + P.w + 0.2, PP.cy, 'h']];
+    const near = q => Math.min(...F.lines.map(L => { const v = clamp(L.h ? q[0] : q[1], L.a, L.b); return L.h ? Math.hypot(v - q[0], L.c - q[1]) : Math.hypot(L.c - q[0], v - q[1]); }));
+    const E = gaps.sort((g1, g2) => near(g1) - near(g2))[0];
+    return E[2] === 'v' ? [[E[0], E[1]], [PP.cx, p[1]], p] : [[E[0], E[1]], [p[0], PP.cy], p];
+  }
   function footRoute(a, b) {
+    const ia = parkVia(a), ib = parkVia(b);
+    if (ia && ib) { const PP = parkPlan(), onH = q => Math.abs(q[1] - PP.cy) <= Math.abs(q[0] - PP.cx), pa = onH(a) ? [a[0], PP.cy] : [PP.cx, a[1]], pb = onH(b) ? [b[0], PP.cy] : [PP.cx, b[1]]; return onH(a) === onH(b) ? [pa, pb, b] : [pa, [PP.cx, PP.cy], pb, b]; }
+    if (ib) { const r = footRouteRaw(a, ib[0]); return [...r, ...ib.slice(1)]; }
+    if (ia) { const r = footRouteRaw(ia[0], b); return [...ia.slice(0, -1).reverse(), ...r]; }
+    return footRouteRaw(a, b);
+  }
+  function footRouteRaw(a, b) {
     const F = footNet(), ns = F.nodes, n = ns.length;
     const snap = p => {
       let best = null;
@@ -1769,11 +1924,12 @@ const Scene = (() => {
     if (VIEW_TOWN !== myTown() || !TL.park) return [];
     const P = TL.park, dayN = Math.floor(now() / DAY), list = [];
     const ids = allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id));
-    [[P.x + 16.4, P.y + 13.3], [P.x + 17.5, P.y + 13.2], [P.x + 7.4, P.y + 21.2], [P.x + 15.6, P.y + 7.4]].forEach(([x, y], i) => { const id = ids[(dayN * 3 + i * 7) % Math.max(1, ids.length)]; if (id) list.push({ id, look: homeOf(id).look, x, y, i }); });
-    if (S.meet && S.meet.until > now()) { const who = whoIs(S.meet.id); if (who) list.push({ id: S.meet.id, look: who.look, x: P.x + 12.6, y: P.y + 13.4, i: 11, work: !!who.wp, boss: !!(who.wp && who.wp.boss) }); }   // v0.26: you asked them on the phone
+    const PP = parkPlan(), b0 = PP.benches[0], pc = PP.picnic[0] || [PP.play.x + 1, PP.play.y + 6], T = PP.ten;   // v0.32
+    [[b0[0] + 0.4, b0[1] + 1.4], [b0[0] + 1.3, b0[1] + 1.3], [pc[0] - 0.5, pc[1] + 0.6], [T.x + 2.2, T.y + T.d + 0.9]].forEach(([x, y], i) => { const id = ids[(dayN * 3 + i * 7) % Math.max(1, ids.length)]; if (id) list.push({ id, look: homeOf(id).look, x, y, i }); });
+    if (S.meet && S.meet.until > now()) { const who = whoIs(S.meet.id); if (who) list.push({ id: S.meet.id, look: who.look, x: PP.cx - 1.6, y: PP.cy + 2.7, i: 11, work: !!who.wp, boss: !!(who.wp && who.wp.boss) }); }   // v0.26: you asked them on the phone
     const wp = S.job ? workPeople(S.job.place) : [];
-    if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 3 === 0) list.push({ id: wp[1].id, look: wp[1].look, x: P.x + 18.2, y: P.y + 17.5, i: 9, work: true });
-    if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 4 === 1) list.push({ id: wp[0].id, look: wp[0].look, x: P.x + 27, y: P.y + 16.4, i: 10, work: true, boss: true });
+    if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 3 === 0) list.push({ id: wp[1].id, look: wp[1].look, x: PP.cx + 3.6, y: PP.cy - 2.4, i: 9, work: true });
+    if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 4 === 1) list.push({ id: wp[0].id, look: wp[0].look, x: PP.cx - 4.6, y: PP.cy + 2.3, i: 10, work: true, boss: true });
     return list;
   }
   function parkPeople(objs, ts) {
@@ -1971,6 +2127,7 @@ const Scene = (() => {
   }
   function startTrip(to, how, car, done, dest, place) {
     if (trip && !trip.arrived) stopTripHere();   // v0.29: from where you are now (not back to where you set off)
+    TOWN_USE = null;
     const fromHome = atHomeNow();
     const legs = planTrip(to, how, dest, place), L0 = legs[0], [x, y] = L0.from;
     trip = { town: VIEW_TOWN, legs, li: 0, how: L0.how, inCar: !!L0.car, car, x, y, path: L0.path.slice(), done, dest, place, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now(), fromHome };
@@ -2007,6 +2164,7 @@ const Scene = (() => {
     }
   }
   function stepTrip(dt) {
+    if (TOWN_USE && (performance.now() > TOWN_USE.until || mode !== 'town')) { const f = mode === 'town' ? TOWN_USE.done : null; TOWN_USE = null; if (f) setTimeout(f, 60); }   // v0.32
     if (!trip) return;
     if (trip.town !== VIEW_TOWN || mode !== 'town') { finishTripNow(true); return; }
     if (trip.arrived) return;
@@ -3830,6 +3988,10 @@ const Scene = (() => {
     travel(to, how, car, done, dest, place, pick) { if (mode !== 'town') return false; TRIP_CAR = pick === undefined ? null : pick; try { startTrip(to, how, car, done, dest, place); } finally { TRIP_CAR = null; } return true; },
     mePoint() { if (!S) return null; TL = layoutOf(myTown()); const keep = VIEW_TOWN; return S.work || S.jail || (S.out && S.out.town === myTown()) ? (VIEW_TOWN === myTown() ? mePos() : null) : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })(); },
     pingMe() { PING = performance.now(); },
+    // v0.32: do something in the park (watch a game, feed the ducks, sit on the bench…); how long is left
+    parkUse(k, secs, done) { return parkUseNow(k, secs, done); },
+    parkBusy() { return TOWN_USE ? Math.max(0, Math.ceil((TOWN_USE.until - performance.now()) / 1000)) : 0; },
+    parkHas(k) { return mode === 'town' && !!TL.park && !!parkPlan().spots[k]; },
     // v0.31: play a social moment with someone: your bubble (e), then theirs (react), for SOCIAL.sec seconds
     socialAnim(id, e, react, wave) { CHAT = { id, t0: performance.now(), until: performance.now() + SOCIAL.sec * 1000 + 600, e, react, wave }; },
     // v0.30: inside a building: sit at / lie on / work out on something for a while, then done(); what you're doing now
@@ -3843,7 +4005,7 @@ const Scene = (() => {
     walkUp(id, done) {
       const pp = parkList().find(p => p.id === id), w = !pp && WALK.town === VIEW_TOWN && WALK.list.find(x => x.id === id);
       if (mode !== 'town' || (!pp && !w)) { if (done) done(); return; }
-      stopTripHere();   // v0.29: from where you are now
+      stopTripHere(); TOWN_USE = null;   // v0.29: from where you are now
       if (w) { w.path = []; w.stay = Math.max(w.stay || 0, 14); w.moving = false; }   // they stop for you
       const pt = pp ? [pp.x, pp.y] : [w.x, w.y], stand = [pt[0] + 0.15, pt[1] + 1.05], from = mePos();   // just in front of them
       const inPark = q => { const P = TL.park; return q[0] > P.x && q[0] < P.x + P.w && q[1] > P.y && q[1] < P.y + P.d; };
@@ -3855,7 +4017,7 @@ const Scene = (() => {
     parkFolk() { return parkList().map(p => ({ id: p.id, work: !!p.work, boss: !!p.boss })); },
     stroll(done) {   // v0.25: a lap of the park's jogging path, then back where you started
       if (mode !== 'town' || !TL.parkLoop) { if (done) done(); return; }
-      stopTripHere();
+      stopTripHere(); TOWN_USE = null;
       const loop = smoothPts(TL.parkLoop, 1.2).map(p => [p[0], p[1]]), from = mePos();
       let k0 = 0, bd = 1e9; loop.forEach((p, i) => { const d = Math.hypot(p[0] - from[0], p[1] - from[1]); if (d < bd) { bd = d; k0 = i; } });
       const lap = [...loop.slice(k0), ...loop.slice(0, k0), loop[k0], from];

@@ -993,6 +993,13 @@ const SHEETS = {
   // v0.30: something inside a building
   spot(arg) {
     const [v, k] = arg.split('|'), key = v + '|' + k, gymK = v === 'gym';
+    if (v === 'park') {   // v0.32: something in the park: you need to be in the park; watch, feed, sit, bounce, or an ice cream
+      const kind = PARK_KIND[k], here = Scene.here() === 'park';
+      const head2 = `<div class="place-head"><span class="big-emoji">${SPOT_E[key]}</span><div class="grow"><h2>${t('sp_park_' + k)}</h2><p class="muted">${t('sp_park_' + k + '_d')}</p></div></div>`;
+      if (!here) return head2 + `<div class="sec-title">${t('pl_go_first')}</div>${goTiles(goTarget({ place: 'park' }))}`;
+      if (k === 'cart') { const F = MALL.foods.icecream; return head2 + `<button class="btn primary block gap-top" data-act="parkDo" data-arg="cart" ${S.me.coins >= F.price ? '' : 'disabled'}>🍦 ${t('pk_cart_btn', { n: F.price, h: FOOD_FILL.icecream, f: NEED_GAIN.sweetFun })}</button>`; }
+      return head2 + (parkLeft(k) > 0 ? `<button class="btn primary block gap-top" data-act="parkDo" data-arg="${k}">${SPOT_E[key]} ${t('pk_' + kind + '_btn', { n: PARK[kind].fun })}</button>` : `<p class="muted center gap-top">✅ ${t('sp_done_today')}</p>`);
+    }
     const head = `<div class="place-head"><span class="big-emoji">${SPOT_E[key] || placeInfo(v).e}</span><div class="grow"><h2>${t('sp_' + v + '_' + k)}</h2><p class="muted">${t(gymK ? 'sp_gym_d' : 'sp_' + v + '_' + k + '_d', { n: SNACK.price })}</p></div></div>`;
     const go = (act, label, on = true) => `<button class="btn ${on ? 'primary' : ''} block gap-top" data-act="venueDo" data-arg="${v}|${k}|${act}" ${on ? '' : 'disabled'}>${label}</button>`;
     const once = (vk, act, label) => venueLeft(vk) > 0 ? go(act, label) : `<p class="muted center gap-top">✅ ${t('sp_done_today')}</p>`;
@@ -1618,6 +1625,21 @@ const ACT = {
     if (wareId) setTimeout(() => Scene.shopGoWare(wareId, () => { openSheet('ware', wareId); refresh(); }), 250);
     else if (!S.shopTip) { S.shopTip = 1; setTimeout(() => snack(`🛒 ${t('shop_tip')}`), 400); }
   },
+  // v0.32: do something in the park (walk over along the paths first)
+  parkDo(k) {
+    if (Scene.here() !== 'park' || !Scene.parkHas(k)) return;
+    if (k === 'cart') {
+      const r = eatFood('icecream');
+      if (r !== 'ok') { Sound.play('oops'); return snack(t('snack_poor')); }
+      save(); closeSheet(); Scene.parkUse('cart', PARK.icecream.sec, () => { Sound.play('chime'); snack(`🍦 ${t('pk_ate')}`); refresh(); });
+      return refresh();
+    }
+    const kind = PARK_KIND[k];
+    if (parkLeft(k) <= 0) return snack(t('sp_done_today'));
+    closeSheet();
+    Scene.parkUse(k, PARK[kind].sec, () => { if (parkUse(k, kind) === 'ok') { Sound.play('chime'); snack(`${SPOT_E['park|' + k]} ${t('pk_done_' + kind)}`); save(); } refresh(); });
+    refresh();
+  },
   // v0.30: walk into a building (you must be there), walk out again
   enterVenue(k) {
     if (!VENUE_PLACES.includes(k) || VIEW_TOWN !== myTown()) return;
@@ -2019,6 +2041,7 @@ function onSceneHit(h) {
     else snack(`👋 ${homeName(homeOf(h.owner))} · ${t('stranger')}`);
     return;
   }
+  if (k === 'parkSpot') { openSheet('spot', 'park|' + h.k); return refresh(); }   // v0.32
   if (k === 'ware' && h.wk === 'spot') { UI.spotRes = null; openSheet('spot', UI.inVenue + '|' + h.k); return refresh(); }   // v0.30: inside a building
   if (k === 'ware') {   // v0.20: in a store (v0.23: the mall's escalators, stalls, games and cinema)
     if (h.wk === 'escalator') { ACT.mallFloor(h.k); return refresh(); }
@@ -2669,7 +2692,7 @@ function placeBody(key) {
       return `<div class="list-item">${avatar(wp ? wp.look : h.look)}<div class="grow"><b>${esc(wp ? nm(wp.name) : homeName(h))}</b> <span class="muted small">${wp ? '💼 ' + t(wp.boss ? 'boss' : 'coworker') : isFriend(p.id) ? '💛' : ''}</span></div>
         <button class="btn small" data-act="${wp ? 'chatWork' : 'chat'}" data-arg="${p.id}">💬 ${t('chat_btn')}</button></div>`; }).join('');
     return `<p>${t('pl_park_people', { n: Scene.parkFolk().length || Math.max(2, Math.round(onlineIn(VIEW_TOWN) * 0.04)) })}</p>${btn('walk', dogs ? `🐕 ${t('pl_walk_dog')}` : `🚶 ${t('pl_stroll_lap', { f: NEED_GAIN.stroll })}`, !(dogs && P.park))}
-      ${who ? `<div class="muted small gap-top">${t('pl_park_here')}</div><div class="card">${who}</div>` : ''}`;
+      ${who ? `<div class="muted small gap-top">${t('pl_park_here')}</div><div class="card">${who}</div>` : ''}<p class="muted small center gap-top">🎾 🏀 ⚽ 🦆 🪑 🍦 🛝 ${t('pk_hint')}</p>`;
   }
   if (key === 'lake') return btn('fish', P.fish ? `✅ ${t('pl_fished')}` : `🎣 ${t('pl_fish')}`, !P.fish) + `<p class="muted small">${t('pl_swim_note')}</p>`;
   if (key === 'bakery') return jobSection(key) + snackBtn(key) + `<p>${t('pl_bake_note', { n: BREAD.wheat, have: S.me.barn.wheat || 0, bread: S.me.barn.bread || 0 })}</p>${btn('bake', `🍞 ${t('pl_bake')}`, (S.me.barn.wheat || 0) >= BREAD.wheat)}`;
@@ -3042,7 +3065,8 @@ function playMovie() {
 }
 
 // ---------- v0.25: needs in the HUD; a bite to eat; the people you work with ----------
-const SPOT_E = { 'bakery|case': '🥐', 'bakery|oven': '🔥', 'bakery|table': '🍽️', 'cafe|menu': '☕', 'cafe|table': '💬', 'cafe|sofa': '🛋️', 'clinic|bed': '🛏️', 'clinic|scale': '🩺', 'clinic|pharmacy': '💊',
+const PARK_KIND = { tennis: 'watch', basketball: 'watch', soccer: 'watch', pond: 'ducks', bench: 'bench', play: 'play', cart: 'icecream' };
+const SPOT_E = { 'park|tennis': '🎾', 'park|basketball': '🏀', 'park|soccer': '⚽', 'park|pond': '🦆', 'park|bench': '🪑', 'park|cart': '🍦', 'park|play': '🛝', 'bakery|case': '🥐', 'bakery|oven': '🔥', 'bakery|table': '🍽️', 'cafe|menu': '☕', 'cafe|table': '💬', 'cafe|sofa': '🛋️', 'clinic|bed': '🛏️', 'clinic|scale': '🩺', 'clinic|pharmacy': '💊',
   'library|featured': '⭐', 'library|table': '📖', 'gym|treadmill': '🏃', 'gym|spinbike': '🚴', 'gym|dumbbells': '🏋️', 'gym|boxing': '🥊', 'gym|yogamat': '🧘', 'post|boxes': '📬', 'post|cards': '💌',
   'school|desk': '✏️', 'plaza|board': '🏆', 'police|board': '📋', 'firestation|truck': '🚒', 'gas|shelf': '🍫', 'gas|fridge': '🥤' };
 // v0.31: you can do things with someone when you've walked over to them, are round at their home, or work with them

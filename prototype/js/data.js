@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.31.0';
+const VERSION = '0.32.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -1036,11 +1036,16 @@ function buildLayout(id, flip) {
     if (F0) nearLot('fields', F0.x + Math.min(F0.w / 2, 10), F0.y, [F0.x, F0.y, F0.w, F0.d, []]);
     nearLot('lake', lake.x, lake.y - lake.ry); }
   const P = box(B.park), loop = [];
-  const m = parks.some(([k, x, y, w, d]) => k === 'park' && x >= P.x - 0.01 && x + w <= P.x + P.w + 0.01 && y >= P.y - 0.01 && y + d <= P.y + P.d + 0.01) ? 1.5 + PARK_D + 0.6 : 1.5;   // v0.19: room for a car park inside
+  // v0.32: the loop keeps to the park's edge, and only moves in on the one side where a car park is inside the park
+  const mg = { l: 1.5, r: 1.5, t: 1.5, b: 1.5 };
+  parks.filter(([k, x, y, w, d]) => k === 'park' && x >= P.x - 0.01 && x + w <= P.x + P.w + 0.01 && y >= P.y - 0.01 && y + d <= P.y + P.d + 0.01).forEach(([, x, y, w, d]) => {
+    const need = { t: y + d - P.y + 0.6, b: P.y + P.d - y + 0.6, l: x + w - P.x + 0.6, r: P.x + P.w - x + 0.6 }, side = Object.keys(need).sort((a, b) => need[a] - need[b])[0];
+    mg[side] = Math.max(mg[side], need[side]);
+  });
   for (let k = 0; k <= 48; k++) {   // a rounded loop inside the park's edge, gently wobbling
     const a = k / 48 * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a), e = 0.35;
-    const rx = P.w / 2 - m, ry = P.d / 2 - m, px = Math.sign(c) * Math.pow(Math.abs(c), e) * rx, py = Math.sign(s2) * Math.pow(Math.abs(s2), e) * ry;
-    loop.push([P.x + P.w / 2 + px + Math.sin(a * 5) * 0.25, P.y + P.d / 2 + py + Math.cos(a * 4) * 0.25]);
+    const rx = (P.w - mg.l - mg.r) / 2, ry = (P.d - mg.t - mg.b) / 2, px = Math.sign(c) * Math.pow(Math.abs(c), e) * rx, py = Math.sign(s2) * Math.pow(Math.abs(s2), e) * ry;
+    loop.push([P.x + mg.l + rx + px + Math.sin(a * 5) * 0.25, P.y + mg.t + ry + py + Math.cos(a * 4) * 0.25]);
   }
   // v0.27: a flyover (an elevated road on pillars) along the main avenue past the town centre: up a ramp, over the
   // crossings and their lights, and down again. Cars going a long way across town take it.
@@ -1138,6 +1143,10 @@ const JOB_REL = { finish: 4, quit: -6, max: 100 };
 // sleep. Sick: walks slower and real-life rewards are a bit smaller. Medicine from the clinic plus a rest in bed
 // cures it; otherwise it passes after a couple of days.
 const SICK = { base: 0.03, overwork: 0.08, overworkDays: 5, lowSleep: 0.06, lowSleepScore: 60, longShift: 0.1, walk: 0.6, earn: 0.75, days: 2, medicine: 60, restSec: 20 };
+// ---------- the park (v0.32) ----------
+// Things to do in the park (each once a day; the ice-cream cart is the food court's ice cream): watch a game on a
+// court or the pitch and cheer, feed the ducks, sit on a bench, bounce on the trampoline. sec: how long it takes.
+const PARK = { watch: { fun: 6, sec: 8 }, ducks: { fun: 8, sec: 8 }, bench: { fun: 4, sec: 10 }, play: { fun: 6, sec: 8 }, icecream: { sec: 5 } };
 // ---------- getting along with people, like The Sims (v0.31) ----------
 // Friendship with each person runs from -30 to 100; where it starts depends on who they are. It never wears off
 // by itself (no pressure), and a failed joke only costs a little.

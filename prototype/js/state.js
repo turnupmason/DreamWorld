@@ -2073,6 +2073,14 @@ function venueUse(key) {
   if (V.social) addNeed('social', V.social);
   return 'ok';
 }
+// v0.32: the same once-a-day rule for the park (watching each court counts on its own)
+function parkLeft(key) { return 1 - (venueToday()['park_' + key] || 0); }
+function parkUse(key, kind) {
+  if (parkLeft(key) <= 0) return 'done';
+  const n = venueToday(); n['park_' + key] = 1;
+  const V = PARK[kind] || {}; if (V.fun) addNeed('fun', V.fun);
+  return 'ok';
+}
 const fireTip = () => FIRE_TIPS[Math.floor(now() / 86400000) % FIRE_TIPS.length];
 function buySnack() { if (S.me.coins < SNACK.price) return 'poor'; S.me.coins -= SNACK.price; addNeed('hunger', FOOD_FILL.snack); addNeed('social', NEED_GAIN.snackSocial); return 'ok'; }
 // cooking at home: two things from your barn (crops, eggs, milk, fruit...) and a kitchen or a stove
