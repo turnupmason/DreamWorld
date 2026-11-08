@@ -6,6 +6,9 @@
 //               (left / right to aim, a longer swipe goes deeper). First to 5 points.
 //   basketball  swipe up to shoot: straight to be on line, how far you swipe is how hard. Take turns from 5 places.
 //   football    penalties: swipe at the goal to shoot (sideways for where, longer for higher); in goal, tap where to dive.
+//   bowling     (v0.38, the bowling alley) swipe up the lane: where you start is where the ball leaves your hand, a
+//               slanted swipe sends it slanting, a longer one is faster. Frames of two balls; strikes and spares score extra.
+//   race        (v0.38, the swimming centre) tap left, right, left… to swim a length; dive in on the whistle.
 // Games.open(kind, partner, onEnd, onClose): partner = { id, name, look, skill }. onEnd(result) runs when a game is
 // over and returns the html for what it gave; onClose() when you go back to the park.
 const Games = (() => {
@@ -77,7 +80,7 @@ const Games = (() => {
   // air (units), after (draws what they hold), rot (radians: diving), lift (metres off the ground).
   function townie(L, x, y, o = {}) {
     const p = P(x, y, o.lift || 0), s = p.k * PS, wheel = L.mob === 'wheel';
-    const opt = { look: L, energy: 'good', ts: T * 1000, seed: o.seed || 1, pose: o.pose || 'stand', view: o.view || 'front', turn: o.turn || 0, phase: o.phase || 0, hands: o.hands, air: o.air || 0, wave: o.wave, face: o.face || (o.view === 'back' ? 1 : -1), back: o.view === 'back' };
+    const opt = { look: L, energy: 'good', ts: o.ts !== undefined ? o.ts : T * 1000, seed: o.seed || 1, pose: o.pose || 'stand', view: o.view || 'front', turn: o.turn || 0, phase: o.phase || 0, hands: o.hands, air: o.air || 0, wave: o.wave, face: o.face || (o.view === 'back' ? 1 : -1), back: o.view === 'back' };
     if (!wheel) opt.after = o.after;
     if (o.rot) { ctx.save(); ctx.translate(p.x, p.y - (o.rotAt || 12) * s); ctx.rotate(o.rot); ctx.translate(-p.x, -(p.y - (o.rotAt || 12) * s)); }
     if (o.lift) { const q = P(x, y, 0); ellipse(q.x, q.y, 8 * q.k * PS, 3.4 * q.k * PS, 'rgba(0,0,0,.14)'); }
@@ -658,7 +661,248 @@ const Games = (() => {
     return { step, draw, input, hint, hud, dbg: () => ({ st, kicker, res, ball, kp, outcome }) };
   }
 
-  const MAKE = { tennis: Tennis, basketball: Hoops, soccer: Penalty };
+  // =========================================================================== bowling (v0.38)
+  function Bowling() {
+    const C = { lw: 1.05, gut: 0.24, len: 18.29, br: 0.109, pr: 0.06, ph: 0.38, deck: 19.3, frames: VENUE_GAMES.bowling.frames, strike: VENUE_GAMES.bowling.strike, spare: VENUE_GAMES.bowling.spare };
+    const sk = mate.skill, SP = 0.3048, RW2 = 0.264;
+    const SPOTS = [[0, 0], [-SP / 2, RW2], [SP / 2, RW2], [-SP, 2 * RW2], [0, 2 * RW2], [SP, 2 * RW2], [-SP * 1.5, 3 * RW2], [-SP / 2, 3 * RW2], [SP / 2, 3 * RW2], [SP * 1.5, 3 * RW2]];
+    let who = 0, frame = 0, ball2 = 0, st = 'ready', wait = 0, pins = [], ball = null, camY = 0, runT = -9, aim = null, settleT = 0, sayT = -9, lastBall = 0, rolls = 0;
+    const card = [[], []];   // each frame: [first, second] pins down
+    const fresh = () => SPOTS.map(([x, dy], i) => ({ i, x, y: C.len + dy, vx: 0, vy: 0, down: false, fall: 0, fa: 0, gone: false, up: true }));
+    function setUp(newFrame) {
+      if (newFrame) pins = fresh(); else pins = pins.filter(p => !p.down && !p.gone).map(p => ({ ...p, vx: 0, vy: 0 }));
+      ball = null; camY = 0; st = 'ready'; runT = -9; aim = null; wait = who ? 1.1 : 0;
+      say(who ? t('mg_b_turn_them', { name: mate.name }) : t('mg_b_turn_me'), t('mg_w_frame', { i: frame + 1, n: C.frames }) + (ball2 ? ' · ' + t('mg_w_ball2') : ''), '#fff', 1.1);
+    }
+    function score(i) {
+      let s = 0; card[i].forEach(f => { const a = f[0] || 0, b = f[1] || 0; s += a + b; if (a === 10) s += C.strike; else if (a + b === 10 && f.length > 1) s += C.spare; });
+      return s;
+    }
+    function release(x, slope, v) {
+      ball = { x: cl(x, -C.lw / 2 + 0.05, C.lw / 2 - 0.05), y: 0.2, vx: slope * v, vy: v, gut: 0, rot: 0 };
+      st = 'roll'; Sound.play('bounce'); rolls++;
+    }
+    function aiRoll() {
+      const left = pins.filter(p => !p.down);
+      let tx = 0.07;   // the pocket, just right of the head pin
+      if (ball2 && left.length) tx = left.reduce((a, p) => a + p.x, 0) / left.length;
+      const err = 0.04 + (1 - sk) * 0.16, x0 = cl(tx * 0.3 + gauss() * err * 0.6, -0.45, 0.45), aimX = tx + gauss() * err;
+      const v = 7.2 + gauss() * 0.5;
+      release(x0, (aimX - x0) / C.len, v);
+    }
+    function step(dt) {
+      if (st === 'ready' && who && (wait -= dt) <= 0) { st = 'run'; runT = T; }
+      if (st === 'run' && T - runT >= 0.55) { if (who) aiRoll(); else release(aim[0], aim[1], aim[2]); }
+      if (ball) roll(dt);
+      if (st === 'roll' || st === 'settle') movePins(dt);
+      if (st === 'roll' && ball && ball.y > C.deck + 0.5) { st = 'settle'; settleT = T; }
+      if (st === 'settle' && (T - settleT > 2.6 || (T - settleT > 0.9 && pins.every(p => Math.hypot(p.vx, p.vy) < 0.05)))) count();
+      if (st === 'after' && (wait -= dt) <= 0) next();
+      const goal = ball && st !== 'after' ? cl(ball.y - 2, 0, C.len - 2.6) : st === 'after' || st === 'settle' ? C.len - 2.6 : 0;
+      camY += (goal - camY) * Math.min(1, dt * (st === 'ready' ? 6 : 2.2));
+    }
+    function roll(dt) {
+      const b = ball, n = 4, h = dt / n;
+      for (let k = 0; k < n; k++) {
+        b.x += b.vx * h; b.y += b.vy * h; b.rot += b.vy * h / C.br;
+        if (!b.gut && Math.abs(b.x) > C.lw / 2 + 0.03 && b.y < C.deck) { b.gut = Math.sign(b.x); b.vx = 0; Sound.play('pop'); if (!sayT || T - sayT > 1) { say(t('mg_w_gutter'), '', '#fff', 1.2); sayT = T; } }
+        if (b.gut) { b.x += (b.gut * (C.lw / 2 + C.gut / 2) - b.x) * Math.min(1, h * 12); continue; }
+        pins.forEach(p => {
+          if (p.gone) return;
+          const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy), m = C.br + C.pr;
+          if (d >= m || d < 1e-6) return;
+          const nx = dx / d, ny = dy / d, rel = (b.vx - p.vx) * nx + (b.vy - p.vy) * ny;
+          if (rel <= 0) return;
+          p.vx += nx * rel * 0.75 + (Math.random() - 0.5) * 0.3; p.vy += ny * rel * 0.75; b.vx -= nx * rel * 0.32; b.vy -= ny * rel * 0.22;
+          p.x = b.x + nx * m; p.y = b.y + ny * m; hit(p);
+          Sound.play('crunch');
+        });
+      }
+    }
+    function hit(p) { if (!p.down) { p.down = true; p.fa = Math.atan2(p.vx, p.vy); } }
+    function movePins(dt) {
+      const n = 3, h = dt / n;
+      for (let k = 0; k < n; k++) {
+        pins.forEach(p => {
+          if (p.gone) return;
+          p.x += p.vx * h; p.y += p.vy * h;
+          const sp = Math.hypot(p.vx, p.vy); if (sp > 0) { const f = Math.max(0, sp - (p.down ? 5.5 : 3) * h) / sp; p.vx *= f; p.vy *= f; }
+          if (Math.abs(p.x) > C.lw / 2 + C.gut + 0.35) { p.x = Math.sign(p.x) * (C.lw / 2 + C.gut + 0.35); p.vx *= -0.3; p.vy *= 0.6; }   // the side boards
+          if (p.y > C.deck + 0.2 || Math.abs(p.x) > C.lw / 2 + 0.08 && p.down && sp < 0.3) { p.gone = true; p.down = true; }   // into the pit or the gutter
+          if (p.down) p.fall = Math.min(1, p.fall + h * 4.5);
+        });
+        for (let i = 0; i < pins.length; i++) for (let j = i + 1; j < pins.length; j++) {
+          const a = pins[i], b = pins[j]; if (a.gone || b.gone) continue;
+          const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = C.pr * 2 + (a.down || b.down ? 0.05 : 0);
+          if (d >= m || d < 1e-6) continue;
+          const nx = dx / d, ny = dy / d, rel = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+          if (rel <= 0) continue;
+          const imp = rel * 0.85; a.vx -= nx * imp; a.vy -= ny * imp; b.vx += nx * imp; b.vy += ny * imp;
+          if (imp > 1.1) { hit(a); hit(b); } else if (imp > 0.55) { if (Math.random() < 0.6) hit(b); }
+        }
+      }
+    }
+    function count() {
+      const before = ball2 ? 10 - (card[who][frame][0] || 0) : 10, standing = pins.filter(p => !p.down && !p.gone).length, got = before - standing;
+      const f = card[who][frame] = card[who][frame] || []; f.push(got);
+      const mine = who === 0, strike = !ball2 && got === 10, spare = ball2 && standing === 0;
+      say(strike ? t('mg_w_strike') : spare ? t('mg_w_spare') : got ? t('mg_w_pins', { n: got }) : t('mg_w_none'), strike ? `+${C.strike}` : spare ? `+${C.spare}` : '', strike || spare ? '#ffe066' : '#fff', 1.5);
+      if (strike || spare) Sound.play(mine ? 'cheer' : 'pop');
+      lastBall = { strike, spare, done: strike || ball2 === 1 };
+      st = 'after'; wait = strike || spare ? 1.9 : 1.4;
+    }
+    function next() {
+      if (!lastBall.done) { ball2 = 1; return setUp(false); }
+      ball2 = 0;
+      if (who === 1) { frame++; if (frame >= C.frames) return finish({ won: score(0) > score(1) ? true : score(0) < score(1) ? false : null, me: score(0), them: score(1) }); }
+      who = 1 - who; setUp(true);
+    }
+    function input(sw) {
+      if (who !== 0 || st !== 'ready') return;
+      if (sw.tap || sw.dy > -20) return;
+      const sx = sw.x - sw.dx, x0 = cl((sx - W / 2) / (W * 0.5) * 0.5, -0.45, 0.45);   // the whole width of the screen is the width of the lane
+      const slope = cl(Math.atan2(sw.dx, -sw.dy) * 0.075, -0.05, 0.05) + rnd(-0.003, 0.003), v = cl(5.4 + sw.len / (H * 0.4) * 3.2, 5.4, 9.5);
+      aim = [x0, slope, v]; st = 'run'; runT = T;
+    }
+    function cam() { V.cx = W / 2; V.F = Math.min(W * 1.9, H * 0.95) * (1 + camY * 0.045); V.D = 9 - camY; V.h = 3.2 - camY * 0.1; V.hor = H * 0.33; }
+    function drawPin(p) {
+      const q = P(p.x, p.y, 0), k = q.k, hp = C.ph * k, s = Math.max(0.6, k * 0.012);
+      if (p.y > C.deck + 0.4) return;
+      ctx.save(); ctx.translate(q.x, q.y);
+      if (p.down) { const a = p.fall * Math.PI / 2 * (Math.sin(p.fa) >= 0 ? 1 : -1); ctx.rotate(a * (0.7 + 0.3 * Math.abs(Math.sin(p.fa)))); }
+      ellipse(0, 0, 0.07 * k, 0.03 * k, 'rgba(0,0,0,.18)');
+      ellipse(0, -hp * 0.3, 0.06 * k, hp * 0.3, '#fbfbf7', 'rgba(0,0,0,.15)', s);
+      rrect(-0.026 * k, -hp * 0.78, 0.052 * k, hp * 0.3, 0.02 * k, '#fbfbf7');
+      circle(0, -hp * 0.86, 0.034 * k, '#fbfbf7', 'rgba(0,0,0,.12)', s);
+      rrect(-0.028 * k, -hp * 0.66, 0.056 * k, hp * 0.035, 0.005 * k, '#c9433b'); rrect(-0.028 * k, -hp * 0.6, 0.056 * k, hp * 0.035, 0.005 * k, '#c9433b');
+      circle(-0.012 * k, -hp * 0.9, 0.01 * k, 'rgba(255,255,255,.9)');
+      ctx.restore();
+    }
+    function drawBall() {
+      if (!ball || ball.y > C.deck + 1.2) return;
+      const q = P(ball.x, ball.y, C.br), r = Math.max(2, C.br * q.k), col = who ? '#c9433b' : '#3a4cc0';
+      const g0 = P(ball.x, ball.y, 0); ellipse(g0.x, g0.y, r * 0.9, r * 0.32, 'rgba(0,0,0,.22)');
+      circle(q.x, q.y, r, col, 'rgba(0,0,0,.3)', 1);
+      const a = ball.rot; [[0, -0.45], [0.3, -0.25], [-0.3, -0.25]].forEach(([dx, dy]) => { const yy = dy * Math.cos(a) * r; if (Math.cos(a) > -0.2) circle(q.x + dx * r, q.y + yy, r * 0.12, '#141a3a'); });
+      circle(q.x - r * 0.35, q.y - r * 0.4, r * 0.28, 'rgba(255,255,255,.3)');
+    }
+    function lane(cx, tone) {   // a lane: maple boards, the arrows, gutters, the deck and the pit
+      const L = C.lw / 2;
+      grect(cx - L - C.gut - 0.12, -6, cx + L + C.gut + 0.12, C.deck + 1.6, '#2a2f45');
+      grect(cx - L - C.gut, -0.3, cx - L, C.deck, '#6b7280'); grect(cx + L, -0.3, cx + L + C.gut, C.deck, '#6b7280');
+      grect(cx - L, -6, cx + L, C.deck, tone);
+      grect(cx - L, -6, cx + L, -0.02, shade(tone, 0.06));
+      for (let b = 1; b < 8; b++) { const xx = cx - L + b * C.lw / 8; gline([xx, -6], [xx, C.deck], 0.008, 'rgba(150,100,55,.35)'); }
+      gline([cx - L, 0], [cx + L, 0], 0.03, '#c9433b');
+      [-2, -1, 0, 1, 2].forEach(a => { const ax = cx + a * 0.15, ay = 4.6 + (2 - Math.abs(a)) * 0.25; gpoly([[ax, ay + 0.18], [ax - 0.04, ay], [ax + 0.04, ay]], '#6b4428'); });
+      [-0.3, -0.15, 0, 0.15, 0.3].forEach(a => { const q = P(cx + a, 2.1, 0); circle(q.x, q.y, Math.max(1, 0.015 * q.k), '#6b4428'); });
+      grect(cx - L - C.gut, C.deck, cx + L + C.gut, C.deck + 1.6, '#141826');
+    }
+    function draw() {
+      cam();
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#141a3a'); g.addColorStop(1, '#2a2f55'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      // the wall over the pins: dark blue with stars and the alley's name
+      const wTop = P(0, C.deck + 1.6, 2.4), wBot = P(0, C.deck + 1.6, 0.55), half = 6 * wTop.k;
+      ctx.fillStyle = '#1d2547'; ctx.fillRect(0, wTop.y, W, wBot.y - wTop.y);
+      for (let s = 0; s < 26; s++) { const xx = (s * 97.3 + 13) % W, yy = wTop.y + ((s * 41.7) % Math.max(1, wBot.y - wTop.y)); circle(xx, yy, 1 + (s % 3) * 0.4, `rgba(255,230,140,${0.4 + 0.4 * Math.sin(T * 2 + s)})`); }
+      txt('MIRROR BOWL', W / 2, wTop.y + (wBot.y - wTop.y) * 0.35, Math.max(10, half * 0.12), '#ff7ac4');
+      lane(-1.75, '#d9a868'); lane(1.75, '#d9a868'); lane(0, '#e3b77c');
+      // the pins on the lanes either side (just standing), then yours from the back to the front, the ball among them
+      [-1.75, 1.75].forEach(cx => SPOTS.slice().reverse().forEach(([x, dy]) => drawPin({ x: cx + x, y: C.len + dy, down: false })));
+      const things = pins.filter(p => !p.gone).map(p => ({ y: p.y, f: () => drawPin(p) }));
+      if (ball) things.push({ y: ball.y, f: drawBall });
+      things.sort((a, b) => b.y - a.y).forEach(o => o.f());
+      // the bowler on the approach
+      const L = who ? mate.look : S.me.look, ru = st === 'run' ? cl((T - runT) / 0.55, 0, 1) : st === 'ready' ? 0 : 1;
+      const bx = (aim && !who ? aim[0] : 0) - 0.42, by = -1.6 + ru * 1.1;
+      if (by + V.D > 2) townie(L, bx, by, { view: 'back', pose: st === 'run' ? 'run' : 'stand', phase: (T - runT) * 14, seed: who ? 5 : 3, wave: st === 'after' && lastBall && (lastBall.strike || lastBall.spare) && Math.sin(T * 9) > 0 });
+      if ((st === 'ready' || st === 'run') && by + V.D > 2) { const q = P(bx + 0.42, by + 0.15, 0.25); circle(q.x, q.y, Math.max(3, C.br * q.k), who ? '#c9433b' : '#3a4cc0', 'rgba(0,0,0,.3)', 1); }
+    }
+    function hint() {
+      if (phase !== 'play' || who !== 0 || st !== 'ready' || rolls > 2) return null;
+      return ['up', W / 2, H * 0.84, t('mg_w_roll')];
+    }
+    function hud() {
+      const line2 = i => `<small class="mg-dots">${card[i].map(f => (f[0] === 10 ? 'X' : (f[0] || '-') + (f.length > 1 ? (f[0] + f[1] === 10 ? '/' : (f[1] || '-')) : ''))).join(' ')}</small>`;
+      return { me: score(0), them: score(1), meSub: line2(0), themSub: line2(1), mid: `🎳 ${t('mg_w_frame', { i: Math.min(frame + 1, C.frames), n: C.frames })}` };
+    }
+    setUp(true);
+    return { step, draw, input, hint, hud, dbg: () => ({ st, who, frame, ball2, card, pins: pins.map(p => ({ x: p.x, y: p.y, down: p.down })), ball, camY }) };
+  }
+
+  // =========================================================================== a swimming race (v0.38)
+  function Race() {
+    const LEN = VENUE_GAMES.race.len, LANE = 2.5, sk = mate.skill;
+    const sw = [   // lane x, who, the target pace for the others
+      { x: -LANE * 1.5, look: FOLK_RACE[0], v0: rnd(1.45, 1.95) }, { x: -LANE * 0.5, me: true }, { x: LANE * 0.5, mate: true, v0: 1.5 + sk * 0.62 + gauss() * 0.06 }, { x: LANE * 1.5, look: FOLK_RACE[1], v0: rnd(1.45, 1.95) },
+    ].map(s => ({ ...s, y: -0.6, v: 0, t: 0, done: 0, stroke: 0, in: false }));
+    const me = sw[1], them = sw[2];
+    let st = 'set', goAt = 1.6 + rnd(0.4, 1.3), side = 0, taps = 0, early = 0, pen = 0, camY = 0;
+    say(t('mg_r_set'), '', '#fff', 1.4);
+    function swimOn(s, dt) {
+      if (!s.in) return;
+      if (s.me) { s.v -= s.v * 0.85 * dt; s.v = Math.max(s.v, 0.25); }
+      else { const target = s.v0 * (s.y < 3 ? 1.25 : 1) * (1 + Math.sin(T * 1.3 + s.x) * 0.04); s.v += (target - s.v) * Math.min(1, dt * 1.5); }
+      s.y += s.v * dt; s.stroke += s.v * dt * 1.8;
+      if (s.y >= LEN && !s.done) { s.y = LEN; s.done = T - goAt; s.v = 0; if (s === me || s === them) Sound.play(s === me ? 'clang' : 'pop'); }
+    }
+    function step(dt) {
+      if (st === 'set' && T >= goAt) { st = 'go'; say(t('mg_r_go'), '', '#ffe066', 0.9); Sound.play('tap'); sw.forEach(s => { if (!s.me) { s.in = true; s.v = 2.2; s.y = 0.5; } }); }
+      if (st === 'go') sw.forEach(s => { if (s.in && !s.done) swimOn(s, dt); });
+      if (st === 'go' && me.in && them.done && me.done) { st = 'end'; setTimeout(() => finish({ won: me.done < them.done, me: me.done.toFixed(1) + '″', them: them.done.toFixed(1) + '″', time: me.done }), 900); }
+      if (st === 'go' && !me.in && T - goAt > 6) { me.in = true; me.v = 1.2; me.y = 0.3; }   // (in you go)
+      camY += (cl(me.y - 3, 0, LEN - 9) - camY) * Math.min(1, dt * 2.5);
+    }
+    function input(s2) {
+      if (st === 'set') { if (!early) { early = 1; say(t('mg_r_early'), t('mg_r_early2'), '#fff', 1.2); Sound.play('oops'); pen = 0.6; } return; }
+      if (st !== 'go' || me.done) return;
+      if (!me.in) { if (T - goAt < pen) return; const quick = T - goAt < 0.35 + pen; me.in = true; me.v = quick ? 2.6 : 2.1; me.y = 0.6; Sound.play('splash'); if (quick) say(t('mg_r_great'), '', '#ffe066', 0.8); return; }
+      const sd = s2.x < W / 2 ? 1 : 2; taps++;
+      if (sd === side) { me.v *= 0.72; pop(t('mg_r_same'), s2.x, s2.y - 30, '#fff'); }
+      else { me.v = Math.min(2.55, me.v + 0.5); if (taps % 4 === 0) Sound.play('splash'); }
+      side = sd;
+    }
+    function cam() { V.cx = W / 2; V.F = Math.min(W * 1.15, H * 0.62); V.D = 4 - camY; V.h = 4.2; V.hor = H * 0.3; }
+    function draw() {
+      cam();
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#dfeef6'); g.addColorStop(1, '#bcdcec'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const half = LANE * 2;
+      // the far wall: the clock and the flags
+      const fw = P(0, LEN + 1.2, 3.2), fb = P(0, LEN + 1.2, 0); ctx.fillStyle = '#f4f7f9'; ctx.fillRect(0, fw.y, W, fb.y - fw.y);
+      rrect(W / 2 - 40, fw.y + 6, 80, 22, 4, '#141a3a'); txt(st === 'set' ? '0.0' : ((me.done || T - goAt) > 0 ? (me.done || T - goAt).toFixed(1) : '0.0'), W / 2, fw.y + 17, 15, '#ffd36b');
+      grect(-half - 2, -3, half + 2, LEN + 1.2, '#e8f1f5');
+      grect(-half, 0, half, LEN, '#2fa6d6');
+      for (let k = 0; k < 4; k++) { const cx = -half + (k + 0.5) * LANE; grect(cx - 0.1, 1.5, cx + 0.1, LEN - 1.5, 'rgba(20,60,110,.4)'); grect(cx - 0.5, LEN - 1.5, cx + 0.5, LEN - 1.3, 'rgba(20,60,110,.4)'); }
+      for (let k = 0; k < 26; k++) { const u = (k * 0.37 + T * 0.05) % 1, v = (k * 0.61) % 1, q = P(-half + u * half * 2, v * LEN, 0); ellipse(q.x, q.y, 0.4 * q.k, 0.08 * q.k, 'rgba(255,255,255,.3)'); }
+      for (let k = 1; k < 4; k++) { const xx = -half + k * LANE; for (let y = 0.3; y < LEN; y += 0.45) { const q = P(xx, y, 0.03); circle(q.x, q.y, Math.max(1, 0.06 * q.k), y < 5 || y > LEN - 5 ? '#e5484d' : Math.round(y / 0.45) % 2 ? '#ffffff' : '#2f6fb2'); } }
+      [5, LEN - 5].forEach(fy => { seg3([-half - 1, fy, 1.8], [half + 1, fy, 1.8], 0.02, '#9aa3ad'); for (let x = -half; x < half; x += 0.5) { const a = P(x, fy, 1.8), b = P(x + 0.25, fy, 1.5), c = P(x + 0.5, fy, 1.8); pg([[a.x, a.y], [b.x, b.y], [c.x, c.y]], Math.round(x * 2) % 2 ? '#e5484d' : '#2f6fb2'); } });
+      // the swimmers, the far ones first
+      sw.slice().sort((a, b) => b.y - a.y).forEach(s => {
+        const L = s.me ? S.me.look : s.mate ? mate.look : s.look;
+        if (!s.in) { townie(L, s.x, -0.6, { view: 'back', lift: 0.45, seed: s.me ? 3 : 5 }); return; }
+        if (s.v > 0.2 && !s.done) { const q = P(s.x, s.y - 0.5, 0); for (let k = 0; k < 3; k++) circle(q.x + (k - 1) * 0.18 * q.k, q.y + Math.sin(T * 20 + k) * 0.04 * q.k, Math.max(1, 0.08 * q.k), 'rgba(255,255,255,.8)'); }
+        townie(L, s.x, s.y, { pose: 'swim', view: 'back', ts: s.stroke * 520, seed: s.me ? 3 : 5 });
+        if (s.done && (s.me || s.mate)) { const q = P(s.x, s.y, 1.2); txt(s.done.toFixed(1) + '″', q.x, q.y, 13, s.me ? '#ffe066' : '#fff'); }
+      });
+      // the starting blocks
+      sw.forEach((s, i) => { gpoly([[s.x - 0.3, -0.9, 0.45], [s.x + 0.3, -0.9, 0.45], [s.x + 0.3, -0.3, 0.45], [s.x - 0.3, -0.3, 0.45]], '#f4f4f0'); const q = P(s.x, -0.3, 0.3); txt(String(i + 1), q.x, q.y, 11, '#2d2d2d'); });
+    }
+    function hint() {
+      if (phase !== 'play') return null;
+      if (st === 'set') return null;
+      if (!me.in) return ['tap', W / 2, H * 0.7, t('mg_r_dive')];
+      if (taps < 8 && !me.done) return ['tap', side === 1 ? W * 0.75 : W * 0.25, H * 0.8, t(side === 1 ? 'mg_r_right' : 'mg_r_left')];
+      return null;
+    }
+    function hud() {
+      const m = s => (s.done ? s.done.toFixed(1) + '″' : `${Math.max(0, Math.floor(s.y))}m`);
+      return { me: m(me), them: m(them), mid: `🏊 ${LEN}m` };
+    }
+    return { step, draw, input, hint, hud, dbg: () => ({ st, me: { ...me }, them: { ...them }, goAt }) };
+  }
+  const FOLK_RACE = [{ skin: '#d39a6c', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', shirt: '#34b27b' }, { skin: '#ffe0c4', hair: 'long', hairCol: '#e9cf7a', mob: 'walk', body: 'regular', shirt: '#a46ef0' }];
+
+  const MAKE = { tennis: Tennis, basketball: Hoops, soccer: Penalty, bowling: Bowling, race: Race };
 
   // ---------- the screen: a canvas, the score at the top, cards for how to play and for the result ----------
   function build() {
@@ -700,10 +944,10 @@ const Games = (() => {
       <div class="mg-p r"><div><b>${esc(mate.name)}</b><span class="mg-n">${h.them}</span>${h.themSub || ''}</div>${avatar(mate.look)}</div></div>`;
   }
   function howTo() {
-    const k = { tennis: 't', basketball: 'b', soccer: 's' }[kind], e = BALL_GAMES[kind].e;
-    const n = { tennis: BALL_GAMES.tennis.to, basketball: BALL_GAMES.basketball.spots, soccer: BALL_GAMES.soccer.kicks }[kind];
+    const k = { tennis: 't', basketball: 'b', soccer: 's', bowling: 'w', race: 'r' }[kind], e = (BALL_GAMES[kind] || VENUE_GAMES[kind]).e;
+    const n = { tennis: BALL_GAMES.tennis.to, basketball: BALL_GAMES.basketball.spots, soccer: BALL_GAMES.soccer.kicks, bowling: VENUE_GAMES.bowling.frames, race: VENUE_GAMES.race.len }[kind];
     card.innerHTML = `<div class="mg-box"><div class="mg-big">${e}</div><h2>${t('mg_' + k + '_title')}</h2><p class="muted">${t('mg_with', { name: esc(mate.name) })}</p>
-      <div class="mg-how"><div><span class="mg-fing">${kind === 'soccer' ? '👆' : '👆'}</span>${t('mg_' + k + '_how1')}</div><div><span>🎯</span>${t('mg_' + k + '_how2')}</div><div><span>🏁</span>${t('mg_' + k + '_how3', { n, s: BALL_GAMES.basketball.shots })}</div></div>
+      <div class="mg-how"><div><span class="mg-fing">${kind === 'soccer' ? '👆' : '👆'}</span>${t('mg_' + k + '_how1')}</div><div><span>🎯</span>${t('mg_' + k + '_how2')}</div><div><span>🏁</span>${t('mg_' + k + '_how3', { n, s: BALL_GAMES.basketball.shots, x: VENUE_GAMES.bowling.strike, p: VENUE_GAMES.bowling.spare })}</div></div>
       <button class="btn primary block" data-mg="start">${t('mg_start')}</button></div>`;
     card.hidden = false;
   }
@@ -720,7 +964,7 @@ const Games = (() => {
     Sound.play(res.won === false ? 'chime' : 'levelup');
     card.innerHTML = `<div class="mg-box"><h2>${head}</h2><div class="mg-final">${res.me} : ${res.them}</div>
       <div class="mg-say">${avatar(mate.look)}<div class="bubble">${esc(lines[Math.floor(Math.random() * lines.length)])}</div></div>
-      ${got}<div class="row gap-top"><button class="btn grow" data-mg="leave">🌳 ${t('mg_back')}</button><button class="btn primary grow" data-mg="again">🔁 ${t('mg_again')}</button></div></div>`;
+      ${got}<div class="row gap-top"><button class="btn grow" data-mg="leave">${mate.back ? '🚪 ' + esc(mate.back) : '🌳 ' + t('mg_back')}</button><button class="btn primary grow" data-mg="again">🔁 ${t('mg_again')}</button></div></div>`;
     card.hidden = false;
   }
   function tick(dt, noDraw) {

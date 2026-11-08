@@ -17,9 +17,20 @@ const Scene = (() => {
   const ents = new Map();
   let edit = null, hover = null, UI_EDIT_SEL = null;   // UI_EDIT_SEL (v0.24): 'house' or an area picked in design mode
   let rankCache = { t: 0, total: 0 };
-  const WOODS = 14, WX0 = WORLD.x0 - WOODS, WY0 = WORLD.y0 - WOODS, WX1 = WORLD.x1 + WOODS, WY1 = WORLD.y1 + WOODS;
+  const WOODS = 14, OUT = { ch: 22 };
+  let WX0, WY0, WX1, WY1, WB = '';
   // The town plan on screen (v0.12: every community has its own; see LAYOUTS in data.js). Set every frame.
   let TL = layoutOf(HOME_TOWN);
+  // v0.38: every town has its own bounds now (its new district makes it bigger): the woods round it, the mountains
+  // and the country beyond follow them
+  const worldOf = () => TL.world || WORLD;
+  function syncWorld() {
+    if (WB === TL.id) return;
+    const B = worldOf(); WB = TL.id;
+    WX0 = B.x0 - WOODS; WY0 = B.y0 - WOODS; WX1 = B.x1 + WOODS; WY1 = B.y1 + WOODS;
+    Object.assign(OUT, { x0: WX0 - 110, y0: WY0 - 110, x1: WX1 + 110, y1: WY1 + 110 });
+  }
+  syncWorld();
   const ZOOM = { world: [0.045, 2.4], interior: [0.5, 2.8] };
   const GH = LOT_D + 2;                      // a lot plus the road in front
   const gwOf = h => homeW(h) + 1;            // ... and the side path
@@ -133,10 +144,10 @@ const Scene = (() => {
       return;
     }
     if (cam.z < minWorldZoom()) { const c0 = unIso(W / 2, H / 2); cam.z = minWorldZoom(); centerOn(c0.x, c0.y); }
-    const c = unIso(W / 2, H / 2), x = clamp(c.x, WORLD.x0 + 4, WORLD.x1 - 4), y = clamp(c.y, WORLD.y0 + 4, WORLD.y1 - 4);
+    const Wb = worldOf(), c = unIso(W / 2, H / 2), x = clamp(c.x, Wb.x0 + 4, Wb.x1 - 4), y = clamp(c.y, Wb.y0 + 4, Wb.y1 - 4);
     if (x !== c.x || y !== c.y) centerOn(x, y);
   }
-  function minWorldZoom() { return Math.max(0.06, W / ((WORLD.x1 - WORLD.x0 + WORLD.y1 - WORLD.y0) * 32) * 1.25); }
+  function minWorldZoom() { const Wb = worldOf(); return Math.max(0.06, W / ((Wb.x1 - Wb.x0 + Wb.y1 - Wb.y0) * 32) * 1.25); }
   // The whole island fits the screen at the smallest zoom.
   function minHomeZoom() { const R = islandRect(owner); return clamp(W * 1.1 / ((R.x1 - R.x0 + R.y1 - R.y0) * 32), 0.25, 1); }
   // Inside: the smallest zoom still fills the screen from side to side.
@@ -746,7 +757,7 @@ const Scene = (() => {
   // Roads: street (2 wide, dashed centre line), avenue (3 wide, double yellow line), dirt (country road).
   // Roads (v0.13): a paved sidewalk along both sides (people walk there), the asphalt between, lane lines, and a
   // zebra crossing where a road meets another. Drawn in passes so crossings join up cleanly.
-  const SIDEWALK = { avenue: 0.5, street: 0.42, lane: 0.36, dirt: 0 };
+  const SIDEWALK = { avenue: 0.5, street: 0.42, lane: 0.36, dirt: 0, boulevard: 0.55 };   // v0.38: + the new district's four-lane boulevard
   function drawRoads(vr) {
     const z = cam.z, vis = r => !(r[2] < vr.x0 || r[0] > vr.x1 || r[3] < vr.y0 || r[1] > vr.y1), roads = TL.roads.filter(vis);
     // v0.27: one-way arrows (white, every few tiles, pointing the way to go)
@@ -786,6 +797,15 @@ const Scene = (() => {
       const lo = Math.max(a0, Math.floor(h ? vr.x0 : vr.y0)), hi = Math.min(a1, h ? vr.x1 : vr.y1);
       const seg = (p, q, off, col, lw) => { const A = h ? iso(p, m + off) : iso(m + off, p), B = h ? iso(q, m + off) : iso(m + off, q); line(A.x, A.y, B.x, B.y, col, lw * z); };
       if (kind === 'avenue') { seg(lo, hi, -0.06, '#f2c230', 1.3); seg(lo, hi, 0.06, '#f2c230', 1.3); }
+      else if (kind === 'boulevard') {   // v0.38: four lanes: a planted median down the middle (open where roads cross), dashed lines between the lanes
+        const cuts = roads.filter(q => q !== r && horiz(q) !== h && (h ? q[1] <= y1 + 0.6 && q[3] >= y0 - 0.6 : q[0] <= x1 + 0.6 && q[2] >= x0 - 0.6)).map(q => (h ? [q[0] - 0.9, q[2] + 0.9] : [q[1] - 0.9, q[3] + 0.9])).sort((a, b) => a[0] - b[0]);
+        const runs = []; let p0 = lo; cuts.forEach(([c0, c1]) => { if (c0 > p0) runs.push([p0, Math.min(c0, hi)]); p0 = Math.max(p0, c1); }); if (p0 < hi) runs.push([p0, hi]);
+        const Q = (p, off) => (h ? iso(p, m + off) : iso(m + off, p));
+        runs.forEach(([p, q]) => { if (q - p < 0.2) return;
+          poly([Q(p, -0.24), Q(q, -0.24), Q(q, 0.24), Q(p, 0.24)], '#6fa85a', 'rgba(235,230,218,.95)', 1.4 * z);
+          if (z > 0.3) for (let u = Math.ceil(p) + 0.5; u < q - 0.3; u += 1.5) { const c = Q(u, 0); circle(c.x, c.y - 3 * z, 3.4 * z, '#4f9a4a'); circle(c.x - 1 * z, c.y - 4 * z, 1.6 * z, '#7cc06a'); }   // little shrubs
+          for (let u = Math.ceil(p) + 0.3; u < q - 0.4; u += 1) { seg(u, u + 0.45, -1.05, 'rgba(255,255,255,.85)', 1.4); seg(u, u + 0.45, 1.05, 'rgba(255,255,255,.85)', 1.4); } });
+      }
       else for (let p = Math.ceil(lo) + 0.3; p < hi; p += 1) seg(p, p + 0.45, 0, 'rgba(255,255,255,.85)', 1.6);
     });
     if (z < 0.25) return;
@@ -836,8 +856,8 @@ const Scene = (() => {
     SCENERY = []; SCENERY_ID = TL.id;
     for (let j = WY0; j < WY1; j++) for (let i = WX0; i < WX1; i++) {
       if (occupied(i, j)) continue;
-      const inside = inRectXY(i, j, WORLD.x0, WORLD.y0, WORLD.x1, WORLD.y1);
-      const edge = Math.min(Math.abs(i - WORLD.x0), Math.abs(i - WORLD.x1), Math.abs(j - WORLD.y0), Math.abs(j - WORLD.y1));
+      const Wb = worldOf(), inside = inRectXY(i, j, Wb.x0, Wb.y0, Wb.x1, Wb.y1);
+      const edge = Math.min(Math.abs(i - Wb.x0), Math.abs(i - Wb.x1), Math.abs(j - Wb.y0), Math.abs(j - Wb.y1));
       const v = hash(i * 1.37 + 0.2, j * 2.11 + 0.7), dens = inside ? 0.14 : edge < 1.5 ? 0.12 : 0.42;
       if (v > dens + 0.08) continue;
       SCENERY.push({ x: i + 0.3 + hash(i, j * 3) * 0.4, y: j + 0.3 + hash(i * 3, j) * 0.4, w: hash(i + 7, j + 3), tree: v < dens });
@@ -860,8 +880,8 @@ const Scene = (() => {
   // Mountains behind the woods (north and west) so the edge of the world looks like a valley, not a blank.
   let PEAKS = null;
   function peaks() {
-    if (PEAKS) return PEAKS;
-    PEAKS = [];
+    if (PEAKS && PEAKS.id === TL.id) return PEAKS;
+    PEAKS = []; PEAKS.id = TL.id;
     for (let x = WX0 - 6; x < WX1 + 10; x += 15) PEAKS.push({ x: x + hash(x, 1) * 6, y: WY0 - 16 + hash(x, 2) * 5, r: 9 + hash(x, 3) * 6, h: 150 + hash(x, 4) * 140 });
     for (let y = WY0 + 8; y < WY1 + 6; y += 15) PEAKS.push({ x: WX0 - 16 + hash(y, 5) * 5, y: y + hash(y, 6) * 6, r: 9 + hash(y, 7) * 6, h: 150 + hash(y, 8) * 140 });
     return PEAKS;
@@ -1368,7 +1388,7 @@ const Scene = (() => {
     // ground: the country around town, woods, the town, neighbourhood lawns, roads, landmarks
     outskirts(vr, ts);
     flatRect(WX0, WY0, WX1 - WX0, WY1 - WY0, PAL.woods);
-    flatRect(WORLD.x0, WORLD.y0, WORLD.x1 - WORLD.x0, WORLD.y1 - WORLD.y0, PAL.town);
+    { const Wb = worldOf(); flatRect(Wb.x0, Wb.y0, Wb.x1 - Wb.x0, Wb.y1 - Wb.y0, PAL.town); }
     Object.values(TL.streets).forEach(st => { if (boxVisible(st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1, vr)) flatRect(st.x - 0.6, st.y - 0.6, st.n * PARCEL + 1.2, LOT_D + 0.6, themed ? shade(PAL.town, st.nb === 'lake' ? -0.04 : st.nb === 'farm' ? 0.04 : 0) : NEIGHBORHOODS[st.nb].grass); });
     const objs = [], tops = [], out = { hall: null, shops: mode === 'town' ? [] : null }, lv = townLevel(rankTotal());
     river(vr);
@@ -2303,6 +2323,13 @@ const Scene = (() => {
     bookstore:  { wall: '#efe6d4', roof: '#2f5d50', floor: ['#b88552', '#ad7c4a'], till: '📖', clerk: { shirt: '#c9893a', top: 'sweater', hair: 'curly' } },
     salon:      { wall: '#f9f1f4', roof: '#2d2d2d', floor: ['#f4f4f0', '#2d2d2d'], till: '💈', clerk: { shirt: '#2d2d2d', top: 'tshirt', hair: 'long', hairCol: '#a46ef0' } },
     florist:    { wall: '#f3f7ee', roof: '#ec6aa8', floor: ['#d9cdb4', '#cfc2a8'], till: '💐', clerk: { shirt: '#6cbf73', top: 'polo', hair: 'long' } },
+    // v0.38
+    hospital:   { wall: '#f4f7f9', roof: '#e5484d', floor: ['#eef3f4', '#e4ebec'], till: '📋', clerk: { shirt: '#9fd6d2', top: 'polo', hair: 'long' } },
+    bowling:    { wall: '#2f3a6b', roof: '#ec6aa8', floor: ['#3a3f5c', '#343954'], till: '👟', clerk: { shirt: '#ec6aa8', top: 'polo', hair: 'curly' } },
+    aquatic:    { wall: '#e6f3fa', roof: '#38a3e0', floor: ['#e8f1f5', '#dfe9ee'], till: '🎟️', clerk: { shirt: '#e5484d', top: 'polo', hair: 'short' } },
+    museum:     { wall: '#efe8da', roof: '#8a7a5a', floor: ['#d9cfc2', '#cfc4b6'], till: '🎟️', clerk: { shirt: '#3b3125', top: 'jacket', inner: '#f4f4f0', hair: 'bun' } },
+    station:    { wall: '#efe2d2', roof: '#3d4a66', floor: ['#d9d4ca', '#cfc9bd'], till: '🎫', clerk: { shirt: '#3d4a66', top: 'jacket', inner: '#f4f4f0', hat: 'cap', hatCol: '#3d4a66' } },
+    suite:      { wall: '#f4ead8', roof: '#b08d57', floor: ['#c9a27a', '#bf9670'], till: '🛎️', clerk: { shirt: '#8a2a34', top: 'jacket' } },
   };
   const venueLook = k => VENUE_LOOK[k] && { ...(STORES[k] || {}), ...(PLACE_INFO[k] || {}), wall: VENUE_LOOK[k].wall || (STORES[k] || {}).wall || '#f1f0ea', roof: VENUE_LOOK[k].roof || (STORES[k] || {}).roof || '#c9893a' };
   const FOLK = i => (i % 2 ? AUDIENCE_LOOKS : TABLE_LOOKS)[i % 6];
@@ -2562,6 +2589,95 @@ const Scene = (() => {
       guest(2.6, 2.8, { face: -1, view: 'back', turn: [-0.3, -1] });
       furn('monstera', 8.0, 5.4); furn('plant', 0.4, 5.6);
       P = { RW: 9, RD: 7, door: [3, 6.3], counter: { x: 5.8, y: 4.6, w: 2.4, d: 0.9 } };
+    } else if (k === 'hospital') {   // v0.38: beds behind curtains, the nursery window, giving blood, a check-up, the pharmacy, a waiting area
+      [[0.6, 0], [3.5, 1], [6.4, 2]].forEach(([bx, j]) => {
+        if (j === 1) spot('visit', bx, 0.6, 2.4, 1.1, { draw: 'hospbed', stand: [bx + 1.2, 2.6], use: { at: [bx + 1.7, 2.05], pose: 'stand', view: 'back', turn: [0.2, -1] } });
+        else dec('hospbed', bx, 0.6, 2.4, 1.1, { empty: j === 2 });
+        if (j < 2) guest(bx + 1.2, 1.15, { pose: 'lie', lift: 10, dir: -2.68 });
+      });
+      dec('ivstand', 3.05, 0.4, 0.3, 0.3); dec('ivstand', 5.95, 0.4, 0.3, 0.3);
+      spot('babies', 10.0, 0.12, 4.6, 0.2, { draw: 'nursery', stand: [12.3, 1.7] });
+      guest(11.2, 1.45, back); guest(13.4, 1.5, back);
+      spot('donate', 0.6, 3.6, 1.2, 1.4, { draw: 'donorchair', stand: [2.4, 5.6], use: { at: [1.2, 4.4], pose: 'sit', face: 1, seatH: 8, sit: 'lean' } });
+      who(2.4, 3.9, { staff: true, face: -1, view: 'front', turn: [-0.4, 1], look: { shirt: '#9fd6d2', top: 'polo', hair: 'bun', hairCol: '#2b1d14', skin: '#d39a6c' } });
+      dec('counter2', 5.4, 4.2, 3.0, 0.9); who(6.9, 3.65, { staff: true, face: -1, view: 'front', turn: [-0.2, 1], look: { shirt: '#5aa2e0', top: 'polo', hair: 'short', hairCol: '#1d1a17', skin: '#9a6440' } });
+      dec('glass', 10.0, 3.0, 0.15, 3.0);
+      spot('checkup', 10.9, 3.4, 1.0, 1.0, { draw: 'healthpod', stand: [11.4, 5.2] });
+      dec('exambed', 12.4, 3.2, 2.2, 1.0); who(13.2, 4.8, { staff: true, face: -1, view: 'front', turn: [-0.3, 1], prop: '🩺', look: { shirt: '#ffffff', top: 'jacket', inner: '#5aa2e0', hair: 'short', hairCol: '#5b5f66', skin: '#f3c59f' } });
+      dec('chairs', 5.0, 7.4, 3.8, 0.8, { n: 4, sat: [0, 2] }); dec('chairs', 5.0, 9.0, 3.8, 0.8, { n: 4, sat: [1, 3] });
+      spot('pharmacy', 11.4, 7.8, 3.0, 0.7, { draw: 'medshelf', stand: [12.9, 9.3] });
+      who(10.8, 8.6, { staff: true, face: -1, view: 'front', turn: [-0.4, 1], look: { shirt: '#ffffff', top: 'jacket', inner: '#6cbf73', hair: 'long', hairCol: '#6b4226', skin: '#ffe0c4' } });
+      dec('vending', 0.2, 6.0, 0.7, 0.9); dec('wheelchair', 9.2, 10.4, 0.8, 0.8);
+      furn('plant', 0.4, 10.6); furn('monstera', 14.2, 10.6); furn('plant', 9.4, 0.4);
+      P = { RW: 15, RD: 12, door: [10.0, 11.3], counter: { x: 1.2, y: 8.2, w: 3.2, d: 0.9 } };
+    } else if (k === 'bowling') {   // four lanes (yours is the first), scores overhead, sofas behind, arcade games, the shoe counter, a snack bar
+      [0, 1, 2, 3].forEach(i => { const lx = 0.5 + i * 2.5;
+        if (i === 0) spot('lane', lx, 0.3, 2.1, 6.6, { draw: 'bowlane', stand: [lx + 1.05, 7.7] });
+        else dec('bowlane', lx, 0.3, 2.1, 6.6, { busy: i !== 1, i });
+        dec('scorescreen', lx + 0.3, 8.0, 1.5, 0.1, { air: true, i });
+        if (i < 3) dec('ballreturn', lx + 2.12, 6.0, 0.3, 1.2);
+      });
+      guest(4.05, 7.5, back); guest(6.6, 7.6, back); guest(9.05, 7.5, back);
+      furn('sofa', 2.8, 9.0, { tint: '#ec6aa8' }); furn('sofa', 7.8, 9.0, { tint: '#38d39f' });
+      guest(3.4, 9.45, { pose: 'sit', seatH: 8.5, sit: 'chat', face: 1, back: true, dz: 0.3 }); guest(8.4, 9.45, { pose: 'sit', seatH: 8.5, sit: 'drink', face: 1, back: true, dz: 0.3 }); guest(9.3, 9.45, { pose: 'sit', seatH: 8.5, sit: 'phone', face: 1, back: true, dz: 0.3 });
+      spot('arcade', 10.9, 0.3, 1.0, 0.8, { draw: 'arcade', stand: [11.4, 1.8], use: { at: [11.4, 1.35], pose: 'stand', view: 'back', turn: [0.1, -1] } });
+      dec('arcade', 12.1, 0.3, 1.0, 0.8, { i: 1 }); dec('clawbox', 13.3, 0.3, 1.1, 1.0); dec('arcade', 14.6, 0.3, 1.0, 0.8, { i: 2 });
+      who(12.6, 1.4, { ...back, scale: 0.75, look: 3 }); guest(15.1, 1.45, back);
+      dec('shoecubby', 12.4, 3.9, 3.2, 0.5);
+      spot('snack', 12.6, 8.8, 2.8, 0.8, { draw: 'snackbar', stand: [14.0, 10.3] });
+      furn('plant', 0.4, 10.6); furn('monstera', 15.2, 6.8);
+      P = { RW: 16, RD: 12, door: [6.0, 11.3], counter: { x: 12.4, y: 5.6, w: 3.2, d: 0.9 } };
+    } else if (k === 'aquatic') {   // a 25 m pool with four lanes, starting blocks, a diving board, stands, the lifeguard, a sauna
+      dec('bleachers', 1.0, 0.15, 9.6, 1.3);
+      guest(2.2, 0.45, { pose: 'sit', seatH: 19, sit: 'chat', face: 1, dz: 0.3 }); guest(5.4, 1.1, { pose: 'sit', seatH: 10, sit: 'phone', face: 1, dz: 0.3 }); guest(7.8, 0.45, { pose: 'sit', seatH: 19, sit: 'lean', face: -1, dz: 0.3 });
+      spot('pool', 1.0, 2.0, 12.0, 6.2, { draw: 'bigpool', stand: [7.4, 9.3], use: { at: [7.0, 4.6], pose: 'swim', face: 1 } });
+      [0, 1, 2, 3].forEach(i => { const bx = 1.0 + (i + 0.5) * 3 - 0.3; if (i === 0) spot('race', bx, 8.25, 0.6, 0.5, { draw: 'block', n: 1, stand: [bx + 0.3, 9.4] }); else dec('block', bx, 8.25, 0.6, 0.5, { n: i + 1 }); });
+      guest(5.5, 3.6, { walk: true, pose: 'swim', face: -1 }); guest(8.5, 6.2, { walk: true, pose: 'swim', face: 1 }); guest(11.5, 4.4, { walk: true, pose: 'swim', face: -1 });
+      spot('dive', 12.4, 4.6, 2.6, 0.6, { draw: 'divingboard', stand: [15.6, 5.9], use: { at: [13.0, 4.9], pose: 'stand', lift: 9, face: -1, view: 'front' } });
+      dec('lifeguard', 13.8, 2.0, 0.9, 0.9); who(14.25, 2.45, { staff: true, pose: 'sit', seatH: 30, face: -1, look: { shirt: '#e5484d', top: 'tshirt', bottom: 'shorts', pants: '#2d2d2d', hair: 'short', hairCol: '#e9cf7a', skin: '#d39a6c' } });
+      spot('sauna', 14.0, 8.4, 2.6, 2.6, { draw: 'sauna', stand: [13.4, 11.0], use: { at: [15.2, 9.9], pose: 'sit', face: -1, seatH: 8, sit: 'lean' } });
+      dec('lockers', 0.3, 11.7, 4.0, 0.6, { along: true }); dec('bench', 1.0, 10.0, 2.4, 0.6); guest(1.8, 10.45, { pose: 'sit', seatH: 7, sit: 'phone', face: -1, dz: 0.4 });
+      furn('plant', 16.4, 12.0); dec('towels', 9.4, 11.8, 1.2, 0.5);
+      P = { RW: 17, RD: 13, door: [11.0, 12.3], counter: { x: 5.4, y: 10.8, w: 3.0, d: 0.9 } };
+    } else if (k === 'museum') {   // a T. rex in the middle, space, paintings, old pots in glass cases, a gift shop
+      spot('dino', 2.2, 1.6, 5.0, 2.2, { draw: 'trex', stand: [4.7, 5.0] });
+      dec('stanchions', 2.0, 4.0, 5.4, 0.4);
+      guest(3.4, 4.9, back); who(5.9, 5.0, { ...back, scale: 0.72, look: 2 }); who(6.5, 5.3, { ...back, scale: 0.72, look: 4 }); who(7.2, 5.0, { ...back, scale: 0.72, look: 5 });
+      who(8.4, 4.6, { staff: true, face: -1, view: 'front', turn: [-0.5, 1], prop: '📢', look: { shirt: '#3b3125', top: 'jacket', inner: '#f4f4f0', hair: 'bun', hairCol: '#6b4226', skin: '#d39a6c' } });
+      spot('space', 12.2, 1.0, 1.6, 1.6, { draw: 'rocket', stand: [13.0, 3.4] }); dec('planets', 9.2, 2.6, 0.1, 0.1, { air: true });
+      guest(14.2, 3.2, { face: -1, view: 'back', turn: [-0.4, -1] });
+      spot('art', 0.05, 5.6, 0.15, 3.8, { draw: 'paintings', stand: [1.5, 7.4] }); dec('paintings', 8.2, 0.05, 3.2, 0.15);
+      guest(1.5, 8.8, { face: -1, view: 'back', turn: [-1, -0.2] });
+      spot('history', 7.4, 6.4, 2.4, 1.0, { draw: 'vitrine', stand: [8.6, 8.0] }); dec('vitrine', 10.4, 6.4, 1.2, 1.0, { i: 1 });
+      dec('bench', 4.8, 8.8, 2.4, 0.6); guest(5.6, 9.25, { pose: 'sit', seatH: 7, sit: 'phone', face: -1, dz: 0.4 });
+      spot('shop', 12.6, 8.4, 2.8, 0.8, { draw: 'giftshop', stand: [14.0, 9.9] });
+      furn('plant', 0.4, 0.4); furn('monstera', 15.2, 10.6);
+      P = { RW: 16, RD: 12, door: [9.0, 11.3], counter: { x: 1.2, y: 10.0, w: 3.0, d: 0.9 } };
+    } else if (k === 'station') {   // the platform at the back (trains come and go), the departures board, ticket machines, a coffee kiosk, benches
+      dec('rails', 0, 0.15, 16, 1.5, { flat: true }); dec('platformedge', 0, 1.65, 16, 0.35, { flat: true });
+      dec('train', 0, 0.2, 16, 1.4);
+      spot('watch', 5.4, 2.6, 2.4, 0.6, { draw: 'bench', stand: [6.6, 3.9], use: { at: [6.6, 2.95], pose: 'sit', face: 1, back: true, seatH: 7 } });
+      dec('bench', 9.6, 2.6, 2.4, 0.6); guest(10.3, 2.95, { pose: 'sit', seatH: 7, sit: 'phone', face: 1, back: true, dz: 0.3 }); dec('luggage', 12.4, 2.7, 0.8, 0.5);
+      guest(2.4, 2.4, { face: 1, view: 'back', turn: [0.2, -1] }); guest(14.2, 2.5, { face: -1, view: 'back', turn: [-0.2, -1] });
+      dec('bigclock', 8.0, 2.2, 0.1, 0.1, { air: true });
+      spot('board', 8.6, 4.8, 3.2, 0.3, { draw: 'departures', stand: [10.2, 5.9] });
+      spot('ticket', 0.6, 4.6, 1.8, 0.6, { draw: 'ticketmachines', stand: [1.5, 5.9] }); guest(3.0, 5.6, { face: -1, view: 'back', turn: [-0.6, -1] });
+      spot('kiosk', 13.0, 6.2, 2.4, 1.2, { draw: 'kiosk', stand: [14.2, 8.2] });
+      who(14.2, 5.8, { staff: true, pose: 'work', face: -1, dz: -1, look: { shirt: '#2f5d50', top: 'polo', hair: 'curly', hairCol: '#2b1d14', skin: '#d39a6c' } });
+      dec('bench', 5.6, 7.4, 2.4, 0.6); guest(6.2, 7.85, { pose: 'sit', seatH: 7, sit: 'read', face: -1, dz: 0.4 }); dec('luggage', 8.3, 7.5, 0.8, 0.5);
+      furn('plant', 15.2, 9.8); furn('plant', 0.4, 9.8);
+      P = { RW: 16, RD: 11, door: [9.0, 10.3], counter: { x: 1.0, y: 8.0, w: 3.0, d: 0.9 } };
+    } else if (k === 'suite') {   // a hotel room high up: a big bed, a bath behind glass, a minibar, an armchair by the window
+      spot('lift', 0.8, 0.1, 1.8, 0.3, { draw: 'lift', stand: [1.7, 1.4] });
+      spot('bed', 4.0, 0.6, 2.8, 2.2, { draw: 'kingbed', stand: [5.4, 3.6], use: { at: [5.5, 1.7], pose: 'lie', lift: 10, dir: -2.68 } });
+      furn('nightstand', 3.0, 0.6); furn('nightstand', 6.9, 0.6);
+      dec('glass', 8.8, 0.1, 0.15, 2.8);
+      spot('bath', 9.4, 0.5, 2.0, 1.0, { furn: 'bathtub', stand: [10.4, 2.3], use: { at: [10.4, 1.0], pose: 'lie', lift: 5, dir: -2.68, prop: '🫧' } });
+      spot('minibar', 0.4, 3.4, 0.8, 0.8, { draw: 'minibar', stand: [1.7, 3.8] });
+      furn('tv', 4.4, 5.0); furn('desk', 0.4, 6.0); dec('rug', 3.6, 3.0, 4.2, 1.8, { col: '#8a2a34', flat: true });
+      spot('view', 10.2, 5.2, 1, 1, { furn: 'armchair', tint: '#b08d57', stand: [10.7, 6.8], use: { at: [10.7, 5.7], pose: 'sit', face: -1, seatH: 8.5, sit: 'chin' } });
+      furn('sofa', 7.4, 7.4, { tint: '#b08d57' }); dec('luggage', 1.8, 7.6, 1.0, 0.6); furn('monstera', 11.2, 8.0);
+      P = { RW: 12, RD: 9, door: [4.5, 8.3], counter: { x: 0.4, y: 8.2, w: 0.1, d: 0.1 }, sky: true, noClerk: true };
     } else {   // gas
       spot('fridge', 0.4, 0.2, 3.6, 0.7, { draw: 'drinkfridge', stand: [2.2, 1.6] });
       dec('icefreezer', 4.6, 0.3, 1.6, 0.8); dec('slushie', 6.8, 0.3, 1.1, 0.7);
@@ -2573,7 +2689,7 @@ const Scene = (() => {
       P = { RW: 12, RD: 9, door: [3, 8.3], counter: { x: 7.0, y: 4.4, w: 3.2, d: 0.9 } };
     }
     const solids = [...wares.map(w => [w.x, w.y, w.w, w.d]), ...decor.filter(d => !d.flat && !d.air && !d.base && d.kind !== 'person').map(d => [d.x, d.y, d.w, d.d])];
-    solids.push([P.counter.x, P.counter.y - 1.1, P.counter.w, P.counter.d + 1.1]);
+    if (!P.noClerk) solids.push([P.counter.x, P.counter.y - 1.1, P.counter.w, P.counter.d + 1.1]);   // (v0.38: a hotel room has no counter)
     P = { k, n: wares.length, wares, decor, venue: true, ...P };
     { const home = VENUE_HOME[k] || (BUILDING_FLOORS[k] ? k : null), fl = home && BUILDING_FLOORS[home];   // v0.37: coming up (or down) in the lift, you step out by the lift
       if (fl) P.from = Object.fromEntries(fl.filter(f => f !== k).map(f => [f, [1.7, 1.5]])); }
@@ -2656,6 +2772,11 @@ const Scene = (() => {
   // v0.36: the things that make each building feel full. d: { x, y, w, d } on the floor (or on a wall: y ≈ 0 is the
   // back wall, x ≈ 0 the left one; d.base lifts it, e.g. onto a counter). d.busy: someone's using it (it moves).
   // Returns false for kinds it doesn't know.
+  // v0.38: the station's departures board: the next three trains to the towns nearby
+  function trainBoard() {
+    const nb = visitorTowns().map(id => nm(COMMUNITIES[id])), d0 = new Date(), m0 = d0.getHours() * 60 + d0.getMinutes(), slot = Math.ceil((m0 + 1) / 20) * 20;
+    return [curLang() === 'zh' ? '出发 DEPARTURES' : 'DEPARTURES', ...[0, 1, 2].map(k2 => { const m = slot + k2 * 20; return `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}  ${nb[k2 % Math.max(1, nb.length)] || ''}`; })];
+  }
   function drawRoomThing(d, ts, i) {
     const z = cam.z, { x, y } = d, c = iso(x + d.w / 2, y + d.d / 2), t = ts / 1000, base = d.base || 0;
     const busy = d.busy || (d.kind === 'spot' && meS.use && !meS.moving && meS.use.k === d.k);
@@ -2832,6 +2953,140 @@ const Scene = (() => {
       case 'kitchenpass': { const b = box(x, y, d.w, d.d, 18, '#c9cfd6', 0, { top: '#e8ecf0' }); [0.2, 0.5, 0.8].forEach((u, k2) => { const q = up(iso(x + u * d.w, y + d.d / 2), 18 * z); ellipse(q.x, q.y, 6 * z, 2.5 * z, '#ffffff', '#c9cfd6', 0.6 * z); emoji(['🍝', '🥩', '🥗'][k2], q.x, q.y + 1 * z, 7 * z); }); const l = up(iso(x + d.w / 2, y + d.d / 2), 40 * z); line(l.x - 20 * z, l.y, l.x + 20 * z, l.y, '#5b6470', 1.2 * z); if (NIGHT > 0.2 || true) glow(l.x, l.y + 6 * z, 30 * z, 0.35); return true; }
       case 'chandelier': { const top = up(c, 92 * z), m = up(c, 70 * z); line(top.x, top.y, m.x, m.y, '#c9a24a', 1 * z); for (let k2 = 0; k2 < 8; k2++) { const a = k2 / 8 * Math.PI * 2, q = { x: m.x + Math.cos(a) * 14 * z, y: m.y + Math.sin(a) * 5 * z }; line(m.x, m.y, q.x, q.y, '#c9a24a', 0.8 * z); circle(q.x, q.y - 2 * z, 2 * z, '#fff2c4'); } ellipse(m.x, m.y, 5 * z, 2.5 * z, '#c9a24a'); glow(m.x, m.y, 40 * z, NIGHT > 0.2 ? 0.7 : 0.3); return true; }
       case 'luggage': { box(x, y, d.w, d.d, 3, '#c9a24a', 4, { top: '#8a2a34' }); [0.15, 0.85].forEach(u => { const a = up(iso(x + u * d.w, y + d.d / 2), 4 * z); line(a.x, a.y, a.x, a.y - 30 * z, '#c9a24a', 1.4 * z); }); const a = up(iso(x + 0.15 * d.w, y + d.d / 2), 34 * z), b2 = up(iso(x + 0.85 * d.w, y + d.d / 2), 34 * z); line(a.x, a.y, b2.x, b2.y, '#c9a24a', 1.6 * z); box(x + 0.15, y + 0.1, 0.4, 0.4, 10, '#2f6fb2', 7, { shadow: false }); box(x + 0.5, y + 0.15, 0.35, 0.3, 8, '#e5484d', 7, { shadow: false }); return true; }
+      // ----- v0.38: the hospital -----
+      case 'hospbed': {   // a hospital bed (the head to the left), a blanket, rails, a heart monitor, a curtain beside it
+        box(x + 0.15, y + 0.15, d.w - 0.3, d.d - 0.3, 7, '#9aa3ad', 0);
+        box(x, y, d.w, d.d, 3, '#eef3f6', 7, { top: '#fbfdfe' });
+        box(x + 0.1, y + 0.15, 0.5, d.d - 0.3, 3, '#ffffff', 10, { shadow: false, top: '#ffffff' });
+        if (!d.empty) box(x + 0.75, y + 0.05, d.w - 0.9, d.d - 0.1, 1.2, '#a8d4e6', 10, { shadow: false, top: '#b9dfee' });
+        box(x - 0.05, y, 0.1, d.d, 18, '#c9cfd6', 0, { shadow: false });
+        { const a = up(iso(x + 0.8, y + d.d), 13 * z), b2 = up(iso(x + d.w - 0.3, y + d.d), 13 * z); line(a.x, a.y, b2.x, b2.y, '#9aa3ad', 1 * z); }
+        const m = up(iso(x + 0.15, y + 0.1), 36 * z); rrect(m.x - 6 * z, m.y - 5 * z, 12 * z, 9 * z, 1.5 * z, '#1d2a35', '#9aa3ad', 0.6 * z);
+        if (!d.empty && z > 0.3) { ctx.save(); ctx.strokeStyle = '#38d39f'; ctx.lineWidth = 0.8 * z; ctx.beginPath(); for (let k2 = 0; k2 <= 10; k2++) { const ph = (k2 + t * 6) % 10; ctx.lineTo(m.x - 5 * z + k2 * z, m.y + (ph > 4 && ph < 5 ? -3 : ph > 5 && ph < 6 ? 2 : 0) * z); } ctx.stroke(); ctx.restore(); }
+        const c0 = iso(x + d.w + 0.2, y - 0.1), c1 = iso(x + d.w + 0.2, y + d.d * 0.75);
+        poly([up(c0, 2 * z), up(c1, 2 * z), up(c1, 50 * z), up(c0, 50 * z)], 'rgba(150,200,210,.7)', 'rgba(255,255,255,.5)', 1);
+        for (let k2 = 1; k2 < 6; k2++) { const a = lerp(c0, c1, k2 / 6); line(a.x, a.y - 2 * z, a.x, a.y - 50 * z, 'rgba(255,255,255,.35)', 1 * z); }
+        return true;
+      }
+      case 'nursery': {   // the window onto the newborns: cribs with babies in pink and blue blankets
+        wallRect(F, 0, 0, 1, 8, 52, '#f4f7f9', '#d6dce2', 1); wallRect(F, 0, 0.04, 0.96, 12, 44, 'rgba(190,225,240,.65)', '#ffffff', 1.4);
+        for (let k2 = 0; k2 < 4; k2++) { const q = wallPt(F, 0, 0.16 + k2 * 0.225, 20); rrect(q.x - 8 * z, q.y - 3 * z, 16 * z, 6 * z, 2 * z, k2 % 2 ? '#f9c6d6' : '#bcd9f5', '#ffffff', 0.6 * z); circle(q.x - 4 * z, q.y - 3.5 * z, 2.6 * z, ['#f3c59f', '#d39a6c', '#ffe0c4', '#9a6440'][k2]); circle(q.x - 4.6 * z, q.y - 3.8 * z, 0.4 * z, '#3b3125'); }
+        txt(0.5, 48, curLang() === 'zh' ? '新生儿 · NURSERY' : 'NURSERY', 4.6, '#e5484d');
+        return true;
+      }
+      case 'donorchair': {   // a blue recliner, a stand with a bag of blood
+        box(x + 0.1, y + 0.3, d.w - 0.2, d.d - 0.4, 8, '#2f6fb2', 0, { top: '#3e7cc9' }); box(x + 0.1, y + 0.15, d.w - 0.2, 0.3, 18, '#2f6fb2', 0, { top: '#3e7cc9', shadow: false });
+        [0, 1].forEach(s2 => box(x + (s2 ? d.w - 0.2 : 0.02), y + 0.4, 0.18, d.d - 0.6, 12, '#24589a', 0, { shadow: false }));
+        const pa = iso(x + d.w + 0.15, y + 0.3), pb = up(pa, 44 * z); line(pa.x, pa.y, pb.x, pb.y, '#9aa3ad', 1.2 * z); rrect(pb.x - 3 * z, pb.y + 2 * z, 6 * z, 9 * z, 2 * z, busy ? '#b8262a' : '#e5484d');
+        if (busy) { const hand = up(iso(x + d.w * 0.75, y + d.d * 0.6), 13 * z); ctx.save(); ctx.strokeStyle = '#b8262a'; ctx.lineWidth = 0.8 * z; ctx.beginPath(); ctx.moveTo(pb.x, pb.y + 11 * z); ctx.quadraticCurveTo(pb.x + 4 * z, hand.y, hand.x, hand.y); ctx.stroke(); ctx.restore(); }
+        return true;
+      }
+      case 'vending': { const b = box(x, y, d.w, d.d, 46, '#e5484d', 0, { top: '#c9373c' }), Fd = b.right; wallRect(Fd, 0, 0.12, 0.7, 14, 42, 'rgba(200,230,250,.85)', '#ffffff', 0.8); [22, 30, 38].forEach(h => ['🥤', '🧃', '🍫'].forEach((e, k2) => { const q = wallPt(Fd, 0, 0.22 + k2 * 0.18, h - 4); if (z > 0.35) emoji(e, q.x, q.y, 5 * z); })); return true; }
+      // ----- the bowling alley -----
+      case 'bowlane': {   // a lane running back to the pins: maple boards, gutters, arrows, the pins, the machine over them
+        flatRect(x, y, 0.3, d.d, '#5b6470'); flatRect(x + d.w - 0.3, y, 0.3, d.d, '#5b6470');
+        flatRect(x + 0.3, y, d.w - 0.6, d.d, '#e3b77c');
+        for (let k2 = 1; k2 < 6; k2++) { const a = iso(x + 0.3 + k2 * (d.w - 0.6) / 6, y), b2 = iso(x + 0.3 + k2 * (d.w - 0.6) / 6, y + d.d); line(a.x, a.y, b2.x, b2.y, 'rgba(160,110,60,.3)', 0.6 * z); }
+        flatRect(x + 0.3, y + d.d - 0.1, d.w - 0.6, 0.1, '#c9433b');
+        [0.2, 0.35, 0.5, 0.65, 0.8].forEach((u, k2) => { const q = iso(x + 0.3 + u * (d.w - 0.6), y + d.d - 2.0 - (2 - Math.abs(k2 - 2)) * 0.25); pg([[q.x, q.y - 2 * z], [q.x - 1.5 * z, q.y + 1.2 * z], [q.x + 1.5 * z, q.y + 1.2 * z]], '#6b4428'); });
+        const r = d.i || 0, cyc = (t / 6 + r * 0.37) % 1, rolling = d.busy && cyc < 0.45, knocked = d.busy && cyc >= 0.45 && cyc < 0.85, PX = x + d.w / 2;
+        const pins = [[0, 0.75], [-0.13, 0.62], [0.13, 0.62], [-0.26, 0.49], [0, 0.49], [0.26, 0.49], [-0.39, 0.36], [-0.13, 0.36], [0.13, 0.36], [0.39, 0.36]];
+        pins.map((p, k2) => [...p, k2]).sort((a, b) => a[1] - b[1]).forEach(([dx, dy, k2]) => { const q = iso(PX + dx * 1.4, y + 0.2 + dy * 1.3);
+          if (knocked && hash(k2, Math.floor(t / 6 + r * 0.37) + r) > 0.15) { ellipse(q.x + (dx > 0 ? 2 : -2) * z, q.y, 3.2 * z, 1.3 * z, '#fbfbf7', '#c9433b', 0.5 * z); return; }
+          ellipse(q.x, q.y - 4 * z, 1.7 * z, 3.3 * z, '#fbfbf7', 'rgba(0,0,0,.12)', 0.4 * z); circle(q.x, q.y - 8.6 * z, 1.2 * z, '#fbfbf7'); line(q.x - 1.1 * z, q.y - 6.8 * z, q.x + 1.1 * z, q.y - 6.8 * z, '#c9433b', 0.7 * z); });
+        if (rolling) { const u = cyc / 0.45, q = iso(PX + Math.sin(u * 3 + r) * 0.2, y + d.d - 0.4 - u * (d.d - 1.4)); circle(q.x, q.y - 2.4 * z, 2.6 * z, ['#3a4cc0', '#c9433b', '#34b27b', '#6b5bd0'][r % 4]); }
+        box(x - 0.05, y, d.w + 0.1, 0.25, 14, '#1d2547', 24, { shadow: false, top: '#2a3366' });
+        return true;
+      }
+      case 'ballreturn': { box(x, y, d.w, d.d, 8, '#2d2d34', 0, { top: '#3a3a44' }); [0.25, 0.5, 0.75].forEach((v, k2) => { const q = up(iso(x + d.w / 2, y + v * d.d), 10 * z); circle(q.x, q.y, 2.4 * z, ['#3a4cc0', '#ec6aa8', '#34b27b'][k2]); }); return true; }
+      case 'scorescreen': { const top = up(c, 88 * z), m = up(c, 62 * z); line(top.x, top.y, m.x, m.y - 7 * z, '#5b6470', 0.8 * z); rrect(m.x - 14 * z, m.y - 7 * z, 28 * z, 13 * z, 2 * z, '#141a3a', '#5b6470', 0.8 * z);
+        if (z > 0.35) { ctx.font = `800 ${4.4 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffd36b'; ctx.fillText(['X 9/ 8- 72', '8- X 7/ 54', '7/ 9- X 61', 'X X 9/ 88'][d.i || 0], m.x, m.y - 0.5 * z); } return true; }
+      case 'arcade': { const b = box(x + 0.05, y, d.w - 0.1, d.d, 40, ['#6b5bd0', '#e5484d', '#2f6fb2'][d.i || 0], 0, { top: '#1d1d22' }); const sc = wallPt(b.left, 0, 0.5, 30), on = 0.6 + 0.4 * Math.sin(t * 5 + x);
+        rrect(sc.x - 7 * z, sc.y - 5 * z, 14 * z, 10 * z, 1.5 * z, `rgba(56,211,159,${on})`, '#1d1d22', 0.8 * z); wallRect(b.left, 0, 0.1, 0.9, 16, 20, '#1d1d22');
+        [0.3, 0.6].forEach(u => { const q = wallPt(b.left, 0, u, 20); circle(q.x, q.y - 1 * z, 1.2 * z, u < 0.5 ? '#f2c230' : '#e5484d'); }); if (z > 0.35) emoji(['👾', '🏎️', '🕹️'][d.i || 0], sc.x, sc.y + 2 * z, 6 * z); return true; }
+      case 'clawbox': { box(x, y, d.w, d.d, 14, '#ec6aa8', 0, { top: '#f48cc0' }); const q = up(c, 16 * z); ['🧸', '🐰', '🦆'].forEach((e, k2) => emoji(e, q.x + (k2 - 1) * 6 * z, q.y + 3 * z, 6 * z));
+        box(x + 0.05, y + 0.05, d.w - 0.1, d.d - 0.1, 26, 'rgba(200,230,250,.3)', 14, { top: '#ec6aa8', shadow: false, left: 'rgba(200,230,250,.3)', right: 'rgba(200,230,250,.25)' }); const cl = up(c, 36 * z); line(cl.x, cl.y - 4 * z, cl.x, cl.y, '#9aa3ad', 0.8 * z); return true; }
+      case 'shoecubby': { const b = box(x, y, d.w, d.d, 40, '#8a5a36', 0, { top: '#a46e40' }); for (let r = 0; r < 4; r++) for (let k2 = 0; k2 < 6; k2++) { wallRect(b.left, 0, k2 / 6 + 0.01, (k2 + 1) / 6 - 0.01, 4 + r * 9, 11 + r * 9, '#6b4428'); const q = wallPt(b.left, 0, (k2 + 0.5) / 6, 6 + r * 9); rrect(q.x - 2.5 * z, q.y - 2 * z, 5 * z, 2.4 * z, 1 * z, ['#e5484d', '#2f6fb2', '#f2c230'][(r + k2) % 3]); } return true; }
+      case 'snackbar': { const b = box(x, y, d.w, d.d, 16, '#c9433b', 0, { top: '#f4f4f0' }); wallRect(b.left, 0, 0, 1, 12, 16, '#f2c230'); const q = up(c, 16 * z); emoji('🌭', q.x - 9 * z, q.y, 9 * z); emoji('🥤', q.x + 1 * z, q.y - 2 * z, 9 * z); emoji('🍿', q.x + 10 * z, q.y, 9 * z);
+        const s0 = up(iso(x + d.w / 2, y + 0.1), 46 * z); rrect(s0.x - 18 * z, s0.y - 6 * z, 36 * z, 11 * z, 2 * z, '#1d2547', '#f2c230', 0.8 * z); if (z > 0.35) { ctx.font = `800 ${5.5 * z}px ${UI_FONT}`; ctx.fillStyle = '#ffd36b'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SNACKS', s0.x, s0.y - 0.5 * z); } return true; }
+      // ----- the swimming centre -----
+      case 'bigpool': {   // lanes running back from the starting blocks, rope floats between them, tiles round the edge
+        flatRect(x - 0.4, y - 0.4, d.w + 0.8, d.d + 0.8, '#f4f7f9'); flatRect(x, y, d.w, d.d, '#2fa6d6');
+        for (let k2 = 0; k2 < 4; k2++) { const cx2 = x + (k2 + 0.5) * d.w / 4; flatRect(cx2 - 0.07, y + 0.6, 0.14, d.d - 1.2, 'rgba(20,60,110,.35)'); flatRect(cx2 - 0.4, y + 0.6, 0.8, 0.14, 'rgba(20,60,110,.35)'); }
+        for (let k2 = 0; k2 < 20; k2++) { const u = (k2 * 0.37 + t * 0.05) % 1, v = (k2 * 0.61) % 1, q = iso(x + u * d.w, y + v * d.d); ellipse(q.x, q.y, 7 * z, 1.6 * z, 'rgba(255,255,255,.3)'); }
+        for (let k2 = 1; k2 < 4; k2++) { const xx = x + k2 * d.w / 4; for (let s = 0; s < 24; s++) { const q = iso(xx, y + (s + 0.5) * d.d / 24); circle(q.x, q.y - 0.5 * z, 1.3 * z, s < 3 || s > 20 ? '#e5484d' : s % 2 ? '#ffffff' : '#2f6fb2'); } }
+        const ld = iso(x + d.w - 0.3, y + d.d + 0.1); line(ld.x, ld.y, ld.x, ld.y - 10 * z, '#c9cfd6', 1.2 * z); line(ld.x + 4 * z, ld.y + 2 * z, ld.x + 4 * z, ld.y - 8 * z, '#c9cfd6', 1.2 * z);
+        return true;
+      }
+      case 'block': { box(x + 0.1, y + 0.05, d.w - 0.2, d.d - 0.1, 8, '#f4f4f0', 0, { top: '#38a3e0' }); const q = wallPt([iso(x + 0.1, y + d.d - 0.05), iso(x + d.w - 0.1, y + d.d - 0.05)], 0, 0.5, 4); if (z > 0.35) { ctx.font = `800 ${4.4 * z}px ${UI_FONT}`; ctx.fillStyle = '#2d2d2d'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(d.n || 1), q.x, q.y); } return true; }
+      case 'bleachers': { box(x, y, d.w, d.d * 0.5, 18, '#5aa2e0', 0, { top: '#7cb8ea' }); box(x, y + d.d * 0.5, d.w, d.d * 0.5, 9, '#4a8fd0', 0, { top: '#7cb8ea' }); return true; }
+      case 'divingboard': { box(x + d.w - 0.7, y + 0.1, 0.6, d.d - 0.2, 8, '#c9cfd6', 0); box(x, y + 0.15, d.w, d.d - 0.3, 1.2, '#f4f4f0', 8, { top: busy ? '#ffffff' : '#38a3e0', shadow: false }); return true; }
+      case 'lifeguard': { [[0.1, 0.1], [0.7, 0.1], [0.1, 0.7], [0.7, 0.7]].forEach(([dx, dy]) => box(x + dx, y + dy, 0.1, 0.1, 28, '#f4f4f0', 0, { shadow: false })); box(x + 0.05, y + 0.05, d.w - 0.1, d.d - 0.1, 2, '#e5484d', 28, { shadow: false }); return true; }
+      case 'sauna': { const b = box(x, y, d.w, d.d, 50, '#b07a4a', 0, { top: '#8a5a36' }); for (let k2 = 1; k2 < 10; k2++) { wallLine(b.left, 0, 0, k2 * 5, 1, k2 * 5, 'rgba(90,60,30,.35)', 0.6); wallLine(b.right, 0, 0, k2 * 5, 1, k2 * 5, 'rgba(90,60,30,.35)', 0.6); }
+        wallRect(b.left, 0, 0.3, 0.7, 2, 40, busy ? 'rgba(255,200,140,.8)' : 'rgba(255,220,180,.55)', '#8a5a36', 1); const q = wallPt(b.left, 0, 0.5, 45); if (z > 0.35) { ctx.font = `800 ${5 * z}px ${UI_FONT}`; ctx.fillStyle = '#fffaf0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SAUNA', q.x, q.y); }
+        for (let k2 = 0; k2 < 3; k2++) { const u = (t * 0.4 + k2 / 3) % 1, p = up(iso(x + d.w * 0.5, y + d.d * 0.5), (52 + u * 20) * z); circle(p.x + Math.sin(u * 6 + k2) * 4 * z, p.y, (2 + u * 4) * z, `rgba(255,255,255,${0.5 * (1 - u)})`); } return true; }
+      // ----- the museum -----
+      case 'trex': {   // a T. rex skeleton on a low platform, facing left
+        box(x, y, d.w, d.d, 5, '#8a7a5a', 0, { top: '#a8977a' });
+        const P3 = (u, v, h) => up(iso(x + u * d.w, y + v * d.d), (5 + h) * z), bone = '#efe6d0', bw = 1.6 * z;
+        [[0.5, 0.35], [0.5, 0.65]].forEach(([u, v]) => { const hip = P3(u, v, 58), knee = P3(u + 0.07, v, 30), ft = P3(u - 0.02, v, 0); line(hip.x, hip.y, knee.x, knee.y, bone, bw * 1.8); line(knee.x, knee.y, ft.x, ft.y, bone, bw * 1.3); line(ft.x, ft.y, ft.x - 6 * z, ft.y + 1 * z, bone, bw); });
+        const sp = []; for (let k2 = 0; k2 <= 14; k2++) { const u = 0.97 - k2 * 0.06, h = 22 + Math.sin(k2 / 14 * Math.PI) * 42 + (k2 > 10 ? (k2 - 10) * 5 : 0); sp.push(P3(u, 0.5, h)); }
+        ctx.save(); ctx.strokeStyle = bone; ctx.lineWidth = bw * 1.2; ctx.lineCap = 'round'; ctx.beginPath(); sp.forEach((p, k2) => (k2 ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke(); ctx.restore();
+        for (let k2 = 5; k2 < 11; k2++) { const p = sp[k2]; ctx.save(); ctx.strokeStyle = bone; ctx.lineWidth = 1.1 * z; ctx.beginPath(); ctx.ellipse(p.x - 1 * z, p.y + 8 * z, 3 * z, (9 - Math.abs(k2 - 8)) * z, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }   // ribs
+        const ar = sp[11]; line(ar.x, ar.y + 5 * z, ar.x - 5 * z, ar.y + 11 * z, bone, bw * 0.8); line(ar.x - 5 * z, ar.y + 11 * z, ar.x - 8 * z, ar.y + 10 * z, bone, bw * 0.6);
+        const hd = sp[14]; ellipse(hd.x - 9 * z, hd.y - 1 * z, 12 * z, 6.5 * z, bone, 'rgba(120,100,70,.5)', 0.7 * z); circle(hd.x - 6 * z, hd.y - 3 * z, 2 * z, '#5a4a32');
+        line(hd.x - 20 * z, hd.y + 4 * z, hd.x - 3 * z, hd.y + 6 * z, bone, 2 * z); for (let k2 = 0; k2 < 6; k2++) line(hd.x - 19 * z + k2 * 2.6 * z, hd.y + 4 * z, hd.x - 19 * z + k2 * 2.6 * z, hd.y + 2 * z, '#fffaf0', 0.8 * z);
+        const sg = P3(0.12, 1.0, 0); rrect(sg.x - 9 * z, sg.y - 6 * z, 18 * z, 6 * z, 1 * z, '#3b3125'); if (z > 0.35) { ctx.font = `800 ${3.6 * z}px ${UI_FONT}`; ctx.fillStyle = '#f7e9b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('T. REX', sg.x, sg.y - 3 * z); }
+        return true;
+      }
+      case 'rocket': { box(x + 0.2, y + 0.2, d.w - 0.4, d.d - 0.4, 4, '#5b6470', 0, { top: '#9aa3ad' }); const b0 = up(c, 4 * z), tp = up(c, 74 * z);
+        pg([[b0.x - 7 * z, b0.y - 2 * z], [b0.x - 4 * z, b0.y - 14 * z], [b0.x - 4 * z, b0.y - 4 * z]], '#e5484d'); pg([[b0.x + 7 * z, b0.y - 2 * z], [b0.x + 4 * z, b0.y - 14 * z], [b0.x + 4 * z, b0.y - 4 * z]], '#c9433b');
+        pg([[b0.x - 4.5 * z, b0.y - 4 * z], [b0.x + 4.5 * z, b0.y - 4 * z], [b0.x + 4.5 * z, tp.y + 16 * z], [b0.x, tp.y], [b0.x - 4.5 * z, tp.y + 16 * z]], '#f4f4f0', 'rgba(0,0,0,.15)', 0.6 * z);
+        line(b0.x + 2 * z, b0.y - 5 * z, b0.x + 2 * z, tp.y + 16 * z, 'rgba(0,0,0,.06)', 3 * z); circle(b0.x, tp.y + 26 * z, 2.4 * z, '#38a3e0', '#9aa3ad', 0.8 * z);
+        rrect(b0.x - 4.5 * z, b0.y - 30 * z, 9 * z, 3 * z, 0.5 * z, '#2f6fb2'); return true; }
+      case 'planets': { [[0, 0, 9, '#f2c230'], [1.4, 0.4, 3, '#c9a36a'], [2.6, 0.2, 4, '#38a3e0'], [3.8, 0.6, 3.4, '#e5734f'], [5.4, 0.3, 7, '#e3b77c', true]].forEach(([dx, dy, r, col, ring]) => {
+          const tp = up(iso(x + dx, y + dy), 94 * z), q = up(iso(x + dx, y + dy), (68 + Math.sin(t + dx) * 2) * z); line(tp.x, tp.y, q.x, q.y - r * z, 'rgba(90,90,90,.5)', 0.6 * z);
+          if (dx === 0) glow(q.x, q.y, 26 * z, 0.5); circle(q.x, q.y, r * z, col); if (ring) ellipse(q.x, q.y, r * 1.8 * z, r * 0.5 * z, null, '#b08d57', 1.3 * z); }); return true; }
+      case 'paintings': {   // framed pictures on a wall (the back one or the left one)
+        const n = Math.max(1, Math.round(Math.max(d.w, d.d) / 1.3));
+        for (let k2 = 0; k2 < n; k2++) { const u0 = (k2 + 0.15) / n, u1 = (k2 + 0.85) / n, h0 = 24 + (k2 % 2) * 4, h1 = h0 + 18, j = (k2 + (d.d > d.w ? 1 : 0)) % 4;
+          wallRect(F, 0, u0 - 0.02, u1 + 0.02, h0 - 2, h1 + 2, '#c9a24a');
+          wallRect(F, 0, u0, u1, h0 + 7, h1, ['#9fd3f2', '#f6c59f', '#2a3360', '#bfe6c4'][j]); wallRect(F, 0, u0, u1, h0, h0 + 7, ['#6fb44e', '#e5734f', '#3d4a66', '#4f9a4a'][j]);
+          const sun = wallPt(F, 0, u0 + (u1 - u0) * 0.7, h1 - 5); circle(sun.x, sun.y, 2 * z, j === 2 ? '#fffaf0' : '#f2c230');
+          if (j === 2) for (let s = 0; s < 6; s++) { const q = wallPt(F, 0, u0 + (u1 - u0) * hash(s, k2), h0 + 9 + hash(k2, s) * 8); circle(q.x, q.y, 0.7 * z, '#f2c230'); } }
+        return true; }
+      case 'vitrine': { box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 14, '#3b3125', 0, { top: '#5a4a32' }); const items = d.i ? ['🗿'] : ['🏺', '🏺', '🪙'];
+        items.forEach((e, k2) => { const q = up(iso(x + (k2 + 0.5) * d.w / items.length, y + d.d / 2), 22 * z); emoji(e, q.x, q.y, 10 * z); });
+        box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 20, 'rgba(210,235,245,.3)', 14, { left: 'rgba(210,235,245,.3)', right: 'rgba(210,235,245,.24)', top: 'rgba(230,245,250,.35)', shadow: false }); return true; }
+      case 'giftshop': { const b = box(x, y, d.w, d.d, 30, '#f4efe6', 0, { top: '#e6dfd1' }); [[8, ['🦖', '🪐', '🖼️', '🦕']], [20, ['🦕', '🚀', '🦖', '🏺']]].forEach(([h, es]) => es.forEach((e, k2) => { const q = wallPt(b.left, 0, (k2 + 0.5) / 4, h - 4); emoji(e, q.x, q.y, 8 * z); }));
+        const s0 = up(iso(x + d.w / 2, y + 0.1), 42 * z); rrect(s0.x - 16 * z, s0.y - 5 * z, 32 * z, 9 * z, 2 * z, '#c9433b'); if (z > 0.35) { ctx.font = `800 ${4.6 * z}px ${UI_FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(curLang() === 'zh' ? '纪念品' : 'GIFTS', s0.x, s0.y - 0.5 * z); } return true; }
+      // ----- the station -----
+      case 'rails': { flatRect(x, y, d.w, d.d, '#8a8478'); for (let u = x + 0.2; u < x + d.w; u += 0.6) flatRect(u, y + 0.15, 0.25, d.d - 0.3, '#6b4428'); [0.35, 1.1].forEach(v => flatRect(x, y + v, d.w, 0.08, '#c9cfd6')); return true; }
+      case 'platformedge': { flatRect(x, y, d.w, d.d, '#d9d4ca'); flatRect(x, y + 0.08, d.w, 0.12, '#f2c230'); return true; }
+      case 'train': {   // a train pulls in from the left, waits with its doors open, and goes on to the right (every 40 s)
+        const cyc = (t % 40) / 40, L = 9.4;
+        let off;
+        if (cyc < 0.25) off = -L - 1 + (1 - Math.pow(1 - cyc / 0.25, 2)) * (L + 1 + d.w / 2 - L / 2);
+        else if (cyc < 0.55) off = d.w / 2 - L / 2;
+        else if (cyc < 0.8) off = d.w / 2 - L / 2 + Math.pow((cyc - 0.55) / 0.25, 2) * (d.w / 2 + L / 2 + 1);
+        else return true;
+        ctx.save(); ctx.beginPath(); [up(iso(x, y), 120 * z), up(iso(x + d.w, y), 120 * z), iso(x + d.w, y + d.d + 0.4), iso(x, y + d.d + 0.4)].forEach((p, k2) => (k2 ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.clip();
+        for (let car = 0; car < 2; car++) { const cx0 = x + off + car * 4.8, b = box(cx0, y + 0.1, 4.6, d.d - 0.2, 26, '#e8ecf0', 2, { top: '#c9cfd6', shadow: false });
+          wallRect(b.left, 2, 0, 1, 2, 6, '#c9433b'); for (let w2 = 0; w2 < 5; w2++) wallRect(b.left, 2, 0.06 + w2 * 0.19, 0.18 + w2 * 0.19, 10, 20, NIGHT > 0.3 ? '#ffe39a' : '#2f4a5a');
+          if (cyc >= 0.27 && cyc < 0.53) wallRect(b.left, 2, 0.44, 0.56, 1, 22, '#5b6470'); }
+        ctx.restore(); return true; }
+      case 'departures': { [0.1, 0.9].forEach(u => { const a = iso(x + u * d.w, y + d.d / 2), b2 = up(a, 34 * z); line(a.x, a.y, b2.x, b2.y, '#5b6470', 1.4 * z); });
+        box(x, y, d.w, d.d, 24, '#1d1d22', 34, { shadow: false, top: '#2d2d34' });
+        if (z > 0.3) trainBoard().forEach((r, k2) => txt(0.5, 53 - k2 * 6, r, 4, k2 ? '#ffd36b' : '#ffffff', 700)); return true; }
+      case 'ticketmachines': { [0, 1].forEach(k2 => { const b = box(x + k2 * d.w / 2 + 0.1, y, d.w / 2 - 0.2, d.d, 40, '#2f6fb2', 0, { top: '#24589a' }); const q = wallPt(b.left, 0, 0.5, 30); rrect(q.x - 5 * z, q.y - 4 * z, 10 * z, 8 * z, 1 * z, '#9fd3f2'); const s2 = wallPt(b.left, 0, 0.5, 16); rrect(s2.x - 3 * z, s2.y - 1 * z, 6 * z, 2 * z, 0.5 * z, '#1d1d22'); if (z > 0.35) emoji('🎫', q.x, q.y + 1 * z, 5 * z); }); return true; }
+      case 'kiosk': { const b = box(x, y, d.w, d.d, 16, '#2f5d50', 0, { top: '#c99a6b' }); [0.05, 0.95].forEach(u => wallLine(b.left, 0, u, 16, u, 40, '#2f5d50', 1.2)); for (let k2 = 0; k2 < 8; k2++) wallRect(b.left, 0, k2 / 8, (k2 + 1) / 8, 40, 46, k2 % 2 ? '#fffaf0' : '#2f5d50');
+        const q = up(c, 16 * z); emoji('☕', q.x - 6 * z, q.y, 9 * z); emoji('🥯', q.x + 6 * z, q.y + 1 * z, 9 * z); return true; }
+      case 'bigclock': { const tp = up(c, 94 * z), m = up(c, 70 * z); line(tp.x, tp.y, m.x, m.y - 8 * z, '#5b6470', 1 * z); circle(m.x, m.y, 8 * z, '#fffaf0', '#2d2d34', 1.4 * z); const tm = new Date();
+        line(m.x, m.y, m.x + Math.sin(tm.getHours() / 6 * Math.PI) * 4 * z, m.y - Math.cos(tm.getHours() / 6 * Math.PI) * 4 * z, '#2d2d34', 1.2 * z); line(m.x, m.y, m.x + Math.sin(tm.getMinutes() / 30 * Math.PI) * 6 * z, m.y - Math.cos(tm.getMinutes() / 30 * Math.PI) * 6 * z, '#2d2d34', 0.8 * z); return true; }
+      // ----- the hotel room -----
+      case 'kingbed': { box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 6, '#6b4428', 0); box(x, y, d.w, d.d, 4, '#ffffff', 6, { top: '#fbfbf7' }); box(x + 0.1, y + 0.15, 0.6, d.d - 0.3, 3, '#ffffff', 10, { shadow: false, top: '#ffffff' });
+        box(x + 1.0, y + 0.05, d.w - 1.1, d.d - 0.1, 1.4, '#8a2a34', 10, { shadow: false, top: '#a23a44' }); box(x - 0.1, y - 0.05, 0.15, d.d + 0.1, 30, '#6b4428', 0, { shadow: false }); return true; }
+      case 'minibar': { box(x, y, d.w, d.d, 18, '#3b3125', 0, { top: '#5a4632' }); const q = up(c, 18 * z); emoji('🍾', q.x - 4 * z, q.y, 8 * z); emoji('🥂', q.x + 5 * z, q.y + 1 * z, 8 * z); return true; }
       case 'pool': {   // a pool with a tiled edge, lanes and moving light on the water
         flatRect(x - 0.3, y - 0.3, d.w + 0.6, d.d + 0.6, '#f4efe6'); flatRect(x, y, d.w, d.d, '#3fb2d9');
         for (let k2 = 0; k2 < 14; k2++) { const u = (k2 * 0.37 + t * 0.06) % 1, v = (k2 * 0.61) % 1, q = iso(x + u * d.w, y + v * d.d); ellipse(q.x, q.y, 7 * z, 1.6 * z, 'rgba(255,255,255,.35)'); }
@@ -3202,6 +3457,7 @@ const Scene = (() => {
   }
   // other people shopping: they wander from one thing to another, stop and look, and wander on
   function shoppers(P, objs, dt, ts) {
+    if (P.noClerk) return;   // v0.38: nobody wanders into your hotel room
     if (!P.npcs) {
       const ids = allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id)).slice(0, 12);
       P.npcs = [0, 1, 2].map(i => { const id = ids[(i * 5 + P.n) % Math.max(1, ids.length)], h = id && homeOf(id); return { look: h ? h.look : dressUp({ shirt: COLORS[i], skin: SKINS[i % SKINS.length], hair: HAIRS[i % HAIRS.length], hairCol: HAIR_COLORS[i], mob: 'walk' }, 'shop' + i), x: 2 + i * 3, y: P.RD - 2, path: [], wait: 1 + i * 2, face: 1, phase: 0 }; });
@@ -3323,9 +3579,9 @@ const Scene = (() => {
       objs.push({ d: w.x + w.y + (w.w + w.d) / 2, f: () => { const r = drawWare(w, ts); if (r) hits.push({ kind: 'ware', id: w.id, wk: w.kind, k: w.k, ...r }); } }); });
     (P.decor || []).forEach((dd, i) => objs.push({ d: dd.flat ? -1e4 + i : dd.kind === 'person' ? dd.x + dd.y + 0.3 + (dd.dz || 0) : dd.x + dd.y + (dd.w + dd.d) / 2, f: () => drawVenueDecor(dd, ts, i) }));   // v0.30
     const C = P.counter;
-    objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: VL ? { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', top: 'polo', bottom: 'jeans', shoes: 'sneakers', hat: 'nohat', ...VL.clerk } : { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: Math.sin(ts / 2300) > 0.75 ? null : 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
+    if (!P.noClerk) objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: VL ? { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', top: 'polo', bottom: 'jeans', shoes: 'sneakers', hat: 'nohat', ...VL.clerk } : { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: Math.sin(ts / 2300) > 0.75 ? null : 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
       hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${VL ? t('vrole_' + owner) : t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
-    objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#c99a6b', 0, { top: '#e6c79a' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji(VL ? VL.till : '💳', p2.x, p2.y, 9 * z); } });
+    if (!P.noClerk) objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#c99a6b', 0, { top: '#e6c79a' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji(VL ? VL.till : '💳', p2.x, p2.y, 9 * z); } });
     shoppers(P, objs, dt, ts);
     objs.push({ d: meS.use && !meS.moving ? meS.use.at[0] + meS.use.at[1] + 0.5 : meS.x + meS.y + 0.3, f: () => drawMeShop(z, ts) });
     if (meS.use && meS.use.mate && !meS.moving) { const U = meS.use, mx = U.at[0] + 1.5, my = U.at[1]; objs.push({ d: mx + my + 1.2, f: () => { const q = iso(mx, my); drawPerson(q.x, q.y, z, { look: U.mate, face: -1, back: true, energy: 'great', ts, seed: 9, pose: 'sit', seatH: 9, sit: 'chat' }); if (Math.floor(ts / 900) % 2) emoji('💬', q.x - 8 * z, q.y - 44 * z, 12 * z); } }); }   // v0.34: across the table from you
@@ -3455,11 +3711,10 @@ const Scene = (() => {
   }
   // ---------- the country around town (v0.9): other villages, farms, woods and lakes, out to the horizon ----------
   // Made up in 22-tile squares from a fixed seed; drawn simply (they're always far away). Mountains stay to the north and west.
-  const OUT = { x0: WX0 - 110, y0: WY0 - 110, x1: WX1 + 110, y1: WY1 + 110, ch: 22 };
-  let OUT_CHUNKS = null;
+  let OUT_CHUNKS = null;   // (OUT, the country's bounds: see syncWorld)
   function outChunks() {
-    if (OUT_CHUNKS) return OUT_CHUNKS;
-    OUT_CHUNKS = [];
+    if (OUT_CHUNKS && OUT_CHUNKS.id === TL.id) return OUT_CHUNKS;
+    OUT_CHUNKS = []; OUT_CHUNKS.id = TL.id;
     for (let y = OUT.y0; y < OUT.y1; y += OUT.ch) for (let x = OUT.x0; x < OUT.x1; x += OUT.ch) {
       if (x + OUT.ch > WX0 - 2 && x < WX1 + 2 && y + OUT.ch > WY0 - 2 && y < WY1 + 2) continue;   // the town and its woods
       if ((y + OUT.ch > WY0 - 24 && y < WY0 && x < WX1 + 30) || (x + OUT.ch > WX0 - 24 && x < WX0 && y < WY1 + 30)) { OUT_CHUNKS.push({ x, y, k: 'forest' }); continue; }   // under the mountains
@@ -3997,7 +4252,7 @@ const Scene = (() => {
     try { stepTrip(dt); } catch (e) { console.error(e); trip = null; }
     stepCamera(dt);
     SCENE_TOWN = mode === 'town' ? VIEW_TOWN : townOf(owner);
-    TL = layoutOf(SCENE_TOWN);
+    TL = layoutOf(SCENE_TOWN); syncWorld();
     NIGHT = nightAmount(now(), SCENE_TOWN);
     GLOWS = [];
     ctx.clearRect(0, 0, W, H);
@@ -4622,6 +4877,8 @@ const Scene = (() => {
     tripTime(to, how, dest, place, pick) { if (!S) return 0; TRIP_CAR = pick === undefined ? null : pick; try { return Math.max(1, Math.round(tripSecs(planTrip(to, how, dest, place)))); } finally { TRIP_CAR = null; } },
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
+    _fly(x, y, z) { flyTo(x, y, z, true); },   // (testing: jump the camera)
+    trainBoard: () => trainBoard(),   // v0.38: the station's departures
     tripPlan(to, how, dest, place) { return planTrip(to, how, dest, place); },   // for testing
     tripNow() { return trip && !trip.arrived ? { how: trip.inCar ? trip.how : 'walk', toCar: !!(trip.legs[trip.li] || {}).toCar, kind: trip.kind || null } : null; },
     endTrip() { trip = null; },

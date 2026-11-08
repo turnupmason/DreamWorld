@@ -1979,7 +1979,7 @@ function drawStore(st, ts) {
   const G = storeGeo(st), k = G.k, S2 = STORES[k], z = cam.z, [x, y, w, d] = G.b, glassCol = NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5';
   const c = iso(x + w / 2, y + d / 2), side = G.front === 'E' || G.front === 'W', showDoor = G.front === 'S' || G.front === 'E';
   ellipse(c.x, c.y + 6 * z, (w + d) * 9 * z, (w + d) * 4.5 * z, 'rgba(0,0,0,.07)');
-  const wh = k === 'mall' ? 52 : k === 'ranch' ? 26 : k === 'nursery' ? 24 : 30;
+  const wh = CIVIC_WH[k] || (k === 'mall' ? 52 : k === 'ranch' ? 26 : k === 'nursery' ? 24 : 30);
   const gable = (x0, y0, w0, d0, h0, rh, rc, ec) => (side ? gableY(x0, y0, w0, d0, h0, rh, rc, ec) : gableX(x0, y0, w0, d0, h0, rh, rc, ec));
   let b;
   if (k === 'nursery') {   // a greenhouse: glass walls, a glass ridge roof, plants inside
@@ -1994,7 +1994,8 @@ function drawStore(st, ts) {
     wallRect(F, 0, 0.35, 0.65, 0, 18, '#7a3a30', '#fff', 1.4);
     wallLine(F, 0, 0.35, 0, 0.65, 18, '#fff', 1); wallLine(F, 0, 0.65, 0, 0.35, 18, '#fff', 1);
     gable(x + 0.2, y + 0.2, w - 0.4, d - 0.4, wh, 14, S2.roof, shade(S2.roof, 0.15));
-  } else {
+  } else if (CIVIC_WH[k]) b = drawCivic(k, G, x, y, w, d, wh, ts);   // v0.38: the new district's buildings
+  else {
     b = box(x, y, w, d, wh, S2.wall);
     wallRect(b.left, 0, 0, 1, 0, 3, shade(S2.wall, -0.3)); wallRect(b.right, 0, 0, 1, 0, 3, shade(S2.wall, -0.25));
     const F = side ? b.right : b.left, Sd = side ? b.left : b.right;
@@ -2030,7 +2031,7 @@ function drawStore(st, ts) {
     }
   }
   if (NIGHT > 0.3) { const p = iso(x + w / 2, y + d); glow(p.x, p.y - 10 * z, 60 * z, 0.9); }
-  const s = up(iso(x + w / 2, y + d / 2), (wh + (k === 'ranch' || k === 'nursery' ? 18 : 6)) * z);
+  const s = up(iso(x + w / 2, y + d / 2), (wh + (k === 'ranch' || k === 'nursery' ? 18 : k === 'station' ? 36 : k === 'museum' ? 16 : k === 'bowling' ? 84 : 6)) * z);
   if (z > 0.1) pill(`${S2.e} ${nm(S2)}`, s.x, s.y - 6 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
   return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 30 * z, y1: iso(x + w, y + d).y };
 }
@@ -2056,7 +2057,79 @@ function storeShow(st, objs, ts) {
     put(mx - 0.6, my, () => { [[-1.2, 0], [1.2, 0]].forEach(([dx, dy]) => box(mx + dx - 0.2, my + dy - 0.15, 0.4, 0.3, 12, '#f4f4f0', 0, { top: '#e5484d' })); drawCarDir({ k: 'sedan', color: CAR_COLORS[Math.floor(ts / 9000) % CAR_COLORS.length] }, mx + 0.2, my + (G.along === 'x' ? 0.9 : 0), G.dir, ts); });
     put(mx, my + 0.1, () => { [[-1.6, -1], [1.6, -1], [-1.6, 1], [1.6, 1]].forEach(([dx, dy]) => box(mx + dx * (G.along === 'x' ? 1 : 0.5) - 0.06, my + dy * (G.along === 'x' ? 0.5 : 1) - 0.06, 0.12, 0.12, 30, '#d9d9d9', 0, { shadow: false })); box(mx - 2, my - 1.3, 4, 2.6, 3, '#f4f4f0', 30, { top: '#ffffff', shadow: false }); const fr = wallPt([iso(mx - 2, my + 1.3), iso(mx + 2, my + 1.3)], 0, 0.5, 31.5); rrect(fr.x - 30 * z, fr.y - 1.5 * z, 60 * z, 3 * z, 0.5 * z, '#e5484d'); });
   }
+  if (k === 'hospital' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => {   // v0.38: an ambulance, lights going
+    drawCarDir({ k: 'boxtruck', color: '#f8f8f4' }, px, py, G.dir, ts);
+    const lp = up(iso(px, py), 22 * z), on = Math.floor(ts / 260) % 2; circle(lp.x - 3 * z, lp.y, 1.6 * z, on ? '#ff4d4d' : '#7a2020'); circle(lp.x + 3 * z, lp.y, 1.6 * z, on ? '#3a6fe0' : '#ff4d4d'); }); }
+  if (k === 'station' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => drawCarDir({ k: 'sedan', color: '#f2c230' }, px, py, G.dir, ts)); }   // a taxi waiting
+  if (k === 'museum' && sl[1]) { const [px, py] = sl[1]; put(px, py, () => drawCarDir({ k: 'boxtruck', color: '#f2c230' }, px, py, G.dir, ts)); }   // a school trip's bus
   if (k === 'realty' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 16 * z, '#8a5a36', 1.6 * z); rrect(p.x - 8 * z, p.y - 20 * z, 16 * z, 8 * z, 1.5 * z, '#fffaf0', '#e5484d', 1 * z); }); }
+}
+
+// v0.38: the new district's buildings: a hospital (floors of windows, a red cross, a helipad), a bowling alley (a
+// giant pin on the roof), a swimming centre (a glass front and a glass roof), a museum (columns and a pediment) and a
+// train station (brick, with a clock tower). G: storeGeo; returns the box like box() does.
+const CIVIC_WH = { hospital: 62, bowling: 30, aquatic: 26, museum: 34, station: 30 };
+function drawCivic(k, G, x, y, w, d, wh, ts) {
+  const S2 = STORES[k], z = cam.z, side = G.front === 'E' || G.front === 'W', showDoor = G.front === 'S' || G.front === 'E', lit = NIGHT > 0.3;
+  const glass = lit ? '#ffe39a' : '#a9dcf5', zh = curLang() === 'zh';
+  const b = box(x, y, w, d, wh, S2.wall), F = side ? b.right : b.left, Sd = side ? b.left : b.right;
+  const sign = (face, u, h, text, size, col) => { if (z > 0.22) wallText(face, u, h, text, Math.max(6, size * z), col); };
+  if (k === 'hospital') {
+    for (let f = 0; f < 4; f++) [F, Sd].forEach(face => { for (let i = 0; i < 8; i++) { const u = 0.06 + i * 0.113; if (face === F && f === 0 && u > 0.3 && u < 0.66) continue; wallRect(face, 0, u, u + 0.075, 14 + f * 11, 21 + f * 11, lit && hash(i + f, k.length + (face === F ? 0 : 9)) > 0.45 ? '#ffe39a' : '#bfe0f0', '#dfe6ea', 0.8); } });
+    [F, Sd].forEach((face, i) => wallRect(face, 0, 0, 1, wh - 5, wh, i ? '#c9433b' : '#e5484d'));
+    wallRect(F, 0, 0.82, 0.94, wh - 20, wh - 7, '#ffffff'); wallRect(F, 0, 0.865, 0.895, wh - 18.5, wh - 8.5, '#e5484d'); wallRect(F, 0, 0.835, 0.925, wh - 15, wh - 12, '#e5484d');
+    if (showDoor) {
+      wallRect(F, 0, 0.36, 0.64, 0, 11, glass, '#dfe6ea', 1); wallLine(F, 0, 0.5, 0, 0.5, 11, '#dfe6ea', 1.2);
+      wallRect(F, 0, 0.33, 0.67, 11, 16, '#e5484d'); sign(F, 0.5, 13.6, zh ? '急诊 · 医院' : 'EMERGENCY', 4, '#fff');
+    }
+    const hp = up(iso(x + w * 0.62, y + d * 0.5), wh * z); ellipse(hp.x, hp.y, 13 * z, 6.5 * z, '#5b6470', '#f2c230', 1.2 * z);
+    if (z > 0.25) { ctx.font = `900 ${8 * z}px ${UI_FONT}`; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('H', hp.x, hp.y + 0.5 * z); }
+    box(x + w * 0.15, y + d * 0.3, 1.2, 1.2, 6, '#c9cfd6', wh, { shadow: false });   // machinery on the roof
+  } else if (k === 'bowling') {
+    [F, Sd].forEach(face => { wallRect(face, 0, 0, 1, wh - 7, wh - 5, lit ? '#ff7ac4' : '#ec6aa8'); wallRect(face, 0, 0, 1, wh - 10, wh - 9, lit ? '#5cf0b8' : '#38d39f'); });
+    wallRect(F, 0, 0.06, 0.5, 4, 16, glass, '#e8edf2', 1.2); for (let u = 0.17; u < 0.5; u += 0.11) wallLine(F, 0, u, 4, u, 16, '#e8edf2', 1);
+    if (showDoor) { wallRect(F, 0, 0.66, 0.84, 0, 15, '#1d2547', '#f2c230', 1.2); wallLine(F, 0, 0.75, 0, 0.75, 15, '#f2c230', 1); }
+    sign(F, 0.28, 18.5, 'BOWL', 7, lit ? '#ffe066' : '#f2c230');
+    [0.3, 0.7].forEach(u => winFace(Sd, u, 0.07, 8, 18, { frame: '#f2c230' }));
+    // the giant pin and a ball on the roof
+    const c = up(iso(x + w * 0.45, y + d * 0.45), wh * z), q = 2 * z;   // q: the giant pin's scale
+    ellipse(c.x, c.y, 9 * q, 3.5 * q, 'rgba(0,0,0,.15)');
+    ellipse(c.x, c.y - 12 * q, 6.5 * q, 11 * q, '#fbfbf7', 'rgba(0,0,0,.12)', 0.8 * z); ellipse(c.x, c.y - 26 * q, 3.2 * q, 5 * q, '#fbfbf7'); circle(c.x, c.y - 32 * q, 4 * q, '#fbfbf7', 'rgba(0,0,0,.12)', 0.8 * z);
+    rrect(c.x - 3.3 * q, c.y - 25 * q, 6.6 * q, 1.6 * q, 0.5 * q, '#e5484d'); rrect(c.x - 3.1 * q, c.y - 22.4 * q, 6.2 * q, 1.4 * q, 0.5 * q, '#e5484d');
+    circle(c.x - 3 * q, c.y - 35 * q, 1.2 * q, 'rgba(255,255,255,.9)');
+    const bp = up(iso(x + w * 0.68, y + d * 0.58), wh * z); circle(bp.x, bp.y - 5.5 * q, 5.5 * q, '#3a4cc0'); [[-1.5, -7.5], [1, -8], [-0.2, -5.6]].forEach(([dx, dy]) => circle(bp.x + dx * q, bp.y + dy * q, 0.8 * q, '#141a3a')); circle(bp.x - 2 * q, bp.y - 8 * q, 1.4 * q, 'rgba(255,255,255,.35)');
+  } else if (k === 'aquatic') {
+    wallRect(F, 0, 0.04, 0.96, 3, wh - 4, lit ? '#ffe7a6' : '#8fd0ee', '#e8f4fa', 1.2);
+    for (let u = 0.04; u < 0.96; u += 0.1) wallLine(F, 0, u, 3, u, wh - 4, '#e8f4fa', 1);
+    if (!lit && z > 0.3) for (let r = 0; r < 3; r++) { const h0 = 6 + r * 4, ph = ts / 900 + r; for (let u = 0.08; u < 0.92; u += 0.08) wallLine(F, 0, u, h0 + Math.sin(u * 20 + ph) * 0.8, u + 0.04, h0 + Math.sin(u * 20 + ph + 1) * 0.8, 'rgba(255,255,255,.55)', 0.8); }   // the pool shimmering through the glass
+    if (showDoor) { wallRect(F, 0, 0.44, 0.56, 0, 12, '#2f6fb2', '#e8f4fa', 1); }
+    [0.25, 0.75].forEach(u => winFace(Sd, u, 0.1, 6, 18, { frame: '#38a3e0' }));
+    const roof = side ? gableY : gableX; roof(x + 0.1, y + 0.1, w - 0.2, d - 0.2, wh, 9, 'rgba(160,215,240,.92)', shade(S2.wall, 0.02));
+    const p = wallPt(F, 0, 0.2, wh - 2); if (z > 0.22) { rrect(p.x - 12 * z, p.y - 5 * z, 24 * z, 9 * z, 2 * z, '#38a3e0'); emoji('🏊', p.x - 6 * z, p.y - 0.5 * z, 6 * z); ctx.font = `800 ${4 * z}px ${UI_FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(zh ? '游泳' : 'POOL', p.x + 4 * z, p.y - 0.5 * z); }
+  } else if (k === 'museum') {
+    wallMaterial(b, wh, 'stone', S2.wall, 0);
+    wallRect(F, 0, 0, 1, wh - 7, wh, shade(S2.wall, 0.06)); wallLine(F, 0, 0, wh - 7, 1, wh - 7, 'rgba(90,80,60,.35)', 0.8);
+    if (showDoor) { wallRect(F, 0, 0.42, 0.58, 0, 16, '#5a4632', '#c9b88f', 1); wallRect(F, 0, 0.44, 0.56, 13, 16, '#c9a24a'); }
+    for (let i = 0; i < 6; i++) { const u = 0.08 + i * 0.168; wallRect(F, 0, u - 0.025, u + 0.025, 1, wh - 8, '#fbf7ee', 'rgba(0,0,0,.1)', 0.6); wallRect(F, 0, u - 0.034, u + 0.034, wh - 9, wh - 7, '#fffaf0'); wallRect(F, 0, u - 0.034, u + 0.034, 0, 1.6, '#fffaf0'); wallLine(F, 0, u + 0.012, 1.6, u + 0.012, wh - 9, 'rgba(0,0,0,.08)', 0.8); }
+    [0.25, 0.75].forEach((u, i) => { wallRect(F, 0, u - 0.035, u + 0.035, wh - 23, wh - 11, i ? '#2f6fb2' : '#c9433b'); if (z > 0.35) { const p = wallPt(F, 0, u, wh - 17); emoji(i ? '🪐' : '🦖', p.x, p.y, 5 * z); } });
+    [0.3, 0.7].forEach(u => winFace(Sd, u, 0.06, 8, 22, { frame: '#efe8da' }));
+    const roof = side ? gableX : gableY; roof(x, y, w, d, wh, 12, '#9a8a6a', shade(S2.wall, 0.04));   // the pediment faces the street
+    sign(F, 0.5, wh - 3.5, zh ? '博 物 馆' : 'MUSEUM', 4.5, '#6b5a3a');
+  } else {   // the station
+    wallMaterial(b, wh, 'brick', S2.wall, 0);
+    [0.12, 0.3, 0.7, 0.88].forEach(u => { winFace(F, u, 0.05, 6, 20, { frame: '#f4efe4' }); const p = wallPt(F, 0, u, 20); ellipse(p.x, p.y, 4 * z, 2 * z, '#f4efe4'); });
+    if (showDoor) { wallRect(F, 0, 0.43, 0.57, 0, 17, glass, '#f4efe4', 1.2); wallLine(F, 0, 0.5, 0, 0.5, 17, '#f4efe4', 1); }
+    [0.25, 0.5, 0.75].forEach(u => winFace(Sd, u, 0.06, 8, 20, { frame: '#f4efe4' }));
+    box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, S2.roof, wh, { shadow: false });
+    // the clock tower in the middle of the front
+    const tx = x + w / 2 - 0.9, ty = y + d / 2 - 0.9, tb = box(tx, ty, 1.8, 1.8, 30, shade(S2.wall, 0.04), wh + 3, { shadow: false });
+    const cf = side ? tb.right : tb.left, cp = wallPt(cf, wh + 3, 0.5, 20); circle(cp.x, cp.y, 5.5 * z, '#fffaf0', '#3b3125', 1 * z);
+    const tm = new Date(); line(cp.x, cp.y, cp.x + Math.sin(tm.getHours() / 6 * Math.PI) * 2.8 * z, cp.y - Math.cos(tm.getHours() / 6 * Math.PI) * 2.8 * z, '#3b3125', 1 * z); line(cp.x, cp.y, cp.x + Math.sin(tm.getMinutes() / 30 * Math.PI) * 4 * z, cp.y - Math.cos(tm.getMinutes() / 30 * Math.PI) * 4 * z, '#3b3125', 0.7 * z);
+    pyramid(tx - 0.15, ty - 0.15, 2.1, 2.1, wh + 33, 12, S2.roof);
+    sign(F, 0.5, 24.5, zh ? '🚉 火车站' : '🚉 STATION', 4.6, '#fffaf0');
+  }
+  if (NIGHT > 0.3 && k !== 'aquatic') { const p = wallPt(F, 0, 0.5, 14); glow(p.x, p.y, 40 * z, 0.8); }
+  return b;
 }
 
 // v0.18: a plush toy sitting on the floor (won at the mall's claw machine)

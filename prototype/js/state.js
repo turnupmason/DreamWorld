@@ -2095,6 +2095,28 @@ function venueBuy(key) {
 function buyBouquet() { const V = VENUE.bouquet; if (S.me.coins < V.price) return 'poor'; S.me.coins -= V.price; addBarn(S.me, 'bouquet', 1); return 'ok'; }
 function buyGroceries() { const V = VENUE.groceries; if (S.me.coins < V.price) return 'poor'; S.me.coins -= V.price; Object.entries(V.items).forEach(([k, n]) => addBarn(S.me, k, n)); return 'ok'; }
 function haircut(hair, hairCol) { const V = VENUE.haircut; if (S.me.coins < V.price) return 'poor'; S.me.coins -= V.price; S.me.look = { ...S.me.look, hair, hairCol }; return 'ok'; }
+// ---------- v0.38: the new district (hospital, bowling alley, swimming centre, museum, station) and a hotel room ----------
+const midnight = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+// giving blood: once a week at most; days to wait before the next time
+function donateIn() { return S.donated ? Math.max(0, VENUE.donate.every - Math.round((midnight(now()) - midnight(S.donated)) / 864e5)) : 0; }
+function donateBlood() {
+  if (donateIn() > 0) return 'wait';
+  S.donated = now(); S.donations = (S.donations || 0) + 1;
+  addNeed('fun', VENUE.donate.fun); addNeed('hunger', VENUE.donate.hunger);
+  return 'ok';
+}
+// a dinosaur plush from the museum shop, for your home (it isn't one of the claw machine's set)
+function buySouvenir() { const V = VENUE.souvenir; if (S.me.coins < V.price) return 'poor'; S.me.coins -= V.price; S.me.store['room:plushdino'] = (S.me.store['room:plushdino'] || 0) + 1; return 'ok'; }
+// a train ticket to the next town (the fun of the ride once a day)
+function trainRide() { const V = VENUE.train; if (S.me.coins < V.price) return 'poor'; S.me.coins -= V.price; if (onceToday('train')) addNeed('fun', V.fun); return 'ok'; }
+// a night in the hotel: the room (its floor in the lift) is yours until noon the next day
+const roomUntil = () => (S.hotel && S.hotel.until > now() ? S.hotel.until : 0);
+function bookRoom() {
+  if (roomUntil()) return 'have';
+  const V = VENUE.room; if (S.me.coins < V.price) return 'poor';
+  S.me.coins -= V.price; const d = new Date(now()); d.setDate(d.getDate() + 1); d.setHours(V.checkout, 0, 0, 0);
+  S.hotel = { until: d.getTime() }; return 'ok';
+}
 // Do it: the fun / social it gives (once a day; the gym a few times), or 'done' if you already have today.
 function venueUse(key) {
   if (venueLeft(key) <= 0) return 'done';
@@ -2367,7 +2389,8 @@ const sportFirstLeft = kind => !(S.chatDay && S.chatDay['sport_' + kind + '@' + 
 function sportDone(kind, id, res) {
   const R = sportRec(kind), out = { first: onceToday('sport_' + kind) };
   R.p++; if (res.won) R.w++;
-  if (kind === 'basketball') R.best = Math.max(R.best || 0, res.me || 0);
+  if (kind === 'basketball' || kind === 'bowling') R.best = Math.max(R.best || 0, res.me || 0);
+  if (kind === 'race' && res.time) R.best = R.best ? Math.min(R.best, res.time) : res.time;   // v0.38: your fastest length
   if (!out.first) { addNeed('fun', BALL.againFun); out.fun = BALL.againFun; return out; }
   addNeed('fun', BALL.fun); out.fun = BALL.fun;
   if (id && id !== 'court') {

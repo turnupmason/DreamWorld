@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, CENTRE_NEW, TOWER_STOREYS, BUILDING_FLOORS, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -193,6 +193,27 @@ table(['事情', '花多少', '多久', '得到'], [
   ['书店买一本坐下读', `🪙${V2.book.price}`, `${V2.book.sec} 秒`, gain(V2.book)], ['理发店剪头发（换发型、发色）', `🪙${V2.haircut.price}`, `${V2.haircut.sec} 秒`, '新发型'],
   ['花店买一束花（放进仓库，送人关系多 +' + D.SOCIAL.bouquetUp + '）', `🪙${V2.bouquet.price}`, '马上', '一束花'], ['超市生鲜区买一袋菜（回家做饭）', `🪙${V2.groceries.price}`, '马上', Object.entries(V2.groceries.items).map(([k, n]) => `${D.CROPS[k] ? D.CROPS[k].zh : D.GOODS[k].zh} ×${n}`).join('、')],
   ['银行柜台 / 取款机 / 贷款桌', '免费', '马上', '打开手机银行']]);
+// v0.38: a bigger town and the new district
+P('### v0.38 新区（每个镇都变大了）');
+P('');
+{ const L = D.buildLayout('grid', false), late = Object.entries(D.STORES).filter(([, s]) => s.late);
+  P(`每个镇往一边多出一片 ${D.DISTRICT} 格深的新区（大多在南边；南边是海的镇在东边，镜像的镇在西边）：原来通到镇边的大路接着往新区修，新区中间一条四车道大马路（中间有绿化隔离带）；没有大路通过来的地方，从最近的路修一条街连上。原来的店、停车场、小路位置都不变。梧桐镇从 ${D.WORLD.x1 - D.WORLD.x0}×${D.WORLD.y1 - D.WORLD.y0} 变成 ${L.world.x1 - L.world.x0}×${L.world.y1 - L.world.y0}。`);
+  P('');
+  P(`新区的楼（沿大马路，从中间往两边排）：${late.map(([k, s]) => `${s.e} ${s.zh}（${s.w}×${s.d}）`).join('、')}。`);
+  P(''); }
+table(['事情', '花多少', '多久', '得到'], [
+  ['医院：探望病人（每天一次）', '免费', `${V2.visit.sec} 秒`, gain(V2.visit)], ['医院：看新生儿（每天一次）', '免费', `${V2.babies.sec} 秒`, gain(V2.babies)],
+  [`医院：献血（每 ${V2.donate.every} 天最多一次）`, '免费', `${V2.donate.sec} 秒`, gain(V2.donate)], ['医院：全面体检', '免费', '马上', '这周平均步数、今天步数、昨晚睡眠（只有自己看得到）'],
+  [`保龄球（和朋友或隔壁球道的人，每人 ${D.VENUE_GAMES.bowling.frames} 轮，全中 +${D.VENUE_GAMES.bowling.strike}、补中 +${D.VENUE_GAMES.bowling.spare}）`, `🪙${D.VENUE_GAMES.bowling.price}`, '一局', `今天第一局：娱乐 +${D.BALL.fun}，社交 +${D.BALL.social}，关系 +${D.BALL.rel}；再玩：娱乐 +${D.BALL.againFun}`],
+  ['保龄球馆：街机', `🪙${V2.arcade.price}`, `${V2.arcade.sec} 秒`, gain(V2.arcade)],
+  [`游泳比赛（${D.VENUE_GAMES.race.len} 米，轮流点左右）`, '免费', '一局', `同保龄球`], ['游泳馆：自由泳（和屋顶泳池合计每天 ' + V2.swim.max + ' 次）', '免费', `${V2.swim.sec} 秒`, gain(V2.swim)],
+  ['游泳馆：跳水（每天一次）', '免费', `${V2.dive.sec} 秒`, gain(V2.dive)], ['游泳馆：桑拿（每天一次）', '免费', `${V2.sauna.sec} 秒`, gain(V2.sauna)],
+  ['博物馆：恐龙 / 太空 / 画廊 / 历史四个厅（每个厅每天一次，配一张知识卡）', '免费', `${V2.ex_dino.sec} 秒`, gain(V2.ex_dino) + '（每个厅）'], ['博物馆纪念品店：恐龙玩偶（放进仓库）', `🪙${V2.souvenir.price}`, '马上', '恐龙玩偶'],
+  ['火车站：坐火车去附近的镇（每天第一次坐有娱乐）', `🪙${V2.train.price}`, '马上', gain(V2.train)], ['火车站：坐在站台看火车（每天一次）', '免费', `${V2.trains.sec} 秒`, gain(V2.trains)],
+  [`酒店：订一晚客房（住到第二天 ${V2.room.checkout}:00）`, `🪙${V2.room.price}`, '马上', '电梯能上客房'], ['客房：躺大床（每天一次）', '免费', `${V2.bed.sec} 秒`, gain(V2.bed)], ['客房：泡澡（每天一次）', '免费', `${V2.bath.sec} 秒`, gain(V2.bath)]]);
+P('');
+P(`博物馆知识卡：${Object.entries(D.MUSEUM_FACTS).map(([k, L]) => L.length + ' 张').join(' + ')}，每个厅每天换一张。`);
+P('');
 P('## 手机：银行、贷款、股票（v0.26，v0.35 改成真实的银行）');
 P('');
 table(['项目', '数值'], [['存款利息', `年利率 ${+(D.BANK.rate * 100).toFixed(2)}%`],

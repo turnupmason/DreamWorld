@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.37.0';
+const VERSION = '0.38.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -113,7 +113,8 @@ const MAILBOX = [4, 13];                 // every home has a mailbox by the gate
 // Every street is a row of land parcels (PARCEL tiles wide, LOT_D deep) with its road in front (+y).
 // A home takes 4 parcels (the 16-tile core with house, farm and yard) plus any parcels bought next to it, to the right.
 const PARCEL = 4, CORE_PARCELS = LOT_W / PARCEL;
-const WORLD = { x0: -4, y0: -4, x1: 180, y1: 92 };            // the town; woods all around it
+const WORLD = { x0: -4, y0: -4, x1: 180, y1: 92 };            // the town; woods all around it (v0.38: + its new district, each town's `world`)
+const DISTRICT = 46;                                            // v0.38: how far the new district reaches past the old edge of town
 const TOWN_W = WORLD.x1, TOWN_D = WORLD.y1;
 const TOWN_LEVELS = [0, 15000, 40000, 100000, 250000];
 const NEIGHBORHOODS = {
@@ -780,6 +781,13 @@ const STORES = {
   firestation: { e: '🚒', zh: '消防站', en: 'Fire station', cats: [], civic: true, w: 7, d: 6, wall: '#c9433b', roof: '#8a2a24' },
   gas:       { e: '⛽', zh: '加油站', en: 'Petrol station', cats: [], civic: true, w: 5, d: 3, wall: '#f4f4f0', roof: '#e5484d' },
   mall:      { e: '🏬', zh: '购物中心', en: 'Shopping mall', cats: ['clothes', 'excl'], w: 12, d: 9, wall: '#f4efe6', roof: '#c9893a' },
+  // v0.38: more of a real town. late: placed after all the others and their car parks, so nothing that was already in
+  // a town moves
+  hospital:  { e: '🚑', zh: '医院', en: 'Hospital', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#f4f7f9', roof: '#e5484d' },
+  bowling:   { e: '🎳', zh: '保龄球馆', en: 'Bowling alley', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#33407a', roof: '#f2c230' },
+  aquatic:   { e: '🏊', zh: '游泳馆', en: 'Swimming centre', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#e6f3fa', roof: '#38a3e0' },
+  museum:    { e: '🦖', zh: '博物馆', en: 'Museum', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#efe8da', roof: '#8a7a5a' },
+  station:   { e: '🚉', zh: '火车站', en: 'Train station', cats: [], civic: true, late: true, w: 10, d: 6, wall: '#c98a5a', roof: '#3d4a66' },
 };
 // Which store sells each shop category.
 const CAT_STORE = {};
@@ -938,6 +946,30 @@ function buildLayout(id, flip) {
   const box = (b, w = b.w || 0) => ({ ...b, x: fx(b.x, w) });
   const centre = box(B.centre), plaza = box(B.plaza, LOT_W), shops = B.shops.map(([k, x, y]) => [k, fx(x, 6), y]);
   const roads = B.roads.map(rect), lake = { ...B.lake, x: fx(B.lake.x) };
+  // v0.38: every town is bigger: a new district past one edge (the south; the east, or west when mirrored, where the
+  // sea is to the south). The avenues and streets that reached that edge carry on into it, and a four-lane boulevard
+  // runs across it; the new buildings (STORES with `late`) stand along the boulevard, with room for many more.
+  // world: this town's own bounds. A road that was made longer keeps its old ends in r.o, so the stores and car parks
+  // that were already in a town are worked out exactly as before.
+  const world = { ...WORLD }, water = B.water.map(rect), vert = r => r[2] - r[0] < r[3] - r[1];
+  const district = lake.sea && lake.y > 0 ? (flip ? 'W' : 'E') : 'S';
+  const roadsWas = roads.filter(r => r[4] !== 'dirt');
+  if (district === 'S') {
+    world.y1 = WORLD.y1 + DISTRICT;
+    roads.forEach(r => { if (vert(r) && r[3] >= WORLD.y1 - 4 && r[4] !== 'dirt') { r.o = r.slice(); r[3] = world.y1; } });
+    water.forEach(r => { if (r[3] >= WORLD.y1 - 2) r[3] = world.y1 + 16; });
+    const H0 = roadsWas.filter(r => !vert(r)), by = WORLD.y1 + 20;
+    roads.push([Math.min(...H0.map(r => r[0])), by, Math.max(...H0.map(r => r[2])), by + 5, 'boulevard']);
+  } else {
+    const E = district === 'E';
+    if (E) world.x1 = WORLD.x1 + DISTRICT; else world.x0 = WORLD.x0 - DISTRICT;
+    roads.forEach(r => { if (!vert(r) && r[4] !== 'dirt' && (E ? r[2] >= WORLD.x1 - 4 : r[0] <= WORLD.x0 + 4)) { r.o = r.slice(); if (E) r[2] = world.x1; else r[0] = world.x0; } });
+    water.forEach(r => { if (E ? r[2] >= WORLD.x1 - 2 : r[0] <= WORLD.x0 + 2) { if (E) r[2] = world.x1 + 16; else r[0] = world.x0 - 16; } });
+    const bx = E ? WORLD.x1 + 20 : WORLD.x0 - 25, xm = bx + 2.5, V0 = roadsWas.filter(vert);
+    const yEnd = lake.sea ? lake.y - lake.ry * Math.sqrt(Math.max(0, 1 - ((xm - lake.x) / lake.rx) ** 2)) - 8 : WORLD.y1;
+    roads.push([bx, Math.min(...V0.map(r => r[1])), bx + 5, Math.min(Math.max(...V0.map(r => r[3])), yEnd), 'boulevard']);
+  }
+  const blvd = roads[roads.length - 1], oldEnds = r => r.o || r;
   // v0.14: a clinic in the first free spot of the town centre (v0.27: off the roads through it)
   const busy = [[plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y, w = 6, d = 5.5]) => [x, y, x + w, y + d]), ...roads.map(r => r.slice(0, 4))];
   fit: for (let yy = centre.y + 1; yy <= centre.y + centre.d - 6.5; yy += 0.5) for (let xx = centre.x + 1; xx <= centre.x + centre.w - 7; xx += 0.5) {
@@ -961,14 +993,14 @@ function buildLayout(id, flip) {
   // out of town from the ends of the long roads; the park gets a winding jogging loop.
   const south = lake.sea && lake.y < 0, V = roads.filter(r => r[2] - r[0] < r[3] - r[1]);
   const av = south ? V.slice().sort((a, b) => b[3] - a[3])[0] : V.slice().sort((a, b) => a[1] - b[1])[0];
-  const hy = south ? WORLD.y1 + 9 : WORLD.y0 - 9, ax = av ? (av[0] + av[2]) / 2 : (WORLD.x0 + WORLD.x1) / 2, ay = av ? (south ? av[3] : av[1]) : (south ? WORLD.y1 : WORLD.y0);
+  const hy = south ? world.y1 + 9 : world.y0 - 9, ax = av ? (av[0] + av[2]) / 2 : (world.x0 + world.x1) / 2, ay = av ? (south ? av[3] : av[1]) : (south ? world.y1 : world.y0);
   const sg = south ? -1 : 1, HH = 38;
-  const ramp = (rx, ry, dir) => [[rx + dir * 22, hy, HH], [rx + dir * 13, hy + sg * 0.6, HH * 0.78], [rx + dir * 6, hy + sg * 2.6, HH * 0.45], [rx + dir * 2, hy + sg * 5.6, HH * 0.18], [rx, ry - sg * 0.2, 0]];
+  const ramp = (rx, ry, dir, y0 = hy) => [[rx + dir * 22, y0, HH], [rx + dir * 13, y0 + sg * 0.6, HH * 0.78], [rx + dir * 6, y0 + sg * 2.6, HH * 0.45], [rx + dir * 2, y0 + sg * 5.6, HH * 0.18], [rx, ry - sg * 0.2, 0]];
   // v0.16: an interchange at every avenue that reaches this edge of town (so cars can take the expressway across town)
-  const edgeAv = V.filter(r => (south ? r[3] >= WORLD.y1 - 3 : r[1] <= WORLD.y0 + 3));
+  const edgeAv = V.filter(r => r[4] !== 'boulevard' && (south ? r[3] >= world.y1 - 3 : r[1] <= world.y0 + 3));
   const ramps = (edgeAv.length ? edgeAv : av ? [av] : []).flatMap(r => { const rx = (r[0] + r[2]) / 2, ry = south ? r[3] : r[1]; return [ramp(rx, ry, -1), ramp(rx, ry, 1)]; });
-  const highway = { pts: [[WORLD.x0 - 60, hy, HH], [WORLD.x1 + 60, hy, HH]], ramps, h: HH, y: hy };
-  const H2 = roads.filter(r => r[2] - r[0] >= r[3] - r[1]), wEnd = H2.slice().sort((a, b) => a[0] - b[0])[0], eEnd = H2.slice().sort((a, b) => b[2] - a[2])[0];
+  const highway = { pts: [[world.x0 - 60, hy, HH], [world.x1 + 60, hy, HH]], ramps, h: HH, y: hy };
+  const H2 = roads.filter(r => r[2] - r[0] >= r[3] - r[1] && r[4] !== 'boulevard'), wEnd = H2.slice().sort((a, b) => a[0] - b[0])[0], eEnd = H2.slice().sort((a, b) => b[2] - a[2])[0];
   const wy = (wEnd[1] + wEnd[3]) / 2, ey = (eEnd[1] + eEnd[3]) / 2, wx = wEnd[0], ex = eEnd[2];
   const curves = [
     { w: 1.8, pts: [[wx + 0.5, wy], [wx - 8, wy + 1], [wx - 14, wy + 5], [wx - 22, wy + 3], [wx - 30, wy - 3], [wx - 42, wy - 2], [wx - 60, wy + 4]] },
@@ -977,21 +1009,22 @@ function buildLayout(id, flip) {
   // v0.19: little lanes (cars can use them too) join every dead end to the next road along, like the cross streets of
   // an American neighbourhood, so the way next door is never a long loop round the block.
   const lotRects = Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D]);
-  const solid = [...lotRects, ...B.water.map(rect), [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [box(B.park).x, B.park.y, box(B.park).x + B.park.w, B.park.y + B.park.d],
+  const solid = [...lotRects, ...water, [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [box(B.park).x, B.park.y, box(B.park).x + B.park.w, B.park.y + B.park.d],
     ...B.fields.map(f => { const q = box(f); return [q.x, q.y, q.x + q.w, q.y + q.d]; })];
   const hits = (q, list) => list.some(r => q[0] < r[2] - 0.05 && r[0] < q[2] - 0.05 && q[1] < r[3] - 0.05 && r[1] < q[3] - 0.05);
   const isH = r => r[2] - r[0] >= r[3] - r[1], lanes = [];
   const lakeIn = (x, y) => ((x - lake.x) / (lake.rx + 1)) ** 2 + ((y - lake.y) / (lake.ry + 1)) ** 2 < 1;
-  roads.filter(r => r[4] !== 'dirt').forEach(r => {
+  const RL = roads.filter(r => r !== blvd).map(oldEnds);   // v0.38: little lanes as before the town grew
+  RL.filter(r => r[4] !== 'dirt').forEach(r => {
     const h = isH(r);
     [h ? r[0] : r[1], h ? r[2] : r[3]].forEach((e, end) => {
-      const joined = roads.some(q => q !== r && isH(q) !== h && (h ? q[0] <= e + 0.6 && q[2] >= e - 0.6 && q[1] <= r[3] + 0.6 && q[3] >= r[1] - 0.6
+      const joined = RL.some(q => q !== r && isH(q) !== h && (h ? q[0] <= e + 0.6 && q[2] >= e - 0.6 && q[1] <= r[3] + 0.6 && q[3] >= r[1] - 0.6
         : q[1] <= e + 0.6 && q[3] >= e - 0.6 && q[0] <= r[2] + 0.6 && q[2] >= r[0] - 0.6));
       if (joined) return;
       const a0 = end ? e - 2 : e, a1 = a0 + 2;   // the lane runs across the end of the road, 2 wide
       [-1, 1].forEach(dir => {
         let best = null;
-        roads.forEach(q => {
+        RL.forEach(q => {
           if (q === r || isH(q) !== h || q[4] === 'dirt' && false) return;
           if (h ? q[0] > a0 || q[2] < a1 : q[1] > a0 || q[3] < a1) return;
           const gap = h ? (dir < 0 ? r[1] - q[3] : q[1] - r[3]) : (dir < 0 ? r[0] - q[2] : q[0] - r[2]);
@@ -1008,32 +1041,44 @@ function buildLayout(id, flip) {
   roads.push(...lanes);
   // v0.17: the stores, each beside a road (facing it) as close to the town centre as there's room
   const lakeAt = (x, y) => ((x - lake.x) / (lake.rx + (lake.sea ? 6 : 2))) ** 2 + ((y - lake.y) / (lake.ry + (lake.sea ? 6 : 2))) ** 2 < 1;
-  const busyRects = [...Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D + 2]), ...roads.map(r => r.slice(0, 4)), ...B.water.map(rect),
+  const busyRects = [...Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D + 2]), ...roads.map(r => r.slice(0, 4)), ...water,
     [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [box(B.park).x, B.park.y, box(B.park).x + B.park.w, B.park.y + B.park.d], ...B.fields.map(f => { const q = box(f); return [q.x, q.y, q.x + q.w, q.y + q.d]; }),
     ...ramps.map(R => [Math.min(...R.map(p => p[0])) - 1, Math.min(...R.map(p => p[1])) - 1, Math.max(...R.map(p => p[0])) + 1, Math.max(...R.map(p => p[1])) + 1])];
   const stores = [], cx0 = centre.x + centre.w / 2, cy0 = centre.y + centre.d / 2;
   busyRects.push([-200, hy - 4, 400, hy + 4]);   // the expressway
-  const free = (x, y, w, d) => x >= WORLD.x0 - 12 && y >= WORLD.y0 - 8 && x + w <= WORLD.x1 + 12 && y + d <= WORLD.y1 + 8 && !busyRects.some(r => x < r[2] + 0.25 && r[0] < x + w + 0.25 && y < r[3] + 0.25 && r[1] < y + d + 0.25)
-    && ![[x, y], [x + w, y], [x, y + d], [x + w, y + d], [x + w / 2, y + d / 2]].some(([px, py]) => lakeAt(px, py));
-  Object.entries(STORES).filter(([, s]) => s.w).sort((a, b) => b[1].w * b[1].d - a[1].w * a[1].d).forEach(([k, s]) => {
+  // v0.38: where the expressway ran before the town grew (south of it): the stores that were already there keep
+  // out of its way as before
+  const oldOnly = [];
+  if (south) { const hy0 = WORLD.y1 + 9; oldOnly.push([-200, hy0 - 4, 400, hy0 + 4]);
+    const V0 = V.filter(r => r[4] !== 'boulevard').map(oldEnds), E0 = V0.filter(q => q[3] >= WORLD.y1 - 3);
+    (E0.length ? E0 : V0.slice().sort((p, q) => q[3] - p[3]).slice(0, 1)).forEach(q => { const rx = (q[0] + q[2]) / 2; [-1, 1].forEach(dd => { const R = ramp(rx, q[3], dd, hy0); oldOnly.push([Math.min(...R.map(p => p[0])) - 1, Math.min(...R.map(p => p[1])) - 1, Math.max(...R.map(p => p[0])) + 1, Math.max(...R.map(p => p[1])) + 1]); }); }); }
+  const free = (x, y, w, d, late) => { const Wb = late ? world : WORLD; return x >= Wb.x0 - 12 && y >= Wb.y0 - 8 && x + w <= Wb.x1 + 12 && y + d <= Wb.y1 + 8 && !busyRects.some(r => x < r[2] + 0.25 && r[0] < x + w + 0.25 && y < r[3] + 0.25 && r[1] < y + d + 0.25) && (late || !oldOnly.some(r => x < r[2] + 0.25 && r[0] < x + w + 0.25 && y < r[3] + 0.25 && r[1] < y + d + 0.25))
+    && ![[x, y], [x + w, y], [x, y + d], [x + w, y + d], [x + w / 2, y + d / 2]].some(([px, py]) => lakeAt(px, py)); };
+  const placeStore = ([k, s]) => {
     let best = null, bd = 1e9;
+    const late = !!s.late, mx = (blvd[0] + blvd[2]) / 2, my = (blvd[1] + blvd[3]) / 2;   // v0.38: the new ones: along the boulevard, from its middle out
     // v0.19: always on the near side of a road (the door and the car park face it, so you walk straight in), with a
     // car park (STORE_FRONT deep) between the building and the road
     // front: S = the door and car park face +y (a road below it), N = -y, E = +x, W = -x. S and E show the door.
     const D2 = s.d + STORE_FRONT;
-    const tryAt = (x, y, w, d, front, pen) => { if (!free(x, y, w, d)) return; const dd = Math.hypot(x + w / 2 - cx0, y + d / 2 - cy0) + pen; if (dd < bd) { bd = dd; best = [k, x, y, w, d, front]; } };
-    roads.forEach(r => {
-      if (r[2] - r[0] >= r[3] - r[1]) for (let x = r[0] + 0.5; x + s.w <= r[2] - 0.5; x += 1) { tryAt(x, r[1] - D2 - 0.3, s.w, D2, 'S', 0); tryAt(x, r[3] + 0.3, s.w, D2, 'N', 8); }
-      else for (let y = r[1] + 0.5; y + s.w <= r[3] - 0.5; y += 1) { tryAt(r[0] - D2 - 0.3, y, D2, s.w, 'E', 2); tryAt(r[2] + 0.3, y, D2, s.w, 'W', 8); }
+    const tryAt = (x, y, w, d, front, pen) => { if (!free(x, y, w, d, late)) return; const dd = (late ? Math.hypot(x + w / 2 - mx, y + d / 2 - my) : Math.hypot(x + w / 2 - cx0, y + d / 2 - cy0)) + pen; if (dd < bd) { bd = dd; best = [k, x, y, w, d, front]; } };
+    roads.forEach(r0 => {
+      if (late ? r0 !== blvd : r0 === blvd) return;
+      const r = oldEnds(r0);
+      if (r[2] - r[0] >= r[3] - r[1]) for (let x = r[0] + 0.5; x + s.w <= r[2] - 0.5; x += 1) { tryAt(x, r[1] - D2 - 0.3, s.w, D2, 'S', 0); tryAt(x, r[3] + 0.3, s.w, D2, 'N', late ? 0 : 8); }
+      else for (let y = r[1] + 0.5; y + s.w <= r[3] - 0.5; y += 1) { tryAt(r[0] - D2 - 0.3, y, D2, s.w, 'E', late ? 0 : 2); tryAt(r[2] + 0.3, y, D2, s.w, 'W', late ? 0 : 8); }
     });
     if (best) { stores.push(best); busyRects.push([best[1], best[2], best[1] + best[3], best[2] + best[4]]); }
-  });
+  };
+  Object.entries(STORES).filter(([, s]) => s.w && !s.late).sort((a, b) => b[1].w * b[1].d - a[1].w * a[1].d).forEach(placeStore);
   // v0.19: a car park by every other place (the town centre's shops and hall, the park, the lake, the town fields)
   const PARK_W = 6.6, PARK_D = 3.6, parks = [];
   const nearLot = (key, px, py, inside) => {
     let best = null, bd = 1e9;
     const tryAt = (x, y, w, d, front) => { if (!free(x, y, w, d)) return; const dd = Math.hypot(x + w / 2 - px, y + d / 2 - py); if (dd < bd && dd < 30) { bd = dd; best = [key, x, y, w, d, front]; } };
-    roads.forEach(r => {
+    roads.forEach(r0 => {
+      if (r0 === blvd) return;
+      const r = oldEnds(r0);
       if (r[2] - r[0] >= r[3] - r[1]) for (let x = r[0] + 0.5; x + PARK_W <= r[2] - 0.5; x += 1) { tryAt(x, r[1] - PARK_D - 0.3, PARK_W, PARK_D, 'S'); tryAt(x, r[3] + 0.3, PARK_W, PARK_D, 'N'); }
       else for (let y = r[1] + 0.5; y + PARK_W <= r[3] - 0.5; y += 1) { tryAt(r[0] - PARK_D - 0.3, y, PARK_D, PARK_W, 'E'); tryAt(r[2] + 0.3, y, PARK_D, PARK_W, 'W'); }
     });
@@ -1041,7 +1086,7 @@ function buildLayout(id, flip) {
       const [ix, iy, iw, id2] = inside, keep = inside[4] || [];
       for (let y = iy + 0.6; y + PARK_D <= iy + id2 - 0.6; y += 0.5) for (let x = ix + 0.6; x + PARK_W <= ix + iw - 0.6; x += 0.5) {
         if (keep.some(r => x < r[2] + 0.6 && r[0] < x + PARK_W + 0.6 && y < r[3] + 0.6 && r[1] < y + PARK_D + 0.6)) continue;
-        const road = roads.map(r => Math.hypot(Math.max(r[0] - (x + PARK_W), 0, x - r[2]), Math.max(r[1] - (y + PARK_D), 0, y - r[3]))).reduce((m, v) => Math.min(m, v), 1e9);
+        const road = roads.filter(r => r !== blvd).map(oldEnds).map(r => Math.hypot(Math.max(r[0] - (x + PARK_W), 0, x - r[2]), Math.max(r[1] - (y + PARK_D), 0, y - r[3]))).reduce((m, v) => Math.min(m, v), 1e9);
         const dd = road * 3 + Math.hypot(x + PARK_W / 2 - px, y + PARK_D / 2 - py) * 0.2;
         if (dd < bd) { bd = dd; best = [key, x, y, PARK_W, PARK_D, 'S']; }
       }
@@ -1053,6 +1098,44 @@ function buildLayout(id, flip) {
     nearLot('park', Pk.x + Pk.w / 2, Pk.y + Pk.d / 2, [Pk.x, Pk.y, Pk.w, Pk.d, []]);
     if (F0) nearLot('fields', F0.x + Math.min(F0.w / 2, 10), F0.y, [F0.x, F0.y, F0.w, F0.d, []]);
     nearLot('lake', lake.x, lake.y - lake.ry); }
+  // v0.38: the new district must join the town: where fewer than two roads run into the boulevard, new streets from the
+  // nearest road (the shortest that crosses nothing), at least 24 apart, then the new buildings along the boulevard
+  { const S0 = district === 'S', along = S0 ? [Math.max(blvd[0], WORLD.x0) + 3, Math.min(blvd[2], WORLD.x1) - 5] : [Math.max(blvd[1], WORLD.y0) + 3, Math.min(blvd[3], WORLD.y1) - 5];
+    const crosses = r => r !== blvd && (S0 ? vert(r) && r[0] < blvd[2] && r[2] > blvd[0] && r[1] <= blvd[3] && r[3] >= blvd[1] : !vert(r) && r[1] < blvd[3] && r[3] > blvd[1] && r[0] <= blvd[2] && r[2] >= blvd[0]);
+    const joins = roads.filter(crosses).map(r => (S0 ? (r[0] + r[2]) / 2 : (r[1] + r[3]) / 2)), opts = [];
+    for (let u = along[0]; u <= along[1]; u += 1) {
+      if (joins.some(j => Math.abs(j - u) < 24)) continue;
+      let seg = null;
+      roads.forEach(r => {   // the nearest road on the town side that this street could start from
+        if (r === blvd || r[4] === 'dirt') return;
+        if (S0 ? !vert(r) && r[0] <= u - 0.5 && r[2] >= u + 2.5 && r[3] <= blvd[1] : vert(r) && r[1] <= u - 0.5 && r[3] >= u + 2.5 && (district === 'E' ? r[2] <= blvd[0] : r[0] >= blvd[2])) {
+          const q = S0 ? [u, r[3], u + 2, blvd[1]] : district === 'E' ? [r[2], u, blvd[0], u + 2] : [blvd[2], u, r[0], u + 2];
+          if (!seg || (S0 ? q[3] - q[1] : q[2] - q[0]) < (S0 ? seg[3] - seg[1] : seg[2] - seg[0])) seg = q;
+        }
+      });
+      if (!seg) continue;
+      const len = S0 ? seg[3] - seg[1] : seg[2] - seg[0];
+      if (len <= 0.5 || busyRects.some(r => seg[0] < r[2] + 0.4 && r[0] < seg[2] + 0.4 && seg[1] < r[3] - 0.01 && r[1] < seg[3] - 0.01 && !roads.some(q => q[0] === r[0] && q[1] === r[1] && q[2] === r[2] && q[3] === r[3]))) continue;
+      { let wet = false; for (let k = 0; k <= 40 && !wet; k++) { const px = seg[0] + (seg[2] - seg[0]) * k / 40, py = seg[1] + (seg[3] - seg[1]) * k / 40; wet = lakeAt(px, py) || lakeAt(px + (S0 ? 2 : 0), py + (S0 ? 0 : 2)); } if (wet) continue; }
+      opts.push({ u, seg, len });
+    }
+    // …or an avenue or street that stops short of the district carries straight on to the boulevard (better)
+    roads.forEach(r => {
+      if (r === blvd || r[4] === 'dirt' || r[4] === 'lane' || (S0 ? !vert(r) || r[3] >= blvd[1] || r[0] < blvd[0] || r[2] > blvd[2] : vert(r) || r[1] < blvd[1] || r[3] > blvd[3] || (district === 'E' ? r[2] >= blvd[0] : r[0] <= blvd[2]))) return;
+      const seg = S0 ? [r[0], r[3], r[2], blvd[1]] : district === 'E' ? [r[2], r[1], blvd[0], r[3]] : [blvd[2], r[1], r[0], r[3]], u = S0 ? r[0] : r[1];
+      if (joins.some(j => Math.abs(j - u) < 24) || busyRects.some(q => seg[0] < q[2] + 0.4 && q[0] < seg[2] + 0.4 && seg[1] < q[3] - 0.01 && q[1] < seg[3] - 0.01 && !roads.some(w => w[0] === q[0] && w[1] === q[1] && w[2] === q[2] && w[3] === q[3]))) return;
+      let wet = false; for (let k = 0; k <= 40 && !wet; k++) wet = lakeAt(seg[0] + (seg[2] - seg[0]) * k / 40, seg[1] + (seg[3] - seg[1]) * k / 40);
+      if (!wet) opts.push({ u, seg, len: (S0 ? seg[3] - seg[1] : seg[2] - seg[0]) - 12, road: r });
+    });
+    opts.sort((p, q) => p.len - q.len);
+    for (const o of opts) {
+      if (joins.length >= 2) break;
+      if (joins.some(j => Math.abs(j - o.u) < 24)) continue;
+      joins.push(o.u + 1); busyRects.push(o.seg.slice());
+      if (o.road) { const r = o.road; r.o = r.o || r.slice(); if (S0) r[3] = blvd[1]; else if (district === 'E') r[2] = blvd[0]; else r[0] = blvd[2]; }
+      else roads.push([...o.seg, 'street']);
+    } }
+  Object.entries(STORES).filter(([, s]) => s.w && s.late).forEach(placeStore);   // v0.38: the new ones in what's left
   const P = box(B.park), loop = [];
   // v0.32: the loop keeps to the park's edge, and only moves in on the one side where a car park is inside the park
   const mg = { l: 1.5, r: 1.5, t: 1.5, b: 1.5 };
@@ -1069,11 +1152,12 @@ function buildLayout(id, flip) {
   // avenue and lay over people's front gardens, so it looked like a broken road (D196). The expressway along the
   // edge of town (with its ramps through the woods) is still there. `flyovers` stays as an empty list.
   const flyovers = [], labels = B.labels.map(([k, x, y]) => [k, fx(x), y]);
+  labels.push(['area_new', (blvd[0] + blvd[2]) / 2 + (vert(blvd) ? 0 : 0), vert(blvd) ? (blvd[1] + blvd[3]) / 2 : blvd[1] - 13]);   // v0.38
   return {
-    id: id + (flip ? '|f' : ''), streets, npcLots, roads, water: B.water.map(rect), highway, curves, parkLoop: loop, stores, parks, flyovers,
+    id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers,
     centre, plaza, shops, pocket: B.pocket ? box(B.pocket) : null,
     park: box(B.park), lake, fields: B.fields.map(f => box(f)),
-    places: B.places.map(([x, y]) => [fx(x), y]), labels,
+    places: [...B.places.map(([x, y]) => [fx(x), y]), vert(blvd) ? [(blvd[0] + blvd[2]) / 2, (blvd[1] + blvd[3]) / 2] : [(blvd[0] + blvd[2]) / 2, blvd[3] + 0.6]], labels,
   };
 }
 // ---------- public places in town (v0.12) ----------
@@ -1104,14 +1188,15 @@ const PLACE_INFO = {
   office:     { e: '💼', zh: '写字楼', en: 'Offices' },
   restaurant: { e: '🍽️', zh: '空中餐厅', en: 'Sky restaurant' },
   rooftop:    { e: '🏊', zh: '屋顶泳池', en: 'Rooftop pool' },
+  suite:      { e: '🛏️', zh: '酒店客房', en: 'Hotel room' },   // v0.38
 };
 // v0.37: the new buildings of the town centre, [key, width, depth], placed in this order as close to the town hall as
 // there's room (every town has room for the first five; the apartments only where there's space left). A building
 // can hold several floors (BUILDING_FLOORS: you come in on the first and take the lift); VENUE_HOME: which building a
 // floor is in.
 const CENTRE_NEW = [['tower', 6, 6], ['hotel', 6, 6], ['bookstore', 5.5, 5], ['salon', 5, 4.5], ['florist', 5, 4.5], ['apartments', 6, 6]];
-const BUILDING_FLOORS = { tower: ['bank', 'office', 'restaurant'], hotel: ['hotel', 'rooftop'] };
-const VENUE_HOME = { bank: 'tower', office: 'tower', restaurant: 'tower', rooftop: 'hotel' };
+const BUILDING_FLOORS = { tower: ['bank', 'office', 'restaurant'], hotel: ['hotel', 'suite', 'rooftop'] };   // v0.38: + a hotel room
+const VENUE_HOME = { bank: 'tower', office: 'tower', restaurant: 'tower', rooftop: 'hotel', suite: 'hotel' };
 const TOWER_STOREYS = { tower: 14, hotel: 10, apartments: 16 };   // how tall they look from outside
 Object.entries(STORES).forEach(([k, s]) => { if (!PLACE_INFO[k]) PLACE_INFO[k] = { e: s.e, zh: s.zh, en: s.en }; });   // v0.17: stores are places too
 const HARVEST_GOAL = 30;          // the town fields: helps from everyone in town today; full = harvest festival
@@ -1161,6 +1246,12 @@ const JOBS = {
   gym:     { zh: '健身教练', en: 'Fitness coach', wage: 26, from: 10, to: 19 },
   clinic:  { zh: '诊所护士', en: 'Clinic nurse', wage: 40, from: 9, to: 18 },
   office:  { zh: '公司职员', en: 'Office worker', wage: 34, from: 9, to: 17 },   // v0.37: in the City Tower
+  // v0.38: the new buildings
+  hospital: { zh: '医院护工', en: 'Care assistant', wage: 19, from: 7, to: 15 },
+  bowling:  { zh: '保龄球馆店员', en: 'Bowling alley crew', wage: 15, from: 14, to: 22 },
+  aquatic:  { zh: '救生员', en: 'Lifeguard', wage: 18, from: 10, to: 18 },
+  museum:   { zh: '博物馆讲解员', en: 'Museum guide', wage: 21, from: 9, to: 17 },
+  station:  { zh: '列车员', en: 'Train conductor', wage: 30, from: 6, to: 14 },
 };
 const JOB_RANKS = [{ zh: '新人', en: 'Newcomer', at: 0, pay: 1 }, { zh: '熟手', en: 'Skilled', at: 30, pay: 1.2 }, { zh: '主管', en: 'Supervisor', at: 70, pay: 1.45 }];
 const JOB_REL = { finish: 4, quit: -6, max: 100 };
@@ -1258,8 +1349,53 @@ const VENUE = {
   haircut: { price: 45, sec: 10 },                              // a new hairstyle or colour
   bouquet: { price: 35 },                                       // a bouquet to give someone (a gift they love)
   groceries: { price: 40, items: { tomato: 2, potato: 2, egg: 2, milk: 1 } },   // a bag of groceries from the supermarket, to cook with
+  // v0.38 (the games themselves are VENUE_GAMES)
+  arcade: { price: 2, fun: 5, sec: 6 },                         // a go on an arcade machine at the bowling alley
+  dive: { fun: 8, sec: 6 },                                     // the diving board at the swimming centre
+  sauna: { fun: 6, sec: 12 },                                   // a sit in the sauna
+  visit: { social: 10, sec: 10 },                               // keep a patient in hospital company for a while
+  babies: { fun: 6, sec: 8 },                                   // the newborns behind the hospital nursery window
+  donate: { fun: 8, hunger: 10, sec: 12, every: 7 },            // give blood (once a week at most), then a biscuit and a juice
+  ex_dino: { fun: 5, sec: 8 }, ex_space: { fun: 5, sec: 8 }, ex_art: { fun: 5, sec: 8 }, ex_history: { fun: 5, sec: 8 },   // each museum hall once a day
+  souvenir: { price: 15 },                                      // a dinosaur plush from the museum shop (for your home)
+  train: { price: 12, fun: 8 },                                 // a train ride to look round the next town (the fun once a day)
+  trains: { fun: 6, sec: 10 },                                  // sit on the platform and watch the trains come and go
+  room: { price: 159, checkout: 12 },                           // a night in the hotel: the room is yours until noon the next day
+  bed: { fun: 12, sec: 12 },                                    // stretch out on the big hotel bed
+  bath: { fun: 8, sec: 10 },                                    // a bubble bath in the hotel room
 };
-const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas', 'tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist'];   // v0.37: + the new ones
+// v0.38: games you play indoors, with a friend or someone who's there (the rewards are the park's, BALL): bowling,
+// `frames` frames each (a strike is all 10 pins with the first ball: +10; a spare, all 10 with two: +5); a swimming
+// race, one length of `len` metres (tap left, right, left… to swim). price: what a game costs (the lane and the shoes).
+const VENUE_GAMES = {
+  bowling: { e: '🎳', frames: 5, strike: 10, spare: 5, price: 8, place: 'bowling', spot: 'lane' },
+  race:    { e: '🏊', len: 25, price: 0, place: 'aquatic', spot: 'race' },
+};
+// v0.38: what's on the cards in the museum's four halls (one a day each)
+const MUSEUM_FACTS = {
+  dino: [
+    { zh: '霸王龙生活在大约 6600 万年前，一颗牙齿就有一根香蕉那么长。', en: 'T. rex lived about 66 million years ago, and one tooth was as long as a banana.' },
+    { zh: '鸟是恐龙的后代：院子里的鸡，就是恐龙的远房亲戚。', en: 'Birds come from dinosaurs: the hens in your yard are distant dinosaur cousins.' },
+    { zh: '最长的恐龙有三十多米，比两辆公交车接起来还长。', en: 'The longest dinosaurs were over 30 metres long, longer than two buses end to end.' },
+  ],
+  space: [
+    { zh: '太阳光照到地球，大约要走 8 分钟。', en: 'Sunlight takes about 8 minutes to reach the Earth.' },
+    { zh: '空间站大约 90 分钟绕地球一圈，宇航员一天能看到 16 次日出。', en: 'The space station goes round the Earth every 90 minutes or so: 16 sunrises a day.' },
+    { zh: '在月球上看地球，比我们看满月大将近四倍。', en: 'From the Moon, the Earth looks nearly four times as wide as the full Moon looks from here.' },
+  ],
+  art: [
+    { zh: '退后几步看点彩画，一个个小色点会在眼睛里混成一片颜色。', en: 'Step back from a pointillist painting and the little dots of colour blend together in your eyes.' },
+    { zh: '梵高一生画了大约 900 幅油画，活着的时候只卖出去很少几幅。', en: 'Van Gogh painted about 900 pictures in oils but sold very few in his lifetime.' },
+    { zh: '很多大画家动笔之前，都会先画好多张小草稿。', en: 'Many great painters made lots of small sketches before starting the real thing.' },
+  ],
+  history: [
+    { zh: '埃及最大的金字塔已经有四千五百多年了。', en: 'The Great Pyramid in Egypt is more than 4,500 years old.' },
+    { zh: '人类做过的最早的陶罐，大约有两万年了。', en: 'The oldest pottery people have found is about 20,000 years old.' },
+    { zh: '古罗马人就已经有地暖和公共浴场了。', en: 'The ancient Romans already had heated floors and public baths.' },
+  ],
+};
+const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas', 'tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist',
+  'hospital', 'bowling', 'aquatic', 'museum', 'station'];   // v0.37 / v0.38: + the new ones
 // The fire station's tips, one a day.
 const FIRE_TIPS = [
   { zh: '家里装一个烟雾报警器，每个月按一下试试。', en: 'Fit a smoke alarm at home and press its test button once a month.' },
