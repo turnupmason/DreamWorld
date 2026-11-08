@@ -316,7 +316,9 @@ function relocate(st, p, t = VIEW_TOWN) {
 }
 // A tiny seeded random generator, so strangers' homes look the same every time.
 function seeded(seed) { let s = seed % 2147483647 || 1; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
-function genNPCs() { NPCS = []; NPC_DONE = {}; ensureNPCs(HOME_TOWN); }
+function genNPCs() { NPCS = []; NPC_DONE = {}; ensureNPCs(HOME_TOWN); visitorTowns().forEach(ensureNPCs); }
+// v0.34: people from the next two towns come over to your town's shops, cafés and gym (you can meet them there)
+function visitorTowns() { const ks = Object.keys(COMMUNITIES), mt = S && S.lots ? myTown() : HOME_TOWN, i = Math.max(0, ks.indexOf(mt)); return [ks[(i + 1) % ks.length], ks[(i + 2) % ks.length]].filter(t2 => t2 !== mt); }
 let NPC_DONE = {};
 function ensureNPCs(t) {
   if (NPC_DONE[t]) return;
@@ -1935,7 +1937,9 @@ function takeHomeWays(basket, store) {
     { how: 'deliver', ok: true, fee: deliveryFee(basket) },
   ];
 }
-const deliveryFee = basket => Math.max(DELIVERY.min, Math.round(basket.reduce((t, e) => t + e.price, 0) * DELIVERY.fee));
+const deliveryFee = basket => Math.min(DELIVERY.max, Math.max(DELIVERY.min, Math.round(basket.reduce((t, e) => t + e.price, 0) * DELIVERY.fee)));
+// v0.34: a delivery comes the next morning (at DELIVERY.hour), like a real one
+function deliveryAt() { const d = new Date(now()); d.setHours(24 + DELIVERY.hour, 0, 0, 0); return d.getTime(); }
 // Pay at the counter: the money goes now, the things go into your hands / the boot / the van.
 function checkout(basket, how) {
   const total = basket.reduce((t, e) => t + e.price, 0), fee = how === 'deliver' ? deliveryFee(basket) : 0, b = bagState();
@@ -1944,7 +1948,7 @@ function checkout(basket, how) {
   const items = basket.map(e => ({ ...e }));
   if (how === 'hands') b.hands.push(...items);
   else if (how === 'trunk') b.trunk.push(...items);
-  else S.deliveries.push({ at: now() + DELIVERY.minutes * MIN, items });
+  else S.deliveries.push({ at: deliveryAt(), items });
   return 'ok';
 }
 // Something bought arrives home: it's set up the usual way (already paid for). If there's no room any more, the money comes back.

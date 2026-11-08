@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.33.0';
+const VERSION = '0.34.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -13,10 +13,11 @@ const STEAL_FINE = [10, 60];            // caught by a guard dog: pay the owner 
 // (you can pay bail to leave early). Real-life movement and sleep still count while you're in there.
 const STORE_FRONT = 3.2;
 // v0.20: shopping in a real store. You pick things up (into the basket), pay the shopkeeper, then take them home:
-// small things in your hands, bigger ones in your car if you drove here, or the store delivers (a fee, a while later).
+// small things in your hands, bigger ones in your car if you drove here, or the store delivers (v0.34: always for a
+// fee, and it comes the next morning, like a real delivery; the car dealer too).
 // Sizes are in "boxes": a 1×1 piece of furniture is 10, a seed packet 1.
 const HANDS_VOL = 12, BIG_VOL = 10;               // you can carry small things (10 or less each) up to 12 in all
-const DELIVERY = { fee: 0.08, min: 15, minutes: 15 };   // delivery: 8% of the bill (at least 🪙15), arrives in 15 min
+const DELIVERY = { fee: 0.05, min: 30, max: 300, hour: 9 };   // delivery: 5% of the bill (🪙30–300), arrives tomorrow at 9:00
 const SMALL_ANIMALS = ['chicken', 'duck', 'rabbit'];   // v0.19: every store has a car park this deep in front, between the building and the road
 // v0.22: evening classes at the school: one a day; every few classes earn a certificate, and each certificate
 // raises the pay for every job a little (a slow way up, paid for with your own coins).
@@ -1047,23 +1048,10 @@ function buildLayout(id, flip) {
     const rx = (P.w - mg.l - mg.r) / 2, ry = (P.d - mg.t - mg.b) / 2, px = Math.sign(c) * Math.pow(Math.abs(c), e) * rx, py = Math.sign(s2) * Math.pow(Math.abs(s2), e) * ry;
     loop.push([P.x + mg.l + rx + px + Math.sin(a * 5) * 0.25, P.y + mg.t + ry + py + Math.cos(a * 4) * 0.25]);
   }
-  // v0.27: a flyover (an elevated road on pillars) along the main avenue past the town centre: up a ramp, over the
-  // crossings and their lights, and down again. Cars going a long way across town take it.
+  // v0.27 had a flyover along the main avenue. v0.34 took it out: there was no room for its ramps, which crossed the
+  // avenue and lay over people's front gardens, so it looked like a broken road (D196). The expressway along the
+  // edge of town (with its ramps through the woods) is still there. `flyovers` stays as an empty list.
   const flyovers = [], labels = B.labels.map(([k, x, y]) => [k, fx(x), y]);
-  { const A = roads.filter(r => r[4] === 'avenue' && isH(r)).sort((a, b) => (b[2] - b[0]) - (a[2] - a[0]))[0];
-    if (A) {
-      const y = (A[1] + A[3]) / 2, cx = centre.x + centre.w / 2, RL = 15, FH = 40;
-      const crossAt = x => roads.some(q => q !== A && !isH(q) && q[0] - 1.5 <= x && q[2] + 1.5 >= x && q[1] <= A[3] + 0.6 && q[3] >= A[1] - 0.6);
-      const clear = (a, b) => { for (let x = a; x <= b; x += 0.5) if (crossAt(x)) return false; return true; };
-      let xa = Math.max(A[0] + 2, cx - centre.w / 2 - 22), xb = Math.min(A[2] - 2, cx + centre.w / 2 + 22);
-      while (xa > A[0] + 2 && !clear(xa, xa + RL)) xa -= 1;
-      while (xb < A[2] - 2 && !clear(xb - RL, xb)) xb += 1;
-      if (xb - xa > RL * 2 + 10 && clear(xa, xa + RL) && clear(xb - RL, xb)) {
-        // the deck runs just south of the avenue (its pillars on the verge), so from the camera it floats over the avenue
-        const yd = A[3] + 2.2;
-        flyovers.push({ pts: [[xa, y, 0], [xa + RL * 0.45, y + (yd - y) * 0.45, FH * 0.45], [xa + RL, yd, FH], [xb - RL, yd, FH], [xb - RL * 0.45, y + (yd - y) * 0.45, FH * 0.45], [xb, y, 0]], h: FH, y: yd, x0: xa, x1: xb });
-        labels.push(['area_flyover', (xa + xb) / 2 + 10, A[1] - 2]);
-      } } }
   return {
     id: id + (flip ? '|f' : ''), streets, npcLots, roads, water: B.water.map(rect), highway, curves, parkLoop: loop, stores, parks, flyovers,
     centre, plaza, shops, pocket: B.pocket ? box(B.pocket) : null,
@@ -1149,11 +1137,11 @@ const SICK = { base: 0.03, overwork: 0.08, overworkDays: 5, lowSleep: 0.06, lowS
 const PARK = { watch: { fun: 6, sec: 8 }, ducks: { fun: 8, sec: 8 }, bench: { fun: 4, sec: 10 }, play: { fun: 6, sec: 8 }, icecream: { sec: 5 } };
 // v0.33: ball games you really play on the park's courts, with a friend (or one of the people already playing there).
 // Tennis: one game, scored 15 / 30 / 40: the first to `to` points wins (at 40–40 the next point wins). Basketball: `spots` places round the hoop, `shots` each from every place, two points a
-// basket (three from the last place). Football: `kicks` penalties each, then up to `sudden` rounds of sudden death.
+// basket (three from the last place). Football: `kicks` penalties each; level after that is a draw (v0.34: no sudden death).
 const BALL_GAMES = {
   tennis:     { e: '🎾', to: 4 },
   basketball: { e: '🏀', spots: 5, shots: 2 },
-  soccer:     { e: '⚽', kicks: 5, sudden: 3 },
+  soccer:     { e: '⚽', kicks: 5 },
 };
 // What a game gives, win or lose (it's about playing together): the first game of each sport each day gives fun, and
 // with someone you know also social and friendship; after that each game still gives a little fun.
@@ -1375,6 +1363,6 @@ const nicePrice = n => (!n ? n : n < 100 ? Math.max(5, Math.round(n / 5) * 5) : 
   FLOOR_BUILD.coinsPerTile = 100; FLOOR_BUILD.woodPerTile = 1.6;
   MALL.movie = 45; MALL.claw = 20; Object.entries({ burger: 35, noodles: 30, pizza: 40, sushi: 55, boba: 18, icecream: 15 }).forEach(([k, v]) => { MALL.foods[k].price = v; });
   Object.keys(MALL.plush).forEach(k => { FURN[k].value = 60; });
-  DELIVERY.min = 30; SCHOOL.fee = 200; POLICE.bail = 400; POLICE.fineMin = 150; POLICE.fineMax = 800;
+  SCHOOL.fee = 200; POLICE.bail = 400; POLICE.fineMin = 150; POLICE.fineMax = 800;
   TOWN_LEVELS.forEach((v, i) => { TOWN_LEVELS[i] = v * 4; });
 })();

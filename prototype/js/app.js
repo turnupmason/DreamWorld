@@ -117,18 +117,19 @@ let tipTimer = null;
 // or when you tap the same thing again.
 let tipKey = null, tipHidAt = 0;
 function hideTip() { const el = $('#tip'); if (el) el.hidden = true; tipKey = null; }
-function tip(kind, k, name, sub) {
+function tip(kind, k, name, sub, btn) {
   const el = $('#tip'), p = Scene.tapAt(), key = kind + ':' + k + ':' + Math.round(p.x / 30) + ':' + Math.round(p.y / 30);
   if (tipKey === key && (!el.hidden || Date.now() - tipHidAt < 500)) return hideTip();   // same thing again: close it
   tipKey = key;
-  el.innerHTML = `${kind ? thumbImg(kind, k, {}, 52, 44, 'thumb') : ''}<div><b>${esc(name)}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
+  el.innerHTML = `${kind ? thumbImg(kind, k, {}, 52, 44, 'thumb') : ''}<div class="grow"><b>${esc(name)}</b>${sub ? `<span>${sub}</span>` : ''}</div>${btn ? `<button class="btn small primary" data-act="${btn.act}" data-arg="${btn.arg}">${btn.label}</button>` : ''}`;
+  el.classList.toggle('has-btn', !!btn);
   el.hidden = false;
   // v0.13: a slim bar at the top of the scene (under the context bar), so it never covers what you tapped
   const cb = $('#ctxbar'), top = cb && !cb.hidden ? cb.offsetTop + cb.offsetHeight + 8 : 10;
   el.style.left = ''; el.style.top = top + 'px';
   el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   clearTimeout(tipTimer);
-  tipTimer = setTimeout(hideTip, 2600);
+  tipTimer = setTimeout(hideTip, btn ? 6000 : 2600);
 }
 // any touch hides the label (a tap on a thing shows its own label again right after)
 document.addEventListener('pointerdown', e => { const el = $('#tip'); if (el && !el.hidden && !e.target.closest('#tip')) { el.hidden = true; tipHidAt = Date.now(); } }, { passive: true, capture: true });
@@ -741,21 +742,12 @@ const SHEETS = {
       <p class="muted small">${t('loan_rule')}</p>
       ${chk === 'ok' ? `<button class="btn primary block" data-act="loanSign" data-arg="${wid}">✍️ ${t('loan_sign')}</button>` : `<p class="host-say">${t('loan_no_' + chk)}</p>`}`;
   },
-  person(id) {   // v0.25 / v0.31: someone in town: walk over and get talking (like The Sims), or go to their home
-    const w = whoIs(id);
-    if (!w) return '';
-    const wp = w.wp, h = wp ? null : homeOf(id), out = (S.out && S.out.town === myTown()) || S.work, near = canSocial(id);
-    const role = wp ? (wp.boss ? `💼 ${t('boss')} · ${nm(JOBS[S.job.place])}` : `💼 ${t('coworker')} · ${nm(JOBS[S.job.place])}`) : isFriend(id) ? `💛 ${t('friend')}` : h && h.fam ? `👪 ${t('family')}` : t('neighbour');
-    return `<div class="profile">${avatar(w.look, 'xl')}<div class="grow"><div class="profile-name">${esc(w.name)}</div><div class="muted small">${role}</div><div class="muted small">${t('soc_rel')} ${relTag(id)}</div></div></div>
-      ${near ? `<button class="btn primary block" data-act="socialOpen" data-arg="${id}">💬 ${t('soc_talk', { name: esc(w.name) })}</button>` : out || Scene.canWalkUp(id) ? `<button class="btn primary block" data-act="${wp ? 'chatWork' : 'chat'}" data-arg="${id}">💬 ${t(Scene.canWalkUp(id) ? 'chat_walk_btn' : 'chat_btn')}</button>` : `<p class="muted">${t('chat_go_out')}</p>`}
-      ${wp ? `<p class="muted small">${t(wp.boss ? 'chat_boss_note' : 'chat_mate_note')}</p>` : `<button class="btn block gap-top" data-act="goTo" data-arg="${id}">🏡 ${t('visit')}</button>`}`;
-  },
   // v0.31: getting along with someone, like The Sims: how well you get on, their mood today, their traits and hobbies
   // (once you know them), and things to do together, in groups; some need you to be closer friends first.
   social(id) {
     const w = whoIs(id);
     if (!w) return '';
-    const v = relOf(id), lv = relLevel(v), md = moodOf(id), T = traitsOf(id), K = knownOf(id), near = canSocial(id);
+    const v = relOf(id), lv = relLevel(v), md = moodOf(id), T = traitsOf(id), K = knownOf(id), near = canReach(id) && UI.socWalk !== id;   // v0.34: you walk over when you pick one
     const cat = UI.socCat || 'friendly', busy = UI.socBusy && UI.socBusy > Date.now(), lo = REL_LEVELS[0].min, span = 100 - lo;
     const pct = (v - lo) / span * 100, zero = -lo / span * 100;
     const bar = `<div class="relbar"><i class="${v < 0 ? 'neg' : ''}" style="left:${Math.min(zero, pct)}%;width:${Math.abs(pct - zero)}%"></i><u style="left:${zero}%"></u></div>`;
@@ -770,13 +762,16 @@ const SHEETS = {
       if (tp) return `<button class="act-tile" data-act="social" data-arg="${id}|interest|${tp}" ${busy || !near ? 'disabled' : ''}><span>${INTERESTS[tp].e}</span><b>${t('soc_talk_about', { topic: nm(INTERESTS[tp]) })}</b>${K.int.includes(tp) ? `<i>💛 ${t('soc_they_like_short')}</i>` : ''}</button>`;
       return `<button class="act-tile" data-act="social" data-arg="${id}|${k}" ${busy || lock || !near ? 'disabled' : ''}><span>${lock ? '🔒' : A.e}</span><b>${nm(A)}</b>${lock ? `<i>${t('soc_lock', { level: nm(relLevel(A.min)) })}</i>` : ''}</button>`; }).join('');
     const last = UI.socLast && UI.socLast.id === id ? `<div class="soc-last ${UI.socLast.ok ? 'ok' : 'bad'}">${UI.socLast.html}</div>` : '';
+    const hm = !w.wp && homeOf(id), canVisit = hm && townOf(id) === myTown() && !UI.visit;
     return `<div class="profile">${avatar(w.look, 'xl')}<div class="grow"><div class="profile-name">${esc(w.name)} <span>${MOOD_E[md]}</span></div>
+        <div class="muted small">${roleOf(id)}</div>
         <div class="muted small">${lv.e} ${nm(lv)} · ${v} · ${t('smood_' + md)}</div>${bar}</div></div>
       <div class="soc-info"><div><span class="muted small">${t('soc_traits')}</span>${traits}</div><div><span class="muted small">${t('soc_likes')}</span>${ints}</div><div class="muted small">${t('soc_my_likes')} ${myInterests().map(k => INTERESTS[k].e).join(' ')}</div></div>
-      ${last}${busy ? `<p class="muted center soc-wait">💬 …</p>` : ''}
+      ${last}${busy ? `<p class="muted center soc-wait">💬 …</p>` : ''}${UI.socWalk === id ? `<p class="muted center soc-wait">🚶 ${t('soc_walking', { name: esc(w.name) })}</p>` : ''}
       <div class="soc-cats">${tabs}</div>
       <div class="act-grid">${grid}</div>
-      ${near ? '' : `<p class="muted small center gap-top">${t('soc_need_near', { name: esc(w.name) })}</p>`}`;
+      ${near || UI.socWalk === id ? '' : `<p class="muted small center gap-top">${t('soc_need_near', { name: esc(w.name) })}</p>`}
+      ${canVisit ? `<button class="btn block gap-top" data-act="goTo" data-arg="${id}">🏡 ${t('visit')}</button>` : ''}`;
   },
   garage() {   // v0.24: which car is where (drive, garage, parked out) and which one you drive
     const h = S.me, sl = carSlots(h), where = i => (i === h.car && S.carAt ? `📍 ${S.carAt.place ? nm(placeInfo(S.carAt.place)) : t('away_street')}` : sl.garage.includes(i) ? `🅿️ ${t('in_garage')}` : `🚗 ${t('on_drive')}`);
@@ -794,7 +789,7 @@ const SHEETS = {
       info = `${t('house_room', { w: H.room[0], d: H.room[1] })} · ${t('house_floors', { n: H.floors[0], max: H.floors[1] })}`;
       btns = i === S.me.house ? `<span class="tag ok">${t('house_current')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${own || canAfford(H.cost) ? '' : 'disabled'}>✍️ ${own ? t('house_move') : `${t('ware_sign')} ${costText(H.cost)}`}</button>${own ? '' : loanBtn('house', i, w.id)}`; }
     else if (w.kind === 'land') { const L = landDeal(w.k); info = L.sub; btns = L.next ? `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${canAfford(L.cost) ? '' : 'disabled'}>✍️ ${t('ware_sign')} ${costText(L.cost)}</button>` : `<span class="tag ok">${t('maxed')}</span>`; }
-    else if (w.kind === 'car') { const own = S.me.cars.some(c => c.k === w.k); info = t('car_cargo', { n: CARS[w.k].cargo || WALK_CARRY }) + ' · ' + t('car_delivered', { m: DELIVERY.minutes });
+    else if (w.kind === 'car') { const own = S.me.cars.some(c => c.k === w.k); info = t('car_cargo', { n: CARS[w.k].cargo || WALK_CARRY }) + ' · ' + t('car_delivered', { h: DELIVERY.hour, n: deliveryFee([{ price: CARS[w.k].cost.coins || 0 }]) });
       btns = own ? `<span class="tag ok">${t('owned')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${canAfford(CARS[w.k].cost) ? '' : 'disabled'}>✍️ ${t('ware_sign')} ${costText(CARS[w.k].cost)}</button>${loanBtn('car', w.k, w.id)}`; }
     else if (w.kind === 'act') { info = t('st_short_mall'); btns = `<button class="btn primary" data-act="mallAct" data-arg="${w.k}">${t('act_' + w.k)}</button>`; }
     else {
@@ -819,7 +814,7 @@ const SHEETS = {
     if (!B.items.length) return `<h2>${S2.e} ${nm(S2)}</h2>${hello}${sell}`;
     const rows = B.items.map((e, i) => `<div class="list-item"><div class="grow">${wareName(e)}${e.n > 1 ? ` ×${e.n}` : ''} <span class="muted small">${e.vol > BIG_VOL ? '🚚' : '🤲'}</span></div><b>🪙${fmtNum(e.price)}</b><button class="btn small" data-act="dropWare" data-arg="${i}">✕</button></div>`).join('');
     const ways = takeHomeWays(B.items, B.store).map(x => {
-      const label = x.how === 'hands' ? `🤲 ${t('take_hands')}` : x.how === 'trunk' ? `🚗 ${t('take_trunk')}` : `🚚 ${t('take_deliver', { n: x.fee, m: DELIVERY.minutes })}`;
+      const label = x.how === 'hands' ? `🤲 ${t('take_hands')}` : x.how === 'trunk' ? `🚗 ${t('take_trunk')}` : `🚚 ${t('take_deliver', { n: x.fee, h: DELIVERY.hour })}`;
       const why = x.ok ? (x.how === 'trunk' ? t('take_trunk_ok', { v: x.vol, c: x.cap }) : x.how === 'hands' ? t('take_hands_ok') : t('take_deliver_ok')) : t('take_no_' + x.why);
       return `<button class="act-tile wide" data-act="payWith" data-arg="${x.how}" ${x.ok && S.me.coins >= tot + (x.fee && x.how === 'deliver' ? x.fee : 0) ? '' : 'disabled'}><span>${label.split(' ')[0]}</span><b>${label.slice(label.indexOf(' ') + 1)}</b><i>${why}</i></button>`;
     }).join('');
@@ -1427,18 +1422,25 @@ const ACT = {
     closeSheet();
     if (r !== 'ok') { Sound.play('oops'); return snack(r === 'poor' ? t('snack_poor') : r === 'own' ? t('owned') : r === 'garage' ? `🚗 ${t('garage_full')}` : t('loan_no_' + r)); }
     Sound.play('coins'); save();
-    snack(house ? `🏦 ${t('loan_house_ok', { name: nm(HOUSES[k]) })}` : `🏦 ${t('loan_car_ok', { name: nm(CARS[k]), m: DELIVERY.minutes })}`);
+    snack(house ? `🏦 ${t('loan_house_ok', { name: nm(HOUSES[k]) })}` : `🏦 ${t('loan_car_ok', { name: nm(CARS[k]), h: DELIVERY.hour })}`);
   },
-  chat(id, here) { if (!here && Scene.canWalkUp(id)) { closeSheet(); UI.tripTo = (whoIs(id) || {}).name || ''; Scene.walkUp(id, () => ACT.chat(id, true)); return refresh(); }   // walk over first, then talk
-    ACT.socialOpen(id); },
-  chatWork(id, here) { ACT.chat(id, here); },
+  chat(id) { ACT.socialOpen(id); },   // v0.34: the sheet first; you walk over once you pick something to do
+  chatWork(id) { ACT.socialOpen(id); },
+  useFurn(id) { hideTip(); Scene.go({ kind: 'furn', id }); },   // v0.34: sit / lie down / work out on it, now that you've said so
   // v0.31: the things you do with someone (like The Sims): your bubble, a moment, their reaction, then what came of it
-  socialOpen(id) { UI.talk = id; UI.socLast = null; closeSheet(); openSheet('social', id); refresh(); },
+  socialOpen(id) { UI.socLast = null; UI.socWalk = null; closeSheet(); openSheet('social', id); refresh(); },
   socCat(c) { UI.socCat = c; renderSheet(); },
   social(arg) {
     const [id, act, g] = arg.split('|'), w = whoIs(id), A = SOCIALS[act];
-    if (!w || !A || (UI.socBusy && UI.socBusy > Date.now())) return;
-    if (!canSocial(id)) return snack(t('soc_need_near', { name: w.name }));
+    if (!w || !A || (UI.socBusy && UI.socBusy > Date.now()) || UI.socWalk) return;
+    if (!canSocial(id)) {   // v0.34: not next to them yet: walk over (they wait for you), then do it
+      if (!canReach(id)) return snack(t('soc_need_near', { name: w.name }));
+      UI.socWalk = id; closeSheet();   // out of the way while you walk over; it comes back when you get there
+      const go = () => { if (UI.socWalk !== id) return; UI.socWalk = null; if (!UI.sheet) openSheet('social', id); if (canSocial(id)) ACT.social(arg); else renderSheet(); refresh(); };
+      if (Scene.folkHere(id)) Scene.walkToFolk(id, go); else { UI.tripTo = w.name; Scene.walkUp(id, go); }
+      setTimeout(() => { if (UI.socWalk === id) { UI.socWalk = null; if (UI.sheet && UI.sheet.type === 'social') renderSheet(); } }, 20000);   // never stuck
+      return refresh();
+    }
     const r = doSocial(id, act, g);
     if (r.r === 'locked') return snack(`🔒 ${t('soc_lock', { level: nm(relLevel(A.min)) })}`);
     if (r.r === 'nogift') return snack(t('soc_gift_none'));
@@ -1602,7 +1604,6 @@ const ACT = {
       refresh();
     };
     if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
-    UI.talk = null;   // v0.31
     if (UI.tab !== 'town') UI.tab = 'town';
     syncView();
     // v0.19: "straight there" goes the same way (by car if you have one), it just skips the time on the road
@@ -1709,7 +1710,7 @@ const ACT = {
     if (checkout(B.items, how) !== 'ok') { Sound.play('oops'); return snack(t('snack_poor')); }
     const n = B.items.length; B.items = [];
     Sound.play('coins'); closeSheet(); save();
-    snack(t('paid_' + how, { n, m: DELIVERY.minutes }));
+    snack(t('paid_' + how, { n, h: DELIVERY.hour }));
   },
   // things you deal for at the counter right away: a house, land, a garage, a car (the dealer brings it home)
   wareDeal(id) {
@@ -1724,7 +1725,7 @@ const ACT = {
     if (w.kind === 'land') return result(buyLand(w.k), () => { Sound.play('coins'); snack(t('snack_land_' + w.k)); save(); });
     if (w.kind === 'car') {
       const r = orderCar(w);
-      if (r === 'ok') { Sound.play('coins'); snack(`🚗 ${t('car_ordered', { name: nm(CARS[w.k]), m: DELIVERY.minutes })}`); save(); }
+      if (r === 'ok') { Sound.play('coins'); snack(`🚗 ${t('car_ordered', { name: nm(CARS[w.k]), h: DELIVERY.hour, n: deliveryFee([{ price: w.price }]) })}`); save(); }
       else { Sound.play('oops'); snack(r === 'own' ? t('owned') : r === 'garage' ? `🚗 ${t('garage_full')}` : t('snack_poor')); }
     }
   },
@@ -2072,14 +2073,14 @@ function onSceneHit(h) {
   if (k === 'shop') return openSheet('place', h.k);   // (clinic is a shop too since v0.14)
   if (k === 'place' && h.key) return openSheet('place', h.key);
   if (k === 'garage' && h.owner === 'me') return openSheet('garage');   // v0.24: which cars are where
-  if (k === 'person') { openSheet('person', h.id); return refresh(); }   // v0.25: talk to people
+  if (k === 'person') { UI.socLast = null; UI.socWalk = null; openSheet('social', h.id); return refresh(); }   // v0.34: anyone, anywhere: the sheet opens at once, you walk over when you pick something to do
   if (k === 'land') return openSheet('land', { st: h.st, p: h.p, n: h.n, run: h.run });
   if (k === 'buyParcel') return openSheet('land', { st: lotOf('me').st, p: lotOf('me').p + lotOf('me').n, n: 1, next: true });
   if (k === 'furn') {
     const it = shownRoom(homeOf(Scene.view().owner)).items.find(x => x.id === h.id), d = FURN[h.k];
     const sub = d.souv ? `✨ ${t('souv_title')}` : d.use ? t('use_' + d.use) : '';
     const vo = Scene.view().owner;
-    if (it && d.use && canUseAt(vo)) Scene.go({ kind: 'furn', id: it.id });
+    if (it && d.use && canUseAt(vo)) return tip('furn', h.k, nm(d), sub, { act: 'useFurn', arg: it.id, label: t('fu_' + d.use) });   // v0.34: you go and use it only when you say so
     else if (it && d.use) { tip('furn', h.k, nm(d), `🙏 ${t('ask_first')}`); UI.hostWant = h.k; return openSheet('host', vo); }   // house rules: ask first
     return tip('furn', h.k, nm(d), sub);
   }
@@ -2976,12 +2977,26 @@ document.addEventListener('click', e => {
   if (needStore && S && !S.onboarding && !(UI.inStore === needStore && el.closest('#sheet'))) { ACT.enterStore(needStore, wareKey(el.dataset.act, el.dataset.arg)); refresh(); return; }   // v0.20: pick it up in the store
   // every button makes a sound: picking things (shop categories, tabs, cards) a bubbly blip, everything else a soft tick
   Sound.play(CLICK_SOUND[el.dataset.act] || 'tick');
+  if (S && el.closest('#sheet') && GO_ACTS.has(el.dataset.act) && Scene.view().mode === 'shop') goToSheetThing();   // v0.34
   const ta = $('#draftText');
   if (ta && UI.draft) UI.draft.text = ta.value;
   fn(el.dataset.arg);
   if (S && !S.onboarding && !el.dataset.act.startsWith('ob')) refresh();
 });
 const CLICK_SOUND = { shopCat: 'select', shopSub: 'select', tab: 'select', petPick: 'select', worldPick: 'select' };
+// v0.34: in a store or building a tap only opens things; these buttons are where you actually do something, so your
+// townie walks over to it then (to the shelf, the counter, the table)
+const GO_ACTS = new Set(['addWare', 'wareDeal', 'loanSign', 'payWith', 'snackBuy', 'buyMed', 'venueDo', 'placeDo', 'mailOpen', 'ranking', 'eatFood', 'clawTry', 'watchMovie', 'takeClass', 'payBail', 'jobApply']);
+function goToSheetThing() {
+  const sh = UI.sheet; if (!sh) return;
+  const arg = String(sh.arg == null ? '' : sh.arg);
+  if (sh.type === 'spot') Scene.shopGoTo(arg.split('|')[1]);
+  else if (sh.type === 'ware' || sh.type === 'loan') Scene.shopGoTo(arg);
+  else if (sh.type === 'food') Scene.shopGoTo(arg);
+  else if (sh.type === 'claw') Scene.shopGoTo('claw');
+  else if (sh.type === 'cinema') Scene.shopGoTo('ticket');
+  else if (sh.type === 'checkout' || sh.type === 'place') Scene.shopGoTo('till');
+}
 document.addEventListener('input', e => {
   if (e.target.id === 'obName') OB.name = e.target.value;
   if (e.target.id === 'loginEmail' && UI.login) UI.login.email = e.target.value;
@@ -3103,7 +3118,14 @@ function openSport(k, id, w) {
     return `<div class="mg-got">${chips.map(c => `<span>${c}</span>`).join('')}</div>${got.up ? `<p class="center"><b>${got.up.e} ${t('mg_got_up', { lv: nm(got.up) })}</b></p>` : ''}<div class="mg-rec">${sportRecText(k)}</div>`;
   }, () => refresh());
 }
-function canSocial(id) { return UI.talk === id || UI.visit === id || (!!S.work && String(id).startsWith('work_')); }
+function canSocial(id) { return UI.visit === id || (!!S.work && String(id).startsWith('work_')) || Scene.near(id); }   // v0.34: right next to them
+const canReach = id => canSocial(id) || Scene.canWalkUp(id) || Scene.folkHere(id);   // v0.34: somewhere you can walk over to them
+// v0.34: who someone is to you, in a few words
+function roleOf(id) {
+  const w = whoIs(id); if (!w) return '';
+  const wp = w.wp, h = wp ? null : homeOf(id);
+  return wp ? `💼 ${t(wp.boss ? 'boss' : 'coworker')} · ${nm(JOBS[S.job.place])}` : isFriend(id) ? `💛 ${t('friend')}` : h && h.fam ? `👪 ${t('family')}` : h && h.town && h.town !== myTown() ? `🏘️ ${t('from_town', { town: nm(COMMUNITIES[h.town]) })}` : `🏡 ${t('neighbour')}`;
+}
 function relTag(id) { const lv = relLevel(relOf(id)); return `${lv.e} ${nm(lv)}`; }
 function snackBtn(key) { return `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${key === 'cafe' ? '☕' : '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`; }
 function workmates(key) {
@@ -3121,15 +3143,14 @@ function needBars() {
 function phoneBadge() { try { return unreadTexts() + unreadMail() + (bank().loans.some(l => l.late) ? 1 : 0); } catch (e) { return 0; } }   // v0.26: letters live in the phone too
 function loanBtn(kind, k, wid) { const q = loanQuote(kind, k), ok = loanCheck(kind, k) === 'ok';
   return `<button class="btn block gap-top" data-act="loanAsk" data-arg="${wid}" ${ok ? '' : 'disabled'}>🏦 ${t('loan_btn', { n: q.down.toLocaleString(), d: q.perDay.toLocaleString(), days: q.days })}</button>`; }
-// buy a car at the dealer: paid in full, the dealer brings it home (free delivery)
+// buy a car at the dealer: paid in full; the dealer brings it home the next morning (v0.34: for a delivery fee)
 function orderCar(w) {
   const pend = allPending().filter(e => e.act === 'buyCar').length;
   if (S.me.cars.some(c => c.k === w.k) || allPending().some(e => e.act === 'buyCar' && e.k === w.k)) return 'own';
   if (S.me.cars.length + pend >= driveCap() + garageCap()) return 'garage';
-  if (!canAfford(CARS[w.k].cost)) return 'poor';
+  if (!canAfford(CARS[w.k].cost) || S.me.coins < (CARS[w.k].cost.coins || 0) + deliveryFee([{ price: w.price }])) return 'poor';
   pay(CARS[w.k].cost); S.me.coins += w.price;   // paid in full (wood too); the coin part rides with the delivery
   if (checkout([{ wid: w.id, kind: 'car', k: w.k, act: 'buyCar', arg: w.k, price: w.price, n: 1, vol: 0 }], 'deliver') !== 'ok') return 'poor';
-  S.deliveries[S.deliveries.length - 1].free = true; S.me.coins += deliveryFee([{ price: w.price }]);   // the dealer delivers for free
   return 'ok';
 }
 function coin(n) { return '🪙' + Math.floor(n).toLocaleString(); }

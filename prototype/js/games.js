@@ -501,7 +501,7 @@ const Games = (() => {
 
   // =========================================================================== football: penalties
   function Penalty() {
-    const C = { gw: 3.66, gh: 2.44, line: 11, g: 9.8, br: 0.13, kicks: BALL_GAMES.soccer.kicks, sudden: BALL_GAMES.soccer.sudden, Lr: 1.75, body: 0.42 };
+    const C = { gw: 3.66, gh: 2.44, line: 11, g: 9.8, br: 0.13, kicks: BALL_GAMES.soccer.kicks, Lr: 1.75, body: 0.42 };
     const sk = mate.skill;
     let kicker = 0, st = 'ready', wait = 0, ball = null, kp = null, res = [[], []], runT = -9, cheer = -9, swipes = 0, taps = 0, tapAt = null, netHit = null, outcome = '', over = false;
     // the goal wide across the screen, the ball low down, you (or them) beside it
@@ -512,7 +512,7 @@ const Games = (() => {
       kp = { tx: 0, tz: 1.3, t0: -9, dive: false, plan: null };
       st = 'ready'; runT = -9; tapAt = null; netHit = null; outcome = '';
       wait = kicker ? 1.4 : 0;
-      say(kicker ? t('mg_s_you_keep') : t('mg_s_you_kick'), res[kicker].length >= C.kicks ? t('mg_s_sudden') : '', '#fff', 1.2);
+      say(kicker ? t('mg_s_you_keep') : t('mg_s_you_kick'), res[kicker].length === C.kicks - 1 ? t('mg_s_last') : '', '#fff', 1.2);
     }
     // the keeper: where the hands are now (diving towards (tx, tz) over 0.4 s), the feet, and the angle of the body
     function keeper() {
@@ -575,11 +575,10 @@ const Games = (() => {
       const txt2 = kicker === 0 ? { goal: t('mg_s_goal'), saved: t('mg_s_saved'), post: t('mg_s_post'), over: t('mg_s_over'), wide: t('mg_s_wide') }[o] : scored ? t('mg_s_conceded') : o === 'saved' ? t('mg_s_isave') : { post: t('mg_s_post'), over: t('mg_s_over'), wide: t('mg_s_wide') }[o];
       say(txt2, '', good ? '#ffe066' : '#fff', 1.5);
       Sound.play(good ? 'cheer' : 'pop');
-      // is it over? (one side can't catch up any more, or sudden death is decided)
+      // is it over? (one side can't catch up any more, or everyone has kicked: level is a draw, v0.34)
       const g0 = goals(0), g1 = goals(1), n0 = res[0].length, n1 = res[1].length;
-      if (n0 <= C.kicks && n1 <= C.kicks) { if (g0 + (C.kicks - n0) < g1 || g1 + (C.kicks - n1) < g0) over = true; }
-      if (n0 === n1 && n0 >= C.kicks && g0 !== g1) over = true;
-      if (n0 === n1 && n0 >= C.kicks + C.sudden) over = true;
+      if (g0 + (C.kicks - n0) < g1 || g1 + (C.kicks - n1) < g0) over = true;
+      if (n0 >= C.kicks && n1 >= C.kicks) over = true;
     }
     function next() {
       if (over) return finish({ won: goals(0) > goals(1) ? true : goals(0) < goals(1) ? false : null, me: goals(0), them: goals(1) });
@@ -652,7 +651,7 @@ const Games = (() => {
       return null;
     }
     function hud() {
-      const dots = i => { const r = res[i], n = Math.max(C.kicks, r.length, res[1 - i].length); let s2 = ''; for (let k = 0; k < n; k++) s2 += k < r.length ? (r[k] ? '🟢' : '❌') : '⚪'; return `<small class="mg-dots">${s2}</small>`; };
+      const dots = i => { const r = res[i], n = C.kicks; let s2 = ''; for (let k = 0; k < n; k++) s2 += k < r.length ? (r[k] ? '🟢' : '❌') : '⚪'; return `<small class="mg-dots">${s2}</small>`; };
       return { me: goals(0), them: goals(1), meSub: dots(0), themSub: dots(1), mid: `⚽ ${t('mg_s_title')}` };
     }
     setUp();

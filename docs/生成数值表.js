@@ -145,7 +145,7 @@ const SLOT_ZH = { top: '上衣', bottom: '下装', shoes: '鞋', hat: '帽子' }
 table(['衣服', '类', '价格'], Object.values(D.CLOTHES).map(c => [`${c.e} ${c.zh} (${c.en})`, SLOT_ZH[c.slot], c.price ? `🪙${c.price}` : '免费']));
 P('## 买东西带回家（v0.20）');
 P('');
-table(['项目', '数值'], [['拿在手上', `每件 ≤ ${D.BIG_VOL}，一共 ≤ ${D.HANDS_VOL}（1×1 家具 = 10，种子 10 包 = 1）`], ['后备箱', '按车的载货量'], ['送货上门', `账单 ${D.DELIVERY.fee * 100}%，至少 🪙${D.DELIVERY.min}，约 ${D.DELIVERY.minutes} 分钟`],
+table(['项目', '数值'], [['拿在手上', `每件 ≤ ${D.BIG_VOL}，一共 ≤ ${D.HANDS_VOL}（1×1 家具 = 10，种子 10 包 = 1）`], ['后备箱', '按车的载货量'], ['送货上门（v0.34 起车行也一样）', `账单 ${D.DELIVERY.fee * 100}%（🪙${D.DELIVERY.min}–${D.DELIVERY.max}），第二天上午 ${D.DELIVERY.hour} 点送到`],
   ['吃饱', `${D.MALL.fed.hours} 小时：打工 +${D.MALL.fed.pay * 100}%，走路快 ${D.MALL.fed.walk * 100}%`], ['电影海报 / 玩偶 / 巨型泰迪熊', '家产 +60 / +40 / +300']]);
 P('## 公园（v0.32）');
 P('');
@@ -155,7 +155,7 @@ P('## 公园球场上的小游戏（v0.33）');
 P('');
 table(['小游戏', '怎么玩', '规则'], [['🎾 网球', '自己会跑过去接球；脚下的圈缩小变绿时往上划回球，左右划定方向，划长打得深', `一局定输赢：15、30、40，先得 ${D.BALL_GAMES.tennis.to} 分赢，40 平时下一分决胜`],
   ['🏀 投篮比赛', '往上划投篮：划直才准，划多长就投多远', `${D.BALL_GAMES.basketball.spots} 个位置，每人每个位置投 ${D.BALL_GAMES.basketball.shots} 球；进一个 2 分，最后一个位置 3 分`],
-  ['⚽ 点球大战', '踢：往球门划，左右定方向，越长越高；守门：点要扑的地方', `每人 ${D.BALL_GAMES.soccer.kicks} 个，打平再突然死亡最多 ${D.BALL_GAMES.soccer.sudden} 轮，还平就算平局`]]);
+  ['⚽ 点球大战', '踢：往球门划，左右定方向，越长越高；守门：点要扑的地方', `每人 ${D.BALL_GAMES.soccer.kicks} 个，进得多的赢；一样多就是平局`]]);
 P('');
 table(['什么时候', '得到'], [['每种球今天的第一局（输赢都一样）', `娱乐 +${D.BALL.fun}；和认识的人玩再加社交 +${D.BALL.social}、关系 +${D.BALL.rel}`], ['同一种球再玩', `娱乐 +${D.BALL.againFun}`]]);
 P('');

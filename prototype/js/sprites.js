@@ -83,6 +83,29 @@ function skeleton(pose, o) {
         k.legs[1] = { h: [1.2, -10], k: [5.6, -8.3], f: [6, 0] };
       }
       k.arms[0].e = [1.2, -15]; k.arms[0].h = [3.6, -11.5]; k.arms[1].e = [2.6, -15]; k.arms[1].h = [5, -11.5];
+      // v0.34: on a chair at a table, everyone does their own thing (o.sit). In this frame a hand resting on a table
+      // (14 high) is at y ≈ -16.3, and a hand at the mouth is at about (3.5, -29).
+      const u = ts / 1000 + seed * 1.37, TB = -16.3, A0 = k.arms[0].s, A1 = k.arms[1].s;
+      switch (o.sit) {
+        case 'eat': { const b = Math.pow(Math.max(0, Math.sin(u * 2.4)), 2); k.lean = 0.7;   // a forkful now and then
+          k.arms[0] = { s: A0, e: [3.2, -16.8], h: [6.8, TB] };
+          k.arms[1] = { s: A1, e: [4.6 - b * 1.2, -17.2 - b * 3], h: [7.2 - b * 3.6, TB - b * 12.5] }; k.prop = 'fork'; break; }
+        case 'drink': { const b = Math.pow(Math.max(0, Math.sin(u * 1.3)), 3);   // the cup up to the mouth, then down again
+          k.arms[0] = { s: A0, e: [3, -16.8], h: [6.5, TB] };
+          k.arms[1] = { s: A1, e: [4.4 - b, -17 - b * 3.5], h: [6.6 - b * 3, TB - 1 - b * 11.5] }; k.prop = 'cup'; k.head[0] -= b * 0.6; break; }
+        case 'phone': k.lean = 0.5; k.head[1] += 1.4; k.head[0] += 0.4;   // looking down at it
+          k.arms[0] = { s: A0, e: [2.2, -15.6], h: [5, -19.2] }; k.arms[1] = { s: A1, e: [3.2, -15.4], h: [5.6, -19.6] }; k.prop = 'phone'; break;
+        case 'read': k.lean = 0.6; k.head[1] += 1.2;
+          k.arms[0] = { s: A0, e: [2.6, -16], h: [5.6, -18.6] }; k.arms[1] = { s: A1, e: [3.4, -15.8], h: [6.4, -18.8] }; k.prop = 'book'; break;
+        case 'chat': { const g = Math.sin(u * 3.1), g2 = Math.abs(Math.sin(u * 2.2));   // talking with their hands
+          k.arms[0] = { s: A0, e: [3, -16.8], h: [6.5, TB] };
+          k.arms[1] = { s: A1, e: [4.2, -17.5 - g2], h: [7 + g * 1.2, -20 - g2 * 3] }; k.head[1] += Math.sin(u * 4) * 0.4; break; }
+        case 'chin': k.lean = 1.6; k.head[0] += 0.8; k.head[1] += 1;   // elbow on the table, chin in the hand
+          k.arms[1] = { s: A1, e: [6.4, TB - 0.5], h: [4.6, -25.5] };
+          k.arms[0] = { s: A0, e: [3.6, -16.8], h: [7, TB] }; break;
+        case 'cross': k.arms[0].h = [4.2, -12.5]; k.arms[1] = { s: A1, e: [3.2, -16.6], h: [6.4, TB] }; k.cross = true; k.legFront = true; break;   // one leg over the other
+        case 'lean': k.lean = -1.1; k.head[0] -= 0.6; k.arms[0].h = [3, -12]; k.arms[1].h = [4.6, -12.2]; break;   // sitting back
+      }
       break;
     }
     case 'lift': {
@@ -145,7 +168,10 @@ function pFit(k, pose, o) {
   const sq = p => [p[0], p[1] * 0.86], by = p => [p[0], bodyY(p[1])];
   const out = { ...k, lift: k.lift * 0.86, legs: k.legs.map(l => ({ h: sq(l.h), k: sq(l.k), f: sq(l.f) })),
     arms: k.arms.map(a => ({ s: by(a.s), e: by(a.e), h: by(a.h) })), top: bodyY(k.top), head: [k.head[0], bodyY(k.head[1]) - 3.2] };
-  if (pose === 'sit' && o.seatH) { out.lift = o.seatH + 1 + HIP_Y; out.legs.forEach(l => { l.k = [l.k[0], -(o.seatH + 1)]; }); }
+  if (pose === 'sit' && o.seatH) {
+    out.lift = o.seatH + 1 + HIP_Y; out.legs.forEach(l => { l.k = [l.k[0], -(o.seatH + 1)]; });
+    if (k.cross) { const sh = o.seatH; out.legs[1] = { h: out.legs[1].h, k: [5.2, -(sh + 3.4)], f: [6.8, -(sh - 2.6)] }; out.legs[0].f = [4.4, 0]; }   // v0.34: the near leg crossed over the far knee
+  }
   const ts = o.ts || 0, A = out.arms;
   if (o.wave || pose === 'wave') { A[1].e[0] += 1.6; A[1].h[0] += 3; }
   if (pose === 'pick') { A[1].e[0] += 2; A[1].h[0] += 4.2; }
@@ -222,7 +248,7 @@ function drawPerson(sx, sy, s, o) {
     if (k.legFront) pPart(() => pLeg(k.legs[1], lift, lean, C));
     unscaled(hx, hy, BD, () => drawHead(hx, hy, L, energy, ts, seed, T, !!o.back, k.sway, !!o.back));
     pPart(() => pArm(B(k.arms[1].s), B(k.arms[1].e), B(k.arms[1].h), C));
-    drawProp(k, ts, B);
+    drawProp(k, ts, B, o.back);
   });
   sleepyZ(sx, sy, s, energy, ts, seed, 40 + air);
 }
@@ -490,8 +516,16 @@ function pArm(sh, el, ha, C, far) {
   else seg(sh, mixPt(sh, el, C.sleeve * 1.6), 3.8, 3.5, sl);
   pEll(ha[0], ha[1], 1.8, 1.8, sk);
 }
-function drawProp(k, ts, B) {
+function drawProp(k, ts, B, back) {
   const hand = i => B(k.arms[i].h);
+  // v0.34: things in your hands at a table (seen from behind, the body hides them)
+  if (k.prop === 'cup' && !back) { const [x, y] = hand(1); ellipse(x + 2.2, y - 1.6, 1.2, 1.4, null, '#d9cfbf', 0.7); rrect(x - 1.5, y - 3.8, 3.4, 4, 0.8, '#fffaf0', INK_COL, 0.5); ellipse(x + 0.2, y - 3.7, 1.6, 0.6, '#6b4428'); }
+  if (k.prop === 'fork') { const [x, y] = hand(1); line(x + 0.4, y - 0.4, x + 2.2, y - 3.6, '#b9c1ca', 0.7); }
+  if ((k.prop === 'phone' || k.prop === 'book') && !back) {
+    const a = hand(0), b = hand(1), m = [(a[0] + b[0]) / 2 + 0.6, (a[1] + b[1]) / 2 - 1.2];
+    if (k.prop === 'phone') { rrect(m[0] - 1.3, m[1] - 2.4, 2.6, 4.2, 0.6, '#2d2d34'); rrect(m[0] - 0.9, m[1] - 2, 1.8, 3.4, 0.4, (Math.floor(ts / 2600) % 3) ? '#8fd3ff' : '#ffd6e8'); }
+    else { pg([[m[0] - 3.4, m[1] - 2.2], [m[0], m[1] - 1.2], [m[0], m[1] + 2.2], [m[0] - 3.4, m[1] + 1.2]], '#fffaf0', '#c9b98f', 0.4); pg([[m[0], m[1] - 1.2], [m[0] + 3.4, m[1] - 2.2], [m[0] + 3.4, m[1] + 1.2], [m[0], m[1] + 2.2]], '#f4ecd8', '#c9b98f', 0.4); line(m[0] - 2.6, m[1] - 0.6, m[0] - 0.6, m[1], 'rgba(0,0,0,.25)', 0.3); line(m[0] + 0.6, m[1], m[0] + 2.6, m[1] - 0.6, 'rgba(0,0,0,.25)', 0.3); }
+  }
   if (k.prop === 'dumbbells') [0, 1].forEach(i => { const [x, y] = hand(i); rrect(x - 2.4, y - 0.8, 4.8, 1.6, 0.6, '#555'); rrect(x - 3, y - 2, 1.4, 4, 0.5, '#333'); rrect(x + 1.6, y - 2, 1.4, 4, 0.5, '#333'); });
   if (k.prop === 'gloves') [0, 1].forEach(i => { const [x, y] = hand(i); circle(x + 0.5, y, 2.4, '#e5373b', INK_COL, 0.6); });
   if (k.prop === 'basket') { const [x, y] = hand(0); rrect(x - 2.5, y - 1, 6, 4, 1.5, '#c8954f', '#9a6a34', 0.5); }

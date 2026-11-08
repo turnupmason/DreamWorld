@@ -820,3 +820,8 @@ body.dark .soc-last { background: #24382a; } body.dark .soc-last.bad { backgroun
 body.dark .mg-box { background: linear-gradient(#27231f, #1f1b18); color: var(--ink); }
 body.dark .mg-how > div, body.dark .mg-say .bubble { background: #2f2a25; }
 body.dark .mg-got span { background: #3a2c1f; }
+
+/* v0.34: the label at the top of the scene can have a button (home furniture: sit / lie down) */
+.tip.has-btn { pointer-events: auto; }
+.tip .grow { min-width: 0; }
+.tip .btn { flex: none; margin-left: 4px; }
