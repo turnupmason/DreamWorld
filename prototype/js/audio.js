@@ -150,6 +150,13 @@ const Sound = (() => {
     crunch: t => [0, 0.09, 0.18].forEach(d => burst(sfx, t + d, 0.05, { vol: 0.08, type: 'highpass', freq: 1500 })),
     sweep: t => burst(sfx, t, 0.4, { vol: 0.07, type: 'bandpass', freq: 3000, q: 0.6, sweep: 0.4 }),
     levelup: t => [523, 659, 784, 1047].forEach((f, i) => tone(sfx, f, t + i * 0.1, 0.5, { type: 'triangle', vol: 0.07 })),
+    // v0.33 ball games: a racket hitting the ball, a bounce, a kick, the net swishing, the rim clanging, people cheering
+    racket: t => { tone(sfx, 540, t, 0.06, { type: 'triangle', vol: 0.12, glide: 0.55 }); burst(sfx, t, 0.05, { vol: 0.08, type: 'bandpass', freq: 2400, q: 1.4 }); },
+    bounce: t => tone(sfx, 170, t, 0.09, { vol: 0.1, glide: 0.5 }),
+    kick: t => { tone(sfx, 120, t, 0.14, { vol: 0.2, glide: 0.4 }); burst(sfx, t, 0.06, { vol: 0.1, type: 'lowpass', freq: 900 }); },
+    swish: t => burst(sfx, t, 0.35, { vol: 0.12, type: 'highpass', freq: 3200, sweep: 0.5 }),
+    clang: t => { tone(sfx, 620, t, 0.45, { type: 'triangle', vol: 0.06 }); tone(sfx, 1475, t, 0.3, { vol: 0.035 }); },
+    cheer: t => { burst(sfx, t, 1.0, { vol: 0.08, type: 'bandpass', freq: 1300, q: 0.5 }); [0.08, 0.2, 0.31, 0.45, 0.58, 0.7].forEach(d => burst(sfx, t + d, 0.04, { vol: 0.06, type: 'highpass', freq: 2200 })); tone(sfx, 784, t, 0.25, { type: 'triangle', vol: 0.05 }); tone(sfx, 1047, t + 0.12, 0.35, { type: 'triangle', vol: 0.05 }); },
   };
 
   return {

@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -151,6 +151,16 @@ P('## 公园（v0.32）');
 P('');
 table(['事情', '多久', '得到'], [['在网球场 / 篮球场 / 足球场边看比赛（每个场地每天一次）', `${D.PARK.watch.sec} 秒`, `娱乐 +${D.PARK.watch.fun}`], ['喂鸭子（每天一次）', `${D.PARK.ducks.sec} 秒`, `娱乐 +${D.PARK.ducks.fun}`],
   ['喷泉边的长椅坐一会儿（每天一次）', `${D.PARK.bench.sec} 秒`, `娱乐 +${D.PARK.bench.fun}`], ['游乐场蹦床（每天一次）', `${D.PARK.play.sec} 秒`, `娱乐 +${D.PARK.play.fun}`], ['冰淇淋车', `${D.PARK.icecream.sec} 秒`, `和美食广场的冰淇淋一样：🪙${D.MALL.foods.icecream.price}，饱腹 +${D.FOOD_FILL.icecream}，娱乐 +${D.NEED_GAIN.sweetFun}`]]);
+P('## 公园球场上的小游戏（v0.33）');
+P('');
+table(['小游戏', '怎么玩', '规则'], [['🎾 网球', '自己会跑过去接球；脚下的圈缩小变绿时往上划回球，左右划定方向，划长打得深', `一局定输赢：15、30、40，先得 ${D.BALL_GAMES.tennis.to} 分赢，40 平时下一分决胜`],
+  ['🏀 投篮比赛', '往上划投篮：划直才准，划多长就投多远', `${D.BALL_GAMES.basketball.spots} 个位置，每人每个位置投 ${D.BALL_GAMES.basketball.shots} 球；进一个 2 分，最后一个位置 3 分`],
+  ['⚽ 点球大战', '踢：往球门划，左右定方向，越长越高；守门：点要扑的地方', `每人 ${D.BALL_GAMES.soccer.kicks} 个，打平再突然死亡最多 ${D.BALL_GAMES.soccer.sudden} 轮，还平就算平局`]]);
+P('');
+table(['什么时候', '得到'], [['每种球今天的第一局（输赢都一样）', `娱乐 +${D.BALL.fun}；和认识的人玩再加社交 +${D.BALL.social}、关系 +${D.BALL.rel}`], ['同一种球再玩', `娱乐 +${D.BALL.againFun}`]]);
+P('');
+P(`对手的球技（0–1）：基础 ${D.BALL.skill.base}，性格「运动迷」+${D.BALL.skill.sporty}，爱好有「运动」+${D.BALL.skill.sport}，最多 0.9；球场上本来在玩的人是 ${D.BALL.skill.court}。关系「有点尴尬」或者对方今天心情很差，会不想玩。不给金币。`);
+P('');
 P('## 和人相处（v0.31，像模拟人生）');
 P('');
 P(`关系值 ${D.REL_LEVELS[0].min} 到 100，不会自己掉。起点：朋友 ${D.REL_START.friend}、家人 ${D.REL_START.family}、同事老板 ${D.REL_START.work}、其他人 ${D.REL_START.other}。`);

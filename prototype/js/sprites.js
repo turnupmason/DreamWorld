@@ -509,6 +509,8 @@ function drawProp(k, ts, B) {
 // ground [dx, dy] (or a number for an older -1..1 turn). Feet, hips and shoulders sit on the ground plane, seen
 // from the camera: walking along a road the body is at 3/4, the shoulders slant, and the feet step along the road
 // (not up and down while the body slides sideways).
+// v0.33 (ball games): o.hands = [left, right] puts a hand where you say (null: it swings as usual), o.air jumps
+// (the shadow stays on the ground), o.after() draws what they hold, in the same frame as the hands.
 function drawPersonFront(sx, sy, s, o, pose) {
   const L = o.look, ts = o.ts || 0, seed = o.seed || 0, energy = o.energy || 'good', back = o.view === 'back';
   // ground directions on screen: F = forwards, V = sideways (to the screen right), both for one step of ~1
@@ -521,13 +523,13 @@ function drawPersonFront(sx, sy, s, o, pose) {
   const T = clamp(F[0] / (Math.hypot(F[0], F[1] * 2) || 1) * 1.15, -1, 1);   // how far the face is turned (for the head)
   const moving = pose !== 'stand', run = pose === 'run', ph = o.phase || 0, sw = moving ? Math.sin(ph) : 0;
   const tired = energy === 'tired' || energy === 'exhausted';
-  const bounce = moving ? Math.abs(Math.cos(ph)) * (run ? 2 : tired ? 0.6 : 1.1) : (energy === 'great' && !o.wave ? Math.max(0, Math.sin(ts / 240 + seed)) * 2.5 : 0);
+  const bounce = moving ? Math.abs(Math.cos(ph)) * (run ? 2 : tired ? 0.6 : 1.1) : (energy === 'great' && !o.wave && !o.hands ? Math.max(0, Math.sin(ts / 240 + seed)) * 2.5 : 0), air = o.air || 0;
   const C = outfitOf(L), stride = run ? 5.2 : 3.6, liftH = run ? 2.6 : 1.6;
   const G = (side, w, fwd) => [side * w * V[0] + fwd * F[0], side * w * V[1] + fwd * F[1]];   // a point on the ground
-  ellipse(sx, sy, 8 * s, 3.4 * s, 'rgba(0,0,0,.18)');
+  ellipse(sx, sy, (8 - Math.min(4, air * 0.3)) * s, (3.4 - Math.min(1.6, air * 0.12)) * s, 'rgba(0,0,0,.18)');
   const BD = bodyOf(L);
   local(sx, sy, s, 1, () => {
-    ctx.translate(0, -bounce);
+    ctx.translate(0, -bounce - air);
     ctx.scale(BD.w, BD.h);   // v0.18: the body's build
     // which side is further from the camera (drawn first)
     const farSide = V[1] < 0 ? 1 : -1, sides = [farSide, -farSide];
@@ -544,6 +546,8 @@ function drawPersonFront(sx, sy, s, o, pose) {
     // arms swing forwards and back, opposite to the legs; a waving arm goes up beside the head
     const shoulder = side => [side * 4.2 * V[0], -16.9 + side * 4.2 * V[1]];
     const arm = side => {
+      const want = o.hands && o.hands[side > 0 ? 1 : 0];
+      if (want) { const shp = shoulder(side), el = mixPt(shp, want, 0.5); el[0] += side * 1.3; el[1] += 1; return pArm(shp, el, want, C, side === farSide); }
       const u = side > 0 ? -sw : sw, shp = shoulder(side), swing = u * (run ? 3.6 : 2.4);
       const hand = [shp[0] + side * 0.9 * V[0] + F[0] * swing, -10.3 + side * 0.9 * V[1] + F[1] * swing - Math.abs(u) * 0.5];
       const el = mixPt(shp, hand, 0.5); el[0] += side * 0.5 * V[0];
@@ -560,6 +564,7 @@ function drawPersonFront(sx, sy, s, o, pose) {
     if (!(o.wave && sides[1] > 0)) pPart(() => arm(sides[1]));
     unscaled(hx, hy, BD, () => drawHead(hx, hy, L, energy, ts, seed, T, back, sw * 0.5, back));
     if (o.wave) pPart(waveArm);
+    if (o.after) o.after();
   });
   sleepyZ(sx, sy, s, energy, ts, seed, 40 + bounce);
 }

@@ -3992,6 +3992,9 @@ const Scene = (() => {
     parkUse(k, secs, done) { return parkUseNow(k, secs, done); },
     parkBusy() { return TOWN_USE ? Math.max(0, Math.ceil((TOWN_USE.until - performance.now()) / 1000)) : 0; },
     parkHas(k) { return mode === 'town' && !!TL.park && !!parkPlan().spots[k]; },
+    // v0.33: the people playing on each court (to play with, and to watch you from the side)
+    parkLooks(k) { return k === 'tennis' ? TENNIS_P : k === 'basketball' ? BALLERS : TEAMS; },
+    courtLook(k) { return k === 'tennis' ? TENNIS_P[1] : k === 'basketball' ? BALLERS[0] : TEAMS[4]; },
     // v0.31: play a social moment with someone: your bubble (e), then theirs (react), for SOCIAL.sec seconds
     socialAnim(id, e, react, wave) { CHAT = { id, t0: performance.now(), until: performance.now() + SOCIAL.sec * 1000 + 600, e, react, wave }; },
     // v0.30: inside a building: sit at / lie on / work out on something for a while, then done(); what you're doing now

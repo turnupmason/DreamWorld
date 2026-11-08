@@ -149,7 +149,7 @@ function syncView() {
   setViewTown(UI.tab === 'world' && UI.wtown ? UI.wtown : myTown());
   if (UI.tab === 'home') Scene.setView(UI.inside ? 'interior' : 'home', 'me');
   else if (sceneTab()) { if (UI.tab === 'town' && UI.inVenue) Scene.setView('shop', UI.inVenue); else if (UI.tab === 'town' && UI.inStore) Scene.setView('shop', UI.inStore === 'mall' ? UI.mallFloor || 'mall' : UI.inStore); else Scene.setView(UI.visit ? (UI.visitInside ? 'interior' : 'home') : 'town', UI.visit || 'me'); }
-  Scene.setVisible(sceneTab());
+  Scene.setVisible(sceneTab() && !Games.isOpen());   // v0.33: not under a ball game
   // each place has its own tune
   const inside = (UI.tab === 'home' && UI.inside) || (UI.visit && UI.visitInside);
   Sound.setScene(UI.tab === 'shop' || UI.inStore || UI.inVenue ? 'shop' : inside ? 'inside' : UI.tab === 'world' && !UI.wtown ? 'world' : (UI.tab === 'town' || UI.tab === 'world') ? (UI.visit ? 'home' : 'town') : 'home');
@@ -998,7 +998,8 @@ const SHEETS = {
       const head2 = `<div class="place-head"><span class="big-emoji">${SPOT_E[key]}</span><div class="grow"><h2>${t('sp_park_' + k)}</h2><p class="muted">${t('sp_park_' + k + '_d')}</p></div></div>`;
       if (!here) return head2 + `<div class="sec-title">${t('pl_go_first')}</div>${goTiles(goTarget({ place: 'park' }))}`;
       if (k === 'cart') { const F = MALL.foods.icecream; return head2 + `<button class="btn primary block gap-top" data-act="parkDo" data-arg="cart" ${S.me.coins >= F.price ? '' : 'disabled'}>🍦 ${t('pk_cart_btn', { n: F.price, h: FOOD_FILL.icecream, f: NEED_GAIN.sweetFun })}</button>`; }
-      return head2 + (parkLeft(k) > 0 ? `<button class="btn primary block gap-top" data-act="parkDo" data-arg="${k}">${SPOT_E[key]} ${t('pk_' + kind + '_btn', { n: PARK[kind].fun })}</button>` : `<p class="muted center gap-top">✅ ${t('sp_done_today')}</p>`);
+      const sport = !!BALL_GAMES[k];   // v0.33: on a court you can play, not just watch
+      return head2 + (sport ? sportBlock(k) : '') + (parkLeft(k) > 0 ? `<button class="btn ${sport ? '' : 'primary'} block gap-top" data-act="parkDo" data-arg="${k}">${sport ? '📣' : SPOT_E[key]} ${t('pk_' + kind + '_btn', { n: PARK[kind].fun })}</button>` : `<p class="muted center gap-top">✅ ${t(sport ? 'pk_watched' : 'sp_done_today')}</p>`);
     }
     const head = `<div class="place-head"><span class="big-emoji">${SPOT_E[key] || placeInfo(v).e}</span><div class="grow"><h2>${t('sp_' + v + '_' + k)}</h2><p class="muted">${t(gymK ? 'sp_gym_d' : 'sp_' + v + '_' + k + '_d', { n: SNACK.price })}</p></div></div>`;
     const go = (act, label, on = true) => `<button class="btn ${on ? 'primary' : ''} block gap-top" data-act="venueDo" data-arg="${v}|${k}|${act}" ${on ? '' : 'disabled'}>${label}</button>`;
@@ -1624,6 +1625,18 @@ const ACT = {
     UI.visit = null; UI.tab = 'town'; syncView(); Sound.play('chime');
     if (wareId) setTimeout(() => Scene.shopGoWare(wareId, () => { openSheet('ware', wareId); refresh(); }), 250);
     else if (!S.shopTip) { S.shopTip = 1; setTimeout(() => snack(`🛒 ${t('shop_tip')}`), 400); }
+  },
+  // v0.33: play tennis / basketball / football with someone: walk over to the court, then the game starts
+  sportGo(arg) {
+    const [k, id] = arg.split('|');
+    if (!BALL_GAMES[k] || Scene.here() !== 'park' || !Scene.parkHas(k)) return;
+    const w = id === 'court' ? { name: t('mg_court_' + k), look: Scene.courtLook(k) } : whoIs(id);
+    if (!w) return;
+    const ok = sportWillPlay(id);
+    if (ok !== 'ok') { Sound.play('oops'); return snack(`${ok === 'grumpy' ? MOOD_E.grumpy : '😬'} ${t('mg_no_' + ok, { name: w.name })}`); }
+    closeSheet();
+    Scene.parkUse(k, 0.5, () => openSport(k, id, w));
+    refresh();
   },
   // v0.32: do something in the park (walk over along the paths first)
   parkDo(k) {
@@ -3070,6 +3083,26 @@ const SPOT_E = { 'park|tennis': '🎾', 'park|basketball': '🏀', 'park|soccer'
   'library|featured': '⭐', 'library|table': '📖', 'gym|treadmill': '🏃', 'gym|spinbike': '🚴', 'gym|dumbbells': '🏋️', 'gym|boxing': '🥊', 'gym|yogamat': '🧘', 'post|boxes': '📬', 'post|cards': '💌',
   'school|desk': '✏️', 'plaza|board': '🏆', 'police|board': '📋', 'firestation|truck': '🚒', 'gas|shelf': '🍫', 'gas|fridge': '🥤' };
 // v0.31: you can do things with someone when you've walked over to them, are round at their home, or work with them
+// v0.33: a ball game on a park court: who you can play with (one of the people on the court, or anyone you know),
+// how good they are, what the first game today gives; then the game itself, and what it gave at the end
+function sportBlock(k) {
+  const first = sportFirstLeft(k), R = sportRec(k);
+  const stars = id => { const s = sportSkill(id); return '⭐'.repeat(s < 0.45 ? 2 : s < 0.6 ? 3 : s < 0.75 ? 4 : 5); };
+  const rows = [{ id: 'court', name: t('mg_court_' + k), look: Scene.courtLook(k), tag: t('mg_court_tag') }]
+    .concat(contacts().map(c => { const w = whoIs(c.id); return w && { id: c.id, name: w.name, look: w.look, tag: relTag(c.id) }; }).filter(Boolean));
+  return `<div class="sec-title">${BALL_GAMES[k].e} ${t('mg_play_' + k)}</div>
+    <p class="muted small">${first ? t('mg_reward_first', { f: BALL.fun, s: BALL.social, r: BALL.rel }) : t('mg_reward_again', { f: BALL.againFun })}</p>
+    <div class="card sport-list">${rows.map(r => `<div class="list-item">${avatar(r.look)}<div class="grow"><b>${esc(r.name)}</b><div class="muted small">${r.tag} · ${t('mg_skill')} <span class="stars">${stars(r.id)}</span></div></div><button class="btn small primary" data-act="sportGo" data-arg="${k}|${r.id}">${t('mg_play_btn')}</button></div>`).join('')}</div>
+    ${R.p ? `<p class="muted small center">${sportRecText(k)}</p>` : ''}`;
+}
+function sportRecText(k) { const R = sportRec(k); return t('mg_rec', { p: R.p, w: R.w }) + (k === 'basketball' && R.best ? ' · ' + t('mg_rec_best', { b: R.best }) : ''); }
+function openSport(k, id, w) {
+  Games.open(k, { id, name: w.name, look: w.look, skill: sportSkill(id) }, res => {
+    const got = sportDone(k, id, res); save();
+    const chips = [got.fun && t('mg_got_fun', { n: got.fun }), got.social && t('mg_got_social', { n: got.social }), got.rel && t('mg_got_rel', { n: got.rel })].filter(Boolean);
+    return `<div class="mg-got">${chips.map(c => `<span>${c}</span>`).join('')}</div>${got.up ? `<p class="center"><b>${got.up.e} ${t('mg_got_up', { lv: nm(got.up) })}</b></p>` : ''}<div class="mg-rec">${sportRecText(k)}</div>`;
+  }, () => refresh());
+}
 function canSocial(id) { return UI.talk === id || UI.visit === id || (!!S.work && String(id).startsWith('work_')); }
 function relTag(id) { const lv = relLevel(relOf(id)); return `${lv.e} ${nm(lv)}`; }
 function snackBtn(key) { return `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${key === 'cafe' ? '☕' : '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`; }

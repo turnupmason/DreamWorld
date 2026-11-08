@@ -2316,6 +2316,30 @@ function dailyText() {
 }
 const unreadTexts = () => Object.entries(S.texts || {}).reduce((n, [id, th]) => n + th.filter(m => !m.me && m.t <= now() && m.t > ((S.textSeen || {})[id] || 0)).length, 0);
 function seeTexts(id) { S.textSeen = S.textSeen || {}; S.textSeen[id] = now(); }
+// ---------- v0.33: ball games in the park ----------
+// how good someone is at sport (0–1), and whether they'll play with you today
+function sportSkill(id) {
+  if (!id || id === 'court') return BALL.skill.court;
+  return Math.min(0.9, BALL.skill.base + (traitsOf(id).includes('sporty') ? BALL.skill.sporty : 0) + (interestsOf(id).includes('sport') ? BALL.skill.sport : 0));
+}
+function sportWillPlay(id) { if (id === 'court') return 'ok'; if (relOf(id) < 0) return 'awkward'; if (moodOf(id) === 'grumpy') return 'grumpy'; return 'ok'; }
+const sportRec = kind => { S.sport = S.sport || {}; return S.sport[kind] = S.sport[kind] || { p: 0, w: 0, best: 0 }; };
+const sportFirstLeft = kind => !(S.chatDay && S.chatDay['sport_' + kind + '@' + today()]);
+// A game is over. res: { won: true / false / null (a draw), me, them }. Returns what it gave.
+function sportDone(kind, id, res) {
+  const R = sportRec(kind), out = { first: onceToday('sport_' + kind) };
+  R.p++; if (res.won) R.w++;
+  if (kind === 'basketball') R.best = Math.max(R.best || 0, res.me || 0);
+  if (!out.first) { addNeed('fun', BALL.againFun); out.fun = BALL.againFun; return out; }
+  addNeed('fun', BALL.fun); out.fun = BALL.fun;
+  if (id && id !== 'court') {
+    addNeed('social', BALL.social); out.social = BALL.social;
+    const before = relLevel(relOf(id)), v = Math.min(100, relOf(id) + BALL.rel);
+    S.rel = S.rel || {}; S.rel[id] = v; out.rel = BALL.rel;
+    const after = relLevel(v); if (after.min > before.min) out.up = after;
+  }
+  return out;
+}
 // ask someone to meet you in the park (once a day); they're there for an hour
 function meetInPark(id) {
   if (!onceToday('meet_' + id)) return 'done';

@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.32.0';
+const VERSION = '0.33.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -1147,6 +1147,19 @@ const SICK = { base: 0.03, overwork: 0.08, overworkDays: 5, lowSleep: 0.06, lowS
 // Things to do in the park (each once a day; the ice-cream cart is the food court's ice cream): watch a game on a
 // court or the pitch and cheer, feed the ducks, sit on a bench, bounce on the trampoline. sec: how long it takes.
 const PARK = { watch: { fun: 6, sec: 8 }, ducks: { fun: 8, sec: 8 }, bench: { fun: 4, sec: 10 }, play: { fun: 6, sec: 8 }, icecream: { sec: 5 } };
+// v0.33: ball games you really play on the park's courts, with a friend (or one of the people already playing there).
+// Tennis: one game, scored 15 / 30 / 40: the first to `to` points wins (at 40–40 the next point wins). Basketball: `spots` places round the hoop, `shots` each from every place, two points a
+// basket (three from the last place). Football: `kicks` penalties each, then up to `sudden` rounds of sudden death.
+const BALL_GAMES = {
+  tennis:     { e: '🎾', to: 4 },
+  basketball: { e: '🏀', spots: 5, shots: 2 },
+  soccer:     { e: '⚽', kicks: 5, sudden: 3 },
+};
+// What a game gives, win or lose (it's about playing together): the first game of each sport each day gives fun, and
+// with someone you know also social and friendship; after that each game still gives a little fun.
+// skill (0–1): how good the other player is: a base, more if they're sporty or love sport; the people on the court are
+// about average. Someone won't play if things are awkward between you, or if they're in a grumpy mood today.
+const BALL = { fun: 20, social: 10, rel: 4, againFun: 4, skill: { base: 0.4, sporty: 0.25, sport: 0.15, court: 0.5 } };
 // ---------- getting along with people, like The Sims (v0.31) ----------
 // Friendship with each person runs from -30 to 100; where it starts depends on who they are. It never wears off
 // by itself (no pressure), and a failed joke only costs a little.
