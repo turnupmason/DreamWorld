@@ -105,7 +105,41 @@ function skeleton(pose, o) {
           k.arms[0] = { s: A0, e: [3.6, -16.8], h: [7, TB] }; break;
         case 'cross': k.arms[0].h = [4.2, -12.5]; k.arms[1] = { s: A1, e: [3.2, -16.6], h: [6.4, TB] }; k.cross = true; k.legFront = true; break;   // one leg over the other
         case 'lean': k.lean = -1.1; k.head[0] -= 0.6; k.arms[0].h = [3, -12]; k.arms[1].h = [4.6, -12.2]; break;   // sitting back
+        case 'type': { const a = Math.sin(ts / 120 + seed) * 0.5; k.lean = 0.9; k.head[1] += 0.6; k.arms[0] = { s: A0, e: [3.2, -16.6], h: [6.6 + a, TB] }; k.arms[1] = { s: A1, e: [3.8, -16.6], h: [7.2 - a, TB] }; break; }   // v0.36: at a computer
       }
+      break;
+    }
+    // v0.36: more ways to work out, and to be busy at work
+    case 'squat': {   // a barbell across the shoulders: down, and up again
+      const u = (1 - Math.cos(ts / 520 + seed)) / 2;   // 0 standing, 1 at the bottom
+      k.lift = -u * 5; k.lean = 0.6 + u * 1.6;
+      k.legs[0] = { h: [-1.4, -10], k: [-1.4 + u * 5, -5 - u * 1.5], f: [-2, 0] };
+      k.legs[1] = { h: [1.4, -10], k: [1.4 + u * 5.5, -5 - u * 1.2], f: [1.8, 0] };
+      k.arms[0] = { s: k.arms[0].s, e: [-2.2, -21], h: [-0.6, -24.5] };
+      k.arms[1] = { s: k.arms[1].s, e: [2.6, -21.5], h: [0.8, -24.8] };
+      k.prop = 'barbell';
+      break;
+    }
+    case 'ropes': {   // battle ropes: knees bent, arms whipping up and down in turn
+      const a = Math.sin(ts / 95 + seed);
+      k.lift = -3; k.lean = 1.4;
+      k.legs[0] = { h: [-1.6, -10], k: [1.2, -5.5], f: [-2.6, 0] }; k.legs[1] = { h: [1.6, -10], k: [4.6, -5.2], f: [3.2, 0] };
+      k.arms[0] = { s: k.arms[0].s, e: [3, -16 + a], h: [7, -14 + a * 3.5] };
+      k.arms[1] = { s: k.arms[1].s, e: [3.6, -16 - a], h: [7.6, -14 - a * 3.5] };
+      break;
+    }
+    case 'work': {   // busy at a counter or a table: hands out in front, moving (kneading, making coffee, sorting post)
+      const a = Math.sin(ts / 260 + seed), b = Math.sin(ts / 340 + seed * 2);
+      k.lean = 0.8; k.head[1] += 0.8;
+      k.arms[0] = { s: k.arms[0].s, e: [2.6, -17.5], h: [6.4 + a * 0.8, -19.5 + b * 0.8] };
+      k.arms[1] = { s: k.arms[1].s, e: [3.4, -17.5], h: [7 - a * 0.8, -19.8 - b * 0.8] };
+      break;
+    }
+    case 'row': {   // on a rowing machine (o.seatH is the low seat): the legs push, then the arms pull
+      const u = (1 - Math.cos(ts / 480 + seed)) / 2, arm = Math.max(0, u * 1.6 - 0.6);   // u 0: the catch, 1: the finish
+      k.lean = 1.6 - u * 2.6; k.rowU = u;
+      k.arms[0] = { s: k.arms[0].s, e: [5 - arm * 6, -15 - arm * 1.5], h: [9.5 - arm * 6, -12.5 - arm * 5] };
+      k.arms[1] = { s: k.arms[1].s, e: [5.6 - arm * 6, -15 - arm * 1.5], h: [10 - arm * 6, -12.8 - arm * 5] };
       break;
     }
     case 'lift': {
@@ -171,6 +205,11 @@ function pFit(k, pose, o) {
   if (pose === 'sit' && o.seatH) {
     out.lift = o.seatH + 1 + HIP_Y; out.legs.forEach(l => { l.k = [l.k[0], -(o.seatH + 1)]; });
     if (k.cross) { const sh = o.seatH; out.legs[1] = { h: out.legs[1].h, k: [5.2, -(sh + 3.4)], f: [6.8, -(sh - 2.6)] }; out.legs[0].f = [4.4, 0]; }   // v0.34: the near leg crossed over the far knee
+  }
+  if (pose === 'row' && o.seatH) {   // v0.36: hips on the low seat, feet on the foot plates, knees up at the catch and long at the finish
+    const sh = o.seatH, u = k.rowU || 0;
+    out.lift = sh + 1 + HIP_Y;
+    out.legs = [{ h: out.legs[0].h, k: [3.4 + u * 1.2, -(sh + 4.5 - u * 3.3)], f: [7.5, -(sh - 1.5)] }, { h: out.legs[1].h, k: [3.9 + u * 1.2, -(sh + 4.8 - u * 3.3)], f: [8, -(sh - 1.5)] }];
   }
   const ts = o.ts || 0, A = out.arms;
   if (o.wave || pose === 'wave') { A[1].e[0] += 1.6; A[1].h[0] += 3; }
@@ -520,6 +559,7 @@ function drawProp(k, ts, B, back) {
   const hand = i => B(k.arms[i].h);
   // v0.34: things in your hands at a table (seen from behind, the body hides them)
   if (k.prop === 'cup' && !back) { const [x, y] = hand(1); ellipse(x + 2.2, y - 1.6, 1.2, 1.4, null, '#d9cfbf', 0.7); rrect(x - 1.5, y - 3.8, 3.4, 4, 0.8, '#fffaf0', INK_COL, 0.5); ellipse(x + 0.2, y - 3.7, 1.6, 0.6, '#6b4428'); }
+  if (k.prop === 'barbell') { const [x, y] = B(k.arms[1].s), px = x - 4.2, py = y - 1.6; line(px - 2, py, x + 1.5, py, '#9aa3ad', 1.2); circle(px, py, 5, '#2d2d34', INK_COL, 0.5); circle(px, py, 2, '#5b6470'); circle(px, py, 0.8, '#9aa3ad'); }   // on the upper back, behind the neck   // v0.36
   if (k.prop === 'fork') { const [x, y] = hand(1); line(x + 0.4, y - 0.4, x + 2.2, y - 3.6, '#b9c1ca', 0.7); }
   if ((k.prop === 'phone' || k.prop === 'book') && !back) {
     const a = hand(0), b = hand(1), m = [(a[0] + b[0]) / 2 + 0.6, (a[1] + b[1]) / 2 - 1.2];
