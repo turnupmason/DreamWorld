@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.34.0';
+const VERSION = '0.35.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -34,7 +34,10 @@ const BOSS_NAMES = [{ zh: '赵经理', en: 'Ms. Zhao' }, { zh: '孙店长', en: 
 // Bank: savings earn a little every day (on up to interestCap). Loans for a car or a house: pay a fifth now, the rest
 // (plus a flat fee) comes off in equal payments once a day; if you can't pay, nothing is taken away, you just can't
 // borrow again until you catch up.
-const BANK = { rate: 0.002, interestCap: 50000, down: 0.2, car: { days: 14, fee: 0.08 }, house: { days: 30, fee: 0.12 }, maxLoans: 2 };
+// v0.35: like a real bank. Savings earn 4% a year. A mortgage is 5% down, 30 years at 6.5% a year; a car loan 10% down,
+// 5 years at 7%; paid a little every day. All your loans together may take at most 40% of what you earned a day on
+// average over the last 7 days (dti). Short on a payment? Nothing is taken away; no new loans until you catch up.
+const BANK = { rate: 0.04, interestCap: 1e12, down: { car: 0.1, house: 0.05 }, car: { years: 5, apr: 0.07 }, house: { years: 30, apr: 0.065 }, dti: 0.4, maxLoans: 2 };
 // Stocks: six companies in town. Prices move every 15 minutes (the same for everyone, worked out from the time),
 // swing around a slowly rising trend, and buying or selling costs 1%.
 const STOCKS = {
@@ -500,9 +503,9 @@ const APPS = [
 ];
 // Longer offline stretches pay more than the sum of short ones. Not affected by energy.
 const FOCUS_REWARD = {
-  30: { coins: 15, wood: 2 },
-  60: { coins: 35, wood: 5 },
-  120: { coins: 80, wood: 12, seeds: { sunflower: 1 } },
+  30: { coins: 25, wood: 2 },
+  60: { coins: 50, wood: 5 },
+  120: { coins: 120, wood: 12, seeds: { sunflower: 1 } },
 };
 
 // ---------- real life: Apple Health ----------
@@ -513,18 +516,19 @@ const ENERGY_LEVELS = [ // highest first
   { id: 'tired',     min: 50, mult: 0.75 },
   { id: 'exhausted', min: 0,  mult: 0.5 },
 ];
-const STEP_REWARD = { coins: 10, wood: 1 };   // per sixth of YOUR step goal (1,000 steps at a 6,000 goal), wheelchair pushes count
+const STEP_REWARD = { coins: 15, wood: 1 };   // per sixth of YOUR step goal (1,000 steps at a 6,000 goal), wheelchair pushes count
 const STEP_BLOCKS_MAX = 9;                     // paid up to 150 % of your goal, so a marathoner doesn't out-earn a beginner
 const STEP_GOAL_RANGE = [3000, 12000];         // your goal = 110 % of your last 7 days' average, rounded to 500
 const WORKOUT_PAY_MAX = 90;                    // workout minutes paid per day
-const GOAL_REWARD = { coins: 20, wood: 3, seeds: { pumpkin: 1 } };
+const WORKOUT_PAY = 1.8;                       // v0.35: $ per workout minute (energy multiplies it)
+const GOAL_REWARD = { coins: 30, wood: 3, seeds: { pumpkin: 1 } };
 const RINGS = { move: 500, exercise: 30, stand: 12 };          // kcal, minutes, hours
 const RING_REWARD = {
-  move: { coins: 25, wood: 3 }, exercise: { coins: 25, wood: 3 }, stand: { coins: 15, wood: 2 },
-  all: { coins: 40, wood: 5, seeds: { rose: 1 } },
+  move: { coins: 40, wood: 3 }, exercise: { coins: 40, wood: 3 }, stand: { coins: 25, wood: 2 },
+  all: { coins: 60, wood: 5, seeds: { rose: 1 } },
 };
-const SLEEP_REWARD = { coins: 20, seeds: { tulip: 1 } };       // for a sleep score of 80+
-const MINDFUL_REWARD = 5;                                       // coins per mindful minute, up to 10 a day
+const SLEEP_REWARD = { coins: 30, seeds: { tulip: 1 } };       // for a sleep score of 80+
+const MINDFUL_REWARD = 8;                                       // coins per mindful minute, up to 10 a day
 const WORKOUTS = {
   walk:     { e: '🚶', zh: '户外步行', en: 'Outdoor walk', kcal: 5 },
   run:      { e: '🏃', zh: '跑步',     en: 'Run',          kcal: 11 },
@@ -561,7 +565,7 @@ const FRIEND_PRESETS = [
     furn: [['sofa', '#5aa2e0'], 'tv', ['rug', '#f3d36b'], 'monstera', 'lamp', 'piano', 'fridge', 'kitchen', 'table', 'chair'],
     furn2: [['bed', '#e88bb7'], 'nightstand', 'shelf', 'wardrobe', ['yogamat', '#e88bb7'], 'plant', 'moonlamp'], up2: [4, 1],
     yard: ['flowers', 'flowers', 'tree', 'lamp', 'bench', 'beehive'],
-    coins: 2400, wood: 40, likes: 20, shareGoal: true, shareLive: true, shareMood: true, earn: 30 },
+    coins: 24000, wood: 40, likes: 20, shareGoal: true, shareLive: true, shareMood: true, earn: 10 },
   { id: 'wang', name: { zh: '小王', en: 'Leo' }, slot: 7,
     look: { shirt: '#4f8ef7', skin: SKINS[2], hair: 'short', hairCol: '#1d1a17', mob: 'walk', body: 'broad', top: 'hoodie', bottom: 'jeans', shoes: 'hightops', shoeCol: '#e5484d', hat: 'cap', hatCol: '#2d2d2d' },
     house: 2, wall: '#f4e7cc', roof: '#3e7cc9', floor: 1, roomWall: 1,
@@ -571,7 +575,7 @@ const FRIEND_PRESETS = [
     cars: [['motorcycle', '#2d2d2d']],
     furn: [['bed', '#5aa2e0'], 'table', 'chair', 'chair', 'shelf', 'stove', 'treadmill', 'dumbbells'],
     yard: ['pine', 'bbq', 'doghouse'],
-    coins: 900, wood: 20, likes: 12, shareGoal: true, shareLive: true, shareMood: false, earn: 22 },
+    coins: 9000, wood: 20, likes: 12, shareGoal: true, shareLive: true, shareMood: false, earn: 8 },
   { id: 'mia', name: { zh: 'Mia', en: 'Mia' }, slot: 4,
     look: { shirt: '#f2a33a', skin: SKINS[1], hair: 'bun', hairCol: '#b5462e', mob: 'wheel', body: 'round', top: 'sweater', bottom: 'jeans', shoes: 'sneakers', hat: 'beanie', hatCol: '#38a3e0' },
     house: 1, wall: '#c99a6b', roof: '#4f9a4b', floor: 4, roomWall: 2,
@@ -579,10 +583,10 @@ const FRIEND_PRESETS = [
     pastureLv: 0, animals: [['cat', 2]], orchardLv: 0, trees: [], pondLv: 0, cars: [['scooter', '#34b27b']],
     furn: [['sleepbag', '#6cbf73'], 'plant', 'monstera', ['yogamat', '#8b7fe0'], 'lamp', 'easel', 'record'],
     yard: ['flowers', 'flowers', 'flowers', 'gnome', 'hedge', 'birdbath', 'arch'],
-    coins: 380, wood: 12, likes: 5, shareGoal: false, shareLive: false, shareMood: false, earn: 18 },
+    coins: 3800, wood: 12, likes: 5, shareGoal: false, shareLive: false, shareMood: false, earn: 6 },
 ];
 const POOL_BASE = { house: 0, wall: '#f4e7cc', floor: 0, roomWall: 0, fieldLv: 0, crops: [], ripe: [], pastureLv: 0, animals: [],
-  orchardLv: 0, trees: [], pondLv: 0, cars: [], yard: [], coins: 120, wood: 5, likes: 0, earn: 20 };
+  orchardLv: 0, trees: [], pondLv: 0, cars: [], yard: [], coins: 1500, wood: 5, likes: 0, earn: 7 };
 const FRIEND_POOL = [
   { ...POOL_BASE, id: 'chen', name: { zh: '阿晨', en: 'Noah' }, look: { shirt: '#2fb67c', skin: SKINS[3], hair: 'curly', hairCol: '#1d1a17', mob: 'walk' }, roof: '#2fb67c', furn: [['sleepbag', '#5aa2e0']], shareGoal: true, shareLive: true },
   { ...POOL_BASE, id: 'yu', name: { zh: '小雨', en: 'Zoe' }, look: { shirt: '#8b6cf0', skin: SKINS[0], hair: 'long', hairCol: '#6b4226', mob: 'walk' }, roof: '#8b6cf0', furn: [['sleepbag', '#e88bb7']], shareGoal: false },
@@ -1116,15 +1120,15 @@ const WEATHER_FARM = { rainGrow: 0.25, flood: { heavy: 0.12, storm: 0.25 }, floo
 // bit less; finish shifts and the boss likes you more; at 30 and 70 you're promoted (more pay per hour).
 // (Since v0.14 coins also come from work and from selling at the market; wood still only from real life.)
 const JOBS = {
-  bakery:  { zh: '面包店店员', en: 'Bakery assistant', wage: 12, from: 7, to: 15 },
-  cafe:    { zh: '咖啡师', en: 'Barista', wage: 11, from: 8, to: 16 },
-  market:  { zh: '超市收银员', en: 'Cashier', wage: 11, from: 9, to: 18 },
-  library: { zh: '图书管理员', en: 'Librarian', wage: 10, from: 9, to: 17 },
-  post:    { zh: '邮递员', en: 'Postal worker', wage: 12, from: 8, to: 16 },
-  gym:     { zh: '健身教练', en: 'Fitness coach', wage: 14, from: 10, to: 19 },
-  clinic:  { zh: '诊所护士', en: 'Clinic nurse', wage: 16, from: 9, to: 18 },
+  bakery:  { zh: '面包店店员', en: 'Bakery assistant', wage: 16, from: 7, to: 15 },   // v0.35: real US hourly pay
+  cafe:    { zh: '咖啡师', en: 'Barista', wage: 17, from: 8, to: 16 },
+  market:  { zh: '超市收银员', en: 'Cashier', wage: 16, from: 9, to: 18 },
+  library: { zh: '图书管理员', en: 'Librarian', wage: 24, from: 9, to: 17 },
+  post:    { zh: '邮递员', en: 'Postal worker', wage: 23, from: 8, to: 16 },
+  gym:     { zh: '健身教练', en: 'Fitness coach', wage: 26, from: 10, to: 19 },
+  clinic:  { zh: '诊所护士', en: 'Clinic nurse', wage: 40, from: 9, to: 18 },
 };
-const JOB_RANKS = [{ zh: '新人', en: 'Newcomer', at: 0, pay: 1 }, { zh: '熟手', en: 'Skilled', at: 30, pay: 1.3 }, { zh: '主管', en: 'Supervisor', at: 70, pay: 1.7 }];
+const JOB_RANKS = [{ zh: '新人', en: 'Newcomer', at: 0, pay: 1 }, { zh: '熟手', en: 'Skilled', at: 30, pay: 1.2 }, { zh: '主管', en: 'Supervisor', at: 70, pay: 1.45 }];
 const JOB_REL = { finish: 4, quit: -6, max: 100 };
 // ---------- getting sick (v0.14) ----------
 // Each new day there's a small chance your townie falls ill: more after many work days in a row or a poor night's
@@ -1340,29 +1344,79 @@ const EXCLUSIVES = [
   ['pet', 'collie'], ['animal', 'rainbowalpaca'],
 ];
 
-// ---------- v0.23: prices (the reasoning and the sums are in docs/数值平衡.md) ----------
-// A regular player earns about 🪙500 and 🪵25 a day (real life about 250, a work shift about 100, the farm about
-// 150). Big things should take weeks to months, not days: a cabin in 2–3 days, a two-storey house in about three
-// weeks, a mansion in about four months, the castle in about eight; the first car in about a week, a supercar in
-// about four months. Farming (seeds, saplings, animals) keeps its own balance and isn't changed.
-const PRICE_X = { house: 5, houseWood: 2.5, car: 3, furn: 2.5, yard: 2.5, excl: 3, farmLand: 2, farmWood: 1.5, parcel: 2.5, garage: 1.5, clothes: 2.5, pet: 2, petfood: 1.5 };
+// ---------- v0.35: prices in US dollars (Mason #26, D202; the sums are in docs/数值平衡.md) ----------
+// One coin is one US dollar, and things cost what they cost in the north-east of the US (the suburbs of New York,
+// New Jersey, Boston): a coffee about $6, a cinema ticket $15, a small car $23,000, a two-storey house $450,000.
+// Jobs pay real hourly wages; real life (steps, rings, sleep, less phone, workouts) pays on top of that, so a regular
+// player makes about $550 a day, some $17,000 a month: about three times the average US pay. Houses are bought with a
+// mortgage (5% down, 30 years) and cars with a car loan (10% down, 5 years), like in real life (see BANK).
+// The coin prices written in the tables above are the old (v0.22) ones; the real ones are set here. Wood (only from
+// real life) keeps the v0.23 amounts.
 const nicePrice = n => (!n ? n : n < 100 ? Math.max(5, Math.round(n / 5) * 5) : (() => { const q = Math.pow(10, Math.floor(Math.log10(n)) - 1); return Math.round(n / q) * q; })());
-(function rebalance() {
-  const X = PRICE_X, mul = (c, k, kw) => { if (!c) return c; if (c.coins) c.coins = nicePrice(c.coins * k); if (c.wood) c.wood = nicePrice(c.wood * (kw || 1)); return c; };
-  HOUSES.forEach(H => mul(H.cost, X.house, X.houseWood));
-  Object.values(CARS).forEach(c => mul(c.cost, X.car));
-  Object.values(FURN).forEach(d => { if (d.price) d.price = nicePrice(d.price * (d.excl || d.award ? X.excl : X.furn)); });
-  Object.values(YARD).forEach(d => { if (d.price) d.price = nicePrice(d.price * (d.excl || d.award ? X.excl : X.yard)); });
-  for (let i = 1; i < FIELD_COST.length; i++) mul(FIELD_COST[i], X.farmLand, X.farmWood);
-  [PASTURE, ORCHARD, POND].forEach(L => L.forEach(l => l && mul(l.cost, X.farmLand, X.farmWood)));
-  GARAGE.forEach(g => g && mul(g.cost, X.garage, X.garage));
-  Object.values(CLOTHES).forEach(c => { if (c.price) c.price = nicePrice(c.price * X.clothes); });
-  Object.values(PET_BREEDS).forEach(B => { if (B.price) B.price = nicePrice(B.price * (B.excl ? X.excl : X.pet)); });
-  Object.values(PET_FOOD).forEach(f => { f.price = nicePrice(f.price * X.petfood); });
-  LAND.parcel = nicePrice(LAND.parcel * X.parcel); LAND.move = nicePrice(LAND.move * X.parcel);
-  FLOOR_BUILD.coinsPerTile = 100; FLOOR_BUILD.woodPerTile = 1.6;
-  MALL.movie = 45; MALL.claw = 20; Object.entries({ burger: 35, noodles: 30, pizza: 40, sushi: 55, boba: 18, icecream: 15 }).forEach(([k, v]) => { MALL.foods[k].price = v; });
-  Object.keys(MALL.plush).forEach(k => { FURN[k].value = 60; });
-  SCHOOL.fee = 200; POLICE.bail = 400; POLICE.fineMin = 150; POLICE.fineMax = 800;
-  TOWN_LEVELS.forEach((v, i) => { TOWN_LEVELS[i] = v * 4; });
+const USD = {
+  // homes, in the order of HOUSES: tent, cabin, small bungalow, two-storey, modern villa, garden villa, Chinese
+  // courtyard, mansion, castle, cottage, A-frame, farmhouse, ranch, Cape Cod, colonial, craftsman, Spanish villa,
+  // Tudor, beach house, brownstone, glass house, Victorian, mountain lodge
+  house: [0, 85000, 240000, 450000, 850000, 950000, 1800000, 5000000, 15000000, 280000, 320000, 520000, 480000, 500000, 650000, 700000, 1100000, 1200000, 1500000, 2500000, 2800000, 2200000, 3500000],
+  car: { bike: 600, scooter: 1500, vespa: 5500, motorcycle: 9000, sportbike: 16000, mini: 23000, sedan: 29000, convertible: 48000, pickup: 45000, suv: 38000, jeep: 42000,
+    sports: 95000, tractor: 35000, camper: 160000, luxury: 75000, muscle: 55000, supercar: 280000, minivan: 40000, boxtruck: 65000, champcar: 150000, goldbike: 3000 },
+  garage: [0, 5000, 18000, 35000, 60000, 120000],
+  drive: { long: 4000, curve: 9000, double: 7000, triple: 12000 },
+  furn: { sleepbag: 60, bed: 900, nightstand: 150, wardrobe: 600, sofa: 1200, armchair: 450, beanbag: 150, rocker: 350, coffeetable: 250, table: 600, chair: 90,
+    desk: 1500, lamp: 120, tv: 800, shelf: 200, plant: 40, monstera: 80, rug: 250, fridge: 1800, stove: 1200, kitchen: 3500, washer: 900, bathtub: 1500,
+    treadmill: 1800, spinbike: 1400, dumbbells: 600, boxing: 250, yogamat: 40, guitar: 400, drums: 1000, record: 300, easel: 120, cattree: 150, grandclock: 1200,
+    aquarium: 700, fireplace: 3000, piano: 6000, singlebed: 400, bunkbed: 600, tablelamp: 200, arclamp: 250, roundrug: 180, bigrug: 450, roundtable: 350,
+    sidetable: 120, petbowl: 30, litterbox: 60, petbed: 80 },
+  furnValue: { plush: 25, bigteddy: 150, poster: 20 },   // won or given, not sold: what they add to your home's worth
+  yard: { flowers: 150, hedge: 60, tree: 400, pine: 300, lamp: 250, bench: 300, gnome: 40, birdbath: 120, scarecrow: 80, beehive: 500, doghouse: 350, well: 1500,
+    campfire: 300, bbq: 600, picnic: 500, swing: 800, hammock: 300, slide: 700, trampoline: 500, arch: 250, windmill: 2000, fountain: 3000, pool: 50000,
+    // trophy exclusives (you also need the trophy)
+    walkerstatue: 5000, goldginkgo: 6000, triumph: 60000, ringfountain: 12000, ringgarden: 15000, ringtower: 40000, finisharch: 10000, dolphinfountain: 18000,
+    cabin: 35000, zengarden: 12000, podium: 8000, stage: 15000, court: 30000, igloo: 10000, flame: 9000 },
+  statue: 8000, medal: 6000,   // every sport's golden statue; every award's medal sculpture
+  clothes: { polo: 35, hoodie: 55, sweater: 65, jacket: 120, dress: 80, shorts: 30, skirt: 45, hightops: 90, boots: 140, sandals: 35, cap: 25, beanie: 25, sunhat: 35 },
+  pet: { shiba: 2500, corgi: 2000, golden: 2000, husky: 1200, poodle: 1800, tabby: 150, black: 150, white: 300, calico: 200, ragdoll: 1500, collie: 3000 },
+  petfood: { dogfood: 45, catfood: 35, treats: 12 },
+  // the farm: [seed packet, sell price of one unit (a bunch, a bag, a box, one melon…), units per plot]
+  crop: { wheat: [3, 2, 6], carrot: [3, 3, 4], potato: [4, 5, 3], onion: [5, 4, 4], garlic: [5, 3, 6], cabbage: [6, 4, 5], broccoli: [5, 4, 5], sweetpotato: [6, 6, 4],
+    tomato: [8, 4, 6], cucumber: [6, 2, 13], eggplant: [7, 3, 9], chili: [8, 3, 10], corn: [8, 5, 6], pepper: [10, 2, 18], strawberry: [15, 5, 9], blueberry: [14, 6, 8],
+    watermelon: [20, 8, 8], grape: [20, 6, 10], melon: [22, 6, 12], tulip: [18, 12, 5], rose: [25, 25, 3], sunflower: [20, 10, 7], pumpkin: [36, 9, 12] },
+  sapling: { apple: 50, pear: 60, orange: 70, lemon: 60, peach: 70, cherry: 90 },
+  // animals: [a baby, sold as a baby / young / adult, a baby every n-th time]
+  animal: { chicken: [25, [8, 15, 25], 4], duck: [30, [10, 18, 30], 4], rabbit: [40, [15, 25, 40], 1], sheep: [300, [80, 180, 300], 5], goat: [350, [90, 200, 350], 5],
+    pig: [250, [70, 150, 250], 4], cow: [1500, [400, 900, 1500], 8], alpaca: [2000, [600, 1200, 2000], 8], dog: [800, [300, 500, 800], 0], cat: [150, [50, 100, 150], 0],
+    rainbowalpaca: [20000, [5000, 10000, 20000], 8] },
+  // one unit: a carton of eggs, a bag of wool, a churn of milk, a jar of honey, a bag of apples…
+  goods: { egg: 5, duckegg: 7, wool: 25, goatmilk: 12, truffle: 60, milk: 20, alpacawool: 60, honey: 12, fish: 8, bread: 8, shrimp: 12, koi: 40,
+    apple: 5, pear: 6, orange: 6, lemon: 5, peach: 7, cherry: 8 },
+  field: [0, 800, 2000, 4000], pasture: [0, 2500, 6000, 12000], orchard: [0, 1500, 3500, 6000], pond: [0, 8000, 18000],
+  // town and life
+  floorTile: 3000, parcel: 40000, move: 3000,
+  mall: { movie: 15, claw: 2, burger: 14, noodles: 15, pizza: 18, sushi: 22, boba: 7, icecream: 6 },
+  snack: 6, medicine: 30, school: 120, fineMin: 250, fineMax: 1000, bail: 500, stealFine: [20, 150],
+  townLevels: [0, 400000, 1000000, 3000000, 8000000],   // the whole street's worth (you and your friends)
+};
+(function usdPrices() {
+  const X = USD, set = (c, v) => { if (c) c.coins = v; };
+  HOUSES.forEach((H, i) => { set(H.cost, X.house[i]); if (H.cost && H.cost.wood) H.cost.wood = nicePrice(H.cost.wood * 2.5); });   // (wood ×2.5 since v0.23)
+  Object.entries(CARS).forEach(([k, c]) => set(c.cost, X.car[k]));
+  GARAGE.forEach((g, i) => { if (g) { set(g.cost, X.garage[i]); g.cost.wood = nicePrice(g.cost.wood * 1.5); } });
+  Object.entries(X.drive).forEach(([k, v]) => { DRIVES[k].cost = v; });
+  Object.entries(FURN).forEach(([k, d]) => { if (X.furn[k]) d.price = X.furn[k]; if (d.plush) d.value = k === 'bigteddy' ? X.furnValue.bigteddy : X.furnValue.plush; if (d.poster) d.value = X.furnValue.poster; });
+  Object.entries(YARD).forEach(([k, d]) => { if (X.yard[k]) d.price = X.yard[k]; else if (k.startsWith('st_')) d.price = X.statue; else if (k.startsWith('aw_')) d.price = X.medal; });
+  Object.entries(CLOTHES).forEach(([k, c]) => { if (X.clothes[k]) c.price = X.clothes[k]; });
+  Object.entries(PET_BREEDS).forEach(([k, B]) => { if (X.pet[k]) B.price = X.pet[k]; });
+  Object.entries(PET_FOOD).forEach(([k, f]) => { f.price = X.petfood[k]; });
+  Object.entries(X.crop).forEach(([k, [seed, sell, y]]) => Object.assign(CROPS[k], { seed, sell, yield: y }));
+  Object.entries(X.sapling).forEach(([k, v]) => { TREES[k].price = v; });
+  Object.entries(X.animal).forEach(([k, [price, sell, be]]) => Object.assign(ANIMALS[k], { price, sell }, ANIMALS[k].babyEvery ? { babyEvery: be } : {}));
+  Object.entries(X.goods).forEach(([k, v]) => { GOODS[k].sell = v; });
+  const farm = (L, V) => L.forEach((l, i) => { if (!l || !i) return; const c = l.cost || l; c.coins = V[i]; if (c.wood) c.wood = nicePrice(c.wood * 1.5); });
+  farm(FIELD_COST, X.field); farm(PASTURE, X.pasture); farm(ORCHARD, X.orchard); farm(POND, X.pond);
+  FLOOR_BUILD.coinsPerTile = X.floorTile; FLOOR_BUILD.woodPerTile = 1.6;
+  LAND.parcel = X.parcel; LAND.move = X.move;
+  MALL.movie = X.mall.movie; MALL.claw = X.mall.claw; Object.keys(MALL.foods).forEach(k => { MALL.foods[k].price = X.mall[k]; });
+  SNACK.price = X.snack; SICK.medicine = X.medicine; SCHOOL.fee = X.school;
+  POLICE.fineMin = X.fineMin; POLICE.fineMax = X.fineMax; POLICE.bail = X.bail; STEAL_FINE[0] = X.stealFine[0]; STEAL_FINE[1] = X.stealFine[1];
+  X.townLevels.forEach((v, i) => { TOWN_LEVELS[i] = v; });
 })();

@@ -2857,7 +2857,7 @@ const Scene = (() => {
       else { const b = box(x, y, w.w, 0.4, 42, '#2d2540', 0, { top: '#3b3152' }); wallRect(b.left, 0, 0.15, 0.85, 0, 28, '#1b1530', '#f2c230', 1.6); const p2 = wallPt(b.left, 0, 0.5, 36); emoji('🎬', p2.x, p2.y, 11 * z); }
     }
     const f0 = iso(x + w.w / 2, y + w.d);
-    if (w.price && z > 0.5 && w.kind !== 'act') pill(`🪙${fmtNum(w.price)}`, f0.x, f0.y + 9 * z, 'rgba(255,253,248,.92)', '#6b4a1f', `800 ${Math.max(8, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(13, 15 * z));
+    if (w.price && z > 0.5 && w.kind !== 'act') pill(`🪙${fmtPrice(w.price)}`, f0.x, f0.y + 9 * z, 'rgba(255,253,248,.92)', '#6b4a1f', `800 ${Math.max(8, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(13, 15 * z));
     return { x0: iso(x, y + w.d).x - 4 * z, x1: iso(x + w.w, y).x + 4 * z, y0: c.y - 60 * z, y1: iso(x + w.w, y + w.d).y + 8 * z };
   }
   function renderShop(ts, dt) {

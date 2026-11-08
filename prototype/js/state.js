@@ -96,6 +96,12 @@ function migrate() {
     S.relV = 31;
   }
   if (S.carParkV !== 27) { if (S.carAt && S.carAt.town === myTown()) S.carAt = null; S.carParkV = 27; }   // v0.27: the car parks in the town centre moved; a car parked out is back home
+  if (S.priceV !== 35) {   // v0.35: prices in US dollars. Your coins stay (you earn about as much a day as before); the simulated friends' pay is cut to a real one
+    S.friends.forEach(f => { if (f.earn > 12) f.earn = Math.max(5, Math.round(f.earn / 3)); });
+    // no record of what you earned yet: start it from your steps over the last days (what they paid at least)
+    if (!(S.income && S.income.length)) { const g = S.stepGoal || STEP_GOAL; S.income = (S.hist || []).slice(-7).map(st => ({ d: '', c: Math.min(STEP_BLOCKS_MAX, Math.floor(st / (g / 6))) * STEP_REWARD.coins + (st >= g ? GOAL_REWARD.coins : 0) })); }
+    S.priceV = 35;
+  }
   if (S.layoutV !== 2) {   // v0.5: furniture must be reachable; re-arrange the simulated friends' rooms once
     S.friends.forEach(h => { for (let lv = 0; lv < floorsOf(h); lv++) relayoutRoom(h, lv); });
     S.layoutV = 2;
@@ -165,7 +171,7 @@ function newGame(o) {
   };
   S.today = freshDay();
   const me = emptyHome('me');
-  Object.assign(me, { name: o.name, look: o.look, coins: 300, wood: 20, roof: o.look.shirt });
+  Object.assign(me, { name: o.name, look: o.look, coins: 2000, wood: 20, roof: o.look.shirt });   // v0.35: dollars
   me.seeds = { wheat: 4, carrot: 3, potato: 2 };
   // A head start: the wheat is ripe for the tutorial, the carrots are growing.
   me.fields[0] = { crop: 'wheat', at: now() - CROPS.wheat.grow * MIN * 1.05, left: CROPS.wheat.yield, thieves: [] };
@@ -183,7 +189,8 @@ function newGame(o) {
   S.friends.forEach(showOffExclusives); S.trophyV = 1; S.trophySeen = {};
   genNPCs();
   simSleep(78);
-  S.pending.push({ id: uid(), src: 'welcome', reward: { coins: 100, wood: 10, seeds: { tomato: 2 } }, info: {} });
+  S.pending.push({ id: uid(), src: 'welcome', reward: { coins: 500, wood: 10, seeds: { tomato: 2 } }, info: {} });
+  S.priceV = 35; S.income = [];
   save();
 }
 
@@ -204,6 +211,7 @@ function checkDay() {
   st.cur_rings = y.paid.rings.all ? (st.cur_rings || 0) + 1 : 0; st.best_rings = Math.max(st.best_rings || 0, st.cur_rings);
   closeDayAwards(y);
   closeDayHealth(y);
+  S.income = [...(S.income || []), { d: y.date, c: Math.round(y.earned.coins || 0) }].slice(-7);   // v0.35
   st.days++;
   S.today = freshDay();
   S.friends.forEach(f => { f.goalToday = false; f.energy = 55 + Math.round(Math.random() * 40); });
@@ -358,6 +366,14 @@ function ensureNPCs(t) {
 // ---------- resources ----------
 function canAfford(c, h = S.me) { return h.coins >= (c.coins || 0) && h.wood >= (c.wood || 0); }
 function pay(c, h = S.me) { h.coins -= c.coins || 0; h.wood -= c.wood || 0; }
+// v0.35: money you earned today (counted for the bank's loan check)
+function earn(n) { S.me.coins += n; S.today.earned.coins += n; }
+// What you earned a day on average: the last 7 days (today too if it's already more than that)
+function avgIncome() {
+  const L = (S.income || []).map(x => x.c), done = L.length ? L.reduce((a, b) => a + b, 0) / L.length : 0;
+  const job = S.job && JOBS[S.job.place] ? jobWage(S.job.place) * (JOBS[S.job.place].to - JOBS[S.job.place].from) * 5 / 7 : 0;   // like a real bank, your pay counts too
+  return Math.round(Math.max(done, S.today.earned.coins || 0, job));
+}
 function addReward(r) {
   S.me.coins += r.coins || 0; S.me.wood += r.wood || 0;
   S.today.earned.coins += r.coins || 0; S.today.earned.wood += r.wood || 0;
@@ -450,7 +466,7 @@ function processHealth() {
     p.workouts[w.id] = min; S.stats.workouts++;
     const sp = w.sport && SPORT_BY_ID[w.sport] ? w.sport : SPORT_OF_TYPE[w.type] || 'other';   // one more for this sport's trophy
     S.stats.sports = S.stats.sports || {}; S.stats.sports[sp] = (S.stats.sports[sp] || 0) + 1;
-    if (min > 0) addPending('workout', scale({ coins: Math.round(min * 1.2), wood: Math.floor(min / 10) }), { type: w.type, min: w.min, mult });
+    if (min > 0) addPending('workout', scale({ coins: Math.round(min * WORKOUT_PAY), wood: Math.floor(min / 10) }), { type: w.type, min: w.min, mult });
   });
   const mind = Math.min(10, Math.floor(d.mindful)) - p.mindful;
   if (mind > 0) { p.mindful += mind; S.stats.mindful += mind; addPending('mindful', { coins: mind * MINDFUL_REWARD }, { min: mind }); }
@@ -558,7 +574,7 @@ function stealable(h, i, who = 'me') {
   const f = h.fields[i];
   return isRipe(f) && !f.thieves.includes(who) && f.left > stealKeep(f.crop);
 }
-// Caught by a guard dog: you pay the owner a small fine (twice what you tried to take, 🪙10–60) and that dog
+// Caught by a guard dog: you pay the owner a small fine (twice what you tried to take, within STEAL_FINE) and that dog
 // won't let you in again today. It's a prank with a price, not a loss of anything you grew.
 function dogFine(value) { return clamp(Math.round(value * 2), STEAL_FINE[0], STEAL_FINE[1]); }
 // v0.18: a neighbour may see you too ('witness'); a baby animal, or the 3rd time in 7 days, brings the police.
@@ -1354,8 +1370,8 @@ function simFriendStep(h) {
   const next = HOUSES.findIndex((H, i) => i > h.house && !h.houses.includes(i));
   if (next > 0 && h.coins > costValue(HOUSES[next].cost) * 1.3 && h.wood >= (HOUSES[next].cost.wood || 0)) { buyHouse(next, h); return; }
   if (h.fieldLv < 3 && h.coins > FIELD_COST[h.fieldLv + 1].coins * 2) { buyLand('field', h); return; }
-  if (!h.cars.length && h.coins > 1500) { buyCar(h.coins > 3000 ? 'pickup' : 'mini', h); return; }
-  if (h.coins > 400) {
+  if (!h.cars.length && h.coins > CARS.mini.cost.coins * 1.2) { buyCar(h.coins > CARS.pickup.cost.coins * 1.2 ? 'pickup' : 'mini', h); return; }   // v0.35: real car prices
+  if (h.coins > 5000 && Math.random() < 0.12) {
     if (Math.random() < 0.5) buyItem('room', rand(Object.keys(FURN)), h);
     else buyItem('yard', rand(['flowers', 'hedge', 'tree', 'pine', 'lamp', 'bench', 'gnome', 'birdbath']), h);
   }
@@ -1377,7 +1393,7 @@ function likeFriend(id) {
 function giftOptions() {
   const out = [];
   Object.keys(S.me.barn).forEach(k => { if (!k.startsWith('baby_')) out.push({ type: 'barn', k, n: 1 }); });
-  if (S.me.coins >= 20) out.push({ type: 'coins', n: 20 });
+  if (S.me.coins >= 50) out.push({ type: 'coins', n: 50 });
   if (S.me.wood >= 2) out.push({ type: 'wood', n: 2 });
   return out;
 }
@@ -1404,7 +1420,7 @@ function randomGift() {
   return clone(rand([
     { type: 'barn', k: 'carrot', n: 3 }, { type: 'barn', k: 'egg', n: 4 }, { type: 'barn', k: 'milk', n: 2 }, { type: 'barn', k: 'apple', n: 3 },
     { type: 'seed', k: 'tomato', n: 2 }, { type: 'seed', k: 'strawberry', n: 2 }, { type: 'seed', k: 'corn', n: 2 },
-    { type: 'coins', n: 30 }, { type: 'wood', n: 3 },
+    { type: 'coins', n: 50 }, { type: 'wood', n: 3 },
   ]));
 }
 
@@ -1682,14 +1698,14 @@ function sellCargo(k, n) {
     const i = c.animals.findIndex(a => a.id === k.slice(7));
     if (i < 0) return 0;
     const a = c.animals[i], v = marketPrice('animal_' + a.k + '_' + animalStage(a));
-    c.animals.splice(i, 1); S.me.coins += v; S.stats.sold = (S.stats.sold || 0) + v;
+    c.animals.splice(i, 1); earn(v); S.stats.sold = (S.stats.sold || 0) + v;
     return v;
   }
   n = Math.min(n, c.items[k] || 0);
   if (!n) return 0;
   c.items[k] -= n; if (!c.items[k]) delete c.items[k];
   const v = n * marketPrice(k);
-  S.me.coins += v; S.stats.sold = (S.stats.sold || 0) + v;
+  earn(v); S.stats.sold = (S.stats.sold || 0) + v;
   return v;
 }
 function sellAllCargo() { const c = cargo(); return [...Object.keys(c.items).map(k => sellCargo(k, c.items[k])), ...c.animals.map(a => a.id).map(id => sellCargo('animal:' + id))].reduce((a, b) => a + b, 0); }
@@ -1720,7 +1736,7 @@ function finishShift() {
   const w = S.work;
   if (!w || now() < w.end) return null;
   const pay = Math.round(hoursWorked(w) * w.wage * fedMult(w)), before = jobRank();
-  S.me.coins += pay; S.work = null;
+  earn(pay); S.work = null;
   S.job.rel = Math.min(JOB_REL.max, S.job.rel + JOB_REL.finish);
   S.today.worked = true; S.stats.workPay = (S.stats.workPay || 0) + pay;
   if ((S.stats.workStreak || 0) + 1 >= SICK.overworkDays && !S.sick && Math.random() < SICK.longShift) S.sick = { since: now(), med: false, why: 'work' };
@@ -1731,7 +1747,7 @@ function quitShift() {
   const w = S.work;
   if (!w) return null;
   const pay = Math.round(hoursWorked(w) * w.wage * fedMult(w));
-  S.me.coins += pay; S.work = null;
+  earn(pay); S.work = null;
   S.job.rel = Math.max(0, S.job.rel + JOB_REL.quit);
   S.stats.workPay = (S.stats.workPay || 0) + pay;
   return { pay };
@@ -2184,22 +2200,28 @@ function chatWork(id) {
 function bank() {
   S.bank = S.bank || { save: 0, at: now(), loans: [] };
   const b = S.bank, days = (now() - b.at) / DAY;
-  if (days > 0.0005) { b.save += Math.min(b.save, BANK.interestCap) * BANK.rate * days; b.at = now(); }
+  if (days > 0.0005) { b.save += Math.min(b.save, BANK.interestCap) * BANK.rate / 365 * days; b.at = now(); }   // v0.35: a yearly rate
   return b;
 }
 const amountOf = (v, max) => v === 'all' ? Math.floor(max) : Math.min(Math.floor(max), +v || 0);
 function deposit(v) { const n = amountOf(v, S.me.coins); if (n <= 0) return 'poor'; S.me.coins -= n; bank().save += n; return 'ok'; }
 function withdraw(v) { const b = bank(), n = amountOf(v, b.save); if (n <= 0) return 'poor'; b.save -= n; S.me.coins += n; return 'ok'; }
 const loanPrice = (kind, k) => (kind === 'house' ? HOUSES[k] : CARS[k]).cost;
+// v0.35: a real loan: a down payment, then the same payment every day for `years` (interest on what's left, the rest
+// pays it off). fee = all the interest you'd pay over the years.
 function loanQuote(kind, k) {
-  const c = loanPrice(kind, k), price = c.coins || 0, down = Math.ceil(price * BANK.down), amount = price - down, fee = Math.round(amount * BANK[kind].fee), total = amount + fee, days = BANK[kind].days;
-  return { price, down, amount, fee, total, days, perDay: Math.ceil(total / days), wood: c.wood || 0 };
+  const c = loanPrice(kind, k), price = c.coins || 0, L = BANK[kind], down = Math.ceil(price * BANK.down[kind]), amount = price - down;
+  const r = L.apr / 365, days = Math.round(L.years * 365), perDay = Math.ceil(amount * r / (1 - Math.pow(1 + r, -days)));
+  return { price, down, amount, perDay, days, years: L.years, apr: L.apr, total: perDay * days, fee: perDay * days - amount, wood: c.wood || 0 };
 }
+const loansPerDay = () => bank().loans.reduce((t2, l) => t2 + l.perDay, 0);
+const loanRoom = () => Math.max(0, Math.floor(BANK.dti * avgIncome() - loansPerDay()));   // how much more a day the bank lets you pay
 function loanCheck(kind, k) {
   const b = bank(), q = loanQuote(kind, k);
   if (b.loans.some(l => l.late)) return 'late';
   if (b.loans.length >= BANK.maxLoans) return 'maxloans';
   if (S.me.coins < q.down || (q.wood && (S.me.wood || 0) < q.wood)) return 'poor';
+  if (q.perDay > loanRoom()) return 'income';   // the bank looks at what you earn
   return 'ok';
 }
 // Borrow the rest, then buy it the usual way (buy() returns 'ok' or why not; if it fails the loan never happens)
@@ -2210,7 +2232,7 @@ function withLoan(kind, k, buy) {
   S.me.coins += q.amount;
   const r = buy();
   if (r !== 'ok') { S.me.coins -= q.amount; return r; }
-  bank().loans.push({ id: uid(), kind, k, total: q.total, left: q.total, perDay: q.perDay, next: now() + DAY, start: now() });
+  bank().loans.push({ id: uid(), kind, k, total: q.amount, left: q.amount, perDay: q.perDay, apr: q.apr, next: now() + DAY, start: now() });   // left: what's still owed (interest is added day by day)
   return 'ok';
 }
 // Once a day each loan takes its payment: from your coins, then your savings. Short? Nothing happens except that
@@ -2219,16 +2241,16 @@ function loanTick() {
   const b = bank(); let done = null, late = false;
   b.loans.forEach(l => {
     let guard = 60;
-    while (l.left > 0 && now() >= l.next && guard--) {
-      const due = Math.min(l.perDay, l.left);
+    while (l.left > 0.5 && now() >= l.next && guard--) {
+      const int = l.apr ? l.left * l.apr / 365 : 0, due = Math.min(l.perDay, Math.ceil(l.left + int));   // v0.35: a day's interest on what's left
       if (S.me.coins >= due) S.me.coins -= due;
       else if (S.me.coins + b.save >= due) { b.save -= due - S.me.coins; S.me.coins = 0; }
       else { if (!l.late) late = true; l.late = true; break; }
-      l.left -= due; l.next += DAY; l.late = false;
+      l.left = Math.max(0, l.left + int - due); l.next += DAY; l.late = false;
     }
-    if (l.left <= 0) done = l;
+    if (l.left <= 0.5) done = l;
   });
-  b.loans = b.loans.filter(l => l.left > 0);
+  b.loans = b.loans.filter(l => l.left > 0.5);
   return { done, late };
 }
 function repayLoan(id) {

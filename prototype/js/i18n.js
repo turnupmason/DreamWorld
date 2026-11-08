@@ -71,10 +71,10 @@ const STR = {
     goal_done: '今天的步数目标完成了', rest_on: '今天是休息日，好好休息', rest_btn: '今天是休息日',
     inclusive_note: '轮椅推动次数和步数一样算。生病或不舒服时选休息日，奖励照样有，也不打折。',
     workouts_title: '今天的体能训练', wk_line: '{n} 分钟 · {k} 千卡', wk_short: '不满 10 分钟', wk_none: '今天还没有体能训练。',
-    workouts_rule: '每次 10 分钟以上：每分钟 🪙1.2，每 10 分钟 🪵1。',
+    workouts_rule: '每次 10 分钟以上：每分钟 🪙{c}，每 10 分钟 🪵1。',
     mind_title: '正念和身体指标', mindful: '正念', resp: '呼吸频率', per_min: '次/分', rhr: '静息心率',
-    mind_rule: '正念每分钟 🪙5（每天最多 10 分钟），还能给精力加分。身体指标只给你自己看。',
-    focus_today: '今天少刷了', focus_rule: '连续离线越久，奖励越多：30 分钟 🪙15、1 小时 🪙35、2 小时 🪙80 + 🌻 向日葵种子。',
+    mind_rule: '正念每分钟 🪙{c}（每天最多 10 分钟），还能给精力加分。身体指标只给你自己看。',
+    focus_today: '今天少刷了', focus_rule: '连续离线越久，奖励越多：30 分钟 🪙{a}、1 小时 🪙{b}、2 小时 🪙{c} + 🌻 向日葵种子。',
     distract_usage: '分心 App 已用 {n} / {limit} 分钟', focus_note: '超过了也不会扣任何东西，下一段专注时间还在等你。', app_games: '游戏',
     earned_today: '今天从现实里赚到', money_rule: '小镇里所有的金币和木材，最初都来自这里。',
     devices_title: '支持的设备', devices_text: '正式版通过 Apple 健康读取：iPhone、Apple Watch，以及 Oura 戒指、Whoop 等把数据写进健康 App 的设备。原始健康数据只留在手机上。',
@@ -137,7 +137,7 @@ const STR = {
     con_screen: '屏幕使用时间', offline_x: '离线 {d}', distract_btn: '刷了 20 分钟短视频',
     con_time: '时间', sim_time: '模拟时间', ff_x: '快进 {d}', next_day: '进入下一天',
     con_friends: '朋友', sim_friend_event: '朋友互动一次', sim_steal: '朋友来偷东西', sim_letter: '朋友寄来一封信', sim_friend_live: '朋友开始运动', sim_join: '朋友接受邀请',
-    con_demo: '演示', demo_money: '+🪙1000 +🪵50', demo_note: '只给演示用，方便试商店。正式版没有这个按钮。',
+    con_demo: '演示', demo_money: '+🪙10,000 +🪵50', demo_note: '只给演示用，方便试商店。正式版没有这个按钮。',
     con_widget: '锁屏小组件预览', w_quiet: '小镇很安静。', w_ripe: '家里有 {n} 样可以收', w_growing: '菜和牲畜正在慢慢长',
     reset: '重置原型', reset_confirm: '确定清空所有进度，重新开始吗？',
     // snacks
@@ -230,10 +230,10 @@ const STR = {
     goal_done: 'Step goal done for today', rest_on: 'Rest day. Take it easy', rest_btn: 'Take a rest day',
     inclusive_note: 'Wheelchair pushes count like steps. On sick days pick a rest day: you still get the reward, never discounted.',
     workouts_title: 'Workouts today', wk_line: '{n} min · {k} kcal', wk_short: 'under 10 min', wk_none: 'No workouts yet today.',
-    workouts_rule: 'Each workout of 10+ minutes: 🪙1.2 per minute and 🪵1 per 10 minutes.',
+    workouts_rule: 'Each workout of 10+ minutes: 🪙{c} per minute and 🪵1 per 10 minutes.',
     mind_title: 'Mindfulness and vitals', mindful: 'Mindful', resp: 'Respiratory rate', per_min: '/min', rhr: 'Resting HR',
-    mind_rule: 'Mindful minutes pay 🪙5 each (up to 10 a day) and add to energy. Vitals are only for you.',
-    focus_today: 'Offline today', focus_rule: 'Longer offline stretches pay more: 30 min 🪙15, 1 h 🪙35, 2 h 🪙80 + 🌻 seed.',
+    mind_rule: 'Mindful minutes pay 🪙{c} each (up to 10 a day) and add to energy. Vitals are only for you.',
+    focus_today: 'Offline today', focus_rule: 'Longer offline stretches pay more: 30 min 🪙{a}, 1 h 🪙{b}, 2 h 🪙{c} + 🌻 seed.',
     distract_usage: 'Distracting apps: {n} / {limit} min', focus_note: 'Going over never costs anything. Your next focus stretch is waiting.', app_games: 'Games',
     earned_today: 'Earned from real life today', money_rule: 'Every coin and plank in town starts here.',
     devices_title: 'Devices', devices_text: 'The real app reads Apple Health: iPhone, Apple Watch, and devices like Oura and Whoop that write to the Health app. Raw health data stays on your phone.',
@@ -288,7 +288,7 @@ const STR = {
     con_screen: 'Screen Time', offline_x: 'Offline {d}', distract_btn: '20 min of short videos',
     con_time: 'Time', sim_time: 'Sim time', ff_x: '+{d}', next_day: 'Next day',
     con_friends: 'Friends', sim_friend_event: 'Friend does something', sim_steal: 'Friend sneaks', sim_letter: 'Friend sends a letter', sim_friend_live: 'Friend starts a workout', sim_join: 'Friend accepts invite',
-    con_demo: 'Demo', demo_money: '+🪙1000 +🪵50', demo_note: 'Demo only, to try the shop. Not in the real app.',
+    con_demo: 'Demo', demo_money: '+🪙10,000 +🪵50', demo_note: 'Demo only, to try the shop. Not in the real app.',
     con_widget: 'Lock-screen widget', w_quiet: 'The town is quiet.', w_ripe: '{n} things ready at home', w_growing: 'Crops and animals are growing',
     reset: 'Reset prototype', reset_confirm: 'Erase all progress and start over?',
     snack_poor: 'Not enough yet. Go for a walk!', snack_full: 'Full. Expand it under Land first', snack_new_day: 'A new day ☀️', snack_ff: 'Time skipped ahead',
@@ -340,7 +340,7 @@ Object.assign(STR.zh, {
   f_calm: '安静模式：不看朋友的运动', snack_calm_on: '安静模式已打开：不看排行和朋友的运动', snack_calm_off: '安静模式已关闭',
   real_private: '🔒 这一页只有你自己看得到。',
   my_goal: '你的目标', goal_auto: '目标跟着你最近 7 天自动调整，比平时多走一点就好。',
-  steps_rule2: '每走 {n} 步 = 🪙10 + 🪵1，最多算到目标的 150%。走到目标再给 🪙20 + 🪵3 + 南瓜种子。',
+  steps_rule2: '每走 {n} 步 = 🪙{c} + 🪵1，最多算到目标的 150%。走到目标再给 🪙{g} + 🪵3 + 南瓜种子。',
   wk_cap: '每天最多算 {n} 分钟。',
   souv_title: '纪念品', souv_desc: '买不到，只能在现实里做到。你的家会慢慢变成你生活的日记。',
   souv_ok: '太好了', souv_new: '新纪念品！', souv_placed: '已经摆进你家一楼了。', souv_go: '进屋看看',
@@ -372,7 +372,7 @@ Object.assign(STR.en, {
   f_calm: 'Calm mode: friends\' workouts hidden', snack_calm_on: 'Calm mode on: no rankings or friends\' workouts', snack_calm_off: 'Calm mode off',
   real_private: '🔒 Only you can see this page.',
   my_goal: 'your goal', goal_auto: 'Your goal follows your last 7 days: just a bit more than usual.',
-  steps_rule2: 'Every {n} steps = 🪙10 + 🪵1, counted up to 150 % of your goal. Reach your goal for 🪙20 + 🪵3 + a pumpkin seed.',
+  steps_rule2: 'Every {n} steps = 🪙{c} + 🪵1, counted up to 150 % of your goal. Reach your goal for 🪙{g} + 🪵3 + a pumpkin seed.',
   wk_cap: 'Up to {n} minutes a day count.',
   souv_title: 'Souvenirs', souv_desc: 'Can\'t be bought, only earned in real life. Your home slowly becomes a diary of your life.',
   souv_ok: 'Nice!', souv_new: 'New souvenir!', souv_placed: 'It\'s already in your ground floor.', souv_go: 'Go see it',
@@ -586,9 +586,11 @@ const nm = o => (o ? o[curLang()] || o.zh : '');
 // ---------- formatting ----------
 const fmtNum = n => Math.round(n).toLocaleString(curLang() === 'en' ? 'en-US' : 'zh-CN');
 function fmtCompact(n) {
-  if (curLang() === 'zh') return n >= 10000 ? (n / 10000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + '万' : fmtNum(n);
-  return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'k' : fmtNum(n);
+  if (curLang() === 'zh') return n >= 1e8 ? (n / 1e8).toFixed(1).replace(/\.0$/, '') + '亿' : n >= 10000 ? (n / 10000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + '万' : fmtNum(n);
+  return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M' : n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'k' : fmtNum(n);
 }
+// v0.35: a price or a balance: exact up to 100,000, then short (45万 / 450k, 1500万 / 15M)
+const fmtPrice = n => (n >= 100000 ? fmtCompact(n) : fmtNum(n));
 const fmtClock = ms => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
 function fmtDate(ms) {
   const d = new Date(ms);
@@ -957,13 +959,13 @@ Object.assign(STR.zh, {
   ph_calling: '通话中…', ph_call_ok: '聊得很开心：社交 +{n}，熟悉度 +3', ph_call_done: '今天已经打过电话了（只聊天，不再加社交）', ph_hang: '挂断',
   ph_say_hi: '打个招呼吧 👋', ph_no_texts: '还没有消息。', ph_new_text: '给谁发消息', meet_ok: '{name}说：好呀，我在公园等你！', meet_done: '今天已经约过了',
   text_new: '{name}给你发了消息', bank_net: '我的家产（房子、车、东西、钱包、存款、股票，减去贷款）', bank_debt: '其中还欠贷款 🪙{n}', bank_wallet: '钱包', bank_save: '存款', bank_all: '全部',
-  bank_rate: '存款每天利息 {p}%（最多算 🪙{cap}），今天约 🪙{n}', bank_in_out: '⬇ 存进银行　⬆ 取出来', bank_empty: '存款不够',
+  bank_rate: '存款年利率 {p}%，现在每天约 🪙{n} 利息', bank_income: '最近 7 天平均每天挣 🪙{n}；贷款每天还 🪙{d}', bank_in_out: '⬇ 存进银行　⬆ 取出来', bank_empty: '存款不够',
   loan_list: '贷款', loan_none: '没有贷款。在房产中介或车行可以贷款买房买车。', loan_next: '下次还 🪙{n}，{m} 后自动扣（先扣钱包，不够扣存款）',
   loan_late_row: '钱不够，这期还没还上。存点钱就会自动补上；补上前不能再贷款。', loan_repay: '提前还清 🪙{n}', loan_paid_off: '贷款还清了！',
-  loan_late_note: '钱不够还这期贷款，存点钱会自动补上', loan_btn: '贷款买：首付 🪙{n}，每天还 🪙{d}，{days} 天', loan_title: '贷款买 {name}',
-  loan_price: '价格', loan_down: '首付（现在付）', loan_amount: '贷款', loan_fee: '手续费（{p}%）', loan_daily: '每天还', loan_daily_v: '🪙{n} × {d} 天',
-  loan_rule: '每天自动从钱包扣（不够扣存款）。钱不够也不会收走东西，只是还上之前不能再贷款。随时可以提前还清。', loan_sign: '签贷款合同',
-  loan_no_late: '你有一笔贷款还没还上，先还上才能再贷款。', loan_no_maxloans: '最多同时有 2 笔贷款。', loan_no_poor: '首付的钱不够。', loan_no_wood: '木材不够（木材要自己付）。',
+  loan_late_note: '钱不够还这期贷款，存点钱会自动补上', loan_btn: '贷款买：首付 🪙{n}，每天还 🪙{d}，{y} 年', loan_title: '贷款买 {name}',
+  loan_price: '价格', loan_down: '首付（现在付）', loan_amount: '贷款', loan_fee: '利息（年利率 {p}%，{y} 年一共）', loan_income: '你的收入', loan_income_v: '平均每天 🪙{n}，还能多还 🪙{r}/天', loan_daily: '每天还', loan_daily_v: '🪙{n}，还 {y} 年',
+  loan_rule: '跟真的银行一样：房贷首付 5%、30 年，车贷首付 10%、5 年，每天自动还一点（先扣钱包，不够扣存款）。银行看你最近 7 天平均每天挣多少，所有贷款每天还的钱加起来不能超过它的 40%。钱不够也不会收走东西，只是还上之前不能再贷款。随时可以提前还清，只还剩下的本金。', loan_sign: '签贷款合同',
+  loan_no_late: '你有一笔贷款还没还上，先还上才能再贷款。', loan_no_maxloans: '最多同时有 2 笔贷款。', loan_no_poor: '首付的钱不够。', loan_no_income: '收入不够：每天要还 🪙{n}，银行按你的收入最多再让你每天还 🪙{r}。多运动、多打工，过几天再来。', loan_no_wood: '木材不够（木材要自己付）。',
   loan_house_ok: '贷款买下了{name}！每天会自动还款', loan_car_ok: '贷款买下了{name}，明天上午 {h} 点送到家！每天会自动还款',
   stock_mine: '我的股票', stock_have: '持有 {n} 股', stock_note: '价格每 {m} 分钟变一次，有涨有跌。买卖各收 {p}% 手续费。别把要用的钱都放进去。',
   stock_24h: '24 小时', stock_own: '我持有', stock_value: '现在值', stock_buy: '买', stock_sell: '卖', stock_max: '最多', stock_wallet: '钱包里有 🪙{n}',
@@ -976,13 +978,13 @@ Object.assign(STR.en, {
   ph_calling: 'On a call…', ph_call_ok: 'A lovely chat: social +{n}, know them +3', ph_call_done: 'You’ve called today already (a nice chat, no more social)', ph_hang: 'Hang up',
   ph_say_hi: 'Say hi 👋', ph_no_texts: 'No messages yet.', ph_new_text: 'New message', meet_ok: '{name}: sure, see you at the park!', meet_done: 'Already arranged today',
   text_new: '{name} sent you a message', bank_net: 'Home worth (house, cars, things, wallet, savings, shares, minus loans)', bank_debt: 'Still owed on loans: 🪙{n}', bank_wallet: 'Wallet', bank_save: 'Savings', bank_all: 'All',
-  bank_rate: 'Savings earn {p}% a day (on up to 🪙{cap}); about 🪙{n} today', bank_in_out: '⬇ pay in　⬆ take out', bank_empty: 'Not enough savings',
+  bank_rate: 'Savings earn {p}% a year; about 🪙{n} a day now', bank_income: 'You earned 🪙{n} a day over the last 7 days; loans take 🪙{d} a day', bank_in_out: '⬇ pay in　⬆ take out', bank_empty: 'Not enough savings',
   loan_list: 'Loans', loan_none: 'No loans. Take one at the estate agent or the car dealer.', loan_next: 'Next payment 🪙{n} in {m} (from your wallet, then savings)',
   loan_late_row: 'Not enough money for this payment. Save some and it’s paid automatically; no new loans until then.', loan_repay: 'Pay it all off 🪙{n}', loan_paid_off: 'Loan paid off!',
-  loan_late_note: 'Not enough money for a loan payment; it’ll go through once you have it', loan_btn: 'Loan: 🪙{n} down, 🪙{d} a day for {days} days', loan_title: 'Buy {name} with a loan',
-  loan_price: 'Price', loan_down: 'Down payment (now)', loan_amount: 'Loan', loan_fee: 'Fee ({p}%)', loan_daily: 'Each day', loan_daily_v: '🪙{n} × {d} days',
-  loan_rule: 'Paid automatically each day from your wallet (then savings). If you’re short nothing is taken away; you just can’t borrow again until you catch up. Pay it off any time.', loan_sign: 'Sign the loan',
-  loan_no_late: 'You’re behind on a loan; catch up first.', loan_no_maxloans: 'Two loans at a time at most.', loan_no_poor: 'Not enough for the down payment.', loan_no_wood: 'Not enough wood (wood isn’t lent).',
+  loan_late_note: 'Not enough money for a loan payment; it’ll go through once you have it', loan_btn: 'Loan: 🪙{n} down, 🪙{d} a day for {y} years', loan_title: 'Buy {name} with a loan',
+  loan_price: 'Price', loan_down: 'Down payment (now)', loan_amount: 'Loan', loan_fee: 'Interest ({p}% a year, over {y} years)', loan_income: 'Your income', loan_income_v: '🪙{n} a day on average; room for 🪙{r} more a day', loan_daily: 'Each day', loan_daily_v: '🪙{n}, for {y} years',
+  loan_rule: 'Like a real bank: a mortgage is 5% down over 30 years, a car loan 10% down over 5 years, paid a little each day (from your wallet, then savings). The bank looks at what you earned a day over the last 7 days: all your loan payments together may be at most 40% of it. If you’re short nothing is taken away; you just can’t borrow again until you catch up. Pay it off any time (just what’s left of the loan).', loan_sign: 'Sign the loan',
+  loan_no_late: 'You’re behind on a loan; catch up first.', loan_no_maxloans: 'Two loans at a time at most.', loan_no_poor: 'Not enough for the down payment.', loan_no_income: 'Not enough income: this is 🪙{n} a day, and for what you earn the bank allows 🪙{r} more a day. Move more, work more, and come back in a few days.', loan_no_wood: 'Not enough wood (wood isn’t lent).',
   loan_house_ok: 'You bought {name} with a loan! Payments go out each day', loan_car_ok: 'You bought the {name} with a loan; it arrives tomorrow at {h}:00! Payments go out each day',
   stock_mine: 'My shares', stock_have: '{n} shares', stock_note: 'Prices change every {m} minutes, up and down. {p}% fee to buy or sell. Don’t put in money you need.',
   stock_24h: '24 h', stock_own: 'I own', stock_value: 'Worth now', stock_buy: 'Buy', stock_sell: 'Sell', stock_max: 'max', stock_wallet: 'Wallet: 🪙{n}',

@@ -180,7 +180,7 @@ function renderHUD() {
       <div class="row tight"><button class="pill phone-pill" data-act="phone" aria-label="${t('ph_name')}" title="${t('ph_name')}">📱${phoneBadge() ? `<i class="badge">${phoneBadge()}</i>` : ''}</button>${weatherPill()}</div>
     </div>
     <div class="res row">
-      <span class="pill">🪙 ${fmtNum(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>
+      <span class="pill">🪙 ${fmtPrice(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>
       <button class="pill farm ${actionsLeft() === 0 ? 'done' : ''}" data-act="capInfo" style="--p:${Math.round(actionsLeft() / ACTION_CAP * 100)}"><i class="ring"></i>${t('farm_pill', { n: actionsLeft() })}</button>${live}
       ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : ''}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${S.study ? `<button class="pill work" data-act="placeGo" data-arg="school">📚 ${fmtDur(Math.max(0, S.study.end - now()))}</button>` : ''}${isFed() ? `<button class="pill fed" data-act="mallAct" data-arg="food">😋 ${fmtDur(S.fed.until - now())}</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
@@ -595,20 +595,20 @@ function panelReal() {
     <div class="card"><h3>🚶 ${t('steps_today')}</h3>
       <div class="big-num">${fmtNum(steps)} <small>/ ${fmtNum(goal)} · ${t('my_goal')}</small></div>
       <div class="bar"><i style="width:${stepPct}%"></i></div>
-      <p class="muted">${t('steps_rule2', { n: fmtNum(stepBlock()) })} ${t('goal_auto')}</p>
+      <p class="muted">${t('steps_rule2', { n: fmtNum(stepBlock()), c: STEP_REWARD.coins, g: GOAL_REWARD.coins })} ${t('goal_auto')}</p>
       <div class="row between gap-top">${goalRow}</div>
       <p class="muted">${t('inclusive_note')}</p></div>
-    <div class="card"><h3>💪 ${t('workouts_title')}</h3>${wks}<p class="muted">${t('workouts_rule')} ${t('wk_cap', { n: WORKOUT_PAY_MAX })}</p></div>
+    <div class="card"><h3>💪 ${t('workouts_title')}</h3>${wks}<p class="muted">${t('workouts_rule', { c: WORKOUT_PAY })} ${t('wk_cap', { n: WORKOUT_PAY_MAX })}</p></div>
     <div class="card"><h3>🧘 ${t('mind_title')}</h3>
       <div class="vitals">
         <div><span>${t('mindful')}</span><b>${Math.round(d.mindful)} ${t('minutes')}</b></div>
         <div><span>${t('resp')}</span><b>${S.vitals.resp} ${t('per_min')}</b></div>
         <div><span>${t('rhr')}</span><b>${S.vitals.rhr} ${t('bpm')}</b></div>
         <div><span>HRV</span><b>${S.vitals.hrv} ms</b></div>
-      </div><p class="muted">${t('mind_rule')}</p></div>
+      </div><p class="muted">${t('mind_rule', { c: MINDFUL_REWARD })}</p></div>
     <div class="card"><h3>📵 ${t('focus_today')}</h3>
       <div class="big-num">${d.focusMin} <small>${t('minutes')}</small></div>
-      <p class="muted">${t('focus_rule')}</p>
+      <p class="muted">${t('focus_rule', { a: FOCUS_REWARD[30].coins, b: FOCUS_REWARD[60].coins, c: FOCUS_REWARD[120].coins })}</p>
       <div class="row between small-gap"><span class="muted">${t('distract_usage', { n: d.distractMin, limit: S.limitMin })}</span></div>
       <div class="bar warm"><i style="width:${disPct}%"></i></div>
       <div class="gap-top">${apps}</div>
@@ -738,9 +738,10 @@ const SHEETS = {
     const kind = w.kind === 'house' ? 'house' : 'car', k = kind === 'house' ? +w.k : w.k, q = loanQuote(kind, k), chk = loanCheck(kind, k), name = nm(kind === 'house' ? HOUSES[k] : CARS[k]);
     const row = (a, b) => `<div class="row between"><span>${a}</span><b>${b}</b></div>`;
     return `<h2>🏦 ${t('loan_title', { name })}</h2><div class="card">${row(t('loan_price'), '🪙' + q.price.toLocaleString())}${row(t('loan_down'), '🪙' + q.down.toLocaleString() + (q.wood ? ` + 🪵${q.wood}` : ''))}
-      ${row(t('loan_amount'), '🪙' + q.amount.toLocaleString())}${row(t('loan_fee', { p: Math.round(BANK[kind].fee * 100) }), '🪙' + q.fee.toLocaleString())}${row(t('loan_daily'), t('loan_daily_v', { n: q.perDay.toLocaleString(), d: q.days }))}</div>
+      ${row(t('loan_amount'), '🪙' + q.amount.toLocaleString())}${row(t('loan_daily'), t('loan_daily_v', { n: q.perDay.toLocaleString(), y: q.years }))}${row(t('loan_fee', { p: +(q.apr * 100).toFixed(1), y: q.years }), '🪙' + q.fee.toLocaleString())}
+      ${row(t('loan_income'), t('loan_income_v', { n: fmtNum(avgIncome()), r: fmtNum(loanRoom()) }))}</div>
       <p class="muted small">${t('loan_rule')}</p>
-      ${chk === 'ok' ? `<button class="btn primary block" data-act="loanSign" data-arg="${wid}">✍️ ${t('loan_sign')}</button>` : `<p class="host-say">${t('loan_no_' + chk)}</p>`}`;
+      ${chk === 'ok' ? `<button class="btn primary block" data-act="loanSign" data-arg="${wid}">✍️ ${t('loan_sign')}</button>` : `<p class="host-say">${t('loan_no_' + chk, { n: fmtNum(q.perDay), r: fmtNum(loanRoom()) })}</p>`}`;
   },
   // v0.31: getting along with someone, like The Sims: how well you get on, their mood today, their traits and hobbies
   // (once you know them), and things to do together, in groups; some need you to be closer friends first.
@@ -1420,7 +1421,7 @@ const ACT = {
     const house = w.kind === 'house', k = house ? +w.k : w.k;
     const r = withLoan(house ? 'house' : 'car', k, () => house ? buyHouse(k) : orderCar(w));
     closeSheet();
-    if (r !== 'ok') { Sound.play('oops'); return snack(r === 'poor' ? t('snack_poor') : r === 'own' ? t('owned') : r === 'garage' ? `🚗 ${t('garage_full')}` : t('loan_no_' + r)); }
+    if (r !== 'ok') { Sound.play('oops'); return snack(r === 'poor' ? t('snack_poor') : r === 'own' ? t('owned') : r === 'garage' ? `🚗 ${t('garage_full')}` : t('loan_no_' + r, { n: '', r: fmtNum(loanRoom()) })); }
     Sound.play('coins'); save();
     snack(house ? `🏦 ${t('loan_house_ok', { name: nm(HOUSES[k]) })}` : `🏦 ${t('loan_car_ok', { name: nm(CARS[k]), h: DELIVERY.hour })}`);
   },
@@ -1983,7 +1984,7 @@ const ACT = {
   },
   simJoin() { const it = inviteJoin(); if (it) notify(it); else snack(t('snack_street_full')); },
   inviteHere(arg) { const [st, p, n] = arg.split('|'), it = inviteJoin({ st, p: +p, n: +n }); closeSheet(); if (it) { notify(it); Sound.play('levelup'); save(); } else snack(t('invite_none')); },   // v0.27
-  simMoney() { S.me.coins += 1000; S.me.wood += 50; snack('+🪙1000 +🪵50'); },
+  simMoney() { S.me.coins += 10000; S.me.wood += 50; snack('+🪙10,000 +🪵50'); },
   consoleToggle() { $('#console').classList.toggle('open'); },
   consoleClose() { $('#console').classList.remove('open'); },
   tutSkip() { endTutorial(); },
@@ -3142,7 +3143,7 @@ function needBars() {
 // ---------- v0.26: the phone ----------
 function phoneBadge() { try { return unreadTexts() + unreadMail() + (bank().loans.some(l => l.late) ? 1 : 0); } catch (e) { return 0; } }   // v0.26: letters live in the phone too
 function loanBtn(kind, k, wid) { const q = loanQuote(kind, k), ok = loanCheck(kind, k) === 'ok';
-  return `<button class="btn block gap-top" data-act="loanAsk" data-arg="${wid}" ${ok ? '' : 'disabled'}>🏦 ${t('loan_btn', { n: q.down.toLocaleString(), d: q.perDay.toLocaleString(), days: q.days })}</button>`; }
+  return `<button class="btn block gap-top" data-act="loanAsk" data-arg="${wid}">🏦 ${t('loan_btn', { n: q.down.toLocaleString(), d: q.perDay.toLocaleString(), y: q.years })}</button>${ok ? '' : `<p class="muted small center">${t('loan_no_' + loanCheck(kind, k), { n: fmtNum(q.perDay), r: fmtNum(loanRoom()) })}</p>`}`; }   // v0.35: the offer opens even when the bank would say no, so you see why
 // buy a car at the dealer: paid in full; the dealer brings it home the next morning (v0.34: for a delivery fee)
 function orderCar(w) {
   const pend = allPending().filter(e => e.act === 'buyCar').length;
@@ -3199,9 +3200,10 @@ function phoneScreen(arg) {
     const B = bank(), st = stocksValue(), debt = debtLeft();
     body = head(`🏦 ${t('ph_bank')}`) + `<div class="ph-card big"><span class="ph-muted">${t('bank_net')}</span><b>${coin(assetValue(S.me))}</b>${debt ? `<span class="ph-muted small">${t('bank_debt', { n: Math.ceil(debt).toLocaleString() })}</span>` : ''}</div>
       <div class="ph-card"><div class="row between"><span>👛 ${t('bank_wallet')}</span><b>${coin(S.me.coins)}</b></div><div class="row between"><span>🐷 ${t('bank_save')}</span><b>${coin(B.save)}</b></div>
-        <div class="ph-muted small">${t('bank_rate', { p: (BANK.rate * 100).toFixed(1), cap: BANK.interestCap.toLocaleString(), n: Math.floor(Math.min(B.save, BANK.interestCap) * BANK.rate) })}</div>
-        <div class="ph-acts">${['100', '1000', 'all'].map(v => `<button class="ph-btn go" data-act="bankIn" data-arg="${v}">⬇ ${v === 'all' ? t('bank_all') : v}</button>`).join('')}</div>
-        <div class="ph-acts">${['100', '1000', 'all'].map(v => `<button class="ph-btn" data-act="bankOut" data-arg="${v}">⬆ ${v === 'all' ? t('bank_all') : v}</button>`).join('')}</div>
+        <div class="ph-muted small">${t('bank_rate', { p: +(BANK.rate * 100).toFixed(1), n: fmtNum(B.save * BANK.rate / 365) })}</div>
+        <div class="ph-acts">${['1000', '10000', 'all'].map(v => `<button class="ph-btn go" data-act="bankIn" data-arg="${v}">⬇ ${v === 'all' ? t('bank_all') : fmtNum(+v)}</button>`).join('')}</div>
+        <div class="ph-acts">${['1000', '10000', 'all'].map(v => `<button class="ph-btn" data-act="bankOut" data-arg="${v}">⬆ ${v === 'all' ? t('bank_all') : fmtNum(+v)}</button>`).join('')}</div>
+        <div class="ph-muted small">${t('bank_income', { n: fmtNum(avgIncome()), d: fmtNum(loansPerDay()) })}</div>
         <div class="ph-muted small">${t('bank_in_out')}</div></div>
       ${st ? `<button class="ph-card ph-row" data-act="phone" data-arg="stocks">📈 ${t('ph_stocks')}<b class="grow right">${coin(st)}</b></button>` : ''}
       <div class="ph-sub">🧾 ${t('loan_list')}</div>${B.loans.map(l => { const name = nm(l.kind === 'house' ? HOUSES[l.k] : CARS[l.k]), done = 1 - l.left / l.total;

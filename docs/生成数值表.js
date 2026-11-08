@@ -5,7 +5,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'prototype', 'js', 'data.
 const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FIELD_LEVELS, FIELD_COST, PASTURE, ORCHARD, POND, FISH_KINDS, FISH_EVERY,
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
-  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
+  STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
   PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL})`);
 const out = [];
 const P = s => out.push(s);
@@ -179,10 +179,11 @@ P(`能进去的地方：${D.VENUE_PLACES.map(k => D.PLACE_INFO[k] ? D.PLACE_INFO
 P('');
 table(['事情', '多久', '得到'], [['健身房任意器械', `${D.VENUE.gym.sec} 秒`, `娱乐 +${D.VENUE.gym.fun}`], ['咖啡馆坐下聊天', `${D.VENUE.cafeChat.sec} 秒`, `社交 +${D.VENUE.cafeChat.social}`], ['咖啡馆沙发听音乐', `${D.VENUE.cafeSofa.sec} 秒`, `娱乐 +${D.VENUE.cafeSofa.fun}`],
   ['图书馆坐下看书', `${D.VENUE.libRead.sec} 秒`, `娱乐 +${D.VENUE.libRead.fun}`], ['面包店坐下吃点心', `${D.VENUE.eat.sec} 秒`, `就是买点心的饱腹`], ['消防站看消防车', `${D.VENUE.truck.sec} 秒`, `娱乐 +${D.VENUE.truck.fun}，一条防火小知识`], ['诊所健康检查', '马上', '昨晚睡眠分和今天步数（只有自己看得到）']]);
-P('## 手机：银行、贷款、股票（v0.26）');
+P('## 手机：银行、贷款、股票（v0.26，v0.35 改成真实的银行）');
 P('');
-table(['项目', '数值'], [['存款利息', `每天 ${D.BANK.rate * 100}%（最多算 🪙${D.BANK.interestCap.toLocaleString()}）`], ['首付', `${D.BANK.down * 100}%`],
-  ['车贷', `${D.BANK.car.days} 天，手续费 ${D.BANK.car.fee * 100}%`], ['房贷', `${D.BANK.house.days} 天，手续费 ${D.BANK.house.fee * 100}%`], ['同时最多', `${D.BANK.maxLoans} 笔`],
+table(['项目', '数值'], [['存款利息', `年利率 ${+(D.BANK.rate * 100).toFixed(2)}%`],
+  ['车贷', `首付 ${D.BANK.down.car * 100}%，${D.BANK.car.years} 年，年利率 ${+(D.BANK.car.apr * 100).toFixed(2)}%，每天等额还款`], ['房贷', `首付 ${D.BANK.down.house * 100}%，${D.BANK.house.years} 年，年利率 ${+(D.BANK.house.apr * 100).toFixed(2)}%，每天等额还款`],
+  ['审批', `所有贷款每天还的钱 ≤ 最近 7 天平均每天收入的 ${D.BANK.dti * 100}%`], ['同时最多', `${D.BANK.maxLoans} 笔`],
   ['股价', `每 ${D.STOCK.tickMin} 分钟一跳，买卖各收 ${D.STOCK.fee * 100}% 手续费`]]);
 table(['公司', '起始价'], Object.values(D.STOCKS).map(c => [`${c.e} ${c.zh} (${c.en})`, `🪙${c.base}`]));
 P('## 状态：饱腹、社交、娱乐（v0.25）');
@@ -277,7 +278,7 @@ table(['现实里做到', '奖励', '受精力倍率影响'], [
   [`合上锻炼环（${D.RINGS.exercise} 分钟）`, cost(D.RING_REWARD.exercise), '是'],
   [`合上站立环（${D.RINGS.stand} 小时）`, cost(D.RING_REWARD.stand), '是'],
   ['三环全合上（额外）', cost(D.RING_REWARD.all) + ' + 玫瑰种子', '是'],
-  ['每次 10 分钟以上体能训练', `每分钟 🪙1.2，每 10 分钟 🪵1（每天最多算 ${D.WORKOUT_PAY_MAX} 分钟）`, '是'],
+  ['每次 10 分钟以上体能训练', `每分钟 🪙${D.WORKOUT_PAY}，每 10 分钟 🪵1（每天最多算 ${D.WORKOUT_PAY_MAX} 分钟）`, '是'],
   ['正念 / 呼吸练习', `每分钟 🪙${D.MINDFUL_REWARD}（每天最多 10 分钟），精力 +1`, '否'],
   ['睡眠分 80+', cost(D.SLEEP_REWARD) + ' + 郁金香种子', '否'],
   ...Object.entries(D.FOCUS_REWARD).map(([m, r]) => [`离线 ${m} 分钟`, cost(r) + (r.seeds ? ' + 向日葵种子' : ''), '否']),
@@ -285,5 +286,6 @@ table(['现实里做到', '奖励', '受精力倍率影响'], [
 P('### 运动类型（迷你的你会同步做的动作，模拟时每分钟消耗的千卡）');
 P('');
 table(['运动', '每分钟千卡'], Object.values(D.WORKOUTS).map(w => [`${w.e} ${w.zh} (${w.en})`, w.kcal]));
-fs.writeFileSync(path.join(__dirname, '数值表.md'), out.join('\n') + '\n');
+// v0.35: dollar amounts with thousands separators (🪙450000 → 🪙450,000)
+fs.writeFileSync(path.join(__dirname, '数值表.md'), out.join('\n').replace(/🪙(\d{4,})/g, (m, d) => '🪙' + Number(d).toLocaleString('en-US')) + '\n');
 console.log('docs/数值表.md 已更新');
