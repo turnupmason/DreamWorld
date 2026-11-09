@@ -1729,7 +1729,8 @@ function unloadCargo() {
 
 // ---------- jobs (v0.14) ----------
 const jobRank = (rel = (S.job || {}).rel || 0) => JOB_RANKS.filter(r => rel >= r.at).length - 1;
-const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay * (1 + ((S.school || {}).certs || 0) * SCHOOL.certPay) * countyOf(myTown()).wage);   // v0.40: pay goes by county
+const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay * (1 + ((S.school || {}).certs || 0) * SCHOOL.certPay) * countyOf(myTown()).wage * (1 + knowPay()));   // v0.40: pay goes by county (v0.45: and what you've learnt at the museum)
+const knowPay = () => Math.min(PERKS.knowMax, Math.floor((S.know || 0) / PERKS.knowEvery) * PERKS.knowPay);
 function shiftEnd(place, ms = now()) { const d = new Date(ms); d.setHours(JOBS[place].to, 0, 0, 0); return d.getTime(); }
 function inShift(place, ms = now()) { const h = localHour(myTown(), ms); return h >= JOBS[place].from && h < JOBS[place].to; }
 function takeJob(place) { if (S.work) return 'working'; S.job = { place, rel: S.job && S.job.place === place ? S.job.rel : 0, since: now() }; return 'ok'; }
@@ -2098,12 +2099,12 @@ function needs() {
 }
 function addNeed(k, v) { const n = needs(); n[k] = Math.max(0, Math.min(100, n[k] + v)); return n[k]; }
 const moodScore = () => { const n = needs(); return Math.round((n.hunger + n.social + n.fun) / 3); };
-const moodGood = () => moodScore() >= NEEDS.goodMood;
+const moodGood = () => moodScore() >= NEEDS.goodMood || S.rested === today();   // v0.45: after a night in the hotel bed, all day
 // v0.44: what low needs do (D244): hungry → slower, no work or matches until you've eaten; a bad mood pays less at work;
 // a good mood pays more and you walk a little faster
 const hungry = () => needs().hunger < NEED_LOW.low;
-const moodBad = () => moodScore() < NEED_LOW.badMood;
-const walkMult = () => (hungry() ? NEED_LOW.slowWalk : moodGood() ? NEED_LOW.fastWalk : 1);
+const moodBad = () => moodScore() < NEED_LOW.badMood && S.rested !== today();
+const walkMult = () => (hungry() ? NEED_LOW.slowWalk : moodGood() ? NEED_LOW.fastWalk : 1) * (S.swam === today() ? 1 + PERKS.swimWalk : 1);   // v0.45: after a swim
 const moodPayMult = () => (moodGood() ? 1 + NEEDS.moodPay : moodBad() ? 1 - NEED_LOW.badPay : 1);
 // a bite at the café / bakery
 // ---------- inside the buildings (v0.30) ----------
@@ -2150,6 +2151,10 @@ function venueUse(key) {
   n[key] = (n[key] || 0) + 1;
   if (V.fun) addNeed('fun', V.fun);
   if (V.social) addNeed('social', V.social);
+  // v0.45: what some places give you besides
+  if (key === 'swim') S.swam = today();
+  if (key === 'bed') { ['hunger', 'social', 'fun'].forEach(k => addNeed(k, 100)); S.rested = today(); }
+  if (key.startsWith('ex_')) S.know = (S.know || 0) + 1;
   return 'ok';
 }
 // v0.32: the same once-a-day rule for the park (watching each court counts on its own)
@@ -2419,6 +2424,7 @@ function sportDone(kind, id, res) {
   R.p++; if (res.won) R.w++;
   if (kind === 'basketball' || kind === 'bowling') R.best = Math.max(R.best || 0, res.me || 0);
   if (kind === 'race' && res.time) R.best = R.best ? Math.min(R.best, res.time) : res.time;   // v0.38: your fastest length
+  if (kind === 'race') S.swam = today();   // v0.45: a race is a swim too
   // v0.41: fewest strokes round the mini golf, your best karaoke score, the most kilos fished, all the toys you've grabbed
   if (kind === 'golf' && res.strokes) R.best = R.best ? Math.min(R.best, res.strokes) : res.strokes;
   if (kind === 'karaoke' && res.pct !== undefined) R.best = Math.max(R.best || 0, res.pct);
@@ -2595,3 +2601,23 @@ function fillTrough(h = S.me) {
   const n = Math.min(room, h.feed); h.feed -= n; h.trough = (h.trough || 0) + n;
   return { r: 'ok', n };
 }
+
+// ---------- v0.45: giving to the museum ----------
+const museumGiven = () => S.museumGiven || 0;
+function museumTier(n = museumGiven()) { let T = null; MUSEUM_GIFT.tiers.forEach(x => { if (n >= x.at) T = x; }); return T; }
+function donateMuseum(n) {
+  if (!MUSEUM_GIFT.amounts.includes(n)) return { r: 'no' };
+  if (S.me.coins < n) return { r: 'poor' };
+  const before = museumTier();
+  S.me.coins -= n; S.museumGiven = museumGiven() + n; addNeed('fun', MUSEUM_GIFT.fun);
+  const after = museumTier();
+  return { r: 'ok', up: after !== before ? after : null };
+}
+// a statue of someone: their own look, all in bronze or gold
+function statueLook(L, metal = '#c9971a') {
+  const out = { ...L };
+  Object.keys(out).forEach(k => { if (typeof out[k] === 'string' && /^#[0-9a-f]{3,8}$/i.test(out[k])) out[k] = shade(metal, k === 'skin' ? 0.1 : k === 'hairCol' ? -0.18 : (hashStr(k) % 7 - 3) * 0.03); });
+  return out;
+}
+// v0.45: the hospital's A&E: well again at once (the clinic's medicine still needs a rest in bed)
+function erCure() { if (!S.sick) return 'well'; if (S.me.coins < PERKS.er) return 'poor'; S.me.coins -= PERKS.er; S.sick = null; return 'ok'; }

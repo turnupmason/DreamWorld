@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.44.0';
+const VERSION = '0.45.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -1424,14 +1424,15 @@ const PLACE_INFO = {
   restaurant: { e: '🍽️', zh: '空中餐厅', en: 'Sky restaurant' },
   rooftop:    { e: '🏊', zh: '屋顶泳池', en: 'Rooftop pool' },
   suite:      { e: '🛏️', zh: '酒店客房', en: 'Hotel room' },   // v0.38
+  museum2:    { e: '🚀', zh: '太空馆（2 楼）', en: 'Space hall (2F)' }, museum3: { e: '🖼️', zh: '艺术和历史馆（3 楼）', en: 'Art & history (3F)' },   // v0.45
 };
 // v0.37: the new buildings of the town centre, [key, width, depth], placed in this order as close to the town hall as
 // there's room (every town has room for the first five; the apartments only where there's space left). A building
 // can hold several floors (BUILDING_FLOORS: you come in on the first and take the lift); VENUE_HOME: which building a
 // floor is in.
 const CENTRE_NEW = [['tower', 6, 6], ['hotel', 6, 6], ['bookstore', 5.5, 5], ['salon', 5, 4.5], ['florist', 5, 4.5], ['apartments', 6, 6]];
-const BUILDING_FLOORS = { tower: ['bank', 'office', 'restaurant'], hotel: ['hotel', 'suite', 'rooftop'] };   // v0.38: + a hotel room
-const VENUE_HOME = { bank: 'tower', office: 'tower', restaurant: 'tower', rooftop: 'hotel', suite: 'hotel' };
+const BUILDING_FLOORS = { tower: ['bank', 'office', 'restaurant'], hotel: ['hotel', 'suite', 'rooftop'], museum: ['museum', 'museum2', 'museum3'] };   // v0.38: + a hotel room (v0.45: the museum's three floors)
+const VENUE_HOME = { bank: 'tower', office: 'tower', restaurant: 'tower', rooftop: 'hotel', suite: 'hotel', museum2: 'museum', museum3: 'museum' };
 const TOWER_STOREYS = { tower: 14, hotel: 10, apartments: 16 };   // how tall they look from outside
 Object.entries(STORES).forEach(([k, s]) => { if (!PLACE_INFO[k]) PLACE_INFO[k] = { e: s.e, zh: s.zh, en: s.en }; });   // v0.17: stores are places too
 const HARVEST_GOAL = 30;          // the town fields: helps from everyone in town today; full = harvest festival
@@ -1928,6 +1929,28 @@ const WOOD_USD = 25;
   FLOOR_BUILD.coinsPerTile += Math.round(FLOOR_BUILD.woodPerTile * WOOD_USD); FLOOR_BUILD.woodPerTile = 0;
   [STEP_REWARD, GOAL_REWARD, ...Object.values(FOCUS_REWARD), ...Object.values(RING_REWARD)].forEach(r => { r.wood = 0; });
 })();
+// v0.45: what each of the new places gives you, on top of the fun and company (which now matter, D244; Mason #28:
+// "we go there for a reason"): a night in the hotel bed fills all three needs and keeps you in a good mood all day;
+// a swim makes you walk `swimWalk` faster for the rest of the day; every museum hall you see (each once a day) is a
+// point of knowledge, and every `knowEvery` points add `knowPay` to your pay at work (up to `knowMax`); the hospital's
+// A&E makes you well at once for `er`.
+const PERKS = { swimWalk: 0.15, knowEvery: 5, knowPay: 0.01, knowMax: 0.1, er: 120 };
+// v0.45: giving to the museum (Mason #28): any of `amounts` at a time; what you've given in all makes you a donor
+// (your name on the wall by the door), and at the top tier there's a statue of you in the dinosaur hall. `fun`: how
+// good it feels each time.
+const MUSEUM_GIFT = { amounts: [50, 200, 1000], fun: 6, tiers: [
+  { at: 100, e: '🥉', zh: '铜牌捐赠者', en: 'Bronze donor' },
+  { at: 1000, e: '🥈', zh: '银牌捐赠者', en: 'Silver donor' },
+  { at: 5000, e: '🥇', zh: '金牌捐赠者', en: 'Gold donor', statue: true },
+] };
+// v0.45: the furniture store has three floors (Mason #28: too much in one room), by what's sold there (SHOP_SUBS.furn
+// groups); escalators between them. Anything not in a group is on the ground floor.
+const FURN_FLOORS = [
+  { key: 'furniture', zh: '客厅', en: 'Living room', subs: ['seat', 'table', 'rug', 'decor'] },
+  { key: 'furniture2', zh: '卧室和厨房', en: 'Bedroom & kitchen', subs: ['bed', 'kitchen', 'lamp'] },
+  { key: 'furniture3', zh: '运动和爱好', en: 'Fitness & hobbies', subs: ['fit', 'fun'] },
+];
+const furnFloorOf = k => { const sub = (SHOP_SUBS.furn || []).find(g => g.keys.includes(k)); const i = sub ? FURN_FLOORS.findIndex(F => F.subs.includes(sub.id)) : -1; return Math.max(0, i); };
 // v0.44: the farm keeps (D244). Ripe crops stay good for `crop` hours, then rot in the ground (you clear them away);
 // eggs, milk, wool, fruit and honey wait `prod` hours, then they're gone and the next one starts. A warning (⏰) shows
 // for the last `warn` share of that time.

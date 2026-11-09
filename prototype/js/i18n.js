@@ -1236,3 +1236,46 @@ Object.assign(STR.en, {
   feed_sub: '{n} portions a bag; each animal eats 1 per egg, churn or bag · barn {b} · trough {t}/{c}',
   farm_away: 'While you were away: {list}', farm_away_rot: '{n} plots of crops rotted', farm_away_prod: '{n} things went off',
 });
+// ---------- v0.45: shops and places ----------
+Object.assign(STR.zh, { to_floor: '去 {n} 楼',
+  sp_museum_dino: '恐龙馆', sp_museum_donate: '捐款箱', sp_museum_donate_d: '捐给博物馆，名字会写在门口的捐赠者名单上。', sp_museum_mystatue: '雕像台', sp_museum_mystatue_d: '金牌捐赠者的雕像放在这里。',
+  sp_museum2_space: '太空馆', sp_museum2_space_d: '大火箭、头顶的行星、月球石头和宇航服。', sp_museum3_art: '画廊', sp_museum3_art_d: '一墙一墙的画。', sp_museum3_history: '历史展柜', sp_museum3_history_d: '古代的陶罐、石像和木乃伊的棺材。',
+  sp_museum2_lift: '电梯', sp_museum2_lift_d: '去别的楼层。', sp_museum3_lift: '电梯', sp_museum3_lift_d: '去别的楼层。', sp_museum_lift: '电梯', sp_museum_lift_d: '去别的楼层：2 楼太空馆、3 楼艺术和历史馆。',
+  md_none: '还不是捐赠者', md_given: '你一共捐了 🪙{n}', md_next: '再捐 🪙{n} 就是 {e} {name}', md_note: '捐满 🪙{a} 名字就会上门口的捐赠者名单；捐满 🪙{b} 成为金牌捐赠者，恐龙馆里会立一座你的雕像。', md_fun: '心情 +{n}',
+  md_thanks: '谢谢你的 🪙{n}！', md_up: '你成了{name}！门口的名单上有你的名字了', md_up_statue: '你成了{name}！恐龙馆里立起了你的雕像',
+  md_statue_yes: '这是 {name} 的雕像：博物馆的金牌捐赠者。', md_statue_no: '捐满 🪙{n} 成为金牌捐赠者，这里就会立起你的雕像（还差 🪙{left}）。在 1 楼的捐款箱捐款。' });
+Object.assign(STR.en, { to_floor: 'To floor {n}',
+  sp_museum_dino: 'Dinosaur hall', sp_museum_donate: 'Donation box', sp_museum_donate_d: 'Give to the museum, and your name goes on the donors’ wall by the door.', sp_museum_mystatue: 'Statue plinth', sp_museum_mystatue_d: 'A gold donor’s statue goes here.',
+  sp_museum2_space: 'Space hall', sp_museum2_space_d: 'A big rocket, planets overhead, a moon rock and a spacesuit.', sp_museum3_art: 'Gallery', sp_museum3_art_d: 'Walls of paintings.', sp_museum3_history: 'History cases', sp_museum3_history_d: 'Old pots, stone heads and a mummy’s case.',
+  sp_museum2_lift: 'Lift', sp_museum2_lift_d: 'To the other floors.', sp_museum3_lift: 'Lift', sp_museum3_lift_d: 'To the other floors.', sp_museum_lift: 'Lift', sp_museum_lift_d: 'To the other floors: space on 2, art and history on 3.',
+  md_none: 'Not a donor yet', md_given: 'You’ve given 🪙{n} in all', md_next: '🪙{n} more for {e} {name}', md_note: 'Give 🪙{a} in all and your name goes on the donors’ wall by the door; 🪙{b} makes you a gold donor, with a statue of you in the dinosaur hall.', md_fun: 'Mood +{n}',
+  md_thanks: 'Thank you for your 🪙{n}!', md_up: 'You’re a {name}! Your name is on the wall by the door', md_up_statue: 'You’re a {name}! There’s a statue of you in the dinosaur hall',
+  md_statue_yes: 'This is {name}: a gold donor to the museum.', md_statue_no: 'Give 🪙{n} in all to be a gold donor and your statue goes up here (🪙{left} to go). The donation box is on the ground floor.' });
+Object.assign(STR.zh, {
+  pg_title: '去这里能得到',
+  pg_hospital: '生病了来看急诊（🪙{n}），马上就好，不用等；献血、看望病人、看小宝宝让你心情好、交朋友；体检看看你这一周。',
+  pg_bowling: '和朋友打保龄球：娱乐 +20、社交 +10、关系变好；街机玩一玩，抓娃娃抓到的娃娃归你。',
+  pg_aquatic: '游一次泳：娱乐 +12，而且今天走路快 {w}%；跳水、蒸桑拿也加娱乐；还能和朋友比游泳。',
+  pg_museum: '每个展厅每天看一次，长 1 点知识：每 {e} 点知识，打工工资 +{k}%（最多 +{m}%）。你现在有 {know} 点（+{kp}%）。捐款上名单，捐满还有你的雕像。',
+  pg_station: '坐火车去别的镇：路上看风景（娱乐），买当地特产（送人对方更开心），看看别的县的物价。',
+  pg_hotel: '订一晚，上楼在大床上睡一觉：三项需求一下全满，今天一整天心情好（工资 +10%、走路快）。还有下午茶、屋顶泳池和酒吧。',
+  pg_amuse: '摩天轮、过山车、旋转木马……娱乐加得最多；迷你高尔夫、卡拉OK和朋友玩，关系变好。',
+  pg_zoo: '看动物（每天一个冷知识）、喂长颈鹿、摸小动物：娱乐；动物玩偶带回家布置。',
+  pg_stadium: '看一场比赛：娱乐 +15；本垒打大赛和朋友玩，关系变好；饿了买个热狗。',
+  er_btn: '看急诊，马上治好 🪙{n}', er_note: '诊所的药要吃了再躺下休息才好；急诊贵一点，但马上就好。', er_done: '看完急诊，好了！',
+  perk_swim: '走路 +{n}%', perk_rest: '睡饱了，心情好',
+});
+Object.assign(STR.en, {
+  pg_title: 'What you get here',
+  pg_hospital: 'Ill? A&E makes you well at once (🪙{n}), no waiting. Giving blood, visiting patients and seeing the babies lift your mood and make friends; a check-up shows your week.',
+  pg_bowling: 'Bowl with a friend: fun +20, company +10, a closer friendship; the arcade, and the toys you grab are yours.',
+  pg_aquatic: 'A swim: fun +12, and you walk {w}% faster for the rest of the day; the diving board and the sauna are fun too; race a friend.',
+  pg_museum: 'See each hall once a day for a point of knowledge: every {e} points add {k}% to your pay at work (up to {m}%). You have {know} (+{kp}%). Give money for your name on the wall, and a statue of you at the top.',
+  pg_station: 'Take the train to another town: the view on the way (fun), its own specialties (friends love them as gifts), and its prices.',
+  pg_hotel: 'Book a night and sleep in the big bed upstairs: all three needs full at once, and a good mood all day (+10% pay, faster walking). Afternoon tea, the rooftop pool and the bar too.',
+  pg_amuse: 'The Ferris wheel, the coaster, the carousel: the most fun anywhere; mini golf and karaoke with friends bring you closer.',
+  pg_zoo: 'See the animals (a new fact a day), feed the giraffes, pet the farm animals: fun; take a plush animal home.',
+  pg_stadium: 'Watch a game: fun +15; a home run derby with a friend brings you closer; a hot dog if you’re hungry.',
+  er_btn: 'A&E: well again now 🪙{n}', er_note: 'The clinic’s medicine needs a rest in bed afterwards; A&E costs more but works at once.', er_done: 'Seen at A&E: all better!',
+  perk_swim: 'walking +{n}%', perk_rest: 'well rested, good mood',
+});

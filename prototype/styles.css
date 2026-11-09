@@ -922,3 +922,11 @@ body.dark .hud-needs .hn-r i { background: rgba(255,255,255,.12); }
 .hud .row.between > .row.tight { flex: none; }
 .hud .me-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud .coin-chip { padding: 6px 10px 6px 8px; }
+/* v0.45: what a place gives you, and today's perks in the top bar */
+.place-gain { background: linear-gradient(135deg, #fff6df, #ffe9c4); border-radius: 16px; padding: 10px 12px; margin: 0 0 10px; }
+.place-gain b { font-family: var(--font-cute); font-size: 14px; color: #b5641e; }
+.place-gain p { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: #6b4a1f; font-weight: 700; }
+.pill.perk { background: #e3f6e6; color: #2f7d47; font-weight: 800; }
+body.dark .place-gain { background: linear-gradient(135deg, #3a3128, #33291f); }
+body.dark .place-gain p { color: #f2d2a8; }
+body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
