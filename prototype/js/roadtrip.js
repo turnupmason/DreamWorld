@@ -291,13 +291,20 @@ const Drive = (() => {
   // and then a sea creature swims up beside it: tap it to take its photo for the passport. Both show the DreamWorld
   // map itself from above, a close-up piece of it drawn as you go (mapTile).
   const ptsWithU = pts => { let u = 0; pts.forEach((p, i) => { if (i) u += Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y); p.u = u; p.water = false; p.tunnel = false; }); return u; };
+  // v0.69 (Mason #33: "the runway on the big map has a fixed direction, the plane's points where it's going: make them
+  // the same"): down your airport's own runway (the way round nearer where you're going), a smooth turn towards the
+  // other airport, and in to land along its runway
   function planAir(from, to) {
     if (from === to || !DREAM_AIR.includes(from) || !DREAM_AIR.includes(to)) return null;
-    const [ax, ay] = DREAM_AIR_AT[from], [bx, by] = DREAM_AIR_AT[to], L = Math.hypot(bx - ax, by - ay), hx = (bx - ax) / L, hy = (by - ay) / L, r = TRAVEL.runway / 2;
-    const A = [ax - hx * r, ay - hy * r], B = [bx + hx * r, by + hy * r], pts = [];
-    for (let k = 0; k <= 60; k++) { const u = k / 60; pts.push({ x: A[0] + (B[0] - A[0]) * u, y: A[1] + (B[1] - A[1]) * u }); }
+    const [ax, ay] = DREAM_AIR_AT[from], [bx, by] = DREAM_AIR_AT[to], brg = Math.atan2(by - ay, bx - ax), r = TRAVEL.runway / 2;
+    const way = (rw, b) => (Math.cos(rw - b) >= 0 ? rw : rw + Math.PI), dA = way(DREAM_AIR_RW[from] || 0, brg), dB = way(DREAM_AIR_RW[to] || 0, brg);
+    const A0 = [ax - Math.cos(dA) * r, ay - Math.sin(dA) * r], A1 = [ax + Math.cos(dA) * r, ay + Math.sin(dA) * r], B0 = [bx - Math.cos(dB) * r, by - Math.sin(dB) * r], B1 = [bx + Math.cos(dB) * r, by + Math.sin(dB) * r];
+    const k = Math.min(Math.hypot(B0[0] - A1[0], B0[1] - A1[1]) * 0.38, 110), C1 = [A1[0] + Math.cos(dA) * k, A1[1] + Math.sin(dA) * k], C2 = [B0[0] - Math.cos(dB) * k, B0[1] - Math.sin(dB) * k], pts = [];
+    for (let i = 0; i < 8; i++) { const u = i / 8; pts.push({ x: A0[0] + (A1[0] - A0[0]) * u, y: A0[1] + (A1[1] - A0[1]) * u }); }
+    for (let i = 0; i <= 70; i++) { const u = i / 70, v = 1 - u; pts.push({ x: v * v * v * A1[0] + 3 * v * v * u * C1[0] + 3 * v * u * u * C2[0] + u * u * u * B0[0], y: v * v * v * A1[1] + 3 * v * v * u * C1[1] + 3 * v * u * u * C2[1] + u * u * u * B0[1] }); }
+    for (let i = 1; i <= 8; i++) { const u = i / 8; pts.push({ x: B0[0] + (B1[0] - B0[0]) * u, y: B0[1] + (B1[1] - B0[1]) * u }); }
     const len = ptsWithU(pts), km = Math.round(len * DRIVE.km), tiles = len * DRIVE.tilesPerUnit;
-    return { from, to, legs: [], pts, via: [], len, tiles, ev: [], km, cost: TRAVEL.airBase + Math.round(km * TRAVEL.airFare), bridges: 0, seed: from.length * 7 + to.length * 13, mode: 'air', mins: Math.max(1, Math.ceil(tiles / TRAVEL.airSpeed / 60)), rw: [[ax, ay], [bx, by]], hd: Math.atan2(hy, hx) };
+    return { from, to, legs: [], pts, via: [], len, tiles, ev: [], km, cost: TRAVEL.airBase + Math.round(km * TRAVEL.airFare), bridges: 0, seed: from.length * 7 + to.length * 13, mode: 'air', mins: Math.max(1, Math.ceil(tiles / TRAVEL.airSpeed / 60)), rw: [[ax, ay, DREAM_AIR_RW[from] || 0], [bx, by, DREAM_AIR_RW[to] || 0]], hd: dA };
   }
   // the sea: a grid of cells far enough from every coast (the coast as it's drawn: the smooth shapes)
   let SG = null;
@@ -405,7 +412,7 @@ const Drive = (() => {
     g.drawImage(T.cv, SX(T.x0), SY(T.y0), (T.x1 - T.x0) * zoom, (T.y1 - T.y0) * zoom);
     const sx = SX(px), sy = SY(py);
     if (air) {
-      R.p.rw.forEach(([ax, ay]) => runway(SX(ax * DM_S), SY(ay * DM_S), R.p.hd, zoom));
+      R.p.rw.forEach(([ax, ay, ang]) => runway(SX(ax * DM_S), SY(ay * DM_S), ang, zoom));   // (v0.69: each airport's own runway)
       placeLabels(SX, SY, zoom, alt);
       clouds(cx, cy, zoom, alt, ts, 1.25, 0.5, true);   // their shadows on the ground
       clouds(cx, cy, zoom, alt, ts, 1.25, 0.5);

@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.68.0';
+const VERSION = '0.69.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -903,7 +903,7 @@ const DREAM_ROADS = [
 ];
 const DREAM_RAIL = [['wutong', 'vermont'], ['vermont', 'london'], ['london', 'provence'], ['provence', 'seoul'], ['seoul', 'kyoto'], ['vermont', 'palmbay'], ['palmbay', 'rio'], ['provence', 'capetown'], ['seoul', 'hangzhou'], ['hangzhou', 'sydney', 48],
   ['wutong', 'banff', 22], ['wutong', 'cactus', -20], ['cactus', 'andes', 26], ['london', 'holland', -16], ['holland', 'fjord', 18]];   // v0.67 (Mason #32: "every city: roads, railways, all clear"): every place has a station on the line
-const DREAM_AIR = ['wutong', 'london', 'seoul', 'rio', 'sydney', 'capetown'];
+const DREAM_AIR = Object.keys(DREAM_AT);   // v0.69 (Mason #33: "every city must have an airport")
 const DREAM_PORT = ['palmbay', 'rio', 'capetown', 'sydney', 'kyoto', 'fjord', 'london'];
 const DREAM_PEAKS = [[215, 120], [250, 140], [180, 130], [300, 600], [330, 660], [640, 60], [690, 75], [960, 240], [1080, 230]];   // mountains (the drive goes through them in tunnels)
 // v0.60 (Mason #30: "drive out of town and the scene changes… see the whole way"): driving between places along the
@@ -918,7 +918,11 @@ const DRIVE = { trainSpeed: 32, trainFare: 0.07, trainMin: 8, track: 1.3, tilesP
 // passport. Each airport and port has its own spot on the map (the airport on land beside its place, the port's
 // dock in the water off it). Planes fly straight from airport to airport; ships find the shortest way by sea (worked
 // out on a grid of the water, then pulled straight).
-const DREAM_AIR_AT = { wutong: [180, 315], london: [549, 164], seoul: [924, 209], rio: [465, 658], sydney: [1097, 665], capetown: [668, 697] };   // (v0.65: just outside each town's streets)
+// v0.69: every place's airport: on land, just outside its streets, clear of the interstates and the railway; its
+// runway's fixed direction (radians on the map). The plane takes off along it, turns, and lands along the other's.
+const DREAM_AIR_AT = { andes: [354, 656], banff: [246, 196], cactus: [240, 463], capetown: [647, 727], fjord: [699, 92], hangzhou: [916, 372], holland: [636, 218], kyoto: [1104, 262],
+  london: [494, 135], palmbay: [418, 508], provence: [600, 356], rio: [532, 700], seoul: [849, 165], sydney: [1096, 676], vermont: [383, 177], wutong: [146, 368] };
+const DREAM_AIR_RW = { andes: 0, banff: 0, cactus: 1.18, capetown: 0.79, fjord: 0, hangzhou: 1.18, holland: 2.75, kyoto: 0, london: 0, palmbay: 1.57, provence: 1.57, rio: 1.18, seoul: 0, sydney: 0, vermont: 0, wutong: 0 };
 const DREAM_PORT_AT = { palmbay: [483, 489], rio: [549, 705], capetown: [717, 747], sydney: [1083, 591], kyoto: [1089, 213], fjord: [657, 45], london: [459, 129] };
 // airSpeed / shipSpeed: tiles a second at ×1 (a car does 16); airBase + airFare a km, shipBase + shipFare a km
 // (+ shipCar when your car comes along); runway, climb, desc: map units on the runway, climbing and coming down;
@@ -928,10 +932,14 @@ const DREAM_PORT_AT = { palmbay: [483, 489], rio: [549, 705], capetown: [717, 74
 // stamp lifts your fun; sightEvery: a sea creature about this often (map units, at most sightMax a trip), up for
 // sightLife seconds; awards: a travel keepsake at this many stamps
 const TRAVEL = {
-  airSpeed: 90, airBase: 30, airFare: 0.15, runway: 50, climb: 160, desc: 190, zLow: 4, zHigh: 1.35, cruiseM: 10000,
+  airSpeed: 90, airBase: 30, airFare: 0.15, runway: 30, climb: 160, desc: 190, zLow: 4, zHigh: 1.35, cruiseM: 10000,
   shipSpeed: 16, shipBase: 8, shipFare: 0.04, shipCar: 15, zSea: 2.6, seaCell: 6, seaMargin: 18,
   fastAir: [1, 3, 8], fastSea: [1, 4, 16], ticketEvery: 5, stampFun: 15, sightEvery: 110, sightMax: 8, sightLife: 9,
   awards: [[4, 'tv_map'], [8, 'tv_bag'], [12, 'tv_balloon'], [16, 'tv_globe']],
+  // v0.69 (Mason #33: "a 出行 app in the phone to buy plane and train tickets; you can't buy at the airport; they're
+  // for the next day"): tomorrow's departures (local time where it leaves), boarding from boardBefore minutes before
+  // till boardAfter minutes after; a missed one is gone
+  times: { air: [8, 13, 18], train: [7, 10, 13, 16, 19], sea: [9, 15] }, boardBefore: 60, boardAfter: 20,
 };
 // what you can photograph from the ship (where: the regions, 'any', or 'deep': far from every place)
 const SEA_LIFE = [
@@ -960,7 +968,7 @@ const FEED_PAGE = { per: 10, keepDays: 3 };
 // the airports too"): townTile: map units a town tile takes on the map (a town ~55 units across); planPx: how sharp a
 // town's street plan is drawn (px a tile); zMax: the closest zoom (screen px a map px); plansAt / airAt: from this zoom
 // on, the towns' streets and the airports and ports show; tap: how near (screen px) a tap picks a place
-const WMAP_CFG = { townTile: 0.3, planPx: 3, zMax: 16, plansAt: 2.2, airAt: 1.4, tap: 30, runway: 26, runwayW: 2.4 };
+const WMAP_CFG = { townTile: 0.3, planPx: 3, zMax: 16, plansAt: 2.2, airAt: 1.4, tap: 30, runway: 30, runwayW: 2.4 };
 // v0.68 (Mason #33): day and night by each place's real clock: fully light from `light` (8:00) to `dimFrom` (16:00),
 // slowly darker till fully dark at `dark0` (19:00), light again from `dawn` (5:30); dark: how dark the night is;
 // dusk: how warm the sky goes while the sun sets

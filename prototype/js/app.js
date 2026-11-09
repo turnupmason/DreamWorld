@@ -196,7 +196,7 @@ function renderHUD() {
     </div>
     ${needBars()}
     <div class="res row">${perks}${live}
-      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : commuteSoon() ? `<button class="pill work" data-act="commuteGo">💼 ${t('job_commute')}</button>` : ''}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${S.study ? `<button class="pill work" data-act="placeGo" data-arg="school">📚 ${fmtDur(Math.max(0, S.study.end - now()))}</button>` : ''}${isFed() ? `<button class="pill fed" data-act="mallAct" data-arg="food">😋 ${fmtDur(S.fed.until - now())}</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
+      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : commuteSoon() ? `<button class="pill work" data-act="commuteGo">💼 ${t('job_commute')}</button>` : ''}${(tk => (tk ? `<button class="pill work" data-act="goTicket" data-arg="${tk.id}">${WAY_EMO[tk.mode]} ${localClock(tk.from, tk.dep)} ${t('tk_go_' + tk.mode)}</button>` : ''))(ticketSoon())}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${S.study ? `<button class="pill work" data-act="placeGo" data-arg="school">📚 ${fmtDur(Math.max(0, S.study.end - now()))}</button>` : ''}${isFed() ? `<button class="pill fed" data-act="mallAct" data-arg="food">😋 ${fmtDur(S.fed.until - now())}</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
     </div>`;
 }
@@ -1125,7 +1125,8 @@ const SHEETS = {
         <div class="act-grid">${MUSEUM_GIFT.amounts.map(n => `<button class="act-tile" data-act="museumGive" data-arg="${n}" ${S.me.coins >= n ? '' : 'disabled'}><span>💝</span><b>🪙${fmtNum(n)}</b><i>${t('md_fun', { n: MUSEUM_GIFT.fun })}</i></button>`).join('')}</div>`; }
     else if (key === 'museum|mystatue') body = `<p>${museumTier() && museumTier().statue ? t('md_statue_yes', { name: esc(S.me.name || '') }) : t('md_statue_no', { n: fmtNum(MUSEUM_GIFT.tiers[2].at), left: fmtNum(Math.max(0, MUSEUM_GIFT.tiers[2].at - museumGiven())) })}</p>`;
     else if (key === 'museum|shop') body = `<p class="muted small">${t('sp_souvenir_note')}</p><button class="btn primary block gap-top" data-act="souvenirBuy" ${S.me.coins >= VENUE.souvenir.price ? '' : 'disabled'}>🦖 ${t('sp_souvenir_btn', { n: VENUE.souvenir.price })}</button>`;
-    else if (key === 'station|ticket') { const from = whereNow(), dests = Object.keys(DREAM_AT).filter(id => id !== from && COMMUNITIES[id] && Drive.plan(from, id, 'train')).sort((a, b) => (b === myTown()) - (a === myTown()));   // (v0.68: home first)   // v0.61: real trains along the railway
+    else if (key === 'station|ticket') body = ticketsAtHub('train');   // v0.69: tickets come from the phone (出行); here you board
+    else if (key === 'station|ticket_old') { const from = whereNow(), dests = Object.keys(DREAM_AT).filter(id => id !== from && COMMUNITIES[id] && Drive.plan(from, id, 'train')).sort((a, b) => (b === myTown()) - (a === myTown()));   // (v0.68: home first)   // v0.61: real trains along the railway
       body = !dests.length ? `<p class="muted">${t('tr_no_here')}</p>` : `<p class="muted small">${t('tr_note')}</p><div class="card">${dests.map(id => { const P = Drive.plan(from, id, 'train');
         return `<div class="list-item ${id === myTown() ? 'home-row' : ''}"><span class="big-emoji">${id === myTown() ? '🏡' : COMMUNITIES[id].flag}</span><div class="grow"><b>${nm(COMMUNITIES[id])}</b> ${id === myTown() ? `<span class="tag ok">${t('ah_home_tag')}</span>` : isTeamCity(id) ? '🏟️' : ''}<div class="muted small">${P.km} km · ${t('tr_mins', { m: P.mins })} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}</div></div><button class="btn small primary" data-act="trainGo" data-arg="${id}" ${S.me.coins >= P.cost ? '' : 'disabled'}>🚆 🪙${P.cost}</button></div>`; }).join('')}</div>`; }
     else if (key === 'station|board') body = `<div class="card">${Scene.trainBoard().slice(1).map(r => `<div class="list-item"><b>🚆 ${esc(r)}</b></div>`).join('')}</div><p class="muted small">${t('sp_board_note')}</p>`;
@@ -3096,7 +3097,7 @@ function wmPaint() {
   const fa = Math.max(0, Math.min(1, (z - WMAP_CFG.airAt) / 0.6));
   if (fa > 0) {
     DREAM_AIR.forEach(id => { const [ax, ay] = DREAM_AIR_AT[id].map(v => v * S0), L = WMAP_CFG.runway * S0, w2 = WMAP_CFG.runwayW * S0; if (!seen(ax, ay, L)) return;
-      g.save(); g.globalAlpha = fa; g.translate(ax, ay); g.rotate(-0.35);
+      g.save(); g.globalAlpha = fa; g.translate(ax, ay); g.rotate(DREAM_AIR_RW[id] || 0);   // (v0.69: the same way as in the plane)
       g.fillStyle = '#8f949a'; g.fillRect(-L / 2 - w2 * 0.4, -w2 * 0.9, L + w2 * 0.8, w2 * 1.8); g.fillStyle = '#4b4f55'; g.fillRect(-L / 2, -w2 / 2, L, w2);
       g.strokeStyle = '#fff'; g.lineWidth = w2 * 0.08; g.setLineDash([w2 * 0.6, w2 * 0.5]); g.beginPath(); g.moveTo(-L / 2 + w2, 0); g.lineTo(L / 2 - w2, 0); g.stroke(); g.setLineDash([]);
       g.fillStyle = dark ? '#7d848b' : '#d8dde3'; g.fillRect(-L * 0.22, w2 * 1.1, L * 0.44, w2 * 1.3); g.fillStyle = '#9fc6e0'; g.fillRect(-L * 0.2, w2 * 1.15, L * 0.4, w2 * 0.35);
@@ -3184,9 +3185,9 @@ function awayHomeCard() {
   const row = (e, txt, act, arg, label) => `<div class="row gap-top"><span class="grow small">${e} ${txt}</span><button class="btn small primary" data-act="${act}" data-arg="${arg}">${label}</button></div>`;
   return `<div class="card away-home"><b>🧳 ${t('ah_title', { c: nm(COMMUNITIES[here]), h: nm(COMMUNITIES[home]) })}</b>
     ${car ? row('🚗', t('dr_info_short', { km: D.km, n: D.cost }), 'driveTo', home + '|', t('dr_go_home')) : D ? `<p class="muted small">🚗 ${t('ah_no_car', { c: nm(COMMUNITIES[(S.carAt && S.carAt.town) || home]) })}</p>` : ''}
-    ${T ? row('🚆', t('tr_info', { km: T.km, n: T.cost, m: T.mins }), 'goStation', '', t('tr_go_station')) : ''}
-    ${A ? row('✈️', t('fl_info', { km: A.km, n: A.cost, m: A.mins }), 'goHub', 'airport', t('hub_go_air')) : ''}
-    ${Sh ? row('⛴️', t('sh_info', { km: Sh.km, n: Sh.cost, m: Sh.mins }), 'goHub', 'port', t('hub_go_sea')) : ''}
+    ${T ? `<div class="row gap-top"><span class="grow small">🚆 ${t('tr_info', { km: T.km, n: T.cost, m: T.mins })}</span>${tripBtn('train', home)}</div>` : ''}
+    ${A ? `<div class="row gap-top"><span class="grow small">✈️ ${t('fl_info', { km: A.km, n: A.cost, m: A.mins })}</span>${tripBtn('air', home)}</div>` : ''}
+    ${Sh ? `<div class="row gap-top"><span class="grow small">⛴️ ${t('sh_info', { km: Sh.km, n: Sh.cost, m: Sh.mins })}</span>${tripBtn('sea', home)}</div>` : ''}   <!-- (v0.69: tickets in the phone) -->
     <button class="btn block gap-top" data-act="findMe">📍 ${t('ah_see_me')}</button></div>`;
 }
 // v0.60 (Mason #30): driving to another place: where you are now (another city, or home), the way there, gas and tolls
@@ -3198,7 +3199,7 @@ function driveRow(id) {
   if (!P) return '';
   const can = car && !two && S.me.coins >= P.cost && carTown === from, why = !car ? t('dr_no_car') : two ? t('dr_two') : carTown !== from ? t('dr_car_in', { c: nm(COMMUNITIES[carTown]) }) : S.me.coins < P.cost ? t('snack_poor') : '';
   const TP = Drive.plan(from, id, 'train');   // v0.61: the train, from the station
-  const train = TP ? `<div class="row gap-top"><span class="grow small">🚆 ${t('tr_info', { km: TP.km, n: TP.cost, m: TP.mins })}</span><button class="btn small" data-act="goStation">${t('tr_go_station')}</button></div>` : `<p class="muted small">🚆 ${t(Drive.onRail(from) ? 'tr_no_there' : 'tr_no_here')}</p>`;
+  const train = TP ? `<div class="row gap-top"><span class="grow small">🚆 ${t('tr_info', { km: TP.km, n: TP.cost, m: TP.mins })}</span>${tripBtn('train', id)}</div>` : `<p class="muted small">🚆 ${t(Drive.onRail(from) ? 'tr_no_there' : 'tr_no_here')}</p>`;   // (v0.69: tickets in the phone)
   const btn = (place, label) => `<button class="btn ${place ? '' : 'primary'} grow" data-act="driveTo" data-arg="${id}|${place || ''}" ${can ? '' : 'disabled'}>${label}</button>`;
   const games = isTeamCity(id) && id !== myTown() ? SPORT_KEYS.flatMap(sp => todayGames(sp).filter(G => G.h === arTeamIn(sp, id) && G.state !== 'done')) : [];
   return `<div class="card drive-card"><b>🚗 ${id === myTown() ? t('dr_home_title') : t('dr_title', { c: nm(COMMUNITIES[id]) })}</b>
@@ -3217,11 +3218,8 @@ function flySailHtml(id) {
     if (!list.includes(id)) return `<p class="muted small">${e} ${t(air ? 'fl_no_there' : 'sh_no_there', { c: nm(COMMUNITIES[id]), a: nm(COMMUNITIES[nearestOf(list, id)]) })}</p>`;
     if (!list.includes(from)) return `<p class="muted small">${e} ${t(air ? 'fl_no_here' : 'sh_no_here', { c: nm(COMMUNITIES[nearestOf(list, from)]) })}</p>`;
     const P = Drive.plan(from, id, mode); if (!P) return '';
-    const car = !air && carWithYou(), cost = P.cost + (car ? TRAVEL.shipCar : 0), hub = air ? 'airport' : 'port';
-    const atHub = !hubIn(from, hub) || (Scene.here() === hub && VIEW_TOWN === from);   // v0.67: tickets are sold at the airport / the port
-    return `<div class="row gap-top"><span class="grow small">${e} ${t(air ? 'fl_info' : 'sh_info', { km: P.km, n: cost, m: P.mins })}${car ? `<br><span class="muted">🚗 ${t('sh_car', { n: TRAVEL.shipCar })}</span>` : ''}</span>
-      ${!atHub ? `<button class="btn small" data-act="goHub" data-arg="${hub}">${t(air ? 'hub_go_air' : 'hub_go_sea')}</button>`
-        : `${tix ? `<button class="btn small" data-act="${act}" data-arg="${id}|tix">🎟️ ${t('tix_use')}</button>` : ''}<button class="btn small primary" data-act="${act}" data-arg="${id}|" ${S.me.coins >= cost ? '' : 'disabled'}>${e} 🪙${cost}</button>`}</div>`;
+    const car = !air && carWithYou(), cost = P.cost + (car ? TRAVEL.shipCar : 0); void act; void tix;
+    return `<div class="row gap-top"><span class="grow small">${e} ${t(air ? 'fl_info' : 'sh_info', { km: P.km, n: cost, m: P.mins })}${car ? `<br><span class="muted">🚗 ${t('sh_car', { n: TRAVEL.shipCar })}</span>` : ''}</span>${tripBtn(mode, id)}</div>`;   // v0.69: tickets in the phone
   };
   return row('air', '✈️') + row('sea', '⛴️');
 }
@@ -3447,9 +3445,10 @@ function placeBody(key) {
         : `<button class="btn primary block" data-act="takeClass" ${done || max || S.me.coins < SCHOOL.fee ? 'disabled' : ''}>📚 ${max ? t('school_max') : done ? t('school_done') : t('school_take', { n: SCHOOL.fee, m: SCHOOL.minutes })}</button>`}`;
   }
   if (key === 'firestation' || key === 'gas') return `<p>${t('st_desc_' + key)}</p>`;
+  if (key === 'station') return `<p>${t('st_desc_station')}</p>${ticketsAtHub('train')}<p class="muted small">${t('pl_tap_inside')}</p>` + jobSection(key);   // v0.69
   if (key === 'office') return `<p>${t('pl_desc_office')}</p>` + jobSection('office');   // v0.37
   if (['hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium', 'arena'].includes(key)) return `<p>${t('st_desc_' + key)}</p>${key === 'stadium' || key === 'arena' ? venueLookCard(VIEW_TOWN, key) + gameCard(VIEW_TOWN, key) : ''}<p class="muted small">${t('pl_tap_inside')}</p>` + jobSection(key);   // v0.38 (v0.42: + the zoo, the stadium and today's game; v0.59: + the arena, each city's own stadium)
-  if (key === 'airport' || key === 'port') return hubBoard(key);   // v0.67
+  if (key === 'airport' || key === 'port') return ticketsAtHub(key === 'airport' ? 'air' : 'sea');   // v0.69: your tickets (bought in the phone)
   if (key === 'hotel') return hotelDesk() + `<p class="muted small">${t('pl_tap_inside')}</p>`;
   if (['tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist', 'bank', 'restaurant', 'rooftop', 'suite'].includes(key)) return `<p class="muted small">${t('pl_tap_inside')}</p>`;
   if (key === 'police') {   // v0.18: the holding cell (when you're held) or how the police work
@@ -3572,6 +3571,86 @@ Object.assign(ACT, {
 });
 function townMoveTick2() { const M = S.townMove; if (M && !Object.keys(M.votes).length) { moveWholeTown(M.to); snack(`🚚 ${t('tm_moved', { c: nm(COMMUNITIES[M.to]) })}`); S.townMove = null; Scene.moveHome(); syncView(); Scene.recenter(); } }
 Object.assign(ACT, {
+});
+
+
+// ================= v0.69 (Mason #33): tickets in the phone's 出行, boarding at the airport / station / port =================
+const WAY_EMO = { air: '✈️', train: '🚆', sea: '⛴️' };
+// a ticket you hold for this way from here (to there), not yet missed
+const tkFor = (mode, from, to) => myTickets().find(tk => tk.mode === mode && tk.from === from && (!to || tk.to === to) && ticketState(tk) !== 'missed');
+const depTxt = tk => `${fmtDay(tk.dep)} ${localClock(tk.from, tk.dep)}`;
+// one ticket: where to, when (its own clock), how it stands; at the hub you board, anywhere else you can head there
+function ticketRow(tk, atHub) {
+  const st = ticketState(tk), home = tk.to === myTown(), open = localClock(tk.from, tk.dep - TRAVEL.boardBefore * MIN);
+  const btn = st === 'missed' ? '' : atHub ? (st === 'board' ? `<button class="btn small primary" data-act="boardTicket" data-arg="${tk.id}">${WAY_EMO[tk.mode]} ${t('tk_board_' + tk.mode)}</button>` : '')
+    : `<button class="btn small" data-act="goTicket" data-arg="${tk.id}">${t('tk_go_' + tk.mode)}</button>`;
+  return `<div class="list-item ${home ? 'home-row' : ''}"><span class="big-emoji">${WAY_EMO[tk.mode]}</span><div class="grow"><b>${nm(COMMUNITIES[tk.from])} → ${home ? '🏡 ' : ''}${nm(COMMUNITIES[tk.to])}</b>
+    <div class="muted small">${depTxt(tk)} · ${st === 'missed' ? `❌ ${t('tk_missed')}` : st === 'board' ? `✅ ${t('tk_board_now')}` : t('tk_wait', { t: open })}</div></div>${btn}</div>`;
+}
+// at the airport / the station / the port: no ticket office, just your tickets from here
+function ticketsAtHub(mode) {
+  const from = whereNow(), list = myTickets().filter(tk => tk.mode === mode && tk.from === from).sort((a, b) => a.dep - b.dep);
+  return `<p>${t('tk_hub_' + mode, { n: TRAVEL.boardBefore })}</p>${list.length ? `<div class="card">${list.map(tk => ticketRow(tk, true)).join('')}</div>` : `<p class="muted">${t('tk_none_here')}</p>`}
+    <button class="btn block gap-top" data-act="phone" data-arg="trip|${mode}">🧳 ${t('tk_open_app')}</button>`;
+}
+// a way to get there: your ticket (head for the hub) or the app to buy one
+function tripBtn(mode, to) { const tk = tkFor(mode, whereNow(), to); return tk ? `<button class="btn small" data-act="goTicket" data-arg="${tk.id}">${WAY_EMO[mode]} ${t('tk_go_' + mode)}</button>` : `<button class="btn small" data-act="phone" data-arg="trip|${mode}">🧳 ${t('tk_buy_app')}</button>`; }
+// the phone's 出行: planes, trains, ships from where you are, tomorrow's departures; your tickets
+function tripScreen(a) {
+  const tab = ['air', 'train', 'sea', 'mine'].includes(a) ? a : myTickets().length ? 'mine' : 'air', from = whereNow();
+  const tabs = ['air', 'train', 'sea', 'mine'].map(k => `<button class="chip ${k === tab ? 'on' : ''}" data-act="phone" data-arg="trip|${k}">${k === 'mine' ? '🎫' : WAY_EMO[k]} ${t('tk_tab_' + k)}${k === 'mine' && myTickets().length ? ' ' + myTickets().length : ''}</button>`).join('');
+  let body;
+  if (tab === 'mine') body = myTickets().length ? myTickets().slice().sort((x, y) => x.dep - y.dep).map(tk => ticketRow(tk, false)).join('') : `<p class="ph-muted">${t('tk_none')}</p>`;
+  else {
+    const dests = Object.keys(DREAM_AT).filter(id => id !== from && COMMUNITIES[id] && Drive.plan(from, id, tab)).sort((x, y) => (y === myTown()) - (x === myTown()));
+    const deps = tripDeps(tab, from), tix = ticketsLeft(), free = !!UI.tripFree && tix > 0;
+    body = `<div class="ph-muted small">${t('tk_from', { c: nm(COMMUNITIES[from]) })} · ${t('tk_tomorrow')}</div>`
+      + (tix ? `<button class="chip ${free ? 'on' : ''}" data-act="tripFree">🎟️ ${t('tk_free', { n: tix })}</button>` : '')
+      + (dests.length ? dests.map(id => { const P = Drive.plan(from, id, tab), c = COMMUNITIES[id], home = id === myTown(), can = free || S.me.coins >= P.cost;
+        return `<div class="ph-card ${home ? 'home-row' : ''}"><div class="row between"><b>${home ? '🏡' : c.flag} ${nm(c)} ${home ? `<span class="tag ok">${t('ah_home_tag')}</span>` : ''}</b><b>${free ? '🎟️' : '🪙' + P.cost}</b></div>
+          <div class="ph-muted small">${P.km} km · ${t('tr_mins', { m: P.mins })}</div>
+          <div class="chips-row">${deps.map(d => `<button class="chip" data-act="tripBuy" data-arg="${tab}|${id}|${d.dep}" ${can ? '' : 'disabled'}>${d.h}:00</button>`).join('')}</div></div>`; }).join('')
+        : `<p class="ph-muted">${t('tk_no_way_' + tab)}</p>`);
+  }
+  return `<div class="ph-head"><button class="ph-back" data-act="phone" data-arg="home">‹</button><b>🧳 ${t('ph_trip')}</b></div><div class="chips-row">${tabs}</div>${body}`;
+}
+// the next ticket worth heading off for (from 2 hours before it leaves): the top bar shows it
+function ticketSoon() { const here = whereNow(); return myTickets().filter(tk => tk.from === here && ticketState(tk) !== 'missed' && tk.dep - now() < 2 * HOUR).sort((a, b) => a.dep - b.dep)[0] || null; }
+Object.assign(ACT, {
+  tripFree() { UI.tripFree = !UI.tripFree; renderSheet(); },
+  tripBuy(arg) {
+    const [mode, to, dep] = String(arg).split('|'), from = whereNow(), free = !!UI.tripFree && ticketsLeft() > 0, r = buyTicket(mode, from, to, +dep, free);
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r !== 'ok') return;
+    UI.tripFree = false; Sound.play('coins'); save();
+    snack(`${WAY_EMO[mode]} ${t('tk_bought', { c: nm(COMMUNITIES[to]), t: depTxt({ from, dep: +dep }) })}`);
+    openSheet('phone', 'trip|mine'); refresh();
+  },
+  // head for the airport / the station / the port your ticket leaves from
+  goTicket(id) {
+    const tk = myTickets().find(x => x.id === id); if (!tk) return;
+    if (tk.from !== whereNow()) { Sound.play('oops'); return snack(t('tk_wrong_place', { c: nm(COMMUNITIES[tk.from]) })); }
+    closeSheet();
+    if (tk.mode === 'train') return ACT.goStation();
+    ACT.goHub(HUB_OF[tk.mode]);
+  },
+  // at the hub, in time: off you go (the ship takes your car if it's with you, for its fare)
+  boardTicket(id) {
+    const tk = myTickets().find(x => x.id === id); if (!tk) return;
+    const st = ticketState(tk), hub = HUB_OF[tk.mode];
+    if (st === 'missed') { Sound.play('oops'); return snack(t('tk_missed')); }
+    if (st === 'wait') { Sound.play('oops'); return snack(t('tk_too_early', { t: localClock(tk.from, tk.dep - TRAVEL.boardBefore * MIN) })); }
+    if (whereNow() !== tk.from || VIEW_TOWN !== tk.from || !(Scene.here() === hub || UI.inVenue === hub)) { Sound.play('oops'); return snack(t('tk_go_first_' + tk.mode)); }
+    if (S.work || jailed()) return snack(t('dr_busy'));
+    let car = false;
+    if (tk.mode === 'sea' && carWithYou()) { if (S.me.coins < TRAVEL.shipCar) { Sound.play('oops'); return snack(t('snack_poor')); } S.me.coins -= TRAVEL.shipCar; car = true; }
+    S.tickets = myTickets().filter(x => x !== tk); closeSheet(); save(); Sound.play('chime');
+    if (tk.mode === 'train') {
+      const go = () => { UI.inVenue = null; UI.spotRes = null; if (onceToday('train')) addNeed('fun', VENUE.train.fun); Drive.open({ from: tk.from, to: tk.to, mode: 'train' }, o => trainArrived(o)); };
+      return UI.inVenue === 'station' ? Scene.shopGoTo('ticket', go) : go();
+    }
+    Drive.open({ from: tk.from, to: tk.to, mode: tk.mode, car }, o => travelArrived(o));
+  },
 });
 
 // ================= v0.8 =================
@@ -4205,7 +4284,8 @@ function phoneScreen(arg) {
     const app = (k, e, bg, label, n) => `<button class="ph-app" data-act="phone" data-arg="${k}"><i style="background:${bg}">${e}</i>${label}${n ? `<em class="ph-badge">${n}</em>` : ''}</button>`;
     body = `<div class="ph-clock">${fmtClock(now())}</div><div class="ph-date">${d.getMonth() + 1}/${d.getDate()} · ${weatherPill().replace(/<[^>]+>/g, ' ').trim()}</div>
       <div class="ph-apps">${app('contacts', '📇', '#34c759', t('ph_contacts'))}${app('texts', '💬', '#30a2ff', t('ph_texts'), unread)}${app('bank', '🏦', '#ff9f0a', t('ph_bank'), late ? '!' : 0)}
-      ${app('stocks', '📈', '#1c1c1e', t('ph_stocks'))}${app('mail', '✉️', '#5e5ce6', t('ph_mail'), unreadMail())}${app('map', '📍', '#ff375f', t('ph_map'))}${app('sports', '🏟️', '#2e9b5a', t('ph_sports'))}</div>`;
+      ${app('stocks', '📈', '#1c1c1e', t('ph_stocks'))}${app('mail', '✉️', '#5e5ce6', t('ph_mail'), unreadMail())}${app('map', '📍', '#ff375f', t('ph_map'))}${app('sports', '🏟️', '#2e9b5a', t('ph_sports'))}${app('trip', '🧳', '#0a84ff', t('ph_trip'), myTickets().filter(tk => ticketState(tk) === 'board').length)}</div>`;
+  } else if (scr === 'trip') { body = tripScreen(a);   // v0.69
   } else if (scr === 'contacts') {
     const cs = contacts(), group = (kind, label) => { const g = cs.filter(c => c.kind === kind || (kind === 'work' && (c.kind === 'boss' || c.kind === 'mate'))); return g.length ? `<div class="ph-sub">${label}</div>` + g.map(c => { const w = whoIs(c.id); return w ? `<button class="ph-row" data-act="phone" data-arg="person|${c.id}">${avatar(w.look)}<div class="grow"><b>${esc(w.name)}</b><div class="ph-muted">${c.kind === 'boss' ? '💼 ' + t('boss') : c.kind === 'mate' ? '💼 ' + t('coworker') : t('rel_level', { n: (S.rel || {})[c.id] || 0 })}</div></div><span>›</span></button>` : ''; }).join('') : ''; };
     body = head(`📇 ${t('ph_contacts')}`) + (group('family', '👪 ' + t('family')) + group('friend', '💛 ' + t('ph_friends')) + group('work', '💼 ' + t('ph_work')) + group('neighbour', '🏡 ' + t('ph_people')) || `<p class="ph-muted">${t('ph_no_contacts')}</p>`);

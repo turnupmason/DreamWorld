@@ -1474,6 +1474,23 @@ function buyTravelSouv(id) {
 }
 const ownsFurn = k => allRoomItems(S.me).some(it => it.k === k) || (S.me.store['room:' + k] || 0) > 0;
 
+// ---------- v0.69: tickets ----------
+// Bought in the phone (出行), always for tomorrow: { id, mode: 'air' | 'train' | 'sea', from, to, dep (when it leaves),
+// cost }. You board at the airport / the station / the port from TRAVEL.boardBefore minutes before it leaves.
+const HUB_OF = { air: 'airport', train: 'station', sea: 'port' };
+// tomorrow's departures from a place (its own clock)
+function tripDeps(mode, from, ms = now()) { const m0 = Math.floor(ms / MIN) * MIN, base = m0 + (24 * 60 - Math.round(localHour(from, ms) * 60)) * MIN; return TRAVEL.times[mode].map(h => ({ h, dep: base + h * HOUR })); }   // (local midnight tonight, to the minute)
+function ticketState(tk, ms = now()) { return ms > tk.dep + TRAVEL.boardAfter * MIN ? 'missed' : ms >= tk.dep - TRAVEL.boardBefore * MIN ? 'board' : 'wait'; }
+const myTickets = () => { S.tickets = (S.tickets || []).filter(tk => now() < tk.dep + DAY); return S.tickets; };
+function buyTicket(mode, from, to, dep, free) {
+  const P = Drive.plan(from, to, mode);
+  if (!P) return 'none';
+  if (free) { if (ticketsLeft() < 1) return 'poor'; passport().tix++; }
+  else { if (S.me.coins < P.cost) return 'poor'; S.me.coins -= P.cost; }
+  myTickets().push({ id: uid(), mode, from, to, dep, cost: free ? 0 : P.cost, at: now() });
+  return 'ok';
+}
+
 // ---------- assets & ranking ----------
 const costValue = c => (c.coins || 0) + (c.wood || 0) * 5; // wood only comes from real life, so it counts extra
 function assetBreakdown(h) {
