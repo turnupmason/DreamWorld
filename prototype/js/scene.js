@@ -386,9 +386,16 @@ const Scene = (() => {
     else { a.cur = null; if (j.done) j.done(); }
   }
   function cancel(a) { a.jobs = []; a.cur = null; a.act = null; a.path = []; a.seat = 0; a.useId = null; }
+  // v0.44: a little thought bubble over your head when you're hungry, lonely or bored (D244)
+  function needBubble(p, z, ts) {
+    if (z < 0.3 || !S) return;
+    const n = needs(), low = ['hunger', 'social', 'fun'].filter(k => n[k] < NEED_LOW.low);
+    if (!low.length) return;
+    bubble(NEEDS[low[Math.floor(ts / 2200) % low.length]].e, p.x + 14 * z, p.y - 46 * z, z * 0.75, Math.abs(Math.sin(ts / 420)) * 2 * z);
+  }
   function speedOf(h) {
     const e = h.id === 'me' ? energyLevel() : friendEnergy(h);
-    return { great: 2.6, good: 2.2, tired: 1.7, exhausted: 1.3 }[e] * (h.id === 'me' && S.sick ? SICK.walk : 1);   // ill: slower (v0.14)
+    return { great: 2.6, good: 2.2, tired: 1.7, exhausted: 1.3 }[e] * (h.id === 'me' && S.sick ? SICK.walk : 1) * (h.id === 'me' ? walkMult() : 1);   // ill: slower (v0.14); hungry: slower, happy: faster (v0.44)
   }
 
   // Wandering for friends and animals.
@@ -602,7 +609,12 @@ const Scene = (() => {
     if (pr) {
       const bx = pr.x + pr.w - 2;
       objs.push({ d: ox + oy + bx + pr.y + 2, f: () => drawBarn(ox + bx, oy + pr.y) });
-      objs.push({ d: ox + oy + pr.x + 1.6 + pr.y + pr.d - 0.3, f: () => drawTrough(ox + pr.x + 1.05, oy + pr.y + pr.d - 0.55, ts) });
+      objs.push({ d: ox + oy + pr.x + 1.6 + pr.y + pr.d - 0.3, f: () => {   // v0.44: the feed trough (yours shows how full it is; tap it to fill it)
+        const tx = ox + pr.x + 1.05, ty = oy + pr.y + pr.d - 0.55, mineT = h.id === 'me', fill = mineT ? (h.trough || 0) / FEED.trough : null;
+        drawTrough(tx, ty, ts, fill);
+        if (focus && mineT) { const c = iso(tx + 0.45, ty + 0.2); hits.push({ kind: 'trough', owner: h.id, x0: c.x - 18 * z, x1: c.x + 18 * z, y0: c.y - 16 * z, y1: c.y + 8 * z });
+          if (!(h.trough > 0) && h.animals.some(a => !ANIMALS[a.k].pet && ANIMALS[a.k].every)) opt.bubbles.push({ kind: 'trough', p: { x: c.x, y: c.y - 14 * z }, ch: FEED.e, ok: true }); }
+      } });
       objs.push({ d: ox + oy + pr.x + 0.7 + pr.y + 0.6, f: () => drawHay(ox + pr.x + 0.4, oy + pr.y + 0.4) });
     }
     fenceObjs(h, ox, oy, objs);
@@ -618,6 +630,7 @@ const Scene = (() => {
       objs.push({ d: ox + oy + x + y + 1, f: () => {
         if (f) drawCropTile(ox + x, oy + y, fl, ts, i * 1.31 + ox);
         else cropRows(fl, ox + x, oy + y);
+        if (f && focus && h.id === 'me' && (isRotten(fl) || cropWarn(fl))) { const c = iso(ox + x + 0.5, oy + y + 0.5); opt.bubbles.push({ kind: 'field', i, p: { x: c.x, y: c.y - 22 * z }, ch: isRotten(fl) ? '🍂' : '⏰', ok: true }); }   // v0.44
       } });
     });
     // orchard
@@ -702,9 +715,10 @@ const Scene = (() => {
         if (focus) {
           hits.push({ kind: 'animal', owner: h.id, id: a.id, x0: p.x - 16 * z, x1: p.x + 16 * z, y0: p.y - 30 * z, y1: p.y + 6 * z });
           if (!opt.mine && babyStealable(h, a) && st === 0) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 22 * z }, ch: '🍼', ok: true });   // v0.14
+          if (opt.mine && animalHungry(a)) opt.bubbles.push({ kind: 'trough', p: { x: p.x, y: p.y - 26 * z }, ch: FEED.e, ok: true });   // v0.44: hungry: fill the trough
           if (animalReady(a)) {
-            const d = ANIMALS[a.k], baby = nextIsBaby(a);
-            if (opt.mine) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 26 * z }, ch: baby ? '🍼' : GOODS[d.prod].e, ok: true });
+            const d = ANIMALS[a.k], baby = nextIsBaby(a), warn = prodWarn(a) && Math.floor(ts / 700) % 2;
+            if (opt.mine) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 26 * z }, ch: baby ? '🍼' : warn ? '⏰' : GOODS[d.prod].e, ok: true });
             else if (isFriend(h.id) && !baby && d.prod && (a.stolen || 0) < d.n - 1 && !(a.thieves || []).includes('me')) opt.bubbles.push({ kind: 'animal', id: a.id, p: { x: p.x, y: p.y - 26 * z }, ch: '🖐️', ok: true });
           }
         }
@@ -743,7 +757,7 @@ const Scene = (() => {
   }
   function drawMe(ox, oy, ts, focus) {
     const z = cam.z, p = iso(ox + me.x, oy + me.y), pose = mePose();
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, turn: me.turn, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() || (chatting() && !!CHAT.e && !!CHAT.wave) });
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, turn: me.turn, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() || (chatting() && !!CHAT.e && !!CHAT.wave) }); needBubble(p, z, ts);
     if (chatting() && CHAT.e) chatBubble(p.x - 12 * z, p.y - 56 * z, z, true, ts);   // v0.31
     if (S.live) liveBadge(p, S.live, true);
     if (focus) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
@@ -2746,7 +2760,7 @@ const Scene = (() => {
     if (trip.inCar && trip.path.length && stopSign(trip, dt)) return;   // v0.39: a stop sign
     if (trip.inCar && trip.path.length && CARS_OUT.town === trip.town && blocked(trip, CARS_OUT.list.filter(o => o.alpha > 0.3))) { if ((trip.carWait = (trip.carWait || 0) + dt) < 6) return; }   // v0.29: behind another car
     else trip.carWait = 0;
-    const base = (TRIP_SPEED[trip.how] || 3) * dt * (trip.how === 'walk' && isFed() ? 1 + MALL.fed.walk : 1);
+    const base = (TRIP_SPEED[trip.how] || 3) * dt * (trip.how === 'walk' && isFed() ? 1 + MALL.fed.walk : 1) * (trip.how === 'walk' ? walkMult() : 1);   // v0.44
     let left = 1;   // the share of this frame's travel still to go
     while (left > 0 && trip.path.length) {
       const [tx, ty, th = 0, fast = 0] = trip.path[0], dx = tx - trip.x, dy = ty - trip.y, d = Math.hypot(dx, dy);
@@ -2761,7 +2775,7 @@ const Scene = (() => {
   function drawTrip(ts) {
     const z = cam.z, p = iso(trip.x, trip.y);
     if (trip.inCar) { const off = (trip.h || 0) > 1 ? [0, 0] : [trip.ox || 0, trip.oy || 0]; ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir({ ...trip.car, plate: stateOf(myTown()).plate }, trip.x + off[0], trip.y + off[1], trip.dir, ts); ctx.restore(); return; }   // v0.24: on the right (v0.39: in its lane)
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
+    drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' }); needBubble(p, z, ts);
     carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
   }
@@ -3909,7 +3923,7 @@ const Scene = (() => {
       return;
     }
     const p2 = iso(meS.x, meS.y);
-    drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand', wave: chatting() && !!CHAT.e && !!CHAT.wave && !!FOLK_AT[CHAT.id] });
+    drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand', wave: chatting() && !!CHAT.e && !!CHAT.wave && !!FOLK_AT[CHAT.id] }); needBubble(p2, z, ts);
     carryBox(p2, z);
     if (chatting() && CHAT.e && FOLK_AT[CHAT.id]) chatBubble(p2.x - 12 * z, p2.y - 56 * z, z, true, ts);   // v0.34: talking with someone in here
   }
@@ -4147,7 +4161,7 @@ const Scene = (() => {
   function stepShop(dt) {
     if (meS.use && meS.use.until && performance.now() > meS.use.until) { const f = meS.use.done; meS.use = null; if (f) setTimeout(f, 60); }   // v0.30
     if (!meS.path.length) { if (meS.moving) { meS.moving = false; const f = meS.then; meS.then = null; if (f) setTimeout(f, 120); } return; }
-    let go = 3.4 * dt;
+    let go = 3.4 * dt * walkMult();   // v0.44
     while (go > 0 && meS.path.length) {
       const [tx, ty] = meS.path[0], dx = tx - meS.x, dy = ty - meS.y, d = Math.hypot(dx, dy);
       if (d > 0.01) faceTo(meS, dx, dy);
@@ -4208,9 +4222,9 @@ const Scene = (() => {
       { const u = Math.sin(ts / 1700 + x * 3), mv = Math.abs(Math.cos(ts / 1700 + x * 3)) > 0.35, a = iso(x + w.w / 2 + u * 0.45, y + w.d / 2 + u * 0.2); drawAnimal(w.k, 0, a.x, a.y + 6 * z, z * 1.9, { face: Math.cos(ts / 1700 + x * 3) > 0 ? 1 : -1, ts, seed: x, moving: mv, phase: ts / 120 }); }
     }
     else if (w.kind === 'pet') { flatRect(x, y, w.w, w.d, '#f4e6c8'); const B = PET_BREEDS[w.k]; const u = Math.sin(ts / 1300 + x * 2), a = iso(x + w.w / 2 + u * 0.25, y + w.d / 2); drawAnimal(B.kind, 0, a.x, a.y + 5 * z, z * 1.7, { face: Math.cos(ts / 1300 + x * 2) > 0 ? 1 : -1, ts, seed: x, breed: w.k, moving: Math.abs(Math.cos(ts / 1300 + x * 2)) > 0.4, phase: ts / 110, mood: 'happy' }); }
-    else if (w.kind === 'petfood' || w.kind === 'seed') {
+    else if (w.kind === 'petfood' || w.kind === 'seed' || w.kind === 'feed') {
       const b = box(x + 0.1, y + 0.2, w.w - 0.2, w.d - 0.4, 20, '#c99a6b', 0, { top: '#e6c79a' });
-      const e = w.kind === 'seed' ? CROPS[w.k].e : PET_FOOD[w.k].e;
+      const e = w.kind === 'seed' ? CROPS[w.k].e : w.kind === 'feed' ? FEED.e : PET_FOOD[w.k].e;
       [0.25, 0.5, 0.75].forEach((u, i) => { const p2 = wallPt(b.left, 0, u, 8 + (i % 2) * 6); emoji(e, p2.x, p2.y, 9 * z); });
       const tp = iso(x + 0.5, y + 0.5); emoji(e, tp.x, tp.y - 26 * z, 12 * z);
     }
@@ -4767,7 +4781,7 @@ const Scene = (() => {
       const sitH = pose !== 'sit' ? 0 : trS ? trS.seatH : useK === 'sit' ? SEAT_H[useIt.k] || 9 : 0, lieH = pose === 'lie' && useIt ? LIE_H[useIt.k] || 10 : 0;
       const yOff = sitH ? 0 : lieH || meIn.seat || 0;
       const tread = it && FURN[it.k].use === 'run' && pose === 'run';   // v0.43: on the treadmill you face its console, your back to us
-      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: tread ? 'back' : meIn.view, turn: tread ? (it.rot ? [-1, 0.1] : [0.1, -1]) : meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
+      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: tread ? 'back' : meIn.view, turn: tread ? (it.rot ? [-1, 0.1] : [0.1, -1]) : meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) }); needBubble({ x: p.x, y: p.y - (yOff + lift) * z }, z, ts);
       if (pose === 'lie' && useIt) drawBedQuilt(useIt);
       if (pose === 'sit' && useIt && sitH) drawSeatFront(useIt, useIt.x, useIt.y);   // v0.19: the near arm stays in front of you
       ctx.restore();
@@ -5155,6 +5169,7 @@ const Scene = (() => {
       case 'tree': { const [x, y] = orchardSlot(h, tg.i); return () => [x + 0.5, y + 1.15, 1]; }
       case 'pond': { const P = areaOf(h, 'pond'); return () => [P.x - 0.35, P.y + 1.5, 1]; }
       case 'mailbox': return () => [MAILBOX[0] - 0.4, MAILBOX[1] + 0.5, 1];
+      case 'trough': { const pr = pastureRect(h); return pr ? () => [pr.x + 1.5, pr.y + pr.d - 0.05, 1] : null; }   // v0.44
       case 'door': { const [, fy, , fd] = HOUSES[h.house].fp; return () => [DOOR_X, fy + fd + 0.35, 1]; }
       case 'gate': return () => [3.5, LOT_D + 0.7, 0];
       case 'yard': { const it = h.yard.find(x => x.id === tg.id); if (!it) return null; const [w, d] = itemSize('yard', it); return () => [it.x + w / 2, it.y + d + 0.15, 1]; }
@@ -5363,7 +5378,7 @@ const Scene = (() => {
         emoji('😴', w * 0.18, h * 0.3, 20 * s, 0.5 + Math.sin(ts / 500) * 0.3); emoji('✨', w * 0.85, h * 0.28, 18 * s, 0.6 + Math.sin(ts / 300) * 0.4);
       } else if (k == 1) {
         drawPerson(w * 0.36, h * 0.86, s * 1.3, { look: o.look, face: 1, energy: 'great', ts, seed: 1, moving: true, phase: ts / 90, pose: 'run' });
-        ['🪙', '🪵', '🪙', '🌱'].forEach((e, i) => {
+        ['🪙', '💰', '🪙', '🌱'].forEach((e, i) => {
           const u = ((ts / 1600) + i / 4) % 1;
           emoji(e, w * (0.6 + i % 2 * 0.17), h * (0.8 - u * 0.55), (13 + i % 2 * 3) * s, Math.min(1, (1 - u * u * u) * 1.4));
         });

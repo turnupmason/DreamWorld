@@ -2,10 +2,10 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.43.1';
+const VERSION = '0.44.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
-const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
+const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
 const STEAL_CAP = 8;                    // sneaks per day
 const STEAL_FINE = [10, 60];            // caught by a guard dog: pay the owner twice the value, within this range
 // v0.18: the police. No guard dog? A neighbour may still see you (a fine, like the dog's). Caught taking a baby
@@ -473,6 +473,7 @@ const SHOP_SUBS = {
     { id: 'flower', e: '🌷', zh: '花', en: 'Flowers', keys: ['tulip', 'rose', 'sunflower'] },
   ],
   animals: [
+    { id: 'feed', e: '🌾', zh: '饲料', en: 'Feed', keys: ['feed'] },   // v0.44
     { id: 'poultry', e: '🐔', zh: '家禽', en: 'Poultry', keys: ['chicken', 'duck'] },
     { id: 'farm', e: '🐮', zh: '家畜', en: 'Livestock', keys: ['rabbit', 'sheep', 'goat', 'pig', 'cow', 'alpaca'] },
     { id: 'pets', e: '🐕', zh: '宠物', en: 'Pets', keys: ['dog', 'cat'] },
@@ -1915,6 +1916,30 @@ const USD = {
   POLICE.fineMin = X.fineMin; POLICE.fineMax = X.fineMax; POLICE.bail = X.bail; STEAL_FINE[0] = X.stealFine[0]; STEAL_FINE[1] = X.stealFine[1];
   X.townLevels.forEach((v, i) => { TOWN_LEVELS[i] = v; });
 })();
+
+// ---------- v0.44: money only (Mason #28, D243) ----------
+// No more wood. What used to cost wood costs WOOD_USD more per piece (a house only a little more), and real life pays
+// in coins only. Saves keep their value: the wood they had becomes coins at the same rate (see v44() in state.js).
+const WOOD_USD = 25;
+(function noWood() {
+  const fold = c => { if (c && c.wood) { c.coins = (c.coins || 0) + nicePrice(c.wood * WOOD_USD); c.wood = 0; } };
+  HOUSES.forEach(H => fold(H.cost)); GARAGE.forEach(g => g && fold(g.cost));
+  [FIELD_COST, PASTURE, ORCHARD, POND].forEach(L => L.forEach(l => l && fold(l.cost || l)));
+  FLOOR_BUILD.coinsPerTile += Math.round(FLOOR_BUILD.woodPerTile * WOOD_USD); FLOOR_BUILD.woodPerTile = 0;
+  [STEP_REWARD, GOAL_REWARD, ...Object.values(FOCUS_REWARD), ...Object.values(RING_REWARD)].forEach(r => { r.wood = 0; });
+})();
+// v0.44: the farm keeps (D244). Ripe crops stay good for `crop` hours, then rot in the ground (you clear them away);
+// eggs, milk, wool, fruit and honey wait `prod` hours, then they're gone and the next one starts. A warning (⏰) shows
+// for the last `warn` share of that time.
+const FRESH = { crop: 6, prod: 4, warn: 0.3 };
+// v0.44: farm animals eat feed (D244): every egg, churn of milk, bag of wool… takes one portion from the trough by the
+// pasture. Bags of feed come from the farm supply store (`n` portions); tap the trough to fill it (it holds `trough`).
+// An empty trough: no more until it's filled. New and old farms start with `start` portions.
+const FEED = { e: '🌾', zh: '饲料', en: 'Animal feed', price: 25, n: 20, trough: 40, start: 20 };
+// v0.44: when a need gets low (D244): under `low` you're hungry (walking slower, no work or matches until you've
+// eaten), lonely or bored; a mood under `badMood` (the three together) pays `badPay` less at work; a good mood
+// (NEEDS.goodMood) pays NEEDS.moodPay more and you walk a little faster.
+const NEED_LOW = { low: 25, badMood: 40, badPay: 0.15, slowWalk: 0.7, fastWalk: 1.1 };
 
 // v0.40: food, drinks and fun cost what they cost in the county you're in (COUNTIES[].cost): the cafés, restaurants,
 // bars, the mall, the bowling alley… Each price keeps its East Coast base (base_price); reading .price gives it in the

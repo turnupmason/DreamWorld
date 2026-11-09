@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, CENTRE_NEW, TOWER_STOREYS, BUILDING_FLOORS, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY, STATES, COUNTIES, TERRAINS, SPECIALTIES, FOLK_NAMES, TOWNSFOLK, SPECIAL, CONTEST_FISH, SONGS, ZOO_ANIMALS, ZOO_SHOP, STADIUM, TEAM_MASCOTS})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY, STATES, COUNTIES, TERRAINS, SPECIALTIES, FOLK_NAMES, TOWNSFOLK, SPECIAL, CONTEST_FISH, SONGS, ZOO_ANIMALS, ZOO_SHOP, STADIUM, TEAM_MASCOTS, WOOD_USD, FRESH, FEED, NEED_LOW, NEEDS})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -88,7 +88,7 @@ P('');
 table(['房子', '占地', '每层室内', '自带层数', '最多层数', '价格'], D.HOUSES.map(h => [`${h.zh} (${h.en})`, `${h.fp[2]}×${h.fp[3]}`, `${h.room[0]}×${h.room[1]}`, h.floors[0], h.floors[1], cost(h.cost)]));
 P(`### 加盖楼层`);
 P('');
-P(`每加盖一层：🪙 = 室内格数 × ${D.FLOOR_BUILD.coinsPerTile}（取整到 50），🪵 = 室内格数 × ${D.FLOOR_BUILD.woodPerTile}；每多一层再 ×${D.FLOOR_BUILD.grow}。外面看房子每层高 ${D.FLOOR_H} 像素（中式庭院加盖是楼阁的一层）。每层是独立房间：自己的墙纸、地板、家具。`);
+P(`每加盖一层：🪙 = 室内格数 × ${D.FLOOR_BUILD.coinsPerTile}（取整到 50）；每多一层再 ×${D.FLOOR_BUILD.grow}。外面看房子每层高 ${D.FLOOR_H} 像素（中式庭院加盖是楼阁的一层）。每层是独立房间：自己的墙纸、地板、家具。`);
 P('');
 const fc = (h, n) => { const k = Math.pow(D.FLOOR_BUILD.grow, n - h.floors[0] - 1), a = h.room[0] * h.room[1]; return cost({ coins: Math.round(a * D.FLOOR_BUILD.coinsPerTile * k / 50) * 50, wood: Math.round(a * D.FLOOR_BUILD.woodPerTile * k) }); };
 table(['房子', '可以加盖', '每层价格'], D.HOUSES.filter(h => h.floors[1] > h.floors[0]).map(h => {
@@ -258,6 +258,21 @@ P('');
   P(`卡拉OK的歌（古老的儿歌，谁都可以唱）：${D.SONGS.map(g => `${g.e} ${g.zh} (${g.en})`).join('、')}。`);
   P(''); }
 
+// v0.44: money only, the farm keeps, feed, the needs
+P('### v0.44 只用钱、会坏的农场、饲料、需求的后果');
+P('');
+table(['规则', '数值'], [
+  ['木头', `不用了：以前要木头的东西每块木头折 🪙${D.WOOD_USD}（房子只贵一点点），现实奖励不再给木头；旧存档的木头按 🪙${D.WOOD_USD} 一块换成钱`],
+  ['每天农活次数', '不限（偷菜还是每天最多 8 次）'],
+  ['熟了的菜', `放 ${D.FRESH.crop} 小时不收就烂在地里，收不到东西，要清理`],
+  ['蛋、奶、毛、水果、蜂蜜', `好了 ${D.FRESH.prod} 小时不收就坏掉没了，从头等下一次（小宝宝不会坏）`],
+  ['快坏提醒', `最后 ${Math.round(D.FRESH.warn * 100)}% 的时间头上出现 ⏰`],
+  ['饲料', `牲畜用品店一袋 🪙${D.FEED.price}，${D.FEED.n} 份；每只牲畜每产一次吃 1 份；食槽最多 ${D.FEED.trough} 份，点食槽放进去；食槽空了就不产；新的和旧的农场都先送 ${D.FEED.start} 份`],
+  ['饿了', `饱腹低于 ${D.NEED_LOW.low}：走路 ×${D.NEED_LOW.slowWalk}，不能上班、不能玩比赛和小游戏`],
+  ['心情差', `三项平均低于 ${D.NEED_LOW.badMood}：打工工资 −${Math.round(D.NEED_LOW.badPay * 100)}%`],
+  ['心情好', `三项平均 ${D.NEEDS.goodMood} 以上：打工工资 +${Math.round(D.NEEDS.moodPay * 100)}%，走路 ×${D.NEED_LOW.fastWalk}`],
+]);
+P('');
 // v0.42: the zoo, the stadium, a home run derby
 P('### v0.42 动物园、体育场、本垒打大赛');
 P('');
@@ -301,7 +316,7 @@ P('');
 table(['项目', '数值'], [['一节课', `🪙${D.SCHOOL.fee}，每天一节`], ['证书', `每 ${D.SCHOOL.perCert} 节一张，最多 ${D.SCHOOL.maxCerts} 张`], ['每张证书', `所有工作工资 +${D.SCHOOL.certPay * 100}%`]]);
 P('## 车库（v0.19）');
 P('');
-table(['车库', '样子', '车位', '价格'], D.GARAGE.slice(1).map((g, i) => [`Lv${i + 1}`, g.zh, g.cap, `🪙${g.cost.coins} + 🪵${g.cost.wood}`]));
+table(['车库', '样子', '车位', '价格'], D.GARAGE.slice(1).map((g, i) => [`Lv${i + 1}`, g.zh, g.cap, `🪙${g.cost.coins}`]));
 P('## 警察（v0.18）');
 P('');
 table(['项目', '数值'], [['没有狗时被邻居看见的概率', `${D.POLICE.witness * 100}%`], ['几天内被抓几次警察会来', `${D.POLICE.strikeDays} 天 ${D.POLICE.strikes} 次（偷小动物被抓直接来）`],
@@ -377,7 +392,7 @@ table(['现实里做到', '奖励', '受精力倍率影响'], [
   [`合上锻炼环（${D.RINGS.exercise} 分钟）`, cost(D.RING_REWARD.exercise), '是'],
   [`合上站立环（${D.RINGS.stand} 小时）`, cost(D.RING_REWARD.stand), '是'],
   ['三环全合上（额外）', cost(D.RING_REWARD.all) + ' + 玫瑰种子', '是'],
-  ['每次 10 分钟以上体能训练', `每分钟 🪙${D.WORKOUT_PAY}，每 10 分钟 🪵1（每天最多算 ${D.WORKOUT_PAY_MAX} 分钟）`, '是'],
+  ['每次 10 分钟以上体能训练', `每分钟 🪙${D.WORKOUT_PAY}（每天最多算 ${D.WORKOUT_PAY_MAX} 分钟）`, '是'],
   ['正念 / 呼吸练习', `每分钟 🪙${D.MINDFUL_REWARD}（每天最多 10 分钟），精力 +1`, '否'],
   ['睡眠分 80+', cost(D.SLEEP_REWARD) + ' + 郁金香种子', '否'],
   ...Object.entries(D.FOCUS_REWARD).map(([m, r]) => [`离线 ${m} 分钟`, cost(r) + (r.seeds ? ' + 向日葵种子' : ''), '否']),

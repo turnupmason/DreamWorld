@@ -27,7 +27,7 @@ function freshDay() {
 function load() {
   try { S = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { S = null; }
   if (!S || S.v !== 3) S = null;
-  if (S) { migrate(); genNPCs(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); fixBlockedYards(); }
+  if (S) { migrate(); v44(); genNPCs(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); fixBlockedYards(); }
   return S;
 }
 // Saves from v0.3 get the v0.4 fields (floors, privacy, souvenirs, personal goal). Old players skip the tutorial.
@@ -387,8 +387,9 @@ function sumRewards(list) {
   });
   return out;
 }
-function useAction() { if (S.today.actions >= ACTION_CAP) return false; S.today.actions++; return true; }
-function actionsLeft() { return ACTION_CAP - S.today.actions; }
+// v0.44: no daily limit on farm work any more (D243); it's still counted. Sneaking has its own small limit (STEAL_CAP).
+function useAction() { S.today.actions++; return true; }
+function actionsLeft() { return Infinity; }
 function addBarn(h, k, n) { h.barn[k] = (h.barn[k] || 0) + n; }
 function seedCount(h = S.me) { return Object.values(h.seeds).reduce((a, b) => a + b, 0); }
 
@@ -466,7 +467,7 @@ function processHealth() {
     p.workouts[w.id] = min; S.stats.workouts++;
     const sp = w.sport && SPORT_BY_ID[w.sport] ? w.sport : SPORT_OF_TYPE[w.type] || 'other';   // one more for this sport's trophy
     S.stats.sports = S.stats.sports || {}; S.stats.sports[sp] = (S.stats.sports[sp] || 0) + 1;
-    if (min > 0) addPending('workout', scale({ coins: Math.round(min * WORKOUT_PAY), wood: Math.floor(min / 10) }), { type: w.type, min: w.min, mult });
+    if (min > 0) addPending('workout', scale({ coins: Math.round(min * WORKOUT_PAY), wood: 0 }), { type: w.type, min: w.min, mult });
   });
   const mind = Math.min(10, Math.floor(d.mindful)) - p.mindful;
   if (mind > 0) { p.mindful += mind; S.stats.mindful += mind; addPending('mindful', { coins: mind * MINDFUL_REWARD }, { min: mind }); }
@@ -523,7 +524,11 @@ function applyNative(d) {
 // ---------- crops ----------
 function cropProg(f) { return f ? Math.min(1, (now() - f.at) / (CROPS[f.crop].grow * MIN)) : 0; }
 function cropStage(f) { const p = cropProg(f); return p >= 1 ? 4 : p >= 0.65 ? 3 : p >= 0.35 ? 2 : p >= 0.1 ? 1 : 0; }
-function isRipe(f) { return !!f && cropProg(f) >= 1; }
+// v0.44: ripe crops keep FRESH.crop hours (from when they ripened, or from the v0.44 update), then rot in the ground
+const ripeAt = f => Math.max(f.at + CROPS[f.crop].grow * MIN, f.fresh || 0);
+function isRotten(f) { return !!f && cropProg(f) >= 1 && now() - ripeAt(f) > FRESH.crop * HOUR; }
+function isRipe(f) { return !!f && cropProg(f) >= 1 && !isRotten(f); }
+const cropWarn = f => isRipe(f) && now() - ripeAt(f) > FRESH.crop * HOUR * (1 - FRESH.warn);   // ⏰ going off soon
 // Farm areas can be moved around the yard (v0.15): each home keeps where its pasture, fields, orchard and pond are
 // (h.areaAt[key] = [x, y], the top-left tile); without that, the usual spot in AREA.
 const MOVABLE = ['pasture', 'fields', 'orchard', 'pond'];
@@ -560,6 +565,7 @@ function plant(i, crop) {
 }
 function harvest(i) {
   const f = S.me.fields[i];
+  if (isRotten(f)) { S.me.fields[i] = null; S.me.rotten = (S.me.rotten || 0) + 1; return { crop: f.crop, n: 0, i, rotten: true }; }   // v0.44: cleared away
   if (!isRipe(f)) return null;
   addBarn(S.me, f.crop, f.left);
   S.me.fields[i] = null;
@@ -686,7 +692,13 @@ function prodProg(a) {
   if (!d.every || animalStage(a) < 2) return 0;
   return Math.min(1, (now() - (a.last || a.born + d.grow * MIN)) / (d.every * MIN));
 }
-function animalReady(a) { return ANIMALS[a.k].every > 0 && animalStage(a) === 2 && prodProg(a) >= 1; }
+// v0.44: each egg, churn, bag… needs a portion of feed (taken when it's ready, see farmTick); a hungry animal waits
+const cycleStart = a => a.last || a.born + ANIMALS[a.k].grow * MIN;
+const fedNow = a => ANIMALS[a.k].pet || a.fedFor === cycleStart(a);
+function animalReady(a) { return ANIMALS[a.k].every > 0 && animalStage(a) === 2 && prodProg(a) >= 1 && fedNow(a); }
+const animalHungry = a => ANIMALS[a.k].every > 0 && !ANIMALS[a.k].pet && animalStage(a) === 2 && prodProg(a) >= 1 && !fedNow(a);
+const prodFrom = a => Math.max(cycleStart(a) + ANIMALS[a.k].every * MIN, a.fedAt || 0, a.fresh || 0);
+const prodWarn = a => animalReady(a) && now() - prodFrom(a) > FRESH.prod * HOUR * (1 - FRESH.warn);
 function nextIsBaby(a) { const d = ANIMALS[a.k]; return d.babyEvery > 0 && (a.cycles + 1) % d.babyEvery === 0; }
 function pastureCap(h = S.me) { return h.pastureLv ? PASTURE[h.pastureLv].cap : 0; }
 function pastureCount(h = S.me) { return h.animals.filter(a => !ANIMALS[a.k].pet).length; }
@@ -1347,7 +1359,6 @@ function simFriends() {
 }
 function simFriendStep(h) {
   h.coins += Math.round(Math.random() * h.earn);
-  if (Math.random() < 0.15) h.wood += 1;
   if (h.live && now() - h.live.start > h.live.len) h.live = null;
   else if (!h.live && Math.random() < 0.03) h.live = { type: rand(['run', 'walk', 'cycle', 'yoga', 'strength', 'dance']), start: now(), len: (15 + Math.random() * 30) * MIN };
   h.fields.forEach((f, i) => {
@@ -1395,21 +1406,19 @@ function giftOptions() {
   const out = [];
   Object.keys(S.me.barn).forEach(k => { if (!k.startsWith('baby_')) out.push({ type: 'barn', k, n: 1 }); });
   if (S.me.coins >= 50) out.push({ type: 'coins', n: 50 });
-  if (S.me.wood >= 2) out.push({ type: 'wood', n: 2 });
   return out;
 }
 function giveGift(id, g) {
   const h = S.me, f = friendById(id);
   if (g.type === 'barn') { if (!(h.barn[g.k] >= 1)) return false; h.barn[g.k]--; if (!h.barn[g.k]) delete h.barn[g.k]; addBarn(f, g.k, 1); }
   else if (g.type === 'coins') { if (h.coins < g.n) return false; h.coins -= g.n; f.coins += g.n; }
-  else if (g.type === 'wood') { if (h.wood < g.n) return false; h.wood -= g.n; f.wood += g.n; }
   return true;
 }
 function applyGift(g) {
   if (g.type === 'barn') addBarn(S.me, g.k, g.n);
   else if (g.type === 'seed') S.me.seeds[g.k] = (S.me.seeds[g.k] || 0) + g.n;
   else if (g.type === 'coins') S.me.coins += g.n;
-  else if (g.type === 'wood') S.me.wood += g.n;
+  else if (g.type === 'wood') S.me.coins += g.n * WOOD_USD;   // v0.44: an old gift of wood comes as coins
 }
 function claimGift(feedId) {
   const it = S.feed.find(x => x.id === feedId);
@@ -1421,7 +1430,7 @@ function randomGift() {
   return clone(rand([
     { type: 'barn', k: 'carrot', n: 3 }, { type: 'barn', k: 'egg', n: 4 }, { type: 'barn', k: 'milk', n: 2 }, { type: 'barn', k: 'apple', n: 3 },
     { type: 'seed', k: 'tomato', n: 2 }, { type: 'seed', k: 'strawberry', n: 2 }, { type: 'seed', k: 'corn', n: 2 },
-    { type: 'coins', n: 50 }, { type: 'wood', n: 3 },
+    { type: 'coins', n: 50 }, { type: 'coins', n: 75 },
   ]));
 }
 
@@ -1467,7 +1476,7 @@ function inviteJoin(at) {
   S.lots.push({ id: next.id, st: run.st, p: run.p, n: Math.min(run.n, HOME_PARCELS), paid: 0, ...(myTown() !== HOME_TOWN ? { town: myTown() } : {}) });   // friends move in (v0.27: on a wider lot)
   RUNS.key = '';
   S.friends.push(homeFromPreset(next));
-  return addFeed({ kind: 'join', from: next.id, gift: { type: 'wood', n: 5 } });
+  return addFeed({ kind: 'join', from: next.id, gift: { type: 'coins', n: 100 } });
 }
 
 // ---------- local time, who's online, who's visiting (v0.11) ----------
@@ -1728,7 +1737,8 @@ function startShift(place) {
   if (!S.job || S.job.place !== place) return 'nojob';
   if (S.work) return 'working';
   if (!inShift(place)) return 'closed';
-  S.work = { place, start: now(), end: shiftEnd(place), wage: jobWage(place) * (moodGood() ? 1 + NEEDS.moodPay : 1), mood: moodGood() };   // v0.25: in a good mood you work better
+  if (hungry()) return 'hungry';   // v0.44: eat first
+  S.work = { place, start: now(), end: shiftEnd(place), wage: jobWage(place) * moodPayMult(), mood: moodGood(), bad: moodBad() };   // v0.25: in a good mood you work better (v0.44: in a bad one, worse)
   return 'ok';
 }
 const hoursWorked = w => Math.max(0, (Math.min(now(), w.end) - w.start) / HOUR);
@@ -1904,7 +1914,7 @@ function storeWares(store) {
     Object.entries(TREES).forEach(([k, d]) => add('tree', k, 'buyTree', k, d.price));
     grouped('yard', Object.keys(YARD).filter(k => { const d = YARD[k]; return !d.souv && !d.excl && !d.award; })).forEach(k => { const d = YARD[k]; add('yard', k, 'buyItem', 'yard|' + k, d.price, Math.min(d.w, 3), Math.min(d.d, 3)); });
   }
-  if (store === 'ranch') Object.entries(ANIMALS).filter(([, a]) => !a.pet && !a.excl).forEach(([k, a]) => add('animal', k, 'buyAnimal', k, a.price, 2, 2));
+  if (store === 'ranch') { add('feed', 'feed', 'buyFeed', 'feed', FEED.price); Object.entries(ANIMALS).filter(([, a]) => !a.pet && !a.excl).forEach(([k, a]) => add('animal', k, 'buyAnimal', k, a.price, 2, 2)); }   // v0.44: + bags of feed
   if (store === 'petshop') {
     Object.entries(PET_BREEDS).filter(([, B]) => !B.excl).forEach(([k, B]) => add('pet', k, 'adopt', k, B.price, 1.4, 1.4));
     Object.entries(PET_FOOD).forEach(([k, f]) => add('petfood', k, 'buyPetFood', k, f.price));
@@ -1928,7 +1938,7 @@ function storeWares(store) {
 // How much room a thing takes on the way home (see HANDS_VOL).
 function wareVol(e) {
   if (e.kind === 'seed') return Math.ceil((e.n || 1) / 10);
-  if (e.kind === 'clothes' || e.kind === 'petfood') return e.kind === 'clothes' ? 1 : 2;
+  if (e.kind === 'clothes' || e.kind === 'petfood' || e.kind === 'feed') return e.kind === 'clothes' ? 1 : e.kind === 'feed' ? 4 : 2;
   if (e.kind === 'pet') return 6;
   if (e.kind === 'tree') return 8;
   if (e.kind === 'animal') return SMALL_ANIMALS.includes(e.k) ? 6 : 30;
@@ -1985,6 +1995,7 @@ function deliverItem(e) {
   else if (e.act === 'buyAnimal') r = buyAnimal(e.k);
   else if (e.act === 'adopt') r = adoptPet(e.k).r;
   else if (e.act === 'buyPetFood') r = buyPetFood(e.k);
+  else if (e.act === 'buyFeed') r = buyFeed();   // v0.44
   else if (e.act === 'buyItem') { const [scope, k] = e.arg.split('|'); r = buyItem(scope, k).r; }
   else if (e.act === 'buyClothes') r = buyClothes(e.k);
   else if (e.act === 'buyCar') r = buyCar(e.k);
@@ -2088,6 +2099,12 @@ function needs() {
 function addNeed(k, v) { const n = needs(); n[k] = Math.max(0, Math.min(100, n[k] + v)); return n[k]; }
 const moodScore = () => { const n = needs(); return Math.round((n.hunger + n.social + n.fun) / 3); };
 const moodGood = () => moodScore() >= NEEDS.goodMood;
+// v0.44: what low needs do (D244): hungry → slower, no work or matches until you've eaten; a bad mood pays less at work;
+// a good mood pays more and you walk a little faster
+const hungry = () => needs().hunger < NEED_LOW.low;
+const moodBad = () => moodScore() < NEED_LOW.badMood;
+const walkMult = () => (hungry() ? NEED_LOW.slowWalk : moodGood() ? NEED_LOW.fastWalk : 1);
+const moodPayMult = () => (moodGood() ? 1 + NEEDS.moodPay : moodBad() ? 1 - NEED_LOW.badPay : 1);
 // a bite at the café / bakery
 // ---------- inside the buildings (v0.30) ----------
 // What you've done inside today: S.venue = { day, n: { key: times } }.
@@ -2519,4 +2536,62 @@ function stadiumGame(town, ms = now()) {
   const upTo = (w, i) => (sport === 'baseball' ? (w === 1 ? 2 * i : 2 * i + 1) < halves : i < spells);
   const score = [0, 1].map(w => (on ? runs[w].filter((_, i) => upTo(w, i)) : runs[w]).reduce((p, q) => p + q, 0));
   return { sport, on, done: !on, slot, home: town, away, score, runs, part: Math.min(n, Math.floor(halves / 2) + 1), top: halves % 2 === 0, minute: Math.min(90, Math.floor(prog * 90) + 1), next, prog };
+}
+
+// ---------- v0.44: saves from before v0.44 ----------
+// Wood becomes coins (D243); ripe crops start their fresh time now and every farm gets a starter bag of feed, so
+// nothing rots or goes hungry the moment you update (D244).
+function v44() {
+  if (S.v44) return;
+  S.v44 = true;
+  [S.me, ...S.friends].forEach(h => { if (h.wood > 0) { h.coins += h.wood * WOOD_USD; if (h === S.me) S.woodSwap = h.wood * WOOD_USD; } h.wood = 0; });
+  (S.me.fields || []).forEach(f => { if (f) f.fresh = now(); });
+  (S.me.animals || []).forEach(a => { a.fedFor = a.last || a.born; a.fresh = now(); });
+  (S.me.trees || []).forEach(tr => { if (tr) tr.fresh = now(); });
+  (S.me.yard || []).forEach(it => { it.fresh = now(); });
+  S.me.trough = FEED.start;
+}
+
+
+// ---------- v0.44: the farm keeps only so long; the animals eat (D244) ----------
+// Called every second (and when the game opens): feeds the animals whose next egg / churn / bag is ready (one portion
+// each from the trough; none left: they wait, hungry), and throws away what's waited too long (it's gone; the next one
+// starts). Crops rot by themselves (isRotten). Returns how many things went off this time.
+function farmTick(h = S.me) {
+  if (!h || !h.animals) return 0;
+  const t0 = now(), keep = FRESH.prod * HOUR; let lost = 0;
+  h.animals.forEach(a => {
+    const d = ANIMALS[a.k];
+    if (!d.every || d.pet || animalStage(a) < 2) return;
+    const start = cycleStart(a);
+    if (t0 < start + d.every * MIN) return;   // still making it
+    if (a.fedFor !== start) { if ((h.trough || 0) <= 0) return; h.trough--; a.fedFor = start; a.fedAt = t0; }
+    const from = prodFrom(a);
+    if (t0 - from > keep && !nextIsBaby(a)) { a.last = from + keep; a.thieves = []; a.stolen = 0; lost++; }   // (a baby never "goes off")
+  });
+  (h.trees || []).forEach(tr => {
+    if (!tr || treeStage(tr) < 2) return;
+    const from = Math.max((tr.last || tr.planted + TREES[tr.k].grow * MIN) + TREES[tr.k].every * MIN, tr.fresh || 0);
+    if (t0 - from > keep) { tr.last = from + keep; tr.thieves = []; tr.stolen = 0; lost++; }
+  });
+  (h.yard || []).forEach(it => {
+    const d = YARD[it.k]; if (!d || !d.prod) return;
+    const from = Math.max((it.last || it.placed || 0) + d.every * MIN, it.fresh || 0);
+    if (t0 - from > keep) { it.last = from + keep; lost++; }
+  });
+  if (lost) h.spoiled = (h.spoiled || 0) + lost;
+  return lost;
+}
+// feed: bags from the farm supply store go to your barn (h.feed portions); tap the trough to fill it from them
+function buyFeed(h = S.me) {
+  if (h.coins < FEED.price) return 'poor';
+  h.coins -= FEED.price; h.feed = (h.feed || 0) + FEED.n;
+  return 'ok';
+}
+function fillTrough(h = S.me) {
+  const room = FEED.trough - (h.trough || 0);
+  if (room <= 0) return { r: 'full' };
+  if (!(h.feed > 0)) return { r: 'nofeed' };
+  const n = Math.min(room, h.feed); h.feed -= n; h.trough = (h.trough || 0) + n;
+  return { r: 'ok', n };
 }

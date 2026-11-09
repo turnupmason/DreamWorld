@@ -178,14 +178,20 @@ function drawBarn(x, y) {
   return g.R1.y;
 }
 // Wooden water trough on little legs, with a glint on the water.
-function drawTrough(x, y, ts = 0) {
+function drawTrough(x, y, ts = 0, fill = null) {
   const z = cam.z;
   [[0.05, 0.05], [0.79, 0.05], [0.05, 0.27], [0.79, 0.27]].forEach(([u, v]) => box(x + u, y + v, 0.06, 0.06, 3, '#6b4423'));
   const b = box(x, y, 0.9, 0.38, 5, '#a0703f', 3);
   [b.left, b.right].forEach(f => { wallLine(f, 3, 0, 2.5, 1, 2.5, 'rgba(60,30,10,.3)', 0.6); wallLine(f, 3, 0.5, 0, 0.5, 5, 'rgba(60,30,10,.25)', 0.6); });
-  flatRect(x + 0.07, y + 0.07, 0.76, 0.24, '#5fb6dc', null, 7.4);
-  const p = up(iso(x + 0.32 + Math.sin(ts / 900) * 0.06, y + 0.19), 7.5 * z);
-  ellipse(p.x, p.y, 3.2 * z, 1 * z, 'rgba(255,255,255,.65)');
+  if (fill === null) {   // someone else's: water
+    flatRect(x + 0.07, y + 0.07, 0.76, 0.24, '#5fb6dc', null, 7.4);
+    const p = up(iso(x + 0.32 + Math.sin(ts / 900) * 0.06, y + 0.19), 7.5 * z);
+    ellipse(p.x, p.y, 3.2 * z, 1 * z, 'rgba(255,255,255,.65)');
+    return;
+  }
+  // v0.44: yours: feed, as full as the trough is (empty: the bare wood)
+  flatRect(x + 0.07, y + 0.07, 0.76, 0.24, '#5a3a1e', null, 7.4);
+  if (fill > 0) { const h = 4 + 3.6 * Math.min(1, fill); flatRect(x + 0.07, y + 0.07, 0.76, 0.24, '#d9b45a', null, h); for (let k = 0; k < 6; k++) { const q = up(iso(x + 0.14 + k * 0.12, y + 0.12 + (k % 2) * 0.1), h * z); circle(q.x, q.y, 0.9 * z, '#b8913a'); } }
 }
 function drawHay(x, y) {
   const b = box(x, y, 0.62, 0.46, 10, '#e2bd5a');

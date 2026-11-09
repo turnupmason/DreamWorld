@@ -895,3 +895,30 @@ body.dark .place-staff { color: #cdbfae; }
 /* v0.43.1: ZCOOL KuaiLe (站酷快乐体) for titles, section titles, tabs and the big buttons; the rest stays round and easy to read */
 h1, h2, h3, .panel-title, .sec-title, .tabbar .tab, .btn.primary, .place-chips span, .ph-head b, .mg-box h2, .mg-final, .feed-group, .nt-top b { font-family: var(--font-cute); }
 .place-head h2, .panel-title { letter-spacing: .02em; }
+/* v0.44: the top bar: just money (a gold chip) and the three needs, big, with what's wrong and a mood face */
+.coin-chip { display: inline-flex; align-items: center; gap: 4px; border: 0; cursor: pointer; padding: 6px 12px 6px 9px; border-radius: 999px; font-size: 15px;
+  background: linear-gradient(135deg, #ffe08a, #f5b83d); color: #6b4410; box-shadow: 0 2px 6px rgba(200, 140, 30, .35), inset 0 1px 0 rgba(255,255,255,.6); }
+.coin-chip b { font-family: var(--font-cute); font-size: 16px; font-weight: 900; letter-spacing: .01em; }
+.hud-needs { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 7px 10px; border: 0; border-radius: 16px; background: rgba(255,255,255,.75); box-shadow: 0 1px 4px rgba(90, 60, 20, .08); cursor: pointer; text-align: left; }
+.hud-needs .hn { flex: 1; display: flex; align-items: center; gap: 5px; min-width: 0; }
+.hud-needs .hn em { font-style: normal; font-size: 18px; line-height: 1; }
+.hud-needs .hn-r { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hud-needs .hn-r b { font-family: var(--font-cute); font-size: 11.5px; font-weight: 800; color: #6b5a46; line-height: 1; }
+.hud-needs .hn.low .hn-r b { color: #e5484d; }
+.hud-needs .hn-r i { display: block; height: 8px; border-radius: 5px; background: rgba(0,0,0,.1); overflow: hidden; }
+.hud-needs .hn-r s { display: block; height: 100%; border-radius: 5px; text-decoration: none; transition: width .5s; }
+.hud-needs .hn.low em { animation: need-wobble 1.2s ease-in-out infinite; }
+@keyframes need-wobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
+.hud-needs .hn-mood { font-size: 22px; line-height: 1; }
+.res.row:empty { display: none; }
+body.dark .hud-needs { background: rgba(255,255,255,.07); }
+body.dark .hud-needs .hn-r b { color: #e0d2c0; }
+body.dark .hud-needs .hn-r i { background: rgba(255,255,255,.12); }
+.hud .me > div { min-width: 0; }
+.hud .energy { white-space: nowrap; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.hud .row.tight { flex-wrap: nowrap; gap: 6px; }
+.hud .pill.weather, .hud .phone-pill { white-space: nowrap; padding-left: 9px; padding-right: 9px; }
+.hud .row.between > .me { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.hud .row.between > .row.tight { flex: none; }
+.hud .me-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud .coin-chip { padding: 6px 10px 6px 8px; }

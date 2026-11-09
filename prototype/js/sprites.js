@@ -756,6 +756,15 @@ const PLANT_SPOTS = {
 function drawCropTile(tx, ty, f, ts, seed) {
   const c = CROPS[f.crop], st = cropStage(f), z = cam.z;
   const sc = z * (c.n === 4 ? 0.85 : c.n === 1 ? 1.3 : 1);
+  if (typeof isRotten === 'function' && isRotten(f)) {   // v0.44: rotted in the ground: limp brown stalks, a couple of flies
+    PLANT_SPOTS[c.n].forEach(([dx, dy], k) => { const p = iso(tx + dx, ty + dy), b = (hash(seed, k) - 0.5) * 6;
+      ellipse(p.x, p.y, 6 * sc, 2.4 * sc, '#5a4026');
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.quadraticCurveTo(p.x + b * sc, p.y - 11 * sc, p.x + (b + 7) * sc, p.y - 5 * sc); ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 1.6 * sc; ctx.lineCap = 'round'; ctx.stroke();
+      ellipse(p.x + (b + 7) * sc, p.y - 5 * sc, 2.8 * sc, 1.7 * sc, '#6b4a24'); });
+    const p0 = iso(tx + 0.5, ty + 0.5);
+    for (let k = 0; k < 2; k++) { const a = ts / 260 + k * 3 + seed; circle(p0.x + Math.cos(a) * 9 * z, p0.y - 15 * z + Math.sin(a * 1.4) * 4 * z, 1 * z, '#2d2d2d'); }
+    return;
+  }
   if (st === 0) { // seed tag so you can tell what's planted
     const p = iso(tx + 0.14, ty + 0.14);
     line(p.x, p.y, p.x, p.y - 13 * z, '#a77b4f', 1.4 * z);

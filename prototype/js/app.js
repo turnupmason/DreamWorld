@@ -29,7 +29,7 @@ function giftText(g) {
   if (g.type === 'barn') { const b = barnInfo(g.k); return `${g.n} ${b.e}${b.name}`; }
   if (g.type === 'seed') return t('gift_seed', { n: g.n, e: CROPS[g.k].e, name: nm(CROPS[g.k]) });
   if (g.type === 'coins') return `🪙${g.n}`;
-  return `🪵${g.n}`;
+  return `🪙${g.n * WOOD_USD}`;   // (v0.44: wood is now coins)
 }
 const goodE = k => (CROPS[k] || GOODS[k] || {}).e || '';
 function fname(id) { const h = homeOf(id); return h ? homeName(h) : ''; }
@@ -77,7 +77,7 @@ const multText = m => (m > 1 ? `×${m} ${t('mult_bonus')}` : m < 1 ? `×${m} ${t
 function readyLists() {
   const h = S.me;
   return {
-    fields: h.fields.map((f, i) => (isRipe(f) ? i : -1)).filter(i => i >= 0),
+    fields: h.fields.map((f, i) => (isRipe(f) || isRotten(f) ? i : -1)).filter(i => i >= 0),   // v0.44: rotten ones get cleared too
     animals: h.animals.filter(animalReady).map(a => a.id),
     trees: h.trees.map((tr, i) => (i < orchardSlots(h) && treeReady(tr) ? i : -1)).filter(i => i >= 0),
     hives: h.yard.filter(it => YARD[it.k].prod && yardReady(it)).map(it => it.id),
@@ -182,12 +182,11 @@ function renderHUD() {
     <div class="statusbar"><span id="clock">${fmtClock(now())}</span><span>▂▄▆ 🔋</span></div>
     <div class="row between">
       <button class="row me plain" data-act="energyInfo">${avatar(S.me.look, 'hud e-' + e, e)}<div><div class="me-name">${esc(S.me.name)}</div>
-        <div class="energy">${ENERGY_EMOJI[e]} ${energyName(e)} · ${t('sleep_short', { n: S.sleep ? S.sleep.score : '–' })}</div>${needBars()}</div></button>
-      <div class="row tight"><button class="pill phone-pill" data-act="phone" aria-label="${t('ph_name')}" title="${t('ph_name')}">📱${phoneBadge() ? `<i class="badge">${phoneBadge()}</i>` : ''}</button>${weatherPill()}</div>
+        <div class="energy">${ENERGY_EMOJI[e]} ${energyName(e)} · ${t('sleep_short', { n: S.sleep ? S.sleep.score : '–' })}</div></div></button>
+      <div class="row tight"><button class="coin-chip" data-act="phone" data-arg="bank">🪙<b>${fmtPrice(S.me.coins)}</b></button><button class="pill phone-pill" data-act="phone" aria-label="${t('ph_name')}" title="${t('ph_name')}">📱${phoneBadge() ? `<i class="badge">${phoneBadge()}</i>` : ''}</button>${weatherPill()}</div>
     </div>
-    <div class="res row">
-      <span class="pill">🪙 ${fmtPrice(S.me.coins)}</span><span class="pill">🪵 ${S.me.wood}</span>
-      <button class="pill farm ${actionsLeft() === 0 ? 'done' : ''}" data-act="capInfo" style="--p:${Math.round(actionsLeft() / ACTION_CAP * 100)}"><i class="ring"></i>${t('farm_pill', { n: actionsLeft() })}</button>${live}
+    ${needBars()}
+    <div class="res row">${live}
       ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : ''}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${S.study ? `<button class="pill work" data-act="placeGo" data-arg="school">📚 ${fmtDur(Math.max(0, S.study.end - now()))}</button>` : ''}${isFed() ? `<button class="pill fed" data-act="mallAct" data-arg="food">😋 ${fmtDur(S.fed.until - now())}</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
     </div>`;
@@ -343,7 +342,7 @@ function shopCard(img, name, sub, btns, extra = '') {
 let SHOP_AWAY = false;
 const buyBtn = (act, arg, label, ok, cls = 'primary') => `<button class="btn small ${cls}" data-act="${act}" data-arg="${arg}" ${ok && !(SHOP_AWAY && storeForAct(act, arg)) ? '' : 'disabled'}>${label}</button>`;
 function storeForAct(act, arg = '') {
-  const m = { buySeed: 'market', buyTree: 'nursery', buyAnimal: 'ranch', adopt: 'petshop', buyPetFood: 'petshop', buyCar: 'dealer', buyHouse: 'realty', buyLand: 'realty', buyExcl: 'mall', buyClothes: 'mall', watchMovie: 'mall', clawTry: 'mall', eatFood: 'mall', buyParcel: 'realty', moveHouse: 'realty', buyRun: 'realty', moveHere: 'realty' };
+  const m = { buySeed: 'market', buyTree: 'nursery', buyAnimal: 'ranch', buyFeed: 'ranch', adopt: 'petshop', buyPetFood: 'petshop', buyCar: 'dealer', buyHouse: 'realty', buyLand: 'realty', buyExcl: 'mall', buyClothes: 'mall', watchMovie: 'mall', clawTry: 'mall', eatFood: 'mall', buyParcel: 'realty', moveHouse: 'realty', buyRun: 'realty', moveHere: 'realty' };
   if (act === 'buyItem') return String(arg).startsWith('room|') ? 'furniture' : 'nursery';
   return m[act] || null;
 }
@@ -412,7 +411,8 @@ function panelShop() {
       buyBtn('buyTree', k, `${t('buy_sapling')} 🪙${d.price}`, h.coins >= d.price && free > 0))).join('');
   } else if (cat === 'animals') {
     note = h.pastureLv ? t('pasture_cap', { n: pastureCount(), cap: pastureCap() }) : `${t('no_pasture')} <button class="btn small" data-act="shopCat" data-arg="land">${t('go_land')}</button>`;
-    body = Object.entries(ANIMALS).filter(([k, a]) => keep(k) && !a.excl).map(([k, a]) => {
+    const feedCard = keep('feed') ? shopCard(`<div class="emoji-thumb">${FEED.e}</div>`, nm(FEED), t('feed_sub', { n: FEED.n, b: h.feed || 0, t: h.trough || 0, c: FEED.trough }), buyBtn('buyFeed', 'feed', `🪙${FEED.price}`, h.coins >= FEED.price)) : '';   // v0.44
+    body = feedCard + Object.entries(ANIMALS).filter(([k, a]) => keep(k) && !a.excl).map(([k, a]) => {
       let sub;
       if (a.pet) sub = t(a.guard ? 'dog_sub' : 'cat_sub');
       else if (!a.prod) sub = t('animal_sub_rabbit', { d: fmtDur(a.every * MIN) });
@@ -516,7 +516,7 @@ function panelShop() {
   const where = inside ? `<div class="store-in">${thumbImg('storein', UI.inStore, {}, 340, 150, 'store-pic')}<div class="row between"><b>${SD.e} ${t('store_inside', { name: nm(SD) })}</b><button class="btn small" data-act="leaveStore">🚪 ${t('store_leave')}</button></div></div>`
     : SD && cat !== 'sell' ? `<div class="store-banner"><span>${SD.e} ${t(atStore(store) ? 'store_here' : 'store_sells', { name: nm(SD) })}</span>${atStore(store) ? `<button class="btn small primary" data-act="enterStore" data-arg="${store}">🛍️ ${t('store_enter')}</button>` : `<button class="btn small primary" data-act="placeGo" data-arg="${store}">🚶 ${t('store_go')}</button>`}</div>` : '';
   return `<div class="shop-head"><h1 class="panel-title">${inside ? nm(SD) : t('shop_catalog')}</h1>
-      <div class="row tight"><span class="pill">🪙 ${fmtNum(h.coins)}</span><span class="pill">🪵 ${h.wood}</span></div></div>
+      <div class="row tight"><span class="pill">🪙 ${fmtNum(h.coins)}</span></div></div>
     ${where}${mallActs}
     ${inside ? '' : `<p class="muted note">${t('shop_money_note')}</p>`}
     <div class="shop-cats">${chips}</div>
@@ -620,7 +620,7 @@ function panelReal() {
       <div class="gap-top">${apps}</div>
       <p class="muted">${t('focus_note')}</p></div>
     <div class="card earn"><h3>💰 ${t('earned_today')}</h3>
-      <div class="big-num">🪙${fmtNum(d.earned.coins)} <small>🪵${d.earned.wood}</small></div>
+      <div class="big-num">🪙${fmtNum(d.earned.coins)}</div>
       <p class="muted">${t('money_rule')}</p></div>
     ${trophyCard()}
     ${souvCard()}
@@ -691,6 +691,7 @@ function wareName(w) {
   if (w.kind === 'animal') return `${ANIMALS[w.k].e} ${nm(ANIMALS[w.k].baby)}`;
   if (w.kind === 'pet') return `${PET_BREEDS[w.k].kind === 'dog' ? '🐕' : '🐈'} ${nm(PET_BREEDS[w.k])}`;
   if (w.kind === 'petfood') return `${PET_FOOD[w.k].e} ${nm(PET_FOOD[w.k])}`;
+  if (w.kind === 'feed') return `${FEED.e} ${nm(FEED)}`;   // v0.44
   if (w.kind === 'furn') return nm(FURN[w.k]);
   if (w.kind === 'yard') return nm(YARD[w.k]);
   if (w.kind === 'car') return nm(CARS[w.k]);
@@ -707,6 +708,7 @@ function warePic(w) {
   if (w.kind === 'animal') return thumbImg('animal', w.k, { stage: 0 });
   if (w.kind === 'pet') return thumbImg('pet', w.k, {});
   if (w.kind === 'petfood') return `<div class="emoji-thumb">${PET_FOOD[w.k].e}</div>`;
+  if (w.kind === 'feed') return `<div class="emoji-thumb">${FEED.e}</div>`;
   if (w.kind === 'furn' || w.kind === 'yard') return thumbImg(w.kind, w.k);
   if (w.kind === 'car') return thumbImg('car', w.k, { color: CARS[w.k].look || CAR_COLORS[0] });
   if (w.kind === 'house') return thumbImg('house', +w.k, { wall: S.me.wall, roof: S.me.roof });
@@ -717,7 +719,7 @@ function warePic(w) {
 }
 const wareKey = (act, arg) => {   // which thing on show a catalogue button means
   const [a, b] = String(arg).split('|');
-  return { buySeed: 'seed:' + a, buyTree: 'tree:' + a, buyAnimal: 'animal:' + a, adopt: 'pet:' + a, buyPetFood: 'petfood:' + a, buyItem: (a === 'room' ? 'furn:' : 'yard:') + b,
+  return { buySeed: 'seed:' + a, buyTree: 'tree:' + a, buyAnimal: 'animal:' + a, buyFeed: 'feed:feed', adopt: 'pet:' + a, buyPetFood: 'petfood:' + a, buyItem: (a === 'room' ? 'furn:' : 'yard:') + b,
     buyCar: 'car:' + a, buyHouse: 'house:' + a, moveHouse: 'house:' + a, buyLand: 'land:' + a, buyClothes: 'clothes:' + a, buyExcl: 'excl:' + arg }[act] || null;
 };
 // ---------- sheets ----------
@@ -895,7 +897,8 @@ const SHEETS = {
   energy() {
     const e = energyLevel(), s = S.sleep || {}, n = needs(), home = !(S.out && S.out.town === myTown()) && !S.work && !S.study;
     const row = (k, ic, v, tip2) => `<div class="mn-row"><span>${ic} ${t('need_' + k)}</span><div class="bar ${v < 30 ? 'low' : ''}"><i style="width:${Math.round(v)}%"></i></div><b>${Math.round(v)}</b><div class="muted small need-tip">${tip2}</div></div>`;
-    const needsCard = `<div class="card gap-top"><b>${t('needs_title')}</b> <span class="muted small">${moodGood() ? '😊 ' + t('mood_good', { p: Math.round(NEEDS.moodPay * 100) }) : t('mood_note')}</span>
+    const needsCard = `<div class="card gap-top"><b>${t('needs_title')}</b> <span class="muted small">${moodGood() ? '😊 ' + t('mood_good', { p: Math.round(NEEDS.moodPay * 100) }) : moodBad() ? '😞 ' + t('mood_bad', { p: Math.round(NEED_LOW.badPay * 100) }) : t('mood_note')}</span>
+      <p class="muted small">${t('needs_rules', { n: NEED_LOW.low, b: NEED_LOW.badMood, p: Math.round(NEED_LOW.badPay * 100), g: NEEDS.goodMood, q: Math.round(NEEDS.moodPay * 100) })}</p>
       ${row('hunger', '🍔', n.hunger, t('need_hunger_tip'))}${row('social', '💬', n.social, t('need_social_tip'))}${row('fun', '🎉', n.fun, t('need_fun_tip'))}
       ${home ? `<button class="btn block gap-top" data-act="cook" ${canCook() ? '' : 'disabled'}>🍳 ${t(canCook() ? 'cook_btn' : 'cook_need_kitchen')}</button>` : ''}</div>`;
     return `<div class="center"><div class="big-emoji xl">${ENERGY_EMOJI[e]}</div><h2>${energyName(e)} · ${energyScore()}</h2></div>
@@ -916,7 +919,7 @@ const SHEETS = {
           <div class="cost">${t('seed_sub', { d: fmtDur(c.grow * MIN), n: c.yield, p: c.sell })}</div></div>
           <div class="col-btns">${buyBtn('plant', k, t('plant'), left > 0)}${buyBtn('plantAll', k, t('plant_all'), left > 0, '')}</div></div>`).join('')
         : `<p class="muted">${t('no_seeds')}</p><button class="btn block gap-top" data-act="openShop" data-arg="seeds">🛒 ${t('buy_seeds')}</button>`;
-      return `<h2>🌱 ${t('plant_title')}</h2><p class="muted">${t('build_left', { n: left, cap: ACTION_CAP })} · ${t('plant_walk')}</p><div class="card">${list}</div>`;
+      return `<h2>🌱 ${t('plant_title')}</h2><p class="muted">${t('plant_walk')}</p><div class="card">${list}</div>`;
     }
     const c = CROPS[f.crop], st = cropStage(f), left = c.grow * MIN - (now() - f.at);
     const thieves = f.thieves.filter(x => x !== owner).map(fname).filter(Boolean);
@@ -1348,7 +1351,7 @@ function walkDo(tg, o) {
 }
 const after = fn => () => { fn(); refresh(); };
 function harvestJob(i) {
-  return { tg: { kind: 'field', i }, o: { pose: 'crouch', dur: 650, valid: () => isRipe(S.me.fields[i]), done: after(() => harvestField(i)) } };
+  return { tg: { kind: 'field', i }, o: { pose: 'crouch', dur: 650, valid: () => isRipe(S.me.fields[i]) || isRotten(S.me.fields[i]), done: after(() => harvestField(i)) } };
 }
 function animalJob(id) {
   return { tg: { kind: 'animal', id }, o: { pose: 'crouch', dur: 700, valid: () => { const a = S.me.animals.find(x => x.id === id); return a && animalReady(a); }, done: after(() => collectFrom(id)) } };
@@ -1366,6 +1369,7 @@ function plantJob(i, crop) {
 function harvestField(i) {
   const r = harvest(i);
   if (!r) return;
+  if (r.rotten) { Sound.play('oops'); Scene.floatField(i, '🍂'); return snack(`🍂 ${t('crop_rotten', { e: CROPS[r.crop].e, h: FRESH.crop })}`); }   // v0.44
   tutDone('harvest');
   Sound.play('harvest');
   Scene.floatField(i, `+${r.n} ${CROPS[r.crop].e}`);
@@ -1707,6 +1711,7 @@ const ACT = {
   },
   // v0.33: play tennis / basketball / football with someone: walk over to the court, then the game starts
   sportGo(arg) {
+    if (hungry()) { Sound.play('oops'); return snack(`🍔 ${t('too_hungry_play')}`); }   // v0.44: eat first
     const [k, id] = arg.split('|');
     if (!BALL_GAMES[k] || Scene.here() !== 'park' || !Scene.parkHas(k)) return;
     const w = id === 'court' ? { name: t('mg_court_' + k), look: Scene.courtLook(k) } : whoIs(id);
@@ -1765,6 +1770,7 @@ const ACT = {
     Scene.shopGoTo('ticket', () => { UI.inVenue = null; UI.spotRes = null; ACT.worldVisit(town); snack(`🚆 ${t('sp_train_arrived', { town: nm(COMMUNITIES[town]) })} · 🧺 ${t('special_can_buy')}`); refresh(); });
   },
   gameGo(arg) {   // bowling or a race with someone: pay, walk over, play
+    if (hungry()) { Sound.play('oops'); return snack(`🍔 ${t('too_hungry_play')}`); }   // v0.44: eat first
     const [k, id] = arg.split('|'), G = VENUE_GAMES[k];
     if (!G || !(G.place === 'lake' ? Scene.here() === 'lake' : (G.places || [G.place]).some(pl => UI.inVenue === pl || UI.inStore === pl))) return;   // v0.41: the mall's claw machine, the lake too
     const w = id === 'court' ? venueMate(k) : whoIs(id); if (!w) return;
@@ -1885,6 +1891,7 @@ const ACT = {
     const r = startShift(key);
     if (r === 'ok') { Sound.play('select'); snack(`💼 ${t('job_started', { to: JOBS[key].to })}`); }
     else if (r === 'closed') snack(t('job_closed', { from: JOBS[key].from, to: JOBS[key].to }));
+    else if (r === 'hungry') { Sound.play('oops'); snack(`🍔 ${t('too_hungry_work')}`); }   // v0.44
     if (UI.sheet) renderSheet();
   },
   jobQuit() {
@@ -1942,6 +1949,12 @@ const ACT = {
     if (n) snack(t('snack_going', { n }));
   },
   stopJobs() { Scene.cancel(); },
+  // v0.44: walk to the trough and fill it with feed from the barn (none left: off to the farm supply store)
+  fillTrough() {
+    if (!(S.me.feed > 0) && (S.me.trough || 0) < FEED.trough) { Sound.play('oops'); snack(`${FEED.e} ${t('feed_none')}`); return ACT.openShop('animals'); }
+    walkDo({ kind: 'trough' }, { pose: 'crouch', dur: 800, done: after(() => { const r = fillTrough(); if (r.r === 'ok') { Sound.play('collect'); snack(`${FEED.e} ${t('feed_filled', { n: r.n, t: S.me.trough, c: FEED.trough, b: S.me.feed || 0 })}`); save(); refresh(); } else if (r.r === 'full') snack(`${FEED.e} ${t('feed_full', { c: FEED.trough })}`); }) });
+  },
+  buyFeed() { if (buyFeed() === 'ok') { Sound.play('buy'); snack(`${FEED.e} ${t('feed_bought', { n: FEED.n, b: S.me.feed })}`); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet && UI.sheet && renderSheet(); refresh(); },
   // farm
   plant(c) {
     const i = UI.sheet.arg.i;
@@ -2127,7 +2140,7 @@ const ACT = {
   },
   simJoin() { const it = inviteJoin(); if (it) notify(it); else snack(t('snack_street_full')); },
   inviteHere(arg) { const [st, p, n] = arg.split('|'), it = inviteJoin({ st, p: +p, n: +n }); closeSheet(); if (it) { notify(it); Sound.play('levelup'); save(); } else snack(t('invite_none')); },   // v0.27
-  simMoney() { S.me.coins += 10000; S.me.wood += 50; snack('+🪙10,000 +🪵50'); },
+  simMoney() { S.me.coins += 10000; snack('+🪙10,000'); },
   consoleToggle() { $('#console').classList.toggle('open'); },
   consoleClose() { $('#console').classList.remove('open'); },
   tutSkip() { endTutorial(); },
@@ -2146,6 +2159,7 @@ function onSceneHit(h) {
     return refresh();
   }
   if (k === 'floor') { Scene.go({ kind: 'floor', x: h.x, y: h.y }); return; }
+  if (k === 'trough' || (k === 'bubble' && h.what === 'trough')) return ACT.fillTrough();   // v0.44
   if (k === 'bubble') {
     if (h.what === 'field') return sneakDo({ kind: 'field', i: h.i }, () => stealResult(h.owner, steal(h.owner, h.i)));
     if (h.what === 'animal') {
@@ -2163,7 +2177,7 @@ function onSceneHit(h) {
   }
   if (k === 'field') {
     const hm = homeOf(h.owner), f = hm.fields[h.i];
-    if (mine && isRipe(f)) { const j = harvestJob(h.i); return walkDo(j.tg, j.o); }
+    if (mine && (isRipe(f) || isRotten(f))) { const j = harvestJob(h.i); return walkDo(j.tg, j.o); }
     if (!mine && isFriend(h.owner) && stealable(hm, h.i)) return sneakDo({ kind: 'field', i: h.i }, () => stealResult(h.owner, steal(h.owner, h.i)));
     return openSheet('field', { owner: h.owner, i: h.i });
   }
@@ -3189,6 +3203,7 @@ setInterval(() => {
     const tn = trophyNews();
     if (tn.length) { UI.trophyQ = [...(UI.trophyQ || []), ...tn]; if (!UI.sheet) openSheet('trophyNew', UI.trophyQ.shift()); save(); refresh(); }
   }
+  if (!S.onboarding && farmTick(S.me)) { save(); refresh(); }   // v0.44: feed the animals, throw out what went off
   // pets: say once when one of them needs something; keep the phone reminders up to date
   if (!S.onboarding) {
     const news = petNews();
@@ -3217,6 +3232,10 @@ else {
   $('#onboard').hidden = false;
   renderOnboarding(); renderConsole();
 }
+// v0.44: coming back: what happened on the farm while you were away (crops that rotted, things that went off)
+if (S && !S.onboarding) { const lost = farmTick(S.me), rot = (S.me.fields || []).filter(f => isRotten(f) && !f.told).length; (S.me.fields || []).forEach(f => { if (isRotten(f)) f.told = true; });
+  const L = [rot && t('farm_away_rot', { n: rot }), lost && t('farm_away_prod', { n: lost })].filter(Boolean); if (L.length) setTimeout(() => snack(`🍂 ${t('farm_away', { list: L.join('，') })}`), 2600); }
+if (S && S.woodSwap) { const n = S.woodSwap; delete S.woodSwap; save(); setTimeout(() => snack(`🪙 ${t('wood_swap', { n: fmtNum(n) })}`), 1500); }   // v0.44: your wood became coins
 
 // ---------- v0.18: held at the police station ----------
 // out of the police station: your townie stands at its door (trips start from there)
@@ -3333,9 +3352,12 @@ function workmates(key) {
     return `<div class="list-item">${avatar(p.look)}<div class="grow"><b>${esc(nm(p.name))}</b> <span class="muted small">${t(p.boss ? 'boss' : 'coworker')} · ${relTag(p.id)}</span></div>
       ${at ? `<button class="btn small" data-act="socialOpen" data-arg="${p.id}">💬 ${t('chat_btn')}</button>` : ''}</div>`; }).join('')}${at ? '' : `<div class="muted small">${t('job_people_note')}</div>`}`;
 }
+// v0.44: the three needs, big: an icon, the name (or what's wrong: hungry, lonely, bored), a coloured bar; and your mood
 function needBars() {
-  const n = needs();
-  return `<div class="my-needs">${['hunger', 'social', 'fun'].map(k => `<span class="mn ${n[k] < 30 ? 'low' : ''}">${NEEDS[k].e}<b><i style="width:${Math.round(n[k])}%"></i></b></span>`).join('')}</div>`;
+  const n = needs(), col = v => (v < NEED_LOW.low ? '#e5484d' : v < 60 ? '#f2b33d' : '#4caf6a');
+  const mood = moodGood() ? '😊' : moodBad() ? '😞' : '🙂';
+  return `<button class="hud-needs" data-act="energyInfo">${['hunger', 'social', 'fun'].map(k => { const v = Math.round(n[k]), low = v < NEED_LOW.low;
+    return `<span class="hn ${low ? 'low' : ''}"><em>${NEEDS[k].e}</em><span class="hn-r"><b>${t(low ? 'need_low_' + k : 'need_' + k)}</b><i><s style="width:${v}%;background:${col(v)}"></s></i></span></span>`; }).join('')}<span class="hn-mood" title="${t('needs_title')}">${mood}</span></button>`;
 }
 
 // ---------- v0.26: the phone ----------
