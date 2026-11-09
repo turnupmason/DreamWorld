@@ -2149,6 +2149,8 @@ function drawStore(st, ts) {
   else if (k === 'zoo') b = drawZoo(G, x, y, w, d, ts);   // v0.42: animals in the open
   else if (k === 'stadium') b = drawStadium(G, x, y, w, d, ts);   // v0.42: an open bowl
   else if (k === 'arena') b = drawArenaHall(G, x, y, w, d, ts);   // v0.59: the indoor arena
+  else if (k === 'airport') b = drawAirport(G, x, y, w, d, ts);   // v0.67
+  else if (k === 'port') b = drawPort(G, x, y, w, d, ts);
   else if (CIVIC_WH[k]) b = drawCivic(k, G, x, y, w, d, wh, ts);   // v0.38: the new district's buildings
   else {
     const LS = localShop(), wallC = LS && !['dealer', 'mall', 'police', 'firestation', 'gas'].includes(k) ? localWall(LS, k) : S2.wall;   // v0.53: shops in the local style (the car showroom, the mall and the emergency services stay as they are)
@@ -2189,7 +2191,7 @@ function drawStore(st, ts) {
     }
   }
   if (NIGHT > 0.3) { const p = iso(x + w / 2, y + d); glow(p.x, p.y - 10 * z, 60 * z, 0.9); }
-  const s = up(iso(x + w / 2, y + d / 2), (wh + (G.rh2 || 0) + (k === 'ranch' || k === 'nursery' ? 18 : k === 'station' ? 36 : k === 'museum' ? 16 : k === 'bowling' ? 84 : 6)) * z);
+  const s = up(iso(x + w / 2, y + d / 2), (wh + (G.rh2 || 0) + (k === 'ranch' || k === 'nursery' ? 18 : k === 'station' ? 36 : k === 'museum' ? 16 : k === 'bowling' ? 84 : k === 'airport' ? 40 : k === 'port' ? 20 : 6)) * z);
   if (z > 0.1) label(`${S2.e} ${nm(S2)}`, s.x, s.y - 6 * z, '#fffdf8', '#3b3125', `800 ${Math.max(10, 13 * z)}px ${CUTE_FONT},${EMOJI_FONT}`, Math.max(16, 23 * z), 2);   // v0.43: drawn last, never covered or overlapping
   return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 30 * z, y1: iso(x + w, y + d).y };
 }
@@ -2437,6 +2439,92 @@ function drawZoo(G, x, y, w, d, ts) {
 // ---------- v0.42: the stadium (v0.55: the field and the game on it are in arena.js) ----------
 // the stadium seen from the town: a rounded bowl of stands round the field, floodlights at the corners, a scoreboard
 // over the far stands and flags on top
+// v0.67 (Mason #32: "the airport and the port must have their own buildings in town"). Both are laid out from the
+// side that faces the road (front): u along that side, v from the front backwards. hubFrame turns (u, v) into world
+// rects for the boxes.
+function hubFrame(G, x, y, w, d) {
+  const f = G.front, along = f === 'S' || f === 'N', U = along ? w : d, V = along ? d : w;
+  const W2 = (u, v) => (f === 'S' ? [x + u, y + d - v] : f === 'N' ? [x + u, y + v] : f === 'E' ? [x + w - v, y + u] : [x + v, y + u]);
+  const R = (u0, u1, v0, v1) => { const a = W2(u0, v0), b = W2(u1, v1); return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])]; };
+  const parts = [], add = (r, f2) => parts.push({ d: r[0] + r[2] / 2 + r[1] + r[3] / 2, r, f: f2 }), boxR = (r, h, col, base, o) => box(r[0], r[1], r[2], r[3], h, col, base || 0, { shadow: false, ...(o || {}) });
+  const flush = () => parts.sort((a, b) => a.d - b.d).forEach(p => p.f(p.r));
+  return { U, V, W2, R, add, boxR, flush };
+}
+// The airport: the runway behind (white centre dashes, the stripes at each end), the apron with a plane at the gate
+// and its jet bridge, a glass terminal with a white canopy over the doors, a control tower with its glass cab
+function drawAirport(G, x, y, w, d, ts) {
+  const z = cam.z, F = hubFrame(G, x, y, w, d), { U, V, R, W2, add, boxR } = F, lit = NIGHT > 0.3, glassC = lit ? '#ffe39a' : '#9fd0ea';
+  const flat = (r, col) => flatRect(r[0], r[1], r[2], r[3], col);
+  flat(R(0, U, 0, V), '#c4c8cd');   // the apron
+  const rw = R(0, U, V - 3.2, V - 0.3); flat(rw, '#4b4f55');   // the runway
+  for (let u = 1.5; u < U - 1.5; u += 2.2) { const a = iso(...W2(u, V - 1.75)), b = iso(...W2(u + 1.2, V - 1.75)); line(a.x, a.y, b.x, b.y, '#ffffff', 1.6 * z); }
+  [0.5, U - 0.9].forEach(u0 => { for (let k = 0; k < 5; k++) { const vv = V - 2.9 + k * 0.55, a = iso(...W2(u0, vv)), b = iso(...W2(u0 + 0.4, vv)); line(a.x, a.y, b.x, b.y, '#ffffff', 1.4 * z); } });
+  { const a = iso(...W2(U * 0.7, 5.6)), b = iso(...W2(U * 0.7, V - 3.2)); line(a.x, a.y, b.x, b.y, '#f2c230', 1.4 * z); }   // the taxiway line
+  // the terminal: glass front, a white canopy, the roof
+  add(R(0.8, U * 0.56, 1.4, 5.4), r => { const b = boxR(r, 34, '#e8edf2', 0, { top: '#d5dbe2' }); const fr = [iso(...W2(0.8, 1.4)), iso(...W2(U * 0.56, 1.4))];
+    wallRect(fr, 0, 0.03, 0.97, 4, 29, glassC, '#ffffff', 1.2); for (let i = 1; i < 12; i++) wallLine(fr, 0, i / 12, 4, i / 12, 29, '#ffffff', 0.8); wallLine(fr, 0, 0.03, 16, 0.97, 16, '#ffffff', 1); });
+  add(R(0.4, U * 0.6, 0.5, 1.6), r => boxR(r, 2, '#ffffff', 30, { top: '#f4f6f8' }));   // the canopy
+  // the control tower
+  add(R(U * 0.6, U * 0.6 + 1.2, 2.2, 3.4), r => { boxR(r, 92, '#dfe4ea', 0, { top: '#cfd5dc' }); const c = R(U * 0.6 - 0.35, U * 0.6 + 1.55, 1.85, 3.75); boxR(c, 14, glassC, 92, { top: '#3d4a5c' }); box(c[0] - 0.1, c[1] - 0.1, c[2] + 0.2, c[3] + 0.2, 3, '#3d4a5c', 106, { shadow: false }); const tp = up(iso(c[0] + c[2] / 2, c[1] + c[3] / 2), 109 * z); line(tp.x, tp.y, tp.x, tp.y - 10 * z, '#9aa3ad', 1 * z); circle(tp.x, tp.y - 10 * z, 1.4 * z, Math.floor(ts / 600) % 2 ? '#e5484d' : '#7a2a2a'); });
+  // the plane at its gate, and the jet bridge to it
+  const pu = U * 0.66, pv = 7.2;
+  add(R(U * 0.56, pu + 0.3, 3.2, 3.9), r => boxR(r, 12, '#cfd5dc', 16, { top: '#e1e6ec' }));
+  add(R(pu, pu + 6.5, pv - 0.5, pv + 0.5), () => airplaneIso(W2, pu, pv, z, lit));
+  F.flush();
+  return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
+}
+// an airliner parked on the ground, its nose at u0, along u: wings, engines, a tall tail, a row of windows
+function airplaneIso(W2, u0, v0, z, lit) {
+  const P = (u, v, h) => up(iso(...W2(u, v)), h * z), L = 6.5, hb = 7, hh = 30;
+  const pg2 = (pts, col, st) => poly(pts.map(([u, v, h]) => P(u, v, h)), col, st, 0.6 * z);
+  pg2([[u0 + 2.2, v0, hb + 8], [u0 + 3.4, v0 - 3.4, hb + 11], [u0 + 4.0, v0 - 3.4, hb + 11], [u0 + 3.6, v0, hb + 8]], '#d5dbe2', '#aab2bb');   // the far wing
+  [[u0 + 3.0, v0 - 1.6]].forEach(([u, v]) => pg2([[u, v - 0.3, hb + 3], [u + 0.9, v - 0.3, hb + 3], [u + 0.9, v + 0.3, hb + 3], [u, v + 0.3, hb + 3]], '#8e959c'));
+  const r = (u, v) => [W2(u, v)[0], W2(u, v)[1]];
+  const a = r(u0 + 0.4, v0 - 0.45), b = r(u0 + L, v0 + 0.45);
+  box(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), hh - hb, '#f8fafc', hb, { top: '#ffffff', shadow: false });   // the body
+  pg2([[u0 + 0.4, v0 - 0.45, hb], [u0, v0, hb + 5], [u0 + 0.4, v0 + 0.45, hb], [u0 + 0.4, v0 + 0.45, hh], [u0, v0, hb + 12], [u0 + 0.4, v0 - 0.45, hh]], '#eef1f4', '#c9cfd6');   // the nose
+  pg2([[u0 + 0.12, v0 - 0.2, hb + 13], [u0 + 0.45, v0 - 0.4, hh - 3], [u0 + 0.45, v0 + 0.4, hh - 3], [u0 + 0.12, v0 + 0.2, hb + 13]], '#2c3b4c');   // the cockpit window
+  for (let k = 0; k < 9; k++) { const p = P(u0 + 1.1 + k * 0.55, v0 + 0.46, hb + 15); circle(p.x, p.y, 1.4 * z, lit ? '#ffe39a' : '#3d4a5c'); }
+  { const p0 = P(u0 + 0.6, v0 + 0.46, hb + 9), p1 = P(u0 + L - 0.3, v0 + 0.46, hb + 9); line(p0.x, p0.y, p1.x, p1.y, '#2f7cff', 2.6 * z); }   // a blue line
+  pg2([[u0 + 2.2, v0, hb + 8], [u0 + 3.4, v0 + 3.6, hb + 11], [u0 + 4.0, v0 + 3.6, hb + 11], [u0 + 3.6, v0, hb + 8]], '#e3e8ee', '#aab2bb');   // the near wing
+  { const e0 = r(u0 + 2.9, v0 + 1.25), e1 = r(u0 + 3.9, v0 + 1.95); box(Math.min(e0[0], e1[0]), Math.min(e0[1], e1[1]), Math.abs(e1[0] - e0[0]), Math.abs(e1[1] - e0[1]), 7, '#9aa3ad', hb, { shadow: false, top: '#b5bcc4' }); }   // an engine under the wing
+  pg2([[u0 + L - 1.6, v0, hh], [u0 + L - 0.2, v0, hh], [u0 + L, v0, hh + 26], [u0 + L - 0.7, v0, hh + 26]], '#2f7cff', '#1f5fc8');   // the tail fin
+  pg2([[u0 + L - 1, v0 - 1.4, hh - 0.6], [u0 + L - 0.3, v0 - 1.4, hh - 0.6], [u0 + L - 0.1, v0 + 1.4, hh - 0.6], [u0 + L - 0.8, v0 + 1.4, hh - 0.6]], '#d5dbe2');   // the tailplane
+}
+// The port: a terminal on the quay, the water of the harbour behind, a wooden pier out into it with a ferry tied up
+// beside it, and a little lighthouse at the end of the harbour wall
+function drawPort(G, x, y, w, d, ts) {
+  const z = cam.z, F = hubFrame(G, x, y, w, d), { U, V, R, W2, add, boxR } = F, lit = NIGHT > 0.3, glassC = lit ? '#ffe39a' : '#9fd0ea';
+  const flat = (r, col) => flatRect(r[0], r[1], r[2], r[3], col);
+  flat(R(0, U, 0, V * 0.42), '#c9c2b2');   // the quay
+  flat(R(0, U, V * 0.42, V), '#5aa9d6');   // the harbour water
+  for (let k = 0; k < 9; k++) { const u = (k * 2.3 + (ts / 900 + k) % 1.2) % U, v = V * 0.5 + (k * 1.7) % (V * 0.45), a = iso(...W2(u, v)), b = iso(...W2(u + 0.6, v)); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.6)', 1 * z); }
+  { const a = iso(...W2(0, V * 0.42)), b = iso(...W2(U, V * 0.42)); line(a.x, a.y, b.x, b.y, '#8f8676', 2 * z); }   // the quay edge
+  // the pier and the ferry tied up beside it
+  add(R(U * 0.18, U * 0.28, V * 0.42, V - 0.4), r => boxR(r, 2.5, '#b08a5e', 0, { top: '#c79e6c' }));
+  add(R(U * 0.32, U * 0.92, V * 0.56, V * 0.86), () => ferryIso(W2, U * 0.32, U * 0.92, V * 0.56, V * 0.86, z, lit, ts));
+  // the terminal
+  add(R(U * 0.36, U - 0.6, 0.8, V * 0.38), r => { boxR(r, 32, '#eef1f4', 0, { top: '#2f5fa8' }); const fr = [iso(...W2(U * 0.36, 0.8)), iso(...W2(U - 0.6, 0.8))];
+    wallRect(fr, 0, 0.05, 0.95, 4, 27, glassC, '#ffffff', 1.1); for (let i = 1; i < 8; i++) wallLine(fr, 0, i / 8, 4, i / 8, 27, '#ffffff', 0.8); wallLine(fr, 0, 0.05, 15, 0.95, 15, '#ffffff', 1); });
+  // the lighthouse
+  add(R(0.4, 1.4, V - 1.4, V - 0.4), r => { const lb = boxR(r, 64, '#ffffff', 0, { top: '#f4f6f8' }); [lb.left, lb.right].forEach(f => [0.2, 0.55].forEach(h0 => wallRect(f, 0, 0, 1, 64 * h0, 64 * h0 + 8, '#e5484d'))); box(r[0] + 0.1, r[1] + 0.1, 0.8, 0.8, 9, 'rgba(255,240,180,.85)', 64, { shadow: false, top: '#e5484d' }); const lp = up(iso(r[0] + 0.5, r[1] + 0.5), 70 * z); circle(lp.x, lp.y, 2.6 * z, '#ffe39a'); if (lit) glow(lp.x, lp.y, 60 * z, 1); });
+  F.flush();
+  return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
+}
+// a ferry tied up along u (bow at u1): a white hull with a blue band, two decks of windows, a red funnel
+function ferryIso(W2, u0, u1, v0, v1, z, lit, ts) {
+  const r = (u, v) => W2(u, v), bob = Math.sin(ts / 800) * 0.6;
+  const a = r(u0, v0), b = r(u1 - 0.8, v1), rect = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])];
+  const P = (u, v, h) => up(iso(...r(u, v)), (h + bob) * z);
+  const hull = box(rect[0], rect[1], rect[2], rect[3], 14, '#ffffff', bob, { top: '#d9cbb0', shadow: false });
+  poly([P(u1 - 0.8, v0, 0), P(u1, (v0 + v1) / 2, 4), P(u1, (v0 + v1) / 2, 16), P(u1 - 0.8, v0, 14)], '#f4f6f8', '#c9cfd6', 0.6 * z);   // the bow
+  poly([P(u1 - 0.8, v1, 0), P(u1, (v0 + v1) / 2, 4), P(u1, (v0 + v1) / 2, 16), P(u1 - 0.8, v1, 14)], '#e9edf1', '#c9cfd6', 0.6 * z);
+  [hull.left, hull.right].forEach(f => { wallRect(f, bob, 0, 1, 3, 6.5, '#2f5fa8'); for (let i = 0; i < 10; i++) wallRect(f, bob, 0.05 + i * 0.09, 0.1 + i * 0.09, 9, 11.5, lit ? '#ffe39a' : '#3d4a5c'); });
+  const c0 = r(u0 + 0.5, v0 + 0.4), c1 = r(u1 - 2.2, v1 - 0.4), cr = [Math.min(c0[0], c1[0]), Math.min(c0[1], c1[1]), Math.abs(c1[0] - c0[0]), Math.abs(c1[1] - c0[1])];
+  const cab = box(cr[0], cr[1], cr[2], cr[3], 16, '#f4f6f8', 14 + bob, { top: '#e1e6ec', shadow: false });
+  [cab.left, cab.right].forEach(f => { for (let i = 0; i < 8; i++) wallRect(f, 14 + bob, 0.06 + i * 0.115, 0.14 + i * 0.115, 5, 11, lit ? '#ffe39a' : '#3d4a5c'); });
+  const fu = r(u0 + 1.4, (v0 + v1) / 2); box(fu[0] - 0.4, fu[1] - 0.4, 0.8, 0.8, 12, '#e5484d', 30 + bob, { top: '#2b2b30', shadow: false });
+}
 function drawStadium(G, x, y, w, d, ts) {
   const z = cam.z, cx = x + w / 2, cy = y + d / 2, RX = w / 2 - 0.2, RY = d / 2 - 0.2, e = 0.5, H = 34, h0 = 8, N = 72;
   const town = SCENE_TOWN, A = arenaNow(town, now(), 'stadium'), lit = NIGHT > 0.3, full = !A.off && A.state === 'live';   // v0.55: the league game (arena.js)

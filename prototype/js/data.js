@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.66.0';
+const VERSION = '0.67.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -897,7 +897,8 @@ const DREAM_ROADS = [
   ['provence', 'hangzhou', 60, 30], ['seoul', 'hangzhou', 2, 18], ['seoul', 'kyoto', 3, -20, 'bridge'], ['cactus', 'andes', 45, 24], ['palmbay', 'rio', 75, -20],
   ['andes', 'rio', 15, -18], ['provence', 'capetown', 11, -34], ['hangzhou', 'sydney', 88, 40, 'bridge'],
 ];
-const DREAM_RAIL = [['wutong', 'vermont'], ['vermont', 'london'], ['london', 'provence'], ['provence', 'seoul'], ['seoul', 'kyoto'], ['vermont', 'palmbay'], ['palmbay', 'rio'], ['provence', 'capetown'], ['seoul', 'hangzhou'], ['hangzhou', 'sydney', 48]];
+const DREAM_RAIL = [['wutong', 'vermont'], ['vermont', 'london'], ['london', 'provence'], ['provence', 'seoul'], ['seoul', 'kyoto'], ['vermont', 'palmbay'], ['palmbay', 'rio'], ['provence', 'capetown'], ['seoul', 'hangzhou'], ['hangzhou', 'sydney', 48],
+  ['wutong', 'banff', 22], ['wutong', 'cactus', -20], ['cactus', 'andes', 26], ['london', 'holland', -16], ['holland', 'fjord', 18]];   // v0.67 (Mason #32: "every city: roads, railways, all clear"): every place has a station on the line
 const DREAM_AIR = ['wutong', 'london', 'seoul', 'rio', 'sydney', 'capetown'];
 const DREAM_PORT = ['palmbay', 'rio', 'capetown', 'sydney', 'kyoto', 'fjord', 'london'];
 const DREAM_PEAKS = [[215, 120], [250, 140], [180, 130], [300, 600], [330, 660], [640, 60], [690, 75], [960, 240], [1080, 230]];   // mountains (the drive goes through them in tunnels)
@@ -1204,6 +1205,10 @@ const STORES = {
   aquatic:   { e: '🏊', zh: '游泳馆', en: 'Swimming centre', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#e6f3fa', roof: '#38a3e0' },
   museum:    { e: '🦖', zh: '博物馆', en: 'Museum', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#efe8da', roof: '#8a7a5a' },
   station:   { e: '🚉', zh: '火车站', en: 'Train station', cats: [], civic: true, late: true, w: 10, d: 6, wall: '#c98a5a', roof: '#3d4a66' },
+  // v0.67 (Mason #32: "the airport and the port must have their own buildings in town"): only in the places that
+  // have one (DREAM_AIR / DREAM_PORT): planes and ships leave from here, and you arrive here
+  airport:   { e: '✈️', zh: '机场', en: 'Airport', cats: [], civic: true, late: 2, w: 20, d: 14, wall: '#e8edf2', roof: '#2f7cff', only: 'air' },
+  port:      { e: '⚓', zh: '港口', en: 'Port', cats: [], civic: true, late: 2, w: 16, d: 12, wall: '#eef1f4', roof: '#2f5fa8', only: 'sea' },
 };
 // Which store sells each shop category.
 const CAT_STORE = {};
@@ -1427,7 +1432,7 @@ function findBends(world, roads, occ, lakeAt) {
   }
   return out;
 }
-function buildLayout(id, flip) {
+function buildLayout(id, flip, town) {   // (v0.67: town: which town it's for, so only an airport town gets an airport)
   const B = LAYOUTS[id], fx = (x, w = 0) => (flip ? MIRROR_X - x - w : x);
   const streets = {};
   Object.entries(B.streets).forEach(([k, s]) => { streets[k] = { ...s, x: fx(s.x, s.n * PARCEL) }; });
@@ -1716,9 +1721,11 @@ function buildLayout(id, flip) {
   labels.push(['area_new', (blvd[0] + blvd[2]) / 2 + (vert(blvd) ? 0 : 0), vert(blvd) ? (blvd[1] + blvd[3]) / 2 : blvd[1] - 13]);   // v0.38
   // v0.41: the big places that came after the interstate (an amusement park…): along the boulevard in what's still free
   if (fwy) { roads.filter(r => r[4] === 'frontage' || r.o).forEach(r => busyRects.push(r.slice(0, 4))); busyRects.push(...roads.filter(r => !busyRects.some(q => q[0] === r[0] && q[1] === r[1] && q[2] === r[2] && q[3] === r[3])).map(r => r.slice(0, 4))); }
-  const L2 = ['stadium', 'arena', ...Object.keys(STORES).filter(k => STORES[k].w && STORES[k].late === 2 && k !== 'stadium' && k !== 'arena')];   // v0.59: the sports venues first (every team city needs both)
+  const hubOK = k => !STORES[k].only || (town && (STORES[k].only === 'air' ? DREAM_AIR : DREAM_PORT).includes(town));   // v0.67
+  const L2 = ['stadium', 'arena', ...['airport', 'port'].filter(hubOK), ...Object.keys(STORES).filter(k => STORES[k].w && STORES[k].late === 2 && !['stadium', 'arena', 'airport', 'port'].includes(k))];   // (v0.67: the airport and the port right after them: a town that has one needs it)   // v0.59: the sports venues first (every team city needs both)
   L2.forEach(k => placeStore([k, STORES[k]]));
   L2.forEach(k => { if (!stores.some(st => st[0] === k)) placeStore([k, { ...STORES[k], late: 0 }]); });   // no room on the boulevard: anywhere along a road
+  ['airport', 'port'].filter(hubOK).forEach(k => { for (const f of [0.8, 0.65]) if (!stores.some(st => st[0] === k)) placeStore([k, { ...STORES[k], late: 0, w: Math.round(STORES[k].w * f), d: Math.round(STORES[k].d * f) }]); });   // v0.67: still no room: a smaller one
   if (fwy) labels.push(['area_freeway', ...(fwy.axis === 'x' ? [fwy.over.s + 45, fwy.c - 3] : [fwy.c + 3, fwy.over.s + 45])]);   // v0.39
   const culs = tidyRoads(roads, world, [...busyRects.filter(q => !roads.some(r => r[0] === q[0] && r[1] === q[1] && r[2] === q[2] && r[3] === q[3])),
     ...stores.map(st => [st[1], st[2], st[1] + st[3], st[2] + st[4]]), ...parks.map(pk => [pk[1], pk[2], pk[1] + pk[3], pk[2] + pk[4]]),
@@ -1731,7 +1738,7 @@ function buildLayout(id, flip) {
     ...culs.map(C => [C.x - C.r - 2, C.y - C.r - 2, C.x + C.r + 2, C.y + C.r + 2]), ...fwBand,
     ...(highway ? highway.ramps.flatMap(R => R.map(p => [p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2])) : [])], lakeAt);
   return {
-    id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers, fwy, culs, bends,
+    id: id + (flip ? '|f' : '') + (town ? '@' + town : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers, fwy, culs, bends,
     centre, plaza, shops, pocket: B.pocket ? box(B.pocket) : null,
     park: PK, lake, fields: B.fields.map(f => box(f)),
     places: [...B.places.map(([x, y]) => [fx(x), y]), vert(blvd) ? [(blvd[0] + blvd[2]) / 2, (blvd[1] + blvd[3]) / 2] : [(blvd[0] + blvd[2]) / 2, blvd[3] + 0.6]], labels,

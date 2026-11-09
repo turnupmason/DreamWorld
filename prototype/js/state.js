@@ -248,7 +248,7 @@ const LAYOUT_BUILT = {};
 function layoutOf(t = VIEW_TOWN) {   // v0.52: each town its own (zones, street names, homes)
   if (!COMMUNITIES[t]) t = HOME_TOWN;
   const c = COMMUNITIES[t];
-  return LAYOUT_BUILT[t] || (LAYOUT_BUILT[t] = zoneLayout(buildLayout(c.layout || 'grid', !!c.flip), t, t === HOME_TOWN));
+  return LAYOUT_BUILT[t] || (LAYOUT_BUILT[t] = zoneLayout(buildLayout(c.layout || 'grid', !!c.flip, t), t, t === HOME_TOWN));
 }
 // v0.52: the zone a street / a home is in
 const zoneOfSt = (st, t = VIEW_TOWN) => ZONES[(streetsOf(t)[st] || {}).zone] || ZONES.suburb;

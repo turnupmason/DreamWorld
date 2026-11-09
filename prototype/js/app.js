@@ -1925,6 +1925,7 @@ const ACT = {
     if (S.me.coins < P.cost) { Sound.play('oops'); return snack(t('snack_poor')); }
     S.me.coins -= P.cost; save(); Drive.open({ from: here, to: myTown(), mode: 'train' }, o => trainArrived(o));
   },
+  goHub(hub) { closeSheet(); const here = whereNow(); if (here !== myTown()) { UI.tab = 'world'; UI.wtown = here; } else UI.tab = 'town'; syncView(); openSheet('go', { place: hub }); },   // v0.67
   goStation() { closeSheet(); const here = whereNow(); if (here !== myTown()) { UI.tab = 'world'; UI.wtown = here; } else UI.tab = 'town'; syncView(); openSheet('go', { place: 'station' }); },   // v0.61
   gameGo(arg) {   // bowling or a race with someone: pay, walk over, play
     if (hungry()) { Sound.play('oops'); return snack(`🍔 ${t('too_hungry_play')}`); }   // v0.44: eat first
@@ -3198,30 +3199,46 @@ function flySailHtml(id) {
     if (!list.includes(id)) return `<p class="muted small">${e} ${t(air ? 'fl_no_there' : 'sh_no_there', { c: nm(COMMUNITIES[id]), a: nm(COMMUNITIES[nearestOf(list, id)]) })}</p>`;
     if (!list.includes(from)) return `<p class="muted small">${e} ${t(air ? 'fl_no_here' : 'sh_no_here', { c: nm(COMMUNITIES[nearestOf(list, from)]) })}</p>`;
     const P = Drive.plan(from, id, mode); if (!P) return '';
-    const car = !air && carWithYou(), cost = P.cost + (car ? TRAVEL.shipCar : 0);
+    const car = !air && carWithYou(), cost = P.cost + (car ? TRAVEL.shipCar : 0), hub = air ? 'airport' : 'port';
+    const atHub = !hubIn(from, hub) || (Scene.here() === hub && VIEW_TOWN === from);   // v0.67: tickets are sold at the airport / the port
     return `<div class="row gap-top"><span class="grow small">${e} ${t(air ? 'fl_info' : 'sh_info', { km: P.km, n: cost, m: P.mins })}${car ? `<br><span class="muted">🚗 ${t('sh_car', { n: TRAVEL.shipCar })}</span>` : ''}</span>
-      ${tix ? `<button class="btn small" data-act="${act}" data-arg="${id}|tix">🎟️ ${t('tix_use')}</button>` : ''}<button class="btn small primary" data-act="${act}" data-arg="${id}|" ${S.me.coins >= cost ? '' : 'disabled'}>${e} 🪙${cost}</button></div>`;
+      ${!atHub ? `<button class="btn small" data-act="goHub" data-arg="${hub}">${t(air ? 'hub_go_air' : 'hub_go_sea')}</button>`
+        : `${tix ? `<button class="btn small" data-act="${act}" data-arg="${id}|tix">🎟️ ${t('tix_use')}</button>` : ''}<button class="btn small primary" data-act="${act}" data-arg="${id}|" ${S.me.coins >= cost ? '' : 'disabled'}>${e} 🪙${cost}</button>`}</div>`;
   };
   return row('air', '✈️') + row('sea', '⛴️');
+}
+// v0.67: does this town have the building (some have no room for one: then the city card sells the tickets)
+const hubIn = (town, hub) => (layoutOf(town).stores || []).some(st => st[0] === hub);
+// the departures board at the airport / the port: everywhere you can go from here
+function hubBoard(hub) {
+  const air = hub === 'airport', from = whereNow(), list = (air ? DREAM_AIR : DREAM_PORT).filter(id => id !== from && COMMUNITIES[id]), tix = ticketsLeft(), e = air ? '✈️' : '⛴️', act = air ? 'flyGo' : 'sailGo';
+  const car = !air && carWithYou();
+  return `<p>${t(air ? 'hub_desc_air' : 'hub_desc_sea')}</p>${car ? `<p class="muted small">🚗 ${t('sh_car', { n: TRAVEL.shipCar })}</p>` : ''}<p class="muted small">🎟️ ${t('pass_tix', { n: tix })}</p>
+    <div class="card">${list.map(id => { const P = Drive.plan(from, id, air ? 'air' : 'sea'); if (!P) return ''; const cost = P.cost + (car ? TRAVEL.shipCar : 0), c = COMMUNITIES[id];
+      return `<div class="list-item"><span class="big-emoji">${c.flag}</span><div class="grow"><b>${nm(c)}</b> ${isTeamCity(id) ? '🏟️' : ''}<div class="muted small">${P.km} km · ${t('tr_mins', { m: P.mins })} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}${(passport().st || {})[id] ? ' · 📕' : ''}</div></div>
+        ${tix ? `<button class="btn small" data-act="${act}" data-arg="${id}|tix">🎟️</button>` : ''}<button class="btn small primary" data-act="${act}" data-arg="${id}|" ${S.me.coins >= cost ? '' : 'disabled'}>${e} 🪙${cost}</button></div>`; }).join('')}</div>`;
 }
 function travelGo(mode, arg) {
   const [id, how] = String(arg).split('|'), from = whereNow(), P = Drive.plan(from, id, mode);
   if (!P) return;
   if (S.work || jailed()) return snack(t('dr_busy'));
+  const hub = mode === 'air' ? 'airport' : 'port';
+  if (hubIn(from, hub) && !(Scene.here() === hub && VIEW_TOWN === from)) { Sound.play('oops'); return snack(t(mode === 'air' ? 'hub_first_air' : 'hub_first_sea')); }   // v0.67: from the airport / the port
   const car = mode === 'sea' && carWithYou(), cost = P.cost + (car ? TRAVEL.shipCar : 0), e = mode === 'air' ? '✈️' : '⛴️';
   if (how === 'tix') { if (ticketsLeft() < 1) return; passport().tix++; snack(`🎟️ ${t('tix_used')}`); }
   else { if (S.me.coins < cost) { Sound.play('oops'); return snack(t('snack_poor')); } S.me.coins -= cost; snack(`${e} ${t('go_fare', { n: cost })}`); }
-  save(); Sound.play('select');
+  closeSheet(); save(); Sound.play('select');
   Drive.open({ from, to: id, mode, car }, o => travelArrived(o));
 }
 // off the plane / the ship: in that place's main square (the ship brought your car along if it was with you)
 function travelArrived(o) {
-  const to = o.to, L = layoutOf(to), pk = (L.parks || [])[0], pt = pk ? [pk[1] + pk[3] / 2, pk[2] + pk[4] / 2] : L.places[0];
-  if (o.car) S.carAt = to === myTown() ? null : { town: to, pt, dir: '+y', id: null, place: null };
-  if (to === myTown()) { S.trav = null; S.away = null; UI.wtown = null; UI.visit = null; save(); setTab('home'); Scene.recenter(); stampNews(stampAt(to)); return; }
-  S.trav = { town: to, at: now(), by: o.mode }; S.away = { town: to, until: now() + SPECIAL.visitH * HOUR };
-  UI.tab = 'world'; UI.wtown = to; UI.visit = null; UI.visitInside = false; setLevel(0); syncView();
-  Scene.arriveAt(pt, null); save(); refresh();
+  const to = o.to, L = layoutOf(to), hub = o.mode === 'air' ? 'airport' : 'port', st = (L.stores || []).find(x => x[0] === hub), pk = (L.parks || [])[0];
+  const pt = st ? storeGeo(st).bay : pk ? [pk[1] + pk[3] / 2, pk[2] + pk[4] / 2] : L.places[0];   // v0.67: out of that town's airport / port
+  if (o.car) S.carAt = { town: to, pt, dir: st ? storeGeo(st).dir : '+y', id: null, place: st ? hub : null };
+  if (to === myTown()) { S.trav = null; S.away = null; UI.tab = 'town'; UI.wtown = null; }
+  else { S.trav = { town: to, at: now(), by: o.mode }; S.away = { town: to, until: now() + SPECIAL.visitH * HOUR }; UI.tab = 'world'; UI.wtown = to; }
+  UI.visit = null; UI.visitInside = false; setLevel(0); syncView();
+  Scene.arriveAt(pt, st ? hub : null); Scene.showMe(); save(); refresh();
   stampNews(stampAt(to));
 }
 // a new stamp in the passport (and a keepsake at 4 / 8 / 12 / 16)
@@ -3414,6 +3431,7 @@ function placeBody(key) {
   if (key === 'firestation' || key === 'gas') return `<p>${t('st_desc_' + key)}</p>`;
   if (key === 'office') return `<p>${t('pl_desc_office')}</p>` + jobSection('office');   // v0.37
   if (['hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium', 'arena'].includes(key)) return `<p>${t('st_desc_' + key)}</p>${key === 'stadium' || key === 'arena' ? venueLookCard(VIEW_TOWN, key) + gameCard(VIEW_TOWN, key) : ''}<p class="muted small">${t('pl_tap_inside')}</p>` + jobSection(key);   // v0.38 (v0.42: + the zoo, the stadium and today's game; v0.59: + the arena, each city's own stadium)
+  if (key === 'airport' || key === 'port') return hubBoard(key);   // v0.67
   if (key === 'hotel') return hotelDesk() + `<p class="muted small">${t('pl_tap_inside')}</p>`;
   if (['tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist', 'bank', 'restaurant', 'rooftop', 'suite'].includes(key)) return `<p class="muted small">${t('pl_tap_inside')}</p>`;
   if (key === 'police') {   // v0.18: the holding cell (when you're held) or how the police work
