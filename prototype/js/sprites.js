@@ -704,22 +704,24 @@ function drawRider(sx, sy, s, o) {
   const L = o.look, ts = o.ts || 0, ph = o.phase || ts / 120, energy = o.energy || 'good', C = outfitOf(L);
   local(sx, sy, s, o.face || 1, () => {
     if (!o.noBike) {
+      ctx.save(); if (o.tilt) ctx.transform(1, o.tilt, 0, 1, 0, 0);   // v0.49: the bike lies along the way it goes (front wheel lower coming towards you, higher going away)
       const wheel = (x) => { circle(x, -5, 5, null, '#2b2b2e', 1.4); for (let k = 0; k < 3; k++) { const a = ph + k * Math.PI / 3; line(x - Math.cos(a) * 4.5, -5 - Math.sin(a) * 4.5, x + Math.cos(a) * 4.5, -5 + Math.sin(a) * 4.5, '#999', 0.4); } };
       wheel(-8); wheel(9);
       const col = o.bikeCol || '#e5484d';
       [[-8, -5, 0, -5], [0, -5, -2, -13], [-2, -13, 7, -13], [7, -13, 9, -5], [0, -5, 7, -13], [7, -13, 7.5, -16]].forEach(([a, b, c, d]) => line(a, b, c, d, col, 1.2));
       rrect(-4, -14.5, 5, 1.6, 0.8, '#333');
+      ctx.restore();
     }
     const pedal = (a) => [Math.cos(a) * 2.6, -5 + Math.sin(a) * 2.6];
     [[ph + Math.PI, true], [ph, false]].forEach(([a, far]) => {
       const f = pedal(a), hip = [-1.8, -14.6], knee = [(hip[0] + f[0]) / 2 + 2.6, (hip[1] + f[1]) / 2 - 2.2], dk = c => far ? shade(c, -0.14) : c;
       pPart(() => { seg(hip, knee, 4, 3.6, dk(C.thigh)); seg(knee, [f[0], f[1] - 1], 3.6, 3.1, dk(C.calf)); pEll(f[0] + 0.9, f[1] - 0.2, 2.4, 1.4, dk(C.shoeCol)); });
     });
-    pPart(() => hairBack(2.6, -30.6, L, 0.62, false));
+    if (!o.back) pPart(() => hairBack(2.6, -30.6, L, 0.62, false));
     ctx.save(); ctx.translate(-1.4, -14.2); ctx.rotate(0.28);
     pPart(() => pShape(C.shirt, 0.2, -4.6, 8.4, 11, () => torsoPath(-9.6, 0.4, 3.8, 4.1, 0.4)));
     ctx.restore();
-    drawHead(2.6, -30.6, L, energy, ts, o.seed || 0, 0.62, false);
+    drawHead(2.6, -30.6, L, energy, ts, o.seed || 0, 0.62, !!o.back, 0, !!o.back);   // (v0.49: going away, the back of the head)
     pPart(() => pArm([1.6, -21.6], [4.8, -18.6], [7.6, -16.3], C));
   });
 }

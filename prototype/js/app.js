@@ -1760,7 +1760,7 @@ const ACT = {
     if (k === 'school' && S.study) setTimeout(() => Scene.venueUse('desk', Math.max(5, Math.round((S.study.end - now()) / 1000)), null), 300);   // in class: at your desk
     refresh();
   },
-  leaveVenue() { closeSheet(); UI.inVenue = null; UI.spotRes = null; UI.tab = 'town'; syncView(); refresh(); },
+  leaveVenue() { const v = UI.inVenue && (VENUE_HOME[UI.inVenue] || UI.inVenue); closeSheet(); UI.inVenue = null; UI.spotRes = null; UI.tab = 'town'; syncView(); if (v) Scene.focusPlace(v); refresh(); },   // v0.49: the camera on its door
   // v0.37: the lift in a tower: up or down to another floor
   venueFloor(k) {
     const home = VENUE_HOME[k] || k; if (!UI.inVenue || (VENUE_HOME[UI.inVenue] || UI.inVenue) !== home) return;
@@ -1857,7 +1857,7 @@ const ACT = {
   },
   leaveStore() {
     if (UI.basket && UI.basket.items.length && !confirm(t('basket_leave_q', { n: UI.basket.items.length }))) return;
-    closeSheet(); UI.inStore = null; UI.lastStore = null; UI.mallFloor = null; UI.furnFloor = null; UI.basket = null; Scene.setFilm(null); UI.tab = 'town'; syncView();
+    const left2 = UI.inStore; closeSheet(); UI.inStore = null; UI.lastStore = null; UI.mallFloor = null; UI.furnFloor = null; UI.basket = null; Scene.setFilm(null); UI.tab = 'town'; syncView(); if (left2) Scene.focusPlace(left2);   // v0.49: the camera on its door
   },
   // v0.23: up and down the mall, into the cinema
   mallFloor(f) { closeSheet(); UI.mallFloor = f; syncView(); Sound.play('select'); },

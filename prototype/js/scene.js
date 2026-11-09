@@ -536,7 +536,8 @@ const Scene = (() => {
     if (far()) return;
     const onPasture = (ax, ay, bx, by) => pr && ((ay === by && (ay === pr.y || ay === pr.y + pr.d) && ax >= pr.x && bx <= pr.x + pr.w) ||
       (ax === bx && (ax === pr.x || ax === pr.x + pr.w) && ay >= pr.y && by <= pr.y + pr.d));
-    const seg = (ax, ay, bx, by, kind) => objs.push({ d: ox + oy + (ax + bx) / 2 + (ay + by) / 2 + 0.01, f: () => (kind === 'rail' ? rail : picket)(ox + ax, oy + ay, ox + bx, oy + by) });
+    const pc = cam.z > 0.45 ? 4 : 1;   // v0.49: close up, each tile of fence in four pieces (each put in front or behind on its own)
+    const seg = (ax, ay, bx, by, kind) => { for (let k = 0; k < pc; k++) { const a0 = k / pc, a1 = (k + 1) / pc, px0 = ax + (bx - ax) * a0, py0 = ay + (by - ay) * a0, px1 = ax + (bx - ax) * a1, py1 = ay + (by - ay) * a1; objs.push({ d: ox + oy + (px0 + px1) / 2 + (py0 + py1) / 2 + 0.01, f: () => (kind === 'rail' ? rail : picket)(ox + px0, oy + py0, ox + px1, oy + py1) }); } };
     if (f) {
       for (let x = 0; x < LOT_W; x++) {
         if (!onPasture(x, 0, x + 1, 0)) seg(x, 0, x + 1, 0);
@@ -1233,9 +1234,12 @@ const Scene = (() => {
     fwGeo().ramps.forEach(Rp => {
       const S2 = Rp.S2;
       if (!S2.some(p => p[0] > vr.x0 - 3 && p[0] < vr.x1 + 3 && p[1] > vr.y0 - 3 && p[1] < vr.y1 + 3)) return;
-      strip(S2, 2.0, FW_SHOULDER); strip(S2, 1.3, FW_ASPH);
+      // v0.49: where it reaches the road (its last points) it turns into that road: no shoulder, no edge lines, the road's colour
+      const end = S2[S2.length - 1], far2 = p2 => Math.hypot(p2[0] - end[0], p2[1] - end[1]) > 1.9, body = S2.filter(far2), foot = S2.filter(p2 => !far2(p2));
+      strip(body, 2.0, FW_SHOULDER); strip(body, 1.3, FW_ASPH);
+      if (foot.length) { const fs = [body[body.length - 1] || foot[0], ...foot]; strip(fs, 1.5, '#80878f'); }
       if (z > 0.12) [0.68, -0.68].forEach(o => {
-        for (let k = 0; k < S2.length - 1; k++) { const p = S2[k], q2 = S2[k + 1], dx = q2[0] - p[0], dy = q2[1] - p[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L * o, ny = dx / L * o, A = iso(p[0] + nx, p[1] + ny), Bq = iso(q2[0] + nx, q2[1] + ny); line(A.x, A.y, Bq.x, Bq.y, 'rgba(255,255,255,.85)', 1.1 * z, 'butt'); }
+        for (let k = 0; k < body.length - 1; k++) { const p = S2[k], q2 = S2[k + 1], dx = q2[0] - p[0], dy = q2[1] - p[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L * o, ny = dx / L * o, A = iso(p[0] + nx, p[1] + ny), Bq = iso(q2[0] + nx, q2[1] + ny); line(A.x, A.y, Bq.x, Bq.y, 'rgba(255,255,255,.85)', 1.1 * z, 'butt'); }
       });
     });
   }
@@ -2472,11 +2476,11 @@ const Scene = (() => {
       if (folk.length && (Math.random() < 0.55 || !ids.length)) {   // v0.40: one of the townsfolk
         const p = folk[Math.floor(Math.random() * folk.length)], ends = [...TL.places, ...(TL.stores || []).map(st => storeGeo(st).door)].filter(Boolean);
         const a = ends[Math.floor(Math.random() * ends.length)], b = ends[Math.floor(Math.random() * ends.length)];
-        if (a && b && a !== b) { const bike = Math.random() < 0.2, path = bike ? route(a, b, false) : route(a, b); WALK.list.push({ id: p.id, who: p, x: a[0], y: a[1], path, home: null, phase: 0, face: 1, moving: true, stay: 0, back: false, alpha: 0, bike, bikeCol: COLORS[Math.floor(Math.random() * COLORS.length)], ends }); }
+        if (a && b && a !== b) { const bike = p.look.mob !== 'wheel' && Math.random() < 0.2, path = bike ? route(a, b, false) : route(a, b); WALK.list.push({ id: p.id, who: p, x: a[0], y: a[1], path, home: null, phase: 0, face: 1, moving: true, stay: 0, back: false, alpha: 0, bike, bikeCol: COLORS[Math.floor(Math.random() * COLORS.length)], ends }); }
       } else if (ids.length) {
         const id = ids[Math.floor(Math.random() * ids.length)], g = gateOf(id);
         const others = allLots().filter(l => l.id !== id && homeOf(l.id)), dest = Math.random() < 0.3 && others.length ? gateOf(others[Math.floor(Math.random() * others.length)].id) : TL.places[Math.floor(Math.random() * TL.places.length)];
-        const bike = Math.random() < 0.3;   // v0.25: some people ride their bikes (on the road)
+        const hm = homeOf(id), bike = !(hm && hm.look && hm.look.mob === 'wheel') && Math.random() < 0.3;   // v0.25: some people ride their bikes (on the road) (v0.49: not in a wheelchair)
         WALK.list.push({ id, h: homeOf(id), x: g[0], y: g[1] - 1.2, path: [[g[0], g[1]], ...(bike ? route(g, dest, false) : route(g, dest))], home: g, phase: 0, face: 1, moving: true, stay: 0, back: false, alpha: 0, bike, bikeCol: COLORS[Math.floor(Math.random() * COLORS.length)] });
       }
     }
@@ -2484,17 +2488,22 @@ const Scene = (() => {
       if (w.fade) { w.alpha -= dt * 1.5; if (w.alpha <= 0) return false; }
       else if (w.stay > 0) { w.stay -= dt; w.moving = false; if (w.stay <= 0) { if (w.who) { const b = w.ends[Math.floor(Math.random() * w.ends.length)]; w.path = route([w.x, w.y], b, !w.bike); } else w.path = route([w.x, w.y], w.home, !w.bike).concat([[w.home[0], w.home[1] - 1.2]]); w.going = true; } }
       else if (w.path.length) {
-        const [tx, ty] = w.path[0], dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy), st = (w.bike ? 4.2 : 1.6) * dt;
+        const [tx, ty] = w.path[0], dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy), wh = !w.bike && ((w.h || w.who || {}).look || {}).mob === 'wheel', st = (w.bike ? 4.2 : wh ? 1.35 : 1.6) * dt;
+        // v0.49: on foot (or wheels) you keep a little to your right, so people coming the other way pass by, not through you
+        if (!w.bike && d > 0.01) { const sd = (w.sideK || (w.sideK = 0.16 + (hash(w.x * 3.1, w.y) * 0.08))), tx2 = -dy / d * sd, ty2 = dx / d * sd, k2 = Math.min(1, dt * 4); w.kx = (w.kx || 0) + (tx2 - (w.kx || 0)) * k2; w.ky = (w.ky || 0) + (ty2 - (w.ky || 0)) * k2; }
         if (w.bike && mustStop(w)) { w.moving = false; } else if (d <= st) { w.x = tx; w.y = ty; w.path.shift(); } else { w.x += dx / d * st; w.y += dy / d * st; }
         faceTo(w, dx, dy); if (d > 0.01) w.cdir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); w.phase += dt * (w.bike ? 8 : 9.5); w.moving = true;
         if (!w.path.length) { if (w.going) { if (!w.who) return false; w.fade = true; } else w.stay = 6 + Math.random() * 10; }
       }
       if (!w.fade) w.alpha = Math.min(1, w.alpha + dt * 2);
       objs.push({ d: w.x + w.y, f: () => {
-        const riding = w.bike && w.path.length, o = riding ? { '+x': [0, 0.85], '-x': [0, -0.85], '+y': [-0.85, 0], '-y': [0.85, 0] }[w.cdir || '+x'] : [0, 0], p = iso(w.x + o[0], w.y + o[1]);
+        // v0.49: a bike rides at the right-hand edge of the road, easing over at corners (it used to jump sideways)
+        const riding = w.bike && w.path.length, ot = riding ? { '+x': [0, 0.85], '-x': [0, -0.85], '+y': [-0.85, 0], '-y': [0.85, 0] }[w.cdir || '+x'] : [w.kx || 0, w.ky || 0];
+        if (riding) { const k3 = w.box === undefined ? 1 : Math.min(1, dt * 5); w.box = (w.box || 0) + (ot[0] - (w.box || 0)) * k3; w.boy = (w.boy || 0) + (ot[1] - (w.boy || 0)) * k3; }
+        const o = riding ? [w.box, w.boy] : ot, p = iso(w.x + o[0], w.y + o[1]);
         ctx.save(); ctx.globalAlpha = w.alpha;
         const look = (w.h || w.who).look;
-        if (riding) { drawPerson(p.x, p.y, z, { look, face: w.cdir === '+x' || w.cdir === '-y' ? 1 : -1, energy: 'good', ts, seed: w.x, pose: 'bike', phase: w.phase, bikeCol: w.bikeCol }); }   // v0.25: on a bike, at the right-hand edge of the road
+        if (riding) { const v = DIRV[w.cdir || '+x'], F2 = faceAlong(v[0], v[1]); drawPerson(p.x, p.y, z, { look, face: F2.face, back: F2.back, tilt: F2.back ? -0.5 : 0.5, energy: 'good', ts, seed: w.x, pose: 'bike', phase: w.phase, bikeCol: w.bikeCol }); }   // v0.25: on a bike (v0.49: facing the way it goes, from behind going away)
         else drawPerson(p.x, p.y, z, { look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: chatWave(w.id) || (!w.moving && !chatting(w.id) && Math.sin(ts / 900 + w.x) > 0.7) });
         ctx.restore();
         if (chatting(w.id)) chatBubble(p.x + 12 * z, p.y - 58 * z, z, false, ts);   // v0.25: talking with you
@@ -2785,6 +2794,21 @@ const Scene = (() => {
       return ahead > 0.05 && ahead < reach && side < 0.45;
     }) || null;
   }
+  // v0.49: the nearest car ahead in the same lane, and how far (its back to our front)
+  function leadOf(c, others, reach = 6) {
+    const v = DIRV[c.dir];
+    if (!v) return null;
+    const mx = c.x + (c.ox || 0), my = c.y + (c.oy || 0);
+    let best = null;
+    others.forEach(o => {
+      if (o === c || o.dir !== c.dir || Math.abs((o.h || 0) - (c.h || 0)) > 2) return;
+      const dx = o.x + (o.ox || 0) - mx, dy = o.y + (o.oy || 0) - my, ahead = dx * v[0] + dy * v[1], side = Math.abs(dx * v[1] - dy * v[0]);
+      if (ahead > 0.05 && ahead < reach && side < 0.45 && (!best || ahead < best.gap)) best = { o, gap: ahead };
+    });
+    return best;
+  }
+  // how fast to go behind it: stop at a car's length, ease up to its speed as the gap opens to a safe distance
+  const followSpeed = (vmax, L, v) => { if (!L) return vmax; const s0 = 1.05, safe = 1.9 + v * 0.12; return L.gap <= s0 ? 0 : Math.min(vmax, (L.o.v === undefined ? vmax : L.o.v) + (L.gap - safe) * 1.6, vmax * (L.gap - s0) / (safe - s0)); };
   // nobody in that lane just ahead or just behind
   function laneClear(c, others, off, fwd, back = 2) {
     const v = DIRV[c.dir], Rv = RIGHT[c.dir];
@@ -2833,10 +2857,13 @@ const Scene = (() => {
     CARS_OUT.list = CARS_OUT.list.filter(c => {
       const others = [...CARS_OUT.list.filter(o => o !== c && o.alpha > 0.3), ...(trip && trip.inCar && !trip.arrived && trip.town === VIEW_TOWN ? [trip] : [])];
       const rd = laneStep(c, dt, others);   // v0.39: its lane, and how fast traffic goes on this road
-      let go = 6 * dt * (rd ? (ROAD_KINDS[rd.kind] || ROAD_KINDS.avenue).spd : 0.8) * (c.spd || 1);
-      if (c.path.length && !c.h && mustStop(c)) go = 0;   // v0.22: red light (v0.47: for the way it's turning; car parks' lights)
-      if (go && stopSign(c, dt)) go = 0;   // v0.39: a stop sign
-      if (go && c.path.length && blocked(c, others)) go = 0;
+      const vmax = 6 * (rd ? (ROAD_KINDS[rd.kind] || ROAD_KINDS.avenue).spd : 0.8) * (c.spd || 1);
+      let vt = vmax;
+      if (c.path.length && !c.h && mustStop(c)) { vt = 0; c.v = 0; }   // v0.22: red light (v0.47: for the way it's turning; car parks' lights)
+      if (vt && stopSign(c, dt)) { vt = 0; c.v = 0; }   // v0.39: a stop sign
+      if (vt && c.path.length) vt = Math.max(0, followSpeed(vmax, leadOf(c, others), c.v || 0));   // v0.49: keep a distance from the car in front (no stop-go bouncing)
+      c.v = c.v === undefined ? vt : c.v + clamp(vt - c.v, -18 * dt, 4 * dt);   // brake firmly, pull away gently
+      let go = Math.max(0, c.v) * dt;
       while (go > 0 && c.path.length) { const [tx, ty, th = 0] = c.path[0], dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy); if (d > 0.01) c.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); if (d <= go) { c.x = tx; c.y = ty; c.h = th; c.path.shift(); go -= d; } else { c.x += dx / d * go; c.y += dy / d * go; c.h += (th - c.h) * (go / d); go = 0; } }
       if (c.police && !c.path.length) { const b = TL.places[Math.floor(Math.random() * TL.places.length)], np = b && route([c.x, c.y], b, false); if (np && np.length > 2) c.path = np.slice(1); }   // v0.25: the patrol never ends
       if (!c.path.length && c.fwy !== undefined && TL.fwy) { fwJoin(c, c.fwy); return false; }   // v0.39: up the ramp and away
@@ -2977,9 +3004,15 @@ const Scene = (() => {
     if (trip.inCar && trip.path.length && !mustStop(trip)) trip.waited = 0;
     if (trip.inCar) laneStep(trip, dt, CARS_OUT.town === trip.town ? CARS_OUT.list.filter(o => o.alpha > 0.3) : null);   // v0.39: in your lane (you pass slow cars too)
     if (trip.inCar && trip.path.length && stopSign(trip, dt)) return;   // v0.39: a stop sign
-    if (trip.inCar && trip.path.length && CARS_OUT.town === trip.town && blocked(trip, CARS_OUT.list.filter(o => o.alpha > 0.3))) { if ((trip.carWait = (trip.carWait || 0) + dt) < 6) return; }   // v0.29: behind another car
-    else trip.carWait = 0;
-    const base = (TRIP_SPEED[trip.how] || 3) * dt * (trip.how === 'walk' && isFed() ? 1 + MALL.fed.walk : 1) * (trip.how === 'walk' ? walkMult() : 1) * (trip.inCar && trip.car ? carPace(trip.car.k) : 1);   // v0.44 (v0.47: your car's own pace)
+    // v0.49: behind another car: slow to its speed and keep a distance (stop only right behind it; after 6 s, go round)
+    let follow = 1;
+    if (trip.inCar && trip.path.length && CARS_OUT.town === trip.town) {
+      const L = leadOf(trip, CARS_OUT.list.filter(o => o.alpha > 0.3)), vm = (TRIP_SPEED.car || 10) * 0.6, fv = followSpeed(vm, L, (trip.fv === undefined ? 1 : trip.fv) * vm) / vm;
+      trip.fv = trip.fv === undefined ? fv : trip.fv + clamp(fv - trip.fv, -3 * dt, 0.7 * dt);
+      if (trip.fv <= 0.02 && L && L.gap < 1.1) { if ((trip.carWait = (trip.carWait || 0) + dt) < 6) return; } else trip.carWait = 0;
+      follow = clamp(trip.fv, 0.15, 1);
+    } else trip.carWait = 0;
+    const base = (TRIP_SPEED[trip.how] || 3) * dt * (trip.how === 'walk' && isFed() ? 1 + MALL.fed.walk : 1) * (trip.how === 'walk' ? walkMult() : 1) * (trip.inCar && trip.car ? carPace(trip.car.k) * follow : 1);   // v0.44 (v0.47: your car's own pace; v0.49: behind a slower car)
     let left = 1;   // the share of this frame's travel still to go
     while (left > 0 && trip.path.length) {
       const [tx, ty, th = 0, fast = 0] = trip.path[0], dx = tx - trip.x, dy = ty - trip.y, d = Math.hypot(dx, dy);
@@ -3981,6 +4014,11 @@ const Scene = (() => {
             poly([P3(cx0, y0 + D, B + 1), P3(cx0 + nl, y0 + D, B), P3(cx0 + nl, y0 + D, H + B), P3(cx0 + 0.15, y0 + D, B + 9)], '#eef1f4', '#c9cfd6', 0.6 * z);
             poly([P3(cx0 + 0.15, y0, B + 9), P3(cx0 + 0.15, y0 + D, B + 9), P3(cx0 + nl, y0 + D, H + B), P3(cx0 + nl, y0, H + B)], '#dfe4ea');
             poly([P3(cx0 + 0.25, y0 + D, B + 3), P3(cx0 + nl, y0 + D, B + 3), P3(cx0 + nl, y0 + D, B + 7), P3(cx0 + 0.18, y0 + D, B + 7)], '#2f6fb2');
+            // v0.49: its cab: a windscreen down the slope, a dark bumper, tail lights (it looked sliced off)
+            poly([P3(cx0 + nl - 0.12, y0 + 0.1, H + B - 1.5), P3(cx0 + nl - 0.12, y0 + D - 0.1, H + B - 1.5), P3(cx0 + 0.5, y0 + D - 0.1, B + 15), P3(cx0 + 0.5, y0 + 0.1, B + 15)], lit ? '#ffe9a8' : '#24384a');
+            line(P3(cx0 + 0.5, y0 + D / 2, B + 15).x, P3(cx0 + 0.5, y0 + D / 2, B + 15).y, P3(cx0 + nl - 0.12, y0 + D / 2, H + B - 1.5).x, P3(cx0 + nl - 0.12, y0 + D / 2, H + B - 1.5).y, '#dfe4ea', 1.2 * z);
+            poly([P3(cx0 + 0.15, y0, B + 9), P3(cx0 + 0.15, y0 + D, B + 9), P3(cx0 + 0.32, y0 + D, B + 11.5), P3(cx0 + 0.32, y0, B + 11.5)], '#3a3f47');
+            [0.22, 0.78].forEach(v => { const q = P3(cx0 + 0.36, y0 + v * D, B + 13); circle(q.x, q.y, 1.5 * z, '#e5484d', '#9aa3ad', 0.5 * z); if (lit) glow(q.x, q.y, 10 * z, 0.6); });
           }
           const bx = cx0 + nl, bw = L - nl - nr, b = box(bx, y0, bw, D, H, '#f4f6f8', B, { top: '#dfe4ea', shadow: false });
           wallRect(b.left, B, 0, 1, 3, 7, '#2f6fb2'); wallRect(b.left, B, 0, 1, 7, 8.6, '#e5484d');
@@ -4603,7 +4641,7 @@ const Scene = (() => {
       emoji({ field: '🌱', pasture: '🐄', orchard: '🌳', pond: '🐟', garage: '🚗' }[w.k], c.x, c.y - 41 * z, 17 * z);
       if (z > 0.45) { ctx.font = `800 ${9 * z}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#5b4632'; ctx.fillText(t('land_' + w.k), c.x, c.y - 32.5 * z); }
     }
-    else if (w.kind === 'clothes') { ellipse(c.x, c.y, 12 * z, 6 * z, '#d8cfc2'); const C2 = CLOTHES[w.k]; drawPerson(c.x, c.y, z * 0.95, { look: { ...MANNEQUIN, [C2.slot]: w.k }, face: 1, view: 'front', turn: [0.4, 1], energy: 'good', ts: 0, seed: 0, pose: 'stand' }); }
+    else if (w.kind === 'clothes') { ellipse(c.x, c.y, 14 * z, 6 * z, 'rgba(0,0,0,.08)'); drawClothDisplay(w.k, c.x, c.y, z); }   // v0.49: the thing itself on a rail / a stand (Mason #29: no mannequins)
     else if (w.kind === 'excl') {
       box(x + 0.1, y + 0.1, w.w - 0.2, w.d - 0.2, 12, '#e9e2d4', 0, { top: '#f6f1e8' });
       const [kind, k] = w.arg.split('|'), img = kind === 'yard' ? ['yard', k, {}] : kind === 'car' ? ['car', k, { color: exclDef(kind, k).color }] : kind === 'pet' ? ['pet', k, {}] : ['animal', k, { stage: 2 }];
@@ -4766,15 +4804,41 @@ const Scene = (() => {
       return { x0: iso(x, y + w.d).x - 4 * z, x1: iso(x + w.w, y).x + 4 * z, y0: c.y - 60 * z, y1: f0.y + 10 * z };
     }
     if (w.kind === 'escalator') {   // moving steps between the floors, glass sides and a black handrail
-      const up2 = w.dir ? w.dir === 'up' : w.k === 'mall2', H2 = 60, n = 10;
-      for (let i = 0; i < n; i++) {
-        const u0 = i / n, u1 = (i + 1) / n, y0 = y + w.d * (1 - u0), y1 = y + w.d * (1 - u1), h0 = H2 * u0, h1 = H2 * u1, mv = ((ts / 900) % 1) / n;
-        poly([up(iso(x, y0), h0 * z), up(iso(x + w.w, y0), h0 * z), up(iso(x + w.w, y1), h1 * z), up(iso(x, y1), h1 * z)], i % 2 ? '#9aa3ad' : '#b8c0c9');
-        const ym = y + w.d * (1 - u0 - mv), hm = H2 * (u0 + mv); const a2 = up(iso(x, ym), hm * z), b2 = up(iso(x + w.w, ym), hm * z); line(a2.x, a2.y, b2.x, b2.y, 'rgba(255,255,255,.5)', 0.8 * z);
+      // v0.47→v0.49 (Mason #29: "no ceiling, it just stops in the air; up and down look the same"): the one going up
+      // climbs into an opening in the floor above (a slab of it with a glass rail on top); the one going down sinks
+      // into a hole in this floor (a dark well with glass all round it). The steps creep the way it runs.
+      const up2 = w.dir ? w.dir === 'up' : w.k === 'mall2', n = 12, H2 = up2 ? 74 : -46;
+      const stepAt = (u, sx) => up(iso(sx, y + w.d * (1 - u)), H2 * u * z);
+      const steps = () => { for (let i = 0; i < n; i++) {
+        const u0 = i / n, u1 = (i + 1) / n, mv = (((up2 ? 1 : -1) * ts / 900) % 1 + 1) % 1 / n;
+        poly([stepAt(u0, x), stepAt(u0, x + w.w), stepAt(u1, x + w.w), stepAt(u1, x)], i % 2 ? '#9aa3ad' : '#b8c0c9');
+        const um = u0 + mv, a2 = stepAt(um, x), b2 = stepAt(um, x + w.w); line(a2.x, a2.y, b2.x, b2.y, 'rgba(255,255,255,.5)', 0.8 * z);
+      } };
+      const rails = () => [x, x + w.w].forEach(sx => {   // the glass sides and the moving handrail
+        const a2 = stepAt(0, sx), b2 = stepAt(1, sx); poly([a2, b2, up(b2, 12 * z), up(a2, 12 * z)], 'rgba(200,230,250,.3)', 'rgba(255,255,255,.6)', 1);
+        line(up(a2, 12 * z).x, up(a2, 12 * z).y, up(b2, 12 * z).x, up(b2, 12 * z).y, '#2d2d2d', 2.2 * z);
+        const n0 = up(iso(sx, y + w.d + 0.35), 12 * z); line(n0.x, n0.y, up(a2, 12 * z).x, up(a2, 12 * z).y, '#2d2d2d', 2.2 * z);   // the newel at the bottom
+      });
+      if (up2) {
+        steps(); rails();
+        // the floor above: a slab over the top of the run, its edge dark where the steps go into it, a glass rail on top
+        const sb = box(x - 0.5, y - 0.3, w.w + 1, 1.6, 9, '#ece6dc', H2 - 1, { top: '#f4efe6', shadow: false });
+        wallRect(sb.left, H2 - 1, 0.18, 0.82, 0, 9, '#4a4f57');
+        [[x - 0.5, y + 1.3, x + w.w + 0.5, y + 1.3], [x + w.w + 0.5, y - 0.3, x + w.w + 0.5, y + 1.3]].forEach(([ax, ay, bx, by]) => { const p0 = up(iso(ax, ay), (H2 + 8) * z), p1 = up(iso(bx, by), (H2 + 8) * z); poly([p0, p1, up(p1, 11 * z), up(p0, 11 * z)], 'rgba(200,230,250,.3)', 'rgba(255,255,255,.7)', 1); line(up(p0, 11 * z).x, up(p0, 11 * z).y, up(p1, 11 * z).x, up(p1, 11 * z).y, '#c9ced4', 1.6 * z); });
+      } else {
+        // the well: dark sides going down (the far ones show), the steps inside it, glass round its edge
+        const q = (px, py, hh = 0) => up(iso(px, py), hh * z), D2 = -H2;
+        poly([q(x - 0.1, y - 0.1), q(x + w.w + 0.1, y - 0.1), q(x + w.w + 0.1, y + w.d), q(x - 0.1, y + w.d)], '#3a3f47');
+        ctx.save(); ctx.beginPath(); [q(x - 0.1, y - 0.1), q(x + w.w + 0.1, y - 0.1), q(x + w.w + 0.1, y + w.d), q(x - 0.1, y + w.d)].forEach((pt, i) => (i ? ctx.lineTo(pt.x, pt.y) : ctx.moveTo(pt.x, pt.y))); ctx.closePath(); ctx.clip();
+        poly([q(x - 0.1, y - 0.1), q(x + w.w + 0.1, y - 0.1), q(x + w.w + 0.1, y - 0.1, -D2), q(x - 0.1, y - 0.1, -D2)], '#5b6470');   // its far wall
+        poly([q(x - 0.1, y - 0.1), q(x - 0.1, y + w.d), q(x - 0.1, y + w.d, -D2), q(x - 0.1, y - 0.1, -D2)], '#4a525c');   // its left wall
+        steps(); rails();
+        ctx.restore();
+        const g = (ax, ay, bx, by) => { const p0 = q(ax, ay), p1 = q(bx, by); poly([p0, p1, up(p1, 12 * z), up(p0, 12 * z)], 'rgba(200,230,250,.32)', 'rgba(255,255,255,.75)', 1); line(up(p0, 12 * z).x, up(p0, 12 * z).y, up(p1, 12 * z).x, up(p1, 12 * z).y, '#c9ced4', 1.6 * z); };
+        g(x - 0.1, y - 0.1, x + w.w + 0.1, y - 0.1); g(x - 0.1, y - 0.1, x - 0.1, y + w.d * 0.75); g(x + w.w + 0.1, y - 0.1, x + w.w + 0.1, y + w.d * 0.75);
       }
-      [x, x + w.w].forEach(sx => { const a2 = iso(sx, y + w.d), b2 = up(iso(sx, y), H2 * z); poly([a2, iso(sx, y), b2, up(a2, 10 * z)], 'rgba(200,230,250,.3)', 'rgba(255,255,255,.6)', 1); line(up(a2, 10 * z).x, up(a2, 10 * z).y, up(b2, 10 * z).x, up(b2, 10 * z).y, '#2d2d2d', 2 * z); });
       const sp = up(iso(x + w.w / 2, y + w.d + 0.2), 4 * z); label(w.dir ? `${up2 ? '⬆️' : '⬇️'} ${t('to_floor', { n: FURN_FLOORS.findIndex(F2 => F2.key === w.k) + 1 })}` : up2 ? `⬆️ ${t('mall_up')}` : `⬇️ ${t('mall_down')}`, sp.x, sp.y + 10 * z, '#2f80ed', '#ffffff', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z), 3);
-      return { x0: iso(x, y + w.d).x - 6 * z, x1: iso(x + w.w, y).x + 6 * z, y0: up(iso(x, y), (H2 + 12) * z).y, y1: iso(x + w.w, y + w.d).y + 20 * z };
+      return { x0: iso(x, y + w.d).x - 6 * z, x1: iso(x + w.w, y).x + 6 * z, y0: up(iso(x, y), (Math.max(H2, 0) + 20) * z).y, y1: iso(x + w.w, y + w.d).y + 20 * z };
     }
     if (w.kind === 'ticket') {   // the ticket booth: a kiosk with a window and a seller
       const b = box(x, y, w.w, w.d, 30, '#8a2a34', 0, { top: '#b8383f' });
@@ -4926,6 +4990,9 @@ const Scene = (() => {
   function drawFlight(s, lv, ts) {
     const z = cam.z, wood = '#b07a4a', n = 7, stepH = STAIR_H / n;
     for (let k = 0; k < n; k++) box(s.x + k * s.w / n, s.y, s.w / n + 0.01, s.d, (k + 1) * stepH, k % 2 ? shade(wood, 0.06) : wood, 0, { edge: 'rgba(0,0,0,.12)' });
+    // v0.49: the floor above over the top of the flight, so the stairs go up into it (they used to end in the air)
+    const sb = box(s.x + s.w * 0.5, s.y - 0.05, s.w * 0.55, s.d + 0.15, 8, '#efe6d6', STAIR_H + 2, { top: '#f6efe3', shadow: false });
+    wallRect(sb.left, STAIR_H + 2, 0.05, 0.95, 0, 8, '#5a4636'); wallRect(sb.right, STAIR_H + 2, 0, 1, 0, 8, '#d9cdb8');
     const c = iso(s.x + s.w / 2, s.y + s.d / 2);
     if (!edit) hits.push({ kind: 'stairs', dir: 1, pri: 1, x0: c.x - 40 * z, x1: c.x + 40 * z, y0: c.y - 90 * z, y1: c.y + 16 * z });
   }
@@ -5923,6 +5990,8 @@ const Scene = (() => {
       if (W) { cam.z = z; const t = performance.now() / 1000; centerOn(60 + Math.sin(t / 9) * 22, 24 + Math.cos(t / 11) * 12); }
     },
     // Close-up on your townie (character creation): townie at yFrac of the screen height.
+    // v0.49: coming out of a building: look at its door (Mason #29: it used to zoom out to the whole town)
+    focusPlace(key) { if (mode !== 'town') return; TL = layoutOf(VIEW_TOWN); const p = placePt(key); if (p) flyTo(p[0], p[1], Math.max(0.85, cam.z), true); },
     focusMe(z, yFrac = 0.42) {
       attract = false; useCam(); cancel(me);
       const [, fy, , fd] = HOUSES[S.me.house].fp;

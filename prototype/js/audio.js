@@ -115,8 +115,12 @@ const Sound = (() => {
   }
 
   // ---------- sound effects ----------
+  const indoors = () => scene === 'inside' || scene === 'shop';
   const FX = {
     tap: t => tone(sfx, 880, t, 0.05, { type: 'triangle', vol: 0.04 }),
+    // v0.49: a bowling pin knocked over (a hollow wooden clack), and a strike (the whole rack crashing down)
+    pin: t => { burst(sfx, t, 0.07, { vol: 0.16, type: 'bandpass', freq: 2200 + Math.random() * 900, q: 4 }); tone(sfx, 520 + Math.random() * 160, t, 0.09, { type: 'triangle', vol: 0.08, glide: 0.6 }); },
+    pins: t => { for (let i = 0; i < 9; i++) { const d = i * 0.035 + Math.random() * 0.03; burst(sfx, t + d, 0.08, { vol: 0.13, type: 'bandpass', freq: 1600 + Math.random() * 1600, q: 3.5 }); tone(sfx, 380 + Math.random() * 300, t + d, 0.1, { type: 'triangle', vol: 0.05, glide: 0.5 }); } burst(sfx, t, 0.45, { vol: 0.08, freq: 260, sweep: 0.4 }); },
     pop: t => { tone(sfx, 420, t, 0.12, { vol: 0.14, glide: 2.2 }); burst(sfx, t, 0.05, { vol: 0.05, type: 'highpass', freq: 3000 }); },
     coins: t => [1319, 1568, 2093].forEach((f, i) => { tone(sfx, f, t + i * 0.07, 0.35, { vol: 0.08 }); tone(sfx, f * 2.01, t + i * 0.07, 0.2, { vol: 0.02 }); }),
     buy: t => { [988, 1319].forEach((f, i) => tone(sfx, f, t + i * 0.09, 0.4, { vol: 0.09 })); burst(sfx, t, 0.06, { vol: 0.04, type: 'highpass', freq: 5000 }); },
@@ -168,7 +172,7 @@ const Sound = (() => {
     },
     state: () => (ac ? ac.state : 'off'),
     // Which tune plays: home, town, inside, shop or world.
-    setScene(s) { if (THEMES[s] && s !== scene) { scene = s; lastMotif = []; } },
+    setScene(s) { if (THEMES[s] && s !== scene) { scene = s; lastMotif = []; if (ac && running) setRain(sfxOn && (weather === 'rain' || weather === 'storm') && !indoors(), weather === 'storm'); } },   // (v0.49: no rain indoors)
     play(name) { if (!ac || !sfxOn || !FX[name]) return; try { FX[name](ac.currentTime + 0.01); } catch (e) { /* audio is optional */ } },
     // v0.41: one sung note (karaoke): a MIDI pitch, for dur seconds
     note(n, dur = 0.4, vol = 0.14) { if (!ac || !sfxOn) return; try { const t0 = ac.currentTime + 0.01; tone(sfx, midi(n), t0, dur, { type: 'triangle', vol, attack: 0.02, release: dur }); tone(sfx, midi(n + 12), t0, dur * 0.6, { type: 'sine', vol: vol * 0.3, attack: 0.02, release: dur * 0.6 }); } catch (e) { /* audio is optional */ } },
@@ -180,7 +184,7 @@ const Sound = (() => {
     ambience(isNight, w) {
       night = isNight; weather = w;
       if (!ac || !running) return;
-      setRain(sfxOn && (w === 'rain' || w === 'storm'), w === 'storm');
+      setRain(sfxOn && (w === 'rain' || w === 'storm') && !indoors(), w === 'storm');   // v0.49: under a roof you don't hear the rain
     },
   };
 })();

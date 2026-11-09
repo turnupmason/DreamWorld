@@ -2655,6 +2655,49 @@ function drawPosterStand(film, x, y) {
   rrect(c.x - 6 * z, c.y - 21 * z, 12 * z, 2 * z, 0.6 * z, 'rgba(255,255,255,.75)');
 }
 
+// ---------- the clothes shop (v0.49): each thing on show by itself ----------
+// a top or a pair of trousers on a hanger on a little chrome rail; shoes on a white cube; a hat on a hat stand
+const CLOTH_COL = { tshirt: '#e5484d', polo: '#3e7cc9', hoodie: '#6b5bd0', sweater: '#e0aa2a', jacket: '#4a5a78', dress: '#ec6aa8', jeans: '#3f6fb0', shorts: '#c9a24a', skirt: '#9b5fc0', sneakers: '#f4f4f0', hightops: '#e5484d', boots: '#8a5a36', sandals: '#c99a6b', cap: '#e5484d', beanie: '#34b27b', sunhat: '#f2d27a' };
+function drawClothDisplay(k, cx, cy, z) {
+  const C = CLOTHES[k], col = CLOTH_COL[k] || '#8a9099', dk = shade(col, -0.25), S = z;
+  const P = (pts, fill, stroke) => poly(pts.map(([px, py]) => ({ x: cx + px * S, y: cy + py * S })), fill, stroke, 0.8 * S);
+  if (!C) return;
+  if (C.slot === 'top' || C.slot === 'bottom') {
+    // the rail: two posts, a bar, a hook and a hanger
+    line(cx - 11 * S, cy, cx - 11 * S, cy - 40 * S, '#b8c0c9', 1.4 * S); line(cx + 11 * S, cy, cx + 11 * S, cy - 40 * S, '#b8c0c9', 1.4 * S); line(cx - 13 * S, cy - 40 * S, cx + 13 * S, cy - 40 * S, '#c9ced4', 1.8 * S);
+    line(cx, cy - 40 * S, cx, cy - 36 * S, '#8a9099', 0.8 * S); P([[-7, -33], [0, -36], [7, -33]], null, '#8a9099');
+    const T = -33;   // the hanger's shoulders
+    if (k === 'dress') { P([[-5, T], [5, T], [4, T + 9], [10, T + 26], [-10, T + 26], [-4, T + 9]], col, dk); P([[-2, T], [2, T], [0, T + 3]], '#ffffff'); }
+    else if (C.slot === 'top') {
+      const long = k !== 'tshirt' && k !== 'polo', sl = long ? 15 : 7;
+      P([[-7, T], [7, T], [11, T + 2], [11 + (long ? 2 : 3), T + sl], [8, T + sl + 1], [7, T + 6], [7, T + 22], [-7, T + 22], [-7, T + 6], [-8, T + sl + 1], [-11 - (long ? 2 : 3), T + sl], [-11, T + 2]], col, dk);
+      if (k === 'polo') { P([[-3, T], [0, T + 4], [3, T]], '#ffffff'); circle(cx, cy + (T + 6) * S, 0.7 * S, '#ffffff'); circle(cx, cy + (T + 9) * S, 0.7 * S, '#ffffff'); }
+      if (k === 'tshirt') P([[-3, T], [0, T + 2.5], [3, T]], shade(col, 0.3));
+      if (k === 'hoodie') { P([[-5, T], [-6, T - 4], [0, T - 7], [6, T - 4], [5, T]], dk); P([[-4, T + 13], [4, T + 13], [5, T + 18], [-5, T + 18]], shade(col, -0.12)); }
+      if (k === 'sweater') for (const yy of [T + 20, T + 21.5]) line(cx - 7 * S, cy + yy * S, cx + 7 * S, cy + yy * S, shade(col, 0.2), 0.7 * S);
+      if (k === 'jacket') { line(cx, cy + T * S, cx, cy + (T + 22) * S, '#d9dde2', 1 * S); P([[-3, T], [0, T + 7], [3, T]], shade(col, 0.25)); }
+    } else {   // trousers, shorts and skirts hang from a clip hanger
+      line(cx - 6 * S, cy + T * S, cx + 6 * S, cy + T * S, '#8a9099', 1.4 * S);
+      if (k === 'skirt') P([[-5, T + 1], [5, T + 1], [9, T + 16], [-9, T + 16]], col, dk);
+      else { const L = k === 'shorts' ? 10 : 24; P([[-6, T + 1], [6, T + 1], [6.5, T + L], [1, T + L], [0, T + 6], [-1, T + L], [-6.5, T + L]], col, dk); line(cx - 6 * S, cy + (T + 3) * S, cx + 6 * S, cy + (T + 3) * S, dk, 0.8 * S); }
+    }
+  } else if (C.slot === 'shoes') {
+    // a white cube with the pair on top, side on
+    rrect(cx - 11 * S, cy - 12 * S, 22 * S, 12 * S, 1.5 * S, '#f4f1ea', 'rgba(0,0,0,.12)', 0.8 * S);
+    [-5, 5].forEach((dx2, i) => {
+      const bx = cx + dx2 * S - 5 * S, by = cy - 12 * S - (i ? 1 : 0) * S;
+      if (k === 'boots') { rrect(bx + 1 * S, by - 12 * S, 5 * S, 11 * S, 1.2 * S, col, dk, 0.6 * S); rrect(bx, by - 3.5 * S, 10 * S, 3.5 * S, 1.2 * S, col, dk, 0.6 * S); rrect(bx, by - 1 * S, 10 * S, 1.2 * S, 0.5 * S, '#3b2a22'); }
+      else if (k === 'sandals') { rrect(bx, by - 1.6 * S, 10 * S, 1.6 * S, 0.8 * S, '#a8724a'); line(bx + 3 * S, by - 1.6 * S, bx + 5 * S, by - 4 * S, col, 1.2 * S); line(bx + 7 * S, by - 1.6 * S, bx + 5 * S, by - 4 * S, col, 1.2 * S); }
+      else { const hi = k === 'hightops'; rrect(bx, by - (hi ? 8 : 4.5) * S, hi ? 6 * S : 7 * S, (hi ? 8 : 4.5) * S, 1.6 * S, col, dk, 0.6 * S); rrect(bx + 2 * S, by - 3.8 * S, 8 * S, 3.8 * S, 1.6 * S, col, dk, 0.6 * S); rrect(bx, by - 1.2 * S, 10.4 * S, 1.4 * S, 0.6 * S, '#ffffff', 'rgba(0,0,0,.2)', 0.4 * S); line(bx + 3 * S, by - 2.6 * S, bx + 7 * S, by - 2.6 * S, k === 'sneakers' ? '#3e7cc9' : '#ffffff', 0.9 * S); }
+    });
+  } else if (C.slot === 'hat') {
+    line(cx, cy, cx, cy - 26 * S, '#8a6a4a', 1.6 * S); ellipse(cx, cy, 6 * S, 2.4 * S, '#8a6a4a');
+    const hy = cy - 28 * S;
+    if (k === 'cap') { ctx.beginPath(); ctx.ellipse(cx, hy, 6 * S, 5 * S, 0, Math.PI, 0); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); ellipse(cx + 5 * S, hy, 5 * S, 1.4 * S, dk); circle(cx, hy - 5 * S, 0.9 * S, dk); }
+    else if (k === 'beanie') { ctx.beginPath(); ctx.ellipse(cx, hy, 6 * S, 6.5 * S, 0, Math.PI, 0); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); rrect(cx - 6.4 * S, hy - 1.5 * S, 12.8 * S, 3 * S, 1 * S, dk); circle(cx, hy - 7 * S, 2 * S, shade(col, 0.3)); }
+    else if (k === 'sunhat') { ellipse(cx, hy + 0.5 * S, 11 * S, 3 * S, col, dk, 0.6 * S); ctx.beginPath(); ctx.ellipse(cx, hy, 5.5 * S, 5 * S, 0, Math.PI, 0); ctx.closePath(); ctx.fillStyle = shade(col, 0.08); ctx.fill(); line(cx - 5.5 * S, hy - 0.5 * S, cx + 5.5 * S, hy - 0.5 * S, '#e5484d', 1.2 * S); }
+  }
+}
 // ---------- local styles (v0.48) ----------
 // paper lattice: a window or a sliding door of a hanok or a Japanese home
 function latticeWin(f, u, uw, h0, h1) {

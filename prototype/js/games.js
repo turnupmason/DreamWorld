@@ -80,7 +80,7 @@ const Games = (() => {
   // A townie standing (or running) at (x, y) on the ground. o: pose, view ('back' = facing away), turn, phase, hands,
   // air (units), after (draws what they hold), rot (radians: diving), lift (metres off the ground).
   function townie(L, x, y, o = {}) {
-    const p = P(x, y, o.lift || 0), s = p.k * PS, wheel = L.mob === 'wheel';
+    const p = P(x, y, o.lift || 0), s = p.k * PS * (o.scale || 1), wheel = L.mob === 'wheel';   // (v0.49: scale)
     const opt = { look: L, energy: 'good', ts: o.ts !== undefined ? o.ts : T * 1000, seed: o.seed || 1, pose: o.pose || 'stand', view: o.view || 'front', turn: o.turn || 0, phase: o.phase || 0, hands: o.hands, air: o.air || 0, wave: o.wave, face: o.face || (o.view === 'back' ? 1 : -1), back: o.view === 'back' };
     if (!wheel) opt.after = o.after;
     if (o.rot) { ctx.save(); ctx.translate(p.x, p.y - (o.rotAt || 12) * s); ctx.rotate(o.rot); ctx.translate(-p.x, -(p.y - (o.rotAt || 12) * s)); }
@@ -723,7 +723,7 @@ const Games = (() => {
         });
       }
     }
-    function hit(p) { if (!p.down) { p.down = true; p.fa = Math.atan2(p.vx, p.vy); } }
+    function hit(p) { if (!p.down) { p.down = true; p.fa = Math.atan2(p.vx, p.vy); if (T - (hit.t || -9) > 0.05) { hit.t = T; Sound.play('pin'); } } }   // v0.49: each pin clatters as it goes down
     function movePins(dt) {
       const n = 3, h = dt / n;
       for (let k = 0; k < n; k++) {
@@ -751,7 +751,7 @@ const Games = (() => {
       const f = card[who][frame] = card[who][frame] || []; f.push(got);
       const mine = who === 0, strike = !ball2 && got === 10, spare = ball2 && standing === 0;
       say(strike ? t('mg_w_strike') : spare ? t('mg_w_spare') : got ? t('mg_w_pins', { n: got }) : t('mg_w_none'), strike ? `+${C.strike}` : spare ? `+${C.spare}` : '', strike || spare ? '#ffe066' : '#fff', 1.5);
-      if (strike || spare) Sound.play(mine ? 'cheer' : 'pop');
+      if (strike || spare) { Sound.play('pins'); Sound.play(mine ? 'cheer' : 'pop'); }   // v0.49: the crash of a strike
       lastBall = { strike, spare, done: strike || ball2 === 1 };
       st = 'after'; wait = strike || spare ? 1.9 : 1.4;
     }
@@ -819,7 +819,7 @@ const Games = (() => {
       // the bowler on the approach
       const L = who ? mate.look : S.me.look, ru = st === 'run' ? cl((T - runT) / 0.55, 0, 1) : st === 'ready' ? 0 : 1;
       const bx = (aim && !who ? aim[0] : 0) - 0.42, by = -1.6 + ru * 1.1;
-      if (by + V.D > 2) townie(L, bx, by, { view: 'back', pose: st === 'run' ? 'run' : 'stand', phase: (T - runT) * 14, seed: who ? 5 : 3, wave: st === 'after' && lastBall && (lastBall.strike || lastBall.spare) && Math.sin(T * 9) > 0 });
+      if (by + V.D > 2) townie(L, bx, by, { scale: 0.62, view: 'back', pose: st === 'run' ? 'run' : 'stand', phase: (T - runT) * 14, seed: who ? 5 : 3, wave: st === 'after' && lastBall && (lastBall.strike || lastBall.spare) && Math.sin(T * 9) > 0 });
       if ((st === 'ready' || st === 'run') && by + V.D > 2) { const q = P(bx + 0.42, by + 0.15, 0.25); circle(q.x, q.y, Math.max(3, C.br * q.k), who ? '#c9433b' : '#3a4cc0', 'rgba(0,0,0,.3)', 1); }
     }
     function hint() {
