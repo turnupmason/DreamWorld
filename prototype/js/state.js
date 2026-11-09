@@ -238,10 +238,23 @@ let VIEW_TOWN = HOME_TOWN;
 const townOfLot = l => (l && l.town) || HOME_TOWN;
 const npcId = (t, id) => (t === HOME_TOWN ? id : t + ':' + id);
 const NPC_LOTS_BY = {};
-function npcLots(t) { return NPC_LOTS_BY[t] || (NPC_LOTS_BY[t] = layoutOf(t).npcLots.map(s => ({ ...s, id: npcId(t, s.id), town: t }))); }
+function npcLots(t) {
+  if (NPC_LOTS_BY[t]) return NPC_LOTS_BY[t];
+  const mine = (S && S.lots || []).filter(l => townOfLot(l) === t);   // v0.52: never on top of a player's home
+  return (NPC_LOTS_BY[t] = layoutOf(t).npcLots.filter(s => !mine.some(l => l.st === s.st && s.p < l.p + l.n && l.p < s.p + s.n)).map(s => ({ ...s, id: npcId(t, s.id), town: t })));
+}
 // Each community has its own town plan (v0.12, `LAYOUTS` in data.js); built once, mirrored if the community says so.
 const LAYOUT_BUILT = {};
-function layoutOf(t = VIEW_TOWN) { const c = COMMUNITIES[t] || COMMUNITIES[HOME_TOWN], key = (c.layout || 'grid') + (c.flip ? '|f' : ''); return LAYOUT_BUILT[key] || (LAYOUT_BUILT[key] = buildLayout(c.layout || 'grid', !!c.flip)); }
+function layoutOf(t = VIEW_TOWN) {   // v0.52: each town its own (zones, street names, homes)
+  if (!COMMUNITIES[t]) t = HOME_TOWN;
+  const c = COMMUNITIES[t];
+  return LAYOUT_BUILT[t] || (LAYOUT_BUILT[t] = zoneLayout(buildLayout(c.layout || 'grid', !!c.flip), t, t === HOME_TOWN));
+}
+// v0.52: the zone a street / a home is in
+const zoneOfSt = (st, t = VIEW_TOWN) => ZONES[(streetsOf(t)[st] || {}).zone] || ZONES.suburb;
+const zoneKeyOf = id => { const l = lotOf(id); return (l && (streetsOf(townOfLot(l))[l.st] || {}).zone) || 'suburb'; };
+const zoneOf = id => ZONES[zoneKeyOf(id)];
+const houseLot = i => HOUSE_LOT[(HOUSES[i] || {}).id] || CORE_PARCELS;   // parcels a house needs
 const streetsOf = (t = VIEW_TOWN) => layoutOf(t).streets;
 function myTown() { return townOfLot(S && S.lots.find(l => l.id === 'me')); }
 function townOf(id) { const l = lotOf(id); return l ? townOfLot(l) : HOME_TOWN; }
@@ -294,10 +307,11 @@ function freeRun() {
 const nbOf = id => NEIGHBORHOODS[(streetsOf(townOf(id))[lotOf(id).st] || { nb: 'maple' }).nb];
 const round50 = v => Math.round(v / 50) * 50;
 // The next parcel to the right of your home: each one costs more than the last.
-function canExpand(id = 'me') { const l = lotOf(id), p = l.p + l.n; return p < streetsOf(townOfLot(l))[l.st].n && !parcelOwner(l.st, p, townOfLot(l)); }
+function canExpand(id = 'me') { const l = lotOf(id), p = l.p + l.n; return l.n < zoneOf(id).max && p < streetsOf(townOfLot(l))[l.st].n && !parcelOwner(l.st, p, townOfLot(l)); }   // v0.52: up to the zone's biggest lot
+const atZoneMax = (id = 'me') => lotOf(id).n >= zoneOf(id).max;
 // Land costs more in some communities than others (COMMUNITIES[].price).
 const townPrice = t => (COMMUNITIES[t] || COMMUNITIES[HOME_TOWN]).price;
-function parcelCost(id = 'me') { const l = lotOf(id); return { coins: round50(LAND.parcel * Math.pow(LAND.grow, l.n - CORE_PARCELS) * nbOf(id).price * townPrice(townOfLot(l))) }; }
+function parcelCost(id = 'me') { const l = lotOf(id); return { coins: round50(LAND.parcel * Math.pow(LAND.grow, l.n - CORE_PARCELS) * nbOf(id).price * zoneOf(id).price * townPrice(townOfLot(l))) }; }
 function buyParcel() {
   if (!canExpand()) return 'max';
   const c = parcelCost();
@@ -309,16 +323,18 @@ function buyParcel() {
   return 'ok';
 }
 // Moving your whole home (house, farm, yard) to an empty spot on another street.
-function moveCost(st, t = VIEW_TOWN) { return { coins: round50(LAND.move * CORE_PARCELS * NEIGHBORHOODS[streetsOf(t)[st].nb].price * townPrice(t)) }; }
+// v0.52: you move onto a lot the size of the zone's smallest (an estate lot is big, and costs it)
+function moveLotN(st, p, t = VIEW_TOWN) { const S0 = streetsOf(t)[st], want = Math.max(CORE_PARCELS, zoneOfSt(st, t).lot[0]); let n = 0; while (n < want && p + n < S0.n && !parcelOwner(st, p + n, t)) n++; return n; }
+function moveCost(st, t = VIEW_TOWN, n = CORE_PARCELS) { return { coins: round50(LAND.move * n * NEIGHBORHOODS[streetsOf(t)[st].nb].price * zoneOfSt(st, t).price * townPrice(t)) }; }
 // Moving your home to empty land, in this community or another one (t).
 function relocate(st, p, t = VIEW_TOWN) {
   for (let k = 0; k < CORE_PARCELS; k++) if (p + k >= streetsOf(t)[st].n || parcelOwner(st, p + k, t)) return { r: 'taken' };
-  const c = moveCost(st, t);
+  const nn = moveLotN(st, p, t), c = moveCost(st, t, nn);
   if (!canAfford(c)) return { r: 'poor' };
   const l = lotOf('me'), refund = Math.round((l.paid || 0) * LAND.refund);
   pay(c);
   S.me.coins += refund;
-  Object.assign(l, { st, p, n: CORE_PARCELS, paid: 0 });
+  Object.assign(l, { st, p, n: nn, paid: 0 });
   if (t === HOME_TOWN) delete l.town; else l.town = t;
   fixLayout(S.me);
   return { r: 'ok', refund };
@@ -352,12 +368,14 @@ function ensureNPCs(t) {
     };
     p.trees = Array.from({ length: p.orchardLv ? ORCHARD[p.orchardLv].slots : 0 }, () => [pick(Object.keys(TREES)), 2]);
     if (r() < 0.4) p.animals.push(['dog', 2]);
-    if (t !== HOME_TOWN) { p.house = Math.floor(r() * HOUSES.length); p.name = tfName(t, i * 5 + ti * 3 + 7); }   // v0.40: named the way people are named there
+    if (t !== HOME_TOWN) { p.house = spec.zone ? spec.house : Math.floor(r() * HOUSES.length); p.name = tfName(t, i * 5 + ti * 3 + 7); }   // v0.40: named the way people are named there (v0.52: the house by the zone)
+    if (spec.zone === 'rows' || spec.zone === 'apts') { p.fieldLv = 0; p.crops = []; p.ripe = []; p.pastureLv = 0; p.animals = r() < 0.3 ? [['dog', 2]] : []; p.orchardLv = 0; p.trees = []; p.pondLv = 0; p.yard = ['flowers', 'bench', 'lamp'].filter(() => r() < 0.6); }   // v0.52: in town: no farm
     const h = homeFromPreset(p);
     h.npc = true; h.town = t; if (spec.fam && t === HOME_TOWN) h.fam = spec.fam;   // v0.27: your family
+    if (spec.zone === 'rows' || spec.zone === 'apts') { h.fields = []; h.plots = []; }   // v0.52: a lawn in front, not a vegetable patch
     relayoutYard(h);
     // the extra land of a bigger lot: a garden with trees, a pool or a swing set
-    for (let k = 0; k < (spec.n - CORE_PARCELS) * 3; k++) autoPlace(h, 'yard', pick(['tree', 'pine', 'flowers', 'hedge', 'fountain', 'pool', 'picnic', 'trampoline', 'windmill']));
+    for (let k = 0; k < (spec.n - CORE_PARCELS) * 3; k++) autoPlace(h, 'yard', pick(spec.zone === 'apts' ? ['tree', 'pine', 'bench', 'lamp', 'hedge', 'picnic', 'flowers'] : ['tree', 'pine', 'flowers', 'hedge', 'fountain', 'pool', 'picnic', 'trampoline', 'windmill']));
     h.animals.filter(isPet).forEach(a => setupPet(a, null, h));
     showOffExclusives(h);
     return h;
@@ -1401,6 +1419,8 @@ function buyCar(k, h = S.me) {
 // You can own several houses and pick which one to live in; furniture and yard come along.
 function buyHouse(i, h = S.me) {
   if (h.houses.includes(i)) return 'own';
+  if (HOUSES[i].npc) return 'no';
+  if (h === S.me && lotW('me') / PARCEL < houseLot(i)) return 'small';   // v0.52: a big house needs a big lot
   const c = HOUSES[i].cost;
   if (!canAfford(c, h)) return 'poor';
   pay(c, h);
@@ -1409,7 +1429,7 @@ function buyHouse(i, h = S.me) {
   fitRooms(h);
   return 'ok';
 }
-function moveHouse(i, h = S.me) { if (!h.houses.includes(i)) return false; h.house = i; return fitRooms(h) + 1; }
+function moveHouse(i, h = S.me) { if (!h.houses.includes(i)) return false; if (h === S.me && lotW('me') / PARCEL < houseLot(i)) return false; h.house = i; return fitRooms(h) + 1; }
 
 // ---------- souvenirs: earned in real life, never sold ----------
 function souvProgress(sv) { return Math.min(sv.n, S.stats[sv.need] || 0); }
@@ -2067,7 +2087,7 @@ function storeWares(store) {
   if (store === 'dealer') Object.entries(CARS).filter(([, c]) => !c.excl).forEach(([k, c]) => add('car', k, 'buyCar', k, c.cost.coins, CARS[k].kind === 'two' ? 1.2 : 1.6, CARS[k].kind === 'two' ? 2 : 3));
   if (store === 'realty') {
     ['field', 'pasture', 'orchard', 'pond', 'garage'].forEach(k => add('land', k, 'buyLand', k, 0, 2, 1));
-    HOUSES.forEach((H, i) => add('house', String(i), 'buyHouse', String(i), H.cost.coins || 0, 2.4, 2.4));
+    HOUSES.forEach((H, i) => { if (!H.npc) add('house', String(i), 'buyHouse', String(i), H.cost.coins || 0, 2.4, 2.4); });   // (v0.52: not the apartment blocks)
   }
   if (store === 'mall') {
     ['cinema', 'claw', 'food', 'trophies'].forEach(k => add('act', k, 'mallAct', k, 0, k === 'claw' || k === 'trophies' ? 1 : 2, 1));

@@ -397,7 +397,7 @@ Object.assign(STR.zh, {
   for_sale: '出售', land_lot: '空地 {n} 格宽', buy_parcel: '买下旁边的地',
   area_maple: '🏡 梧桐街社区', area_center: '🏛️ 镇中心', area_lake: '⛵ 湖畔', area_park: '🌳 森林公园', area_farm: '🌾 田园', area_fields: '🌾 麦田', area_water: '💧 镜湖',
   stranger: '镇上的居民', shop_soon: '以后可以进去逛',
-  land_buy_title: '买下旁边这块地', land_buy_desc: '在你家右边，{w} × {d} 格。买下后院子变大，可以摆更多东西；可以一直往右买，一块比一块贵。',
+  land_buy_title: '买下旁边这块地', land_buy_desc: '在你家右边，{w} × {d} 格。买下后院子变大，可以摆更多东西；可以往右接着买，一块比一块贵，买到这条街的上限为止。',
   land_owned: '现在', land_after: '买下后', land_price: '价格', tiles_n: '{w} × {d} 格',
   land_buy_btn: '买下', land_grow_note: '每多买一块，下一块贵 35%。湖畔的地更贵，田园的地便宜。',
   land_move_title: '搬到{street}', land_move_desc: '这里有一块 {w} × {d} 格的空地（{nb}）。搬过来后，房子、菜地、牲畜、院子都跟着你走。',
@@ -415,7 +415,7 @@ Object.assign(STR.en, {
   for_sale: 'For sale', land_lot: 'Land {n} tiles wide', buy_parcel: 'Buy the land next door',
   area_maple: '🏡 Maple', area_center: '🏛️ Town centre', area_lake: '⛵ Lakeside', area_park: '🌳 Woodland Park', area_farm: '🌾 Farmland', area_fields: '🌾 Wheat fields', area_water: '💧 Mirror Lake',
   stranger: 'lives in town', shop_soon: 'You’ll be able to go in later',
-  land_buy_title: 'Buy the land next door', land_buy_desc: 'To the right of your home, {w} × {d} tiles. Your yard gets bigger for more things; keep buying to the right, each piece costs more.',
+  land_buy_title: 'Buy the land next door', land_buy_desc: 'To the right of your home, {w} × {d} tiles. Your yard gets bigger for more things; you can keep buying to the right up to this street’s limit, each piece costs more.',
   land_owned: 'Now', land_after: 'After', land_price: 'Price', tiles_n: '{w} × {d} tiles',
   land_buy_btn: 'Buy', land_grow_note: 'Each piece costs 35% more than the last. Lakeside land is pricier, farmland cheaper.',
   land_move_title: 'Move to {street}', land_move_desc: 'There is {w} × {d} tiles of empty land here ({nb}). Your house, fields, animals and yard all move with you.',
@@ -1323,4 +1323,17 @@ Object.assign(STR.en, {
   inv_text: 'I’m at the {place}, want to play {game}?', inv_sent: 'Invite sent to {name}', inv_yes: 'Yes! On my way to the {place} 🏃', inv_no: 'Don’t feel like playing today, another time',
   inv_later: 'Just saw your invite! Next time 🙏', inv_offline: '{name} isn’t online; the invite is on their phone for when they are', inv_no_snack: '{name} doesn’t feel like playing today',
   inv_coming: '{name} said yes, let’s play {game}!', inv_agreed: '{name} agreed to play {game}, find them there',
+});
+// v0.52: zones, land limits, new homes
+Object.assign(STR.zh, {
+  house_need_lot: '要 {n} 块地', house_need_lot_note: '你现在 {n} 块地，{zone}最多 {max} 块。想住更大的房子，就搬到地更大的街（🏰 富人区）。',
+  house_need_lot_snack: '这栋房子需要更大的地：先买地，或者搬到富人区',
+  zone_rule: '{zone}：每家 {a}–{b} 块地，最多扩到 {max} 块', zone_full_title: '这条街的地买满了',
+  zone_full: '你已经有 {n} 块地，{zone}最多 {max} 块。想要更大的地和房子，就搬到富人区（🏰）那样地大的街。', zone_you_get: '搬过去的地',
+});
+Object.assign(STR.en, {
+  house_need_lot: 'Needs {n} plots', house_need_lot_note: 'You have {n} plots; in the {zone} a home can have at most {max}. For a bigger house, move to a street with bigger lots (🏰 Estates).',
+  house_need_lot_snack: 'This house needs a bigger lot: buy land, or move to the Estates',
+  zone_rule: '{zone}: {a}–{b} plots a home, up to {max}', zone_full_title: 'No more land on this street',
+  zone_full: 'You have {n} plots; in the {zone} a home can have at most {max}. For more land and a bigger house, move to a street with big lots like the Estates (🏰).', zone_you_get: 'Your lot there',
 });

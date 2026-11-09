@@ -499,10 +499,11 @@ function panelShop() {
     note = t('note_cars');
   } else if (cat === 'houses') {
     body = HOUSES.map((H, i) => {
-      if (!keep(H.id)) return '';
+      if (!keep(H.id) || H.npc) return '';
       let btn;
       if (i === h.house) btn = `<span class="tag ok">${t('house_current')}</span>`;
       else if (h.houses.includes(i)) btn = buyBtn('moveHouse', i, t('house_move'), true, '');
+      else if (lotW('me') / PARCEL < houseLot(i)) btn = `<span class="tag">🏗️ ${t('house_need_lot', { n: houseLot(i) })}</span>`;   // v0.52: not on this lot
       else btn = buyBtn('buyHouse', i, costText(H.cost), canAfford(H.cost));
       const ex = (h.extra || {})[i] || 0;
       return shopCard(thumbImg('house', i, { wall: h.wall, roof: h.roof, extra: ex }), nm(H),
@@ -810,9 +811,9 @@ const SHEETS = {
     let info = '', btns = '';
     if (w.kind === 'seed') { const c = CROPS[w.k]; info = t('seed_sub', { d: fmtDur(c.grow * MIN), n: c.yield, p: c.sell }) + (S.me.seeds[w.k] ? ` · ${t('have_n', { n: S.me.seeds[w.k] })}` : '');
       btns = [1, 5, 10].map(n => `<button class="btn small ${n === 5 ? 'primary' : ''}" data-act="addWare" data-arg="${w.id}#${n}">🛒 ×${n} 🪙${c.seed * n}</button>`).join(''); }
-    else if (w.kind === 'house') { const i = +w.k, H = HOUSES[i], own = S.me.houses.includes(i);
-      info = `${t('house_room', { w: H.room[0], d: H.room[1] })} · ${t('house_floors', { n: H.floors[0], max: H.floors[1] })}`;
-      btns = i === S.me.house ? `<span class="tag ok">${t('house_current')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${own || canAfford(H.cost) ? '' : 'disabled'}>✍️ ${own ? t('house_move') : `${t('ware_sign')} ${costText(H.cost)}`}</button>${own ? '' : loanBtn('house', i, w.id)}`; }
+    else if (w.kind === 'house') { const i = +w.k, H = HOUSES[i], own = S.me.houses.includes(i), need = houseLot(i), small = lotW('me') / PARCEL < need;
+      info = `${t('house_room', { w: H.room[0], d: H.room[1] })} · ${t('house_floors', { n: H.floors[0], max: H.floors[1] })}${need > CORE_PARCELS ? ` · <b class="${small ? 'warn-text' : ''}">🏗️ ${t('house_need_lot', { n: need })}</b>` : ''}${small ? `<br><span class="muted small">${t('house_need_lot_note', { n: lotW('me') / PARCEL, max: zoneOf('me').max, zone: nm(zoneOf('me')) })}</span>` : ''}`;   // v0.52
+      btns = i === S.me.house ? `<span class="tag ok">${t('house_current')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${!small && (own || canAfford(H.cost)) ? '' : 'disabled'}>✍️ ${own ? t('house_move') : `${t('ware_sign')} ${costText(H.cost)}`}</button>${own ? '' : loanBtn('house', i, w.id)}`; }
     else if (w.kind === 'land') { const L = landDeal(w.k); info = L.sub; btns = L.next ? `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${canAfford(L.cost) ? '' : 'disabled'}>✍️ ${t('ware_sign')} ${costText(L.cost)}</button>` : `<span class="tag ok">${t('maxed')}</span>`; }
     else if (w.kind === 'car') { const own = S.me.cars.some(c => c.k === w.k); info = t('car_cargo', { n: CARS[w.k].cargo || WALK_CARRY }) + ' · ' + t('car_delivered', { h: DELIVERY.hour, n: deliveryFee([{ price: CARS[w.k].cost.coins || 0 }]) });
       btns = own ? `<span class="tag ok">${t('owned')}</span>` : `<button class="btn primary" data-act="wareDeal" data-arg="${w.id}" ${canAfford(CARS[w.k].cost) ? '' : 'disabled'}>✍️ ${t('ware_sign')} ${costText(CARS[w.k].cost)}</button>${loanBtn('car', w.k, w.id)}`; }
@@ -1207,7 +1208,10 @@ const SHEETS = {
   land(a) {
     const st = streetsOf(VIEW_TOWN)[a.st], nb = NEIGHBORHOODS[st.nb], l = lotOf('me'), other = VIEW_TOWN !== myTown(), cm = COMMUNITIES[VIEW_TOWN];
     const next = !other && l.st === a.st && a.p === l.p + l.n;
-    const shot = `<div class="land-pic"><span>🏷️</span><b>${other ? `${cm.flag} ${nm(cm)} · ` : ''}${nm(st)}</b><i>${nm(nb)}</i></div>`;
+    const Z = ZONES[st.zone] || ZONES.suburb;
+    const shot = `<div class="land-pic"><span>🏷️</span><b>${other ? `${cm.flag} ${nm(cm)} · ` : ''}${nm(st)}</b><i>${Z.e} ${nm(Z)} · ${nm(nb)}</i></div>
+      <p class="muted small">${t('zone_rule', { zone: nm(Z), a: Z.lot[0], b: Z.lot[1], max: Z.max })}</p>`;   // v0.52
+    if (next && atZoneMax()) return `${shot}<h2>${t('zone_full_title')}</h2><div class="card"><p>${t('zone_full', { n: lotOf('me').n, max: zoneOf('me').max, zone: nm(zoneOf('me')) })}</p></div>`;
     if (next) {
       const c = parcelCost();
       return `${shot}<h2>${t('land_buy_title')}</h2><p class="muted">${t('land_buy_desc', { w: PARCEL, d: LOT_D, now: homeW(S.me) })}</p>
@@ -1217,9 +1221,9 @@ const SHEETS = {
         <button class="btn primary block" data-act="buyParcel" ${canAfford(c) ? '' : 'disabled'}>${t('land_buy_btn')} · 🪙${fmtNum(c.coins)}</button>
         <p class="muted center gap-top">${t('land_grow_note')}</p>`;
     }
-    const p0 = a.run != null ? a.run : a.p, fits = a.n >= CORE_PARCELS, c = moveCost(a.st), refund = Math.round((l.paid || 0) * LAND.refund);
+    const p0 = a.run != null ? a.run : a.p, fits = a.n >= CORE_PARCELS, nn = fits ? moveLotN(a.st, p0) : CORE_PARCELS, c = moveCost(a.st, VIEW_TOWN, nn), refund = Math.round((l.paid || 0) * LAND.refund);
     return `${shot}<h2>${t('land_move_title', { street: nm(st) })}</h2><p class="muted">${t('land_move_desc', { w: a.n * PARCEL, d: LOT_D, nb: nm(nb) })}</p>
-      ${fits ? `<div class="card"><div class="asset-row"><span>${t('land_price')}</span><b>🪙${fmtNum(c.coins)}</b></div>
+      ${fits ? `<div class="card"><div class="asset-row"><span>${t('zone_you_get')}</span><b>${t('tiles_n', { w: nn * PARCEL, d: LOT_D })}</b></div><div class="asset-row"><span>${t('land_price')}</span><b>🪙${fmtNum(c.coins)}</b></div>
         ${refund ? `<div class="asset-row"><span>${t('land_refund')}</span><b>+🪙${fmtNum(refund)}</b></div>` : ''}
         <p class="muted">${t('land_move_note')}</p></div>
         <button class="btn primary block" data-act="moveHere" data-arg="${a.st}|${p0}" ${canAfford(c) ? '' : 'disabled'}>🚚 ${t('land_move_btn')} · 🪙${fmtNum(c.coins)}</button>
@@ -1349,6 +1353,7 @@ function result(code, onOk) {
   else if (code === 'noroom') snack(t('plot_noroom'));   // v0.46
   else if (code === 'own') snack(t('owned'));
   else if (code === 'max') snack(t('maxed'));
+  else if (code === 'small') { Sound.play('oops'); snack(`🏗️ ${t('house_need_lot_snack')}`); }   // v0.52
   else if (code === 'space') snack(`🚗 ${t('garage_space')}`);
   else if (code === 'garage') snack(`🚗 ${t('garage_full')}`);
 }

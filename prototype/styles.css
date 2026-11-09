@@ -944,3 +944,4 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 .ph-type { display: flex; gap: 6px; margin-bottom: 9px; }
 .ph-type input { flex: 1; min-width: 0; border: 0; border-radius: 18px; padding: 9px 13px; font: inherit; font-size: 14px; background: rgba(255,255,255,.95); color: #1d1d1f; }
 .ph-send { border: 0; border-radius: 18px; padding: 0 14px; font: inherit; font-weight: 800; background: #0a84ff; color: #fff; }
+.warn-text { color: #d9534f; }   /* v0.52 */

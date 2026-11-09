@@ -58,7 +58,7 @@ function storyRows(b, from, n, o = {}) {
 // walls, roof and trimmings. Not your own home, not a tent.
 const strSeed = s => { let n = 7; for (let i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) % 100003; return n; };
 function localHome(h) {
-  if (!h || !h.id || h === S.me || h.id === 'me' || !HOUSES[h.house] || HOUSES[h.house].id === 'tent' || typeof townOf !== 'function') return null;
+  if (!h || !h.id || h === S.me || h.id === 'me' || !HOUSES[h.house] || HOUSES[h.house].id === 'tent' || HOUSES[h.house].multi || typeof townOf !== 'function') return null;   // (v0.52: a townhouse / duplex / apartment block keeps its shape)
   const c = countyOf(townOf(h.id)), list = c && LOCAL_HOMES[c.folk];
   if (!list) return null;
   const n = strSeed(String(h.id)), L = list[n % list.length], pick = (a, k) => (a ? a[Math.floor(hash(n, k) * a.length)] : undefined);
@@ -1047,7 +1047,7 @@ function drawTower(k, x, y, w, d, ts) {
 }
 // A house seen from far away: walls and a roof in its colours, as many storeys tall as it has. Returns its top.
 function drawHouseFar(h, ox, oy) {
-  const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, x = ox + fx, y = oy + fy, z = cam.z, L = localHome(h);   // v0.48: in its local colours
+  const H = HOUSES[h.house], rw = H.spec && H.spec.row ? 3 : 1, [fx0, fy, w0, d] = H.fp, fx = fx0 - (rw > 1 ? w0 : 0), w = w0 * rw, x = ox + fx, y = oy + fy, z = cam.z, L = localHome(h);   // v0.48: in its local colours (v0.52: a row of townhouses is three wide)
   const wh = H.id === 'tent' ? 0 : 12 + floorsOf(h) * 22 + (H.id === 'castle' ? 18 : 0);
   if (wh) box(x, y, w, d, wh, L ? L.wallCol : H.id === 'castle' ? '#bfb8ac' : h.wall, 0, { edge: null });
   hipRoof(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, H.id === 'tent' ? 40 : 22, L ? L.roofCol : H.id === 'chinese' ? '#7a8796' : h.roof);
@@ -2841,7 +2841,16 @@ function specPorch(kind, x, y, w, d, dx, roof, trim) {
   box(x0 - 0.15, py - 0.05, x1 - x0 + 0.3, pd + 0.15, 2.5, shade(roof, -0.05), 24.5, { shadow: false });
   if (z > 0.5) for (let u = x0 + 0.3; u < x1 - 0.1; u += 0.35) { const a = up(iso(u, py + pd), 3 * z), b = up(iso(u, py + pd), 9 * z); line(a.x, a.y, b.x, b.y, trim, 0.7 * z); }
 }
+// v0.52: the colours of a row of townhouses (each unit its own)
+const ROW_COLS = ['#b0644a', '#7a4b36', '#d8c7a8', '#8a9a7b', '#a9b8c8', '#c98a5a', '#e2d3c0', '#6f6a74'];
 function drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H) {
+  if (H.spec.row && !H.unit) {   // v0.52: a townhouse: next door on the left, yours, next door on the right (walls joined)
+    const sd = strSeed(String((h && h.id) || 'row')), unit = c => ({ ...H, unit: true, spec: { ...H.spec, wallCol: ROW_COLS[c % ROW_COLS.length] } });
+    drawSpecHouse(h, x - w, y, w, d, 0.5, wall, roof, ts, n, unit(sd + 3));
+    const top = drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, { ...H, unit: true, spec: { ...H.spec, wallCol: (h && h.npc ? ROW_COLS[sd % ROW_COLS.length] : H.spec.wallCol) } });
+    drawSpecHouse(h, x + w, y, w, d, 0.5, wall, roof, ts, n, unit(sd + 5));
+    return top;
+  }
   const z = cam.z, S2 = H.spec, ex = n * FLOOR_H, f0 = H.floors[0], trim = '#fffaf0';
   const col = S2.wallCol || wall, rc = S2.roofCol || roof, lift = (S2.stilts ? 12 : 0) + (S2.stoop ? 8 : 0);
   const wh = 4 + f0 * 28 + ex, dx = x + du * w, c = iso(x + w / 2, y + d / 2);
@@ -2882,6 +2891,7 @@ function drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H) {
     const us = fl === 0 ? (wide ? [0.2, 0.8] : [0.17, 0.83]) : (wide ? [0.2, 0.5, 0.8] : [0.17, 0.5, 0.83]);
     if (S2.mat === 'hanok' || S2.mat === 'jp') { us.forEach(u => latticeWin(b.left, u, 0.08, h0 + lift, h1 + lift)); [0.3, 0.7].forEach(u => latticeWin(b.right, u, 0.1, h0 + lift, h1 + lift)); continue; }   // v0.48
     us.forEach(u => specWin(b.left, u, wide ? 0.1 : 0.06, h0, h1, { shutters: sh, box: !!(S2.porch === 'small' && fl === 0) }, lift));
+    if (S2.apt && fl >= 1) us.forEach(u => { wallRect(b.left, 0, u - 0.12, u + 0.12, h0 - 3 + lift, h0 + 4 + lift, 'rgba(210,205,196,.92)', '#9a948a', 1); wallRect(b.left, 0, u - 0.12, u + 0.12, h0 - 4.5 + lift, h0 - 3 + lift, '#8a847a'); });   // v0.52: a balcony under every flat's window
     [0.3, 0.7].forEach(u => specWin(b.right, u, wide ? 0.12 : 0.08, h0, h1, { shutters: sh }, lift));
     if (S2.arches && z > 0.4) us.forEach(u => { const p = wallPt(b.left, 0, u, h1 + lift + 1.5); ellipse(p.x, p.y, 5 * z, 2.4 * z, '#c8653c'); });
   }
@@ -2890,7 +2900,10 @@ function drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H) {
   else specDoor(b.left, du, 0.06, 20, S2.door || (S2.mat === 'brick' ? '#2f4a3a' : shade(rc, -0.25)), lift);
   if (S2.balcony && f0 + n >= 2) localBalcony(b, x, y, w, d, 28 + lift);   // v0.48
   if (S2.pent && f0 + n >= 2) { const a0 = wallPt(b.left, 0, -0.02, lift + 31), a1 = wallPt(b.left, 0, 1.02, lift + 31), q0 = up(iso(x - 0.1, y + d + 0.55), (lift + 26) * z), q1 = up(iso(x + w + 0.1, y + d + 0.55), (lift + 26) * z); poly([a0, a1, q1, q0], rc, 'rgba(0,0,0,.15)', 0.6 * z); }
+  if (S2.twin) { specDoor(b.left, 1 - du, 0.06, 20, S2.door || shade(rc, -0.25), lift); wallLine(b.left, 0, 0.5, lift, 0.5, wh + lift, shade(col, -0.28), 1.6); }   // v0.52: a duplex: the other front door, the wall between the two halves
+  if (S2.apt) { box(x + du * w - 0.7, y + d - 0.05, 1.4, 0.7, 2, '#5b6470', 22 + lift, { shadow: false }); }   // its entrance canopy
   if (S2.porch) specPorch(S2.porch, x, y, w, d, dx, rc, trim);
+  if (S2.porch && S2.twin) specPorch(S2.porch, x, y, w, d, x + (1 - du) * w, rc, trim);
   // the roof
   const RH = S2.low ? 18 : SPEC_ROOF_H[S2.roof] || 30;
   const chim = S2.chimney ? () => chimney(x + w - 0.9, y + 0.5, wh + lift, RH + 12, S2.mat === 'brick' ? shade(col, -0.1) : '#9a948a') : null;

@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.51.0';
+const VERSION = '0.52.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -163,6 +163,61 @@ const NPC_NAMES = [
 ];
 // Where you and your friends start, and where friends who accept an invite move in.
 const START_LOTS = { me: ['maple', 6, 6], li: ['maple', 0, 6], wang: ['cherry', 0, 6], mia: ['cherry', 10, 6] };
+// v0.52 (Mason #29: "like the US neighbourhood I showed you: some lots are tiny, some huge; rich, ordinary and poor
+// areas; you can't buy land for ever — if you want a big house, move"). Every street is in a zone. lot: how many
+// parcels the homes there take (from–to); max: the most a home there can grow to; price: land there × this;
+// houses: what the people living there have; fill: how full the street is.
+const ZONES = {
+  estate:  { e: '🏰', zh: '富人区', en: 'Estates', lot: [8, 10], max: 12, price: 1.8, fill: 0.7, houses: ['mansion', 'castle', 'villa', 'modern', 'colonial', 'spanish', 'victorian', 'glass', 'lodge', 'tudor', 'chinese'] },
+  suburb:  { e: '🏡', zh: '普通住宅区', en: 'Suburb', lot: [5, 7], max: 8, price: 1, fill: 0.65, houses: ['twostory', 'farmhouse', 'ranch', 'capecod', 'craftsman', 'bungalow', 'cottage', 'beach', 'tudor'] },
+  compact: { e: '🏠', zh: '小户型区', en: 'Small lots', lot: [4, 4], max: 5, price: 0.7, fill: 0.75, houses: ['cottage', 'bungalow', 'cabin', 'aframe', 'duplex', 'duplex', 'duplex'] },
+  rows:    { e: '🏘️', zh: '联排住宅区', en: 'Townhouses', lot: [4, 4], max: 4, price: 0.8, fill: 0.85, houses: ['townhouse', 'townhouse', 'townhouse', 'brownstone'] },
+  apts:    { e: '🏢', zh: '公寓区', en: 'Apartments', lot: [6, 7], max: 5, price: 0.75, fill: 0.8, houses: ['apartment'] },
+};
+// how many parcels a big house needs (the others fit on any lot): a castle only on the estates
+const HOUSE_LOT = { mansion: 8, castle: 10, lodge: 8, chinese: 7, glass: 7, victorian: 7 };
+// your home town (invite-only: you, your friends, your family): set by hand; other towns: the lake streets are the
+// estates, the farm streets estates or suburb, the others take turns (from a different place in each town)
+const HOME_ZONES = { maple: 'suburb', cherry: 'suburb', wheat: 'estate', meadow: 'estate', lakeview: 'estate', shore: 'suburb' };
+const ZONE_ROTA = ['suburb', 'rows', 'compact', 'apts', 'suburb', 'compact', 'rows'];
+// the mirrored towns get their own street names (they used to share their twin's)
+const STREET_RENAME = {
+  vermont: { maple: ['橡树街', 'Oak Street'], cherry: ['榆树巷', 'Elm Lane'], wheat: ['谷仓路', 'Barn Road'], meadow: ['三叶草路', 'Clover Road'], lakeview: ['望塘路', 'Pond View Road'], shore: ['湖岸大道', 'Lakeshore Drive'] },
+  sydney: { ocean: ['邦迪路', 'Bondi Road'], palm: ['斑克木街', 'Banksia Street'], sunset: ['蓝花楹巷', 'Jacaranda Lane'], coral: ['海望路', 'Seaview Road'], reef: ['金合欢街', 'Wattle Street'], harbor: ['渡轮路', 'Ferry Road'] },
+  london: { gracht: ['摄政排屋', 'Regent’s Row'], tulip: ['玫瑰巷', 'Rose Lane'], mill: ['船闸路', 'Lock Road'], dyke: ['纤道路', 'Towpath Road'], harbour: ['码头街', 'Wharf Street'], quay: ['船坞路', 'Dockside'] },
+  hangzhou: { sakura: ['桂花巷', 'Osmanthus Lane'], temple: ['灵隐路', 'Lingyin Road'], willow: ['西湖岸', 'West Lake Bank'], paddy: ['稻香路', 'Rice Field Road'], pine: ['竹林街', 'Bamboo Street'], tea: ['龙井路', 'Longjing Road'] },
+  banff: { birch: ['云杉街', 'Spruce Street'], cedar: ['麋鹿路', 'Elk Road'], aspen: ['冰川路', 'Glacier Road'], ridge: ['弓谷路', 'Bow Valley Road'], summit: ['硫磺山路', 'Sulphur Mountain Road'] },
+  cactus: { t1: ['仙人掌坡', 'Saguaro Slope'], t2: ['土坯石阶', 'Adobe Steps'], t3: ['台地路', 'Mesa Road'], t4: ['龙舌兰坡', 'Agave Slope'], t5: ['峡谷路', 'Canyon Road'], e1: ['郊狼街', 'Coyote Street'], e2: ['鼠尾草街', 'Sage Street'] },
+  seoul: { rue1: ['北村街', 'Bukchon Street'], rue2: ['仁寺街', 'Insa Street'], rue3: ['韩屋巷', 'Hanok Lane'], rue4: ['汉江路', 'Han River Road'], rue5: ['南山街', 'Namsan Street'], rue6: ['清溪街', 'Cheonggye Street'], rue7: ['银杏路', 'Ginkgo Road'] },
+  capetown: { cliff: ['信号山路', 'Signal Hill Road'], wharf: ['海滨街', 'Waterfront Street'], hill1: ['波卡普街', 'Bo-Kaap Street'], hill2: ['狮头山路', 'Lion’s Head Road'], vine: ['葡萄园路', 'Vineyard Road'], east2: ['坎普斯湾街', 'Camps Bay Street'] },
+};
+// A town's own version of its plan (v0.52): zones and names on its streets; in towns other than your home town the
+// homes are laid out by zone (estates: a few big lots; townhouses and apartments: many small ones), leaving at least
+// two runs of empty land to move to. Seeded by the town, so it's the same every time.
+function zoneLayout(L, town, home) {
+  const ti = Object.keys(COMMUNITIES).indexOf(town), names = STREET_RENAME[town] || {};
+  let sd = 9973 * (ti + 3);
+  const rnd = () => { sd = (sd * 16807) % 2147483647; return (sd - 1) / 2147483646; };
+  const streets = {};
+  Object.entries(L.streets).forEach(([k, st], i) => {
+    const zone = home ? HOME_ZONES[k] || 'suburb' : st.nb === 'lake' ? (i % 3 === 2 ? 'suburb' : 'estate') : st.nb === 'farm' ? (ti % 2 ? 'estate' : 'suburb') : ZONE_ROTA[(i + ti) % ZONE_ROTA.length];
+    streets[k] = { ...st, zone, ...(names[k] ? { zh: names[k][0], en: names[k][1] } : {}) };
+  });
+  if (home) return { ...L, streets };
+  const lots = [];
+  Object.entries(streets).forEach(([k, st]) => {
+    const Z = ZONES[st.zone];
+    for (let p = 0; p + Z.lot[0] <= st.n;) {
+      const n = Math.min(st.n - p, Z.lot[0] + Math.floor(rnd() * (Z.lot[1] - Z.lot[0] + 1)));
+      if (rnd() < Z.fill) { const hid = Z.houses[Math.floor(rnd() * Z.houses.length)]; lots.push({ st: k, p, n, zone: st.zone, house: Math.max(1, HOUSES.findIndex(H => H.id === hid)) }); }
+      p += n;
+    }
+  });
+  // room to move in: at least two empty runs of a home's width
+  const runs = () => Object.entries(streets).reduce((c, [k, st]) => { let run = 0, best = 0; for (let p = 0; p < st.n; p++) { if (lots.some(l => l.st === k && p >= l.p && p < l.p + l.n)) run = 0; else best = Math.max(best, ++run); } return c + (best >= CORE_PARCELS ? 1 : 0); }, 0);
+  while (lots.length && runs() < 2) lots.splice(lots.length - 1 - Math.floor(rnd() * Math.min(3, lots.length)), 1);
+  return { ...L, streets, npcLots: lots.map((l, i) => ({ id: 'n' + (i + 1), ...l })) };
+}
 // Buying land: each parcel next to your home costs more than the last. Moving to another street costs its land.
 const LAND = { parcel: 600, grow: 1.35, move: 500, refund: 0.5 };
 // Going somewhere in town (v0.12): tiles per second on foot, by bike, by car (sped up so trips take seconds).
@@ -326,6 +381,12 @@ const HOUSES = [
   { id: 'glass',     zh: '玻璃屋',     en: 'Glass house',    fp: [1, 1, 6, 4], room: [9, 7],  floors: [2, 4], cost: { coins: 9500, wood: 130 }, spec: { mat: 'glass', roof: 'flat', wallCol: '#eef1f4' } },
   { id: 'victorian', zh: '维多利亚式', en: 'Victorian',      fp: [1, 1, 6, 4], room: [9, 7],  floors: [2, 4], cost: { coins: 11000, wood: 160 }, spec: { mat: 'siding', roof: 'steep', turret: true, porch: 'wrap', shutters: true } },
   { id: 'lodge',     zh: '山间大木屋', en: 'Mountain lodge', fp: [1, 1, 6, 4], room: [10, 8], floors: [2, 4], cost: { coins: 14000, wood: 220 }, spec: { mat: 'wood', base: 'stone', roof: 'gableY', glassFront: true, chimney: true, wallCol: '#9a6236' } },
+  // v0.52 (Mason #29: "the house structures are all the same"): homes joined to the neighbours. A townhouse is the
+  // middle one of a row of three (the two either side are next door's); a duplex is one building, two front doors;
+  // an apartment block is only for other people (several households, on the apartment streets).
+  { id: 'townhouse', zh: '联排别墅', en: 'Townhouse', fp: [2.8, 1, 2.3, 4], room: [5, 6], floors: [2, 4], cost: { coins: 2000, wood: 50 }, multi: true, spec: { mat: 'brick', roof: 'flat', cornice: true, stoop: true, windows: 'tall', row: true, wallCol: '#b0644a' } },
+  { id: 'duplex',    zh: '双拼住宅', en: 'Duplex',        fp: [1, 1, 6, 4], room: [6, 6], floors: [2, 3], cost: { coins: 1600, wood: 45 }, multi: true, spec: { mat: 'siding', roof: 'gable', porch: 'small', twin: true, wallCol: '#e9e2d0' } },
+  { id: 'apartment', zh: '公寓楼', en: 'Apartment block', fp: [1, 1, 6, 4], room: [6, 5], floors: [4, 6], cost: { coins: 0 }, multi: true, npc: true, spec: { mat: 'stucco', roof: 'flat', cornice: true, apt: true, windows: 'wide', wallCol: '#e8dfd2' } },
 ];
 // How tall a recipe house is on the outside (px at zoom 1), for pictures and its name tag.
 const specWallH = H => 4 + H.floors[0] * 28 + (H.spec.stilts ? 12 : 0) + (H.spec.stoop ? 8 : 0);
@@ -1996,7 +2057,7 @@ const USD = {
   // homes, in the order of HOUSES: tent, cabin, small bungalow, two-storey, modern villa, garden villa, Chinese
   // courtyard, mansion, castle, cottage, A-frame, farmhouse, ranch, Cape Cod, colonial, craftsman, Spanish villa,
   // Tudor, beach house, brownstone, glass house, Victorian, mountain lodge
-  house: [0, 85000, 240000, 450000, 850000, 950000, 1800000, 5000000, 15000000, 280000, 320000, 520000, 480000, 500000, 650000, 700000, 1100000, 1200000, 1500000, 2500000, 2800000, 2200000, 3500000],
+  house: [0, 85000, 240000, 450000, 850000, 950000, 1800000, 5000000, 15000000, 280000, 320000, 520000, 480000, 500000, 650000, 700000, 1100000, 1200000, 1500000, 2500000, 2800000, 2200000, 3500000, 420000, 360000, 0],   // v0.52: + townhouse, duplex, (apartment)
   car: { bike: 600, scooter: 1500, vespa: 5500, motorcycle: 9000, sportbike: 16000, mini: 23000, sedan: 29000, convertible: 48000, pickup: 45000, suv: 38000, jeep: 42000,
     sports: 95000, tractor: 35000, camper: 160000, luxury: 75000, muscle: 55000, supercar: 280000, minivan: 40000, boxtruck: 65000, champcar: 150000, goldbike: 3000 },
   garage: [0, 5000, 18000, 35000, 60000, 120000],

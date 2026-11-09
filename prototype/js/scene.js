@@ -1808,6 +1808,30 @@ const Scene = (() => {
     const underFly = (x, y) => (TL.flyovers || []).some(F => x > F.x0 - 1 && x < F.x1 + 1 && Math.abs(y + 0.5 - F.y) < 2.2);   // v0.27: nothing growing under the flyover
     items.filter(([, x, y]) => !onCarPark(x + 0.5, y + 0.5) && !underFly(x, y)).forEach(([k, x, y]) => objs.push({ d: x + y + 1, f: () => drawYardItem({ k, rot: 0, placed: 0 }, x, y, ts) }));
   }
+  // v0.52: at the near end of every street, a sign with its name and zone: a brick gate pillar on the estates, a
+  // green street sign elsewhere (the apartments and townhouses get a little board too)
+  function streetSigns(objs, vr) {
+    const z = cam.z;
+    if (z < 0.22) return;
+    Object.values(TL.streets).forEach(st => {
+      const x = st.x - 0.75, y = st.y + LOT_D - 0.75;
+      if (!boxVisible(x - 2, y - 2, x + 2, y + 2, vr)) return;
+      const Z = ZONES[st.zone] || ZONES.suburb;
+      objs.push({ d: x + y + 0.4, f: () => {
+        const p = iso(x, y);
+        if (st.zone === 'estate') {
+          box(x - 0.35, y - 0.35, 0.7, 0.7, 26, '#a5523c', 0); box(x - 0.45, y - 0.45, 0.9, 0.9, 4, '#d9d0c0', 26);
+          const pl = up(iso(x + 0.36, y), 14 * z); rrect(pl.x - 9 * z, pl.y - 5 * z, 18 * z, 10 * z, 2 * z, '#2f5d50', '#e9c46a', 1);
+          if (z > 0.4) emoji('🏰', pl.x, pl.y + 4 * z, 7 * z);
+        } else {
+          line(p.x, p.y, p.x, p.y - 30 * z, '#5b6470', 1.6 * z);
+          rrect(p.x - 14 * z, p.y - 36 * z, 28 * z, 8 * z, 1.5 * z, '#2e7d4f', '#ffffff', 0.8 * z);
+          if (z > 0.4) emoji(Z.e, p.x, p.y - 26 * z, 8 * z);
+        }
+        if (z > 0.38) label(`${Z.e} ${nm(st)} · ${nm(Z)}`, p.x, p.y - 46 * z, 'rgba(255,253,248,.92)', '#3b3125', `800 ${Math.max(9, 10.5 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 18 * z), 0);
+      } });
+    });
+  }
   // v0.32: do something in the park: walk there along the paths, then watch / feed / sit / bounce for `secs`, then done()
   function parkUseNow(k, secs, done) {
     const PP = parkPlan(), S0 = PP.spots[k];
@@ -1888,6 +1912,7 @@ const Scene = (() => {
     { const Wb = worldOf(); flatRect(Wb.x0, Wb.y0, Wb.x1 - Wb.x0, Wb.y1 - Wb.y0, PAL.town); }
     Object.values(TL.streets).forEach(st => { if (boxVisible(st.x - 1, st.y - 1, st.x + st.n * PARCEL + 1, st.y + LOT_D + 1, vr)) flatRect(st.x - 0.6, st.y - 0.6, st.n * PARCEL + 1.2, LOT_D + 0.6, themed ? shade(PAL.town, st.nb === 'lake' ? -0.04 : st.nb === 'farm' ? 0.04 : 0) : NEIGHBORHOODS[st.nb].grass); });
     const objs = [], tops = [], out = { hall: null, shops: mode === 'town' ? [] : null }, lv = townLevel(rankTotal());
+    streetSigns(objs, vr);   // v0.52
     river(vr);
     mountains(objs, vr);
     lakeSide(objs, vr, ts);
