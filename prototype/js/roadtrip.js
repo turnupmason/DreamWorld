@@ -14,14 +14,17 @@ const Drive = (() => {
 
   // ---------- the way: Dijkstra over the interstates ----------
   const edgeLen = e => { const P = dreamRoadPts(e[0], e[1], e[3]); let L = 0; for (let i = 1; i < P.length; i++) L += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); return L; };
-  function findWay(from, to) {
+  // v0.61: the rails too (DREAM_RAIL: [a, b, bend]); as [a, b, 'R', bend] so they work like the roads
+  const railEdges = () => DREAM_RAIL.map(([a, b, bend = 30]) => [a, b, 'R', bend]);
+  const onRail = id => DREAM_RAIL.some(r => r[0] === id || r[1] === id);
+  function findWay(from, to, edges = DREAM_ROADS) {
     const ids = Object.keys(DREAM_AT), dist = {}, prev = {}, done = {};
     ids.forEach(id => { dist[id] = 1e9; }); dist[from] = 0;
     for (;;) {
       let u = null; ids.forEach(id => { if (!done[id] && dist[id] < 1e9 && (u === null || dist[id] < dist[u])) u = id; });
       if (u === null || u === to) break;
       done[u] = true;
-      DREAM_ROADS.forEach(e => { if (e[0] !== u && e[1] !== u) return; const v = e[0] === u ? e[1] : e[0], d = dist[u] + edgeLen(e); if (d < dist[v]) { dist[v] = d; prev[v] = { u, e }; } });
+      edges.forEach(e => { if (e[0] !== u && e[1] !== u) return; const v = e[0] === u ? e[1] : e[0], d = dist[u] + edgeLen(e); if (d < dist[v]) { dist[v] = d; prev[v] = { u, e }; } });
     }
     if (dist[to] >= 1e9) return null;
     const legs = []; for (let v = to; v !== from; v = prev[v].u) legs.unshift({ a: prev[v].u, b: v, e: prev[v].e });
@@ -30,8 +33,10 @@ const Drive = (() => {
   const inPoly = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
   const onLand = (x, y) => DREAM_LAND.some(P => inPoly(x, y, P));
   // the way as points on the map, how far along each is (map units), and what's there (water, a mountain)
-  function plan(from, to) {
-    const legs = findWay(from, to);
+  function plan(from, to, mode = 'car') {
+    const train = mode === 'train';
+    if (train && (!onRail(from) || !onRail(to))) return null;
+    const legs = findWay(from, to, train ? railEdges() : DREAM_ROADS);
     if (!legs) return null;
     const pts = [], via = [];
     legs.forEach((L, k) => {
@@ -42,11 +47,12 @@ const Drive = (() => {
     let u = 0; pts.forEach((p, i) => { if (i) u += Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y); p.u = u; p.water = !onLand(p.x, p.y); p.tunnel = !p.water && DREAM_PEAKS.some(([x, y]) => Math.hypot(x - p.x, y - p.y) < DRIVE.tunnel); });
     const len = u, tiles = len * DRIVE.tilesPerUnit;
     // the signs along the way (s: tiles from the start)
-    const ev = [{ s: 6, kind: 'leave', id: from }, { s: tiles - 26, kind: 'exit', id: to }, { s: tiles - 8, kind: 'welcome', id: to }];
-    for (let s = 60; s < tiles - 60; s += 90) ev.push({ s, kind: 'dist' });
+    const ev = train ? [{ s: 4, kind: 'leave', id: from }, { s: tiles - 10, kind: 'welcome', id: to }] : [{ s: 6, kind: 'leave', id: from }, { s: tiles - 26, kind: 'exit', id: to }, { s: tiles - 8, kind: 'welcome', id: to }];
+    for (let s = 60; s < tiles - 60; s += train ? 180 : 90) ev.push({ s, kind: 'dist' });
     via.forEach(id => { const p = pts.reduce((b, q) => (Math.hypot(q.x - DREAM_AT[id][0], q.y - DREAM_AT[id][1]) < Math.hypot(b.x - DREAM_AT[id][0], b.y - DREAM_AT[id][1]) ? q : b), pts[0]); ev.push({ s: p.u * DRIVE.tilesPerUnit, kind: 'via', id }); });
     const bridges = []; let open = null; pts.forEach(p => { if (p.water && !open) open = p.u; if (!p.water && open !== null) { bridges.push([open, p.u]); open = null; } });
-    return { from, to, legs, pts, via, len, tiles, ev, km: Math.round(len * DRIVE.km), cost: Math.round(len * DRIVE.km * DRIVE.gas) + bridges.length * DRIVE.toll, bridges: bridges.length, seed: from.length * 7 + to.length * 13 };
+    const km = Math.round(len * DRIVE.km), cost = train ? Math.max(DRIVE.trainMin, Math.round(km * DRIVE.trainFare)) : Math.round(km * DRIVE.gas) + bridges.length * DRIVE.toll;
+    return { from, to, legs, pts, via, len, tiles, ev, km, cost, bridges: bridges.length, seed: from.length * 7 + to.length * 13, mode, mins: Math.ceil(tiles / (train ? DRIVE.trainSpeed : DRIVE.speed) / 60) };
   }
   // where on the map, and what's there, at s tiles from the start
   function at(s) {
@@ -91,15 +97,22 @@ const Drive = (() => {
       c.lx += (laneX(c.ln, c.dir) - c.lx) * Math.min(1, dt * 3);
     });
   }
+  // v0.61: on the railway: now and then a train the other way
+  function stepTrains(dt) {
+    const me = R.me;
+    R.cars = R.cars.filter(c => c.s > me.s - 60 && c.s < me.s + 160);
+    if (!R.cars.length && Math.random() < dt * 0.25) R.cars.push({ dir: -1, s: me.s + 150, ln: 0, lx: -DRIVE.track, v: DRIVE.trainSpeed * 0.9, train: true });
+    R.cars.forEach(c => { c.s -= c.v * dt; });
+  }
   const laneFree = (c, ln) => !R.cars.concat([R.me]).some(o => o !== c && o.dir === 1 && o.ln === ln && Math.abs(o.s - c.s) < 5);
   function stepMe(dt) {
-    const me = R.me, ahead = R.cars.filter(o => o.dir === 1 && o.ln === me.ln && o.s > me.s && o.s - me.s < 6).sort((a, b) => a.s - b.s)[0];
-    let v = DRIVE.speed * (R.p.cost ? 1.05 : 1);
+    const me = R.me, ahead = R.train ? null : R.cars.filter(o => o.dir === 1 && o.ln === me.ln && o.s > me.s && o.s - me.s < 6).sort((a, b) => a.s - b.s)[0];
+    let v = R.train ? DRIVE.trainSpeed : DRIVE.speed;
     if (ahead) v = Math.min(v, ahead.v * 0.98, (ahead.s - me.s - 2.6) * 3);
     if (me.s > R.tiles - 30) v = Math.min(v, Math.max(3, (R.tiles - me.s) * 0.6));   // slowing for the exit
     me.v += (Math.max(0, v) - me.v) * Math.min(1, dt * 2.5);
     me.s = Math.min(R.tiles, me.s + me.v * dt);
-    me.lx += (laneX(me.ln) - me.lx) * Math.min(1, dt * 3);
+    if (!R.train) me.lx += (laneX(me.ln) - me.lx) * Math.min(1, dt * 3);
     if (me.s >= R.tiles - 0.01 && R.phase === 'go') arrive();
   }
 
@@ -121,6 +134,7 @@ const Drive = (() => {
         if (col !== sky) poly([iso(...W2(s, -40)), iso(...W2(s + 1.05, -40)), iso(...W2(s + 1.05, 40)), iso(...W2(s, 40))], col);
         if (A.water && rnd(s, 1, R.seed) < 0.25) { const q = iso(...W2(s, (rnd(s, 2, 3) - 0.5) * 60)); line(q.x - 6, q.y, q.x + 6, q.y, 'rgba(255,255,255,.5)', 1.2); }
       }
+      if (R.train) drawRails(s0, s1, z, objs, ts); else
       // the road: shoulders, the two carriageways, the median, the lines
       for (let s = Math.floor(s0); s < s1; s += 1) {
         const A = at(s), q = (off, ds = 0) => iso(...W2(s + ds, off));
@@ -153,7 +167,7 @@ const Drive = (() => {
           if (rnd(s, k + 7, R.seed) < 0.35) continue;
           objs.push({ d: wx + wy, f: () => { PAL = th; if (v < 0.12) drawRock(wx, wy, v * 5); else if (v < 0.25) drawBushWild(wx, wy, v); else drawWildTree(wx, wy, v, ts); } });
         }
-        if (s % 9 === 0) [-1, 1].forEach(d => { const [wx, wy] = W2(s, d * (half + 0.8)); objs.push({ d: wx + wy, f: () => { const a = iso(wx, wy); line(a.x, a.y, a.x, a.y - 30 * z, '#9aa3ad', 1.2 * z); line(a.x, a.y - 30 * z, a.x - d * 6 * z, a.y - 31 * z, '#9aa3ad', 1.2 * z); if (NIGHT > 0.3) glow(a.x - d * 6 * z, a.y - 31 * z, 30 * z, 0.6); } }); });   // street lights
+        if (!R.train && s % 9 === 0) [-1, 1].forEach(d => { const [wx, wy] = W2(s, d * (half + 0.8)); objs.push({ d: wx + wy, f: () => { const a = iso(wx, wy); line(a.x, a.y, a.x, a.y - 30 * z, '#9aa3ad', 1.2 * z); line(a.x, a.y - 30 * z, a.x - d * 6 * z, a.y - 31 * z, '#9aa3ad', 1.2 * z); if (NIGHT > 0.3) glow(a.x - d * 6 * z, a.y - 31 * z, 30 * z, 0.6); } }); });   // street lights
       }
       // the towns you pass and the cities at both ends: a cluster of buildings beside the road
       const townAt = (s, id, side) => { for (let k = 0; k < 7; k++) {   // buildings with rows of windows (taller in a city)
@@ -165,17 +179,45 @@ const Drive = (() => {
       if (me.s > R.tiles - 90) { townAt(R.tiles - 6, R.p.to, 1); townAt(R.tiles + 6, R.p.to, -1); }
       // the signs
       R.p.ev.forEach(E => { if (E.s < s0 || E.s > s1) return; const [wx, wy] = W2(E.s, half + 1.4); objs.push({ d: wx + wy + 0.5, f: () => sign(E, wx, wy, z) }); });
-      // the cars (yours too)
-      R.cars.concat([me]).forEach(c => { if (c.s < s0 || c.s > s1) return; const [wx, wy] = W2(c.s, c.lx); objs.push({ d: wx + wy + 0.6, f: () => { drawCarAng(c.car, wx, wy, c.dir > 0 ? -Math.PI / 2 : Math.PI / 2, ts); if (c === me) { const p = iso(wx, wy); circle(p.x, p.y + 12 * z, 2.5 * z, '#ffd36b'); } } }); });
+      // the cars (yours too) — on the railway, the trains
+      if (R.train) R.cars.concat([me]).forEach(c => trainObjs(c, s0, s1, z, objs));
+      else R.cars.concat([me]).forEach(c => { if (c.s < s0 || c.s > s1) return; const [wx, wy] = W2(c.s, c.lx); objs.push({ d: wx + wy + 0.6, f: () => { drawCarAng(c.car, wx, wy, c.dir > 0 ? -Math.PI / 2 : Math.PI / 2, ts); if (c === me) { const p = iso(wx, wy); circle(p.x, p.y + 12 * z, 2.5 * z, '#ffd36b'); } } }); });
       objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
       if (NIGHT > 0.05) { g.fillStyle = `rgba(16,22,60,${(NIGHT * 0.42).toFixed(3)})`; g.fillRect(0, 0, W, H); drawGlows(); }
     } finally { [ctx, cam, PAL, GLOWS] = saved; }
+  }
+  // v0.61: the railway: ballast, sleepers and two tracks, a pole with the overhead wire every few tiles; the
+  // platforms of the stations you pass
+  function drawRails(s0, s1, z, objs) {
+    const T = DRIVE.track;
+    for (let s = Math.floor(s0); s < s1; s += 1) {
+      const A = at(s), q = (off, ds = 0) => iso(...W2(s + ds, off));
+      poly([q(-T - 1.3), q(-T - 1.3, 1.05), q(T + 1.3, 1.05), q(T + 1.3)], A.water ? '#b9bfc6' : '#a89a86');
+      if (z > 0.25) [-T, T].forEach(c => { for (let k = 0; k < 2; k++) { const a = q(c - 0.55, k * 0.5), b = q(c + 0.55, k * 0.5); line(a.x, a.y, b.x, b.y, '#6b5444', 2.2 * z); } });
+      [-T, T].forEach(c => [-0.36, 0.36].forEach(o => { const a = q(c + o), b = q(c + o, 1.05); line(a.x, a.y, b.x, b.y, '#c9cfd6', 1.3 * z); }));
+      if (s % 7 === 0 && !A.tunnel) { const [wx, wy] = W2(s, T + 1.6); objs.push({ d: wx + wy, f: () => { const a = iso(wx, wy), top = a.y - 38 * z, w2 = iso(...W2(s, -T)); line(a.x, a.y, a.x, top, '#8e959c', 1.6 * z); line(a.x, top + 3 * z, w2.x, w2.y - 33 * z, '#8e959c', 1 * z); } }); }
+    }
+    for (let s = Math.floor(s0); s < s1; s += 1) { const a = iso(...W2(s, T)), b = iso(...W2(s + 1, T)), c2 = iso(...W2(s, -T)), d2 = iso(...W2(s + 1, -T)); line(a.x, a.y - 33 * z, b.x, b.y - 33 * z, 'rgba(60,60,60,.55)', 0.7 * z); line(c2.x, c2.y - 33 * z, d2.x, d2.y - 33 * z, 'rgba(60,60,60,.55)', 0.7 * z); }
+    R.p.ev.forEach(E => { if ((E.kind !== 'via' && E.kind !== 'leave' && E.kind !== 'welcome') || E.s < s0 - 12 || E.s > s1 + 12) return;   // a platform with a roof
+      [-1, 1].forEach(d => { const [wx, wy] = W2(E.s - 6, d * (T + 2.2)); objs.push({ d: wx + wy + 6, f: () => { box(wx - 0.9, wy - 12, 1.8, 12, 4, '#d8d2c4', 0, { top: '#e8e2d4' }); } }); });
+    });
+  }
+  // a train: four carriages one behind the other along its track (white with a coloured band, windows)
+  function trainObjs(c, s0, s1, z, objs) {
+    const n = 4, L = 3.2, col = c === R.me ? '#2f7cff' : '#e5484d', x = c.dir > 0 ? DRIVE.track : -DRIVE.track;
+    for (let k = 0; k < n; k++) {
+      const s = c.dir > 0 ? c.s - k * (L + 0.25) : c.s + k * (L + 0.25);
+      if (s < s0 - 4 || s > s1 + 4) continue;
+      const [wx, wy] = W2(s, x);
+      objs.push({ d: wx + wy + 0.8, f: () => { const b = box(wx - 0.55, wy - L / 2, 1.1, L, 16, '#f4f6f8', 0, { top: '#e1e6ec' });
+        [b.left, b.right].forEach(face => { wallRect(face, 0, 0.02, 0.98, 3, 5.5, col); for (let i = 0; i < 4; i++) wallRect(face, 0, 0.08 + i * 0.23, 0.24 + i * 0.23, 8, 13, NIGHT > 0.3 ? '#ffe39a' : '#3d4a5c'); }); } });
+    }
   }
   // a green board on two posts: what it says depends on the kind
   function sign(E, wx, wy, z) {
     const a = iso(wx, wy), zh = curLang() === 'zh', nmOf = id => nm(COMMUNITIES[id]);
     const left = Math.max(0, Math.round((R.tiles - E.s) / DRIVE.tilesPerUnit * DRIVE.km));
-    const txt = E.kind === 'leave' ? t('dr_leave', { c: nmOf(E.id) }) : E.kind === 'welcome' ? t('dr_welcome', { c: nmOf(E.id) }) : E.kind === 'exit' ? t('dr_exit', { c: nmOf(E.id) })
+    const txt = R.train && (E.kind === 'leave' || E.kind === 'welcome' || E.kind === 'via') ? t('tr_station', { c: nmOf(E.id) }) : E.kind === 'leave' ? t('dr_leave', { c: nmOf(E.id) }) : E.kind === 'welcome' ? t('dr_welcome', { c: nmOf(E.id) }) : E.kind === 'exit' ? t('dr_exit', { c: nmOf(E.id) })
       : E.kind === 'via' ? `${nmOf(E.id)} ↗` : `${nmOf(R.p.to)} ${left} km`;
     const blue = E.kind === 'leave' || E.kind === 'welcome';
     g.font = `900 ${Math.max(8, 10 * z)}px ${UI_FONT}`; const tw = g.measureText(txt).width + 12 * z, h = 18 * z, top = a.y - 46 * z;
@@ -197,8 +239,8 @@ const Drive = (() => {
     m.restore();
   }
   function hudHtml() {
-    const leftKm = Math.max(0, Math.round((R.tiles - R.me.s) / DRIVE.tilesPerUnit * DRIVE.km)), secs = Math.round((R.tiles - R.me.s) / Math.max(1, DRIVE.speed) / mult), p = at(R.me.s);
-    return `<div class="rt-row"><b>${nm(COMMUNITIES[R.p.from])} → ${nm(COMMUNITIES[R.p.to])}</b><span>🛣️ ${p.bridge ? '🌉' : 'I-'}${p.no}</span></div>
+    const leftKm = Math.max(0, Math.round((R.tiles - R.me.s) / DRIVE.tilesPerUnit * DRIVE.km)), secs = Math.round((R.tiles - R.me.s) / Math.max(1, R.train ? DRIVE.trainSpeed : DRIVE.speed) / mult), p = at(R.me.s);
+    return `<div class="rt-row"><b>${R.train ? '🚆 ' : ''}${nm(COMMUNITIES[R.p.from])} → ${nm(COMMUNITIES[R.p.to])}</b>${R.train ? '' : `<span>🛣️ ${p.bridge ? '🌉' : 'I-'}${p.no}</span>`}</div>
       <div class="rt-row small"><span>${t('dr_left', { n: leftKm })}</span><span>⏱️ ${fmtSec(secs)}</span>${p.tunnel ? `<span>🚇 ${t('dr_tunnel')}</span>` : p.water ? `<span>🌊 ${t('dr_bridge')}</span>` : `<span>${t('dmr_' + ((COMMUNITIES[nearest(p.x, p.y)] || {}).region || 'na'))}</span>`}</div>`;
   }
   const fmtSec = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
@@ -227,7 +269,7 @@ const Drive = (() => {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000)); last = ts;
     if (!R) return;
-    let left = dt * mult; while (left > 0) { const d = Math.min(0.05, left); left -= d; if (R.phase === 'go') { stepTraffic(d); stepMe(d); } }
+    let left = dt * mult; while (left > 0) { const d = Math.min(0.05, left); left -= d; if (R.phase === 'go') { if (R.train) stepTrains(d); else stepTraffic(d); stepMe(d); } }
     draw(ts);
     if (Math.floor(ts / 250) !== R.hudAt) { R.hudAt = Math.floor(ts / 250); hud.innerHTML = hudHtml(); drawMini(); }
   }
@@ -235,23 +277,25 @@ const Drive = (() => {
     R.phase = 'end'; Sound.play('chime');
     card.hidden = false;
     card.innerHTML = `<div class="rt-card-in"><div class="big-emoji">${COMMUNITIES[R.p.to].flag}</div><h2>${t('dr_welcome', { c: nm(COMMUNITIES[R.p.to]) })}</h2><p class="muted">${t('dr_done', { km: R.p.km })}</p>
-      <button class="btn primary block" data-rt="in">${R.opts.place ? t('dr_in_place', { p: t('venue_' + R.opts.place) }) : R.p.to === myTown() ? t('dr_in_home') : t('dr_in')}</button></div>`;
+      <button class="btn primary block" data-rt="in">${R.train ? t('tr_off') : R.opts.place ? t('dr_in_place', { p: t('venue_' + R.opts.place) }) : R.p.to === myTown() ? t('dr_in_home') : t('dr_in')}</button></div>`;
   }
   function finish() {
     cancelAnimationFrame(raf); root.hidden = true; Scene.setVisible(true);
     const f = R.done, o = R.opts; R = null; if (f) f(o);
   }
   return {
-    plan,
+    plan, onRail,
     // opts: { from, to, place } → false if there's no way
     open(opts, done) {
-      const p = plan(opts.from, opts.to);
+      const p = plan(opts.from, opts.to, opts.mode || 'car');
       if (!p) return false;
       if (!root) build();
       if (!mapCv) { mapCv = document.createElement('canvas'); drawDreamMap(mapCv); }
       const car = S.me.cars[S.me.car];
-      R = { p, opts, done, pts: p.pts, len: p.len, tiles: p.tiles, phase: 'go', cars: [], hudAt: -1, from: p.from, seed: p.seed, me: { dir: 1, s: 0, ln: 1, lx: laneX(1), v: DRIVE.speed * 0.4, car: { ...car } } };
-      for (let s = 10; s < 110; s += 9) if (Math.random() < 0.6) { const c = spawn(Math.random() < 0.5 ? 1 : -1, s); if (!(c.dir === 1 && c.ln === 1 && s < 16)) R.cars.push(c); }
+      const train = p.mode === 'train';
+      R = { p, opts, done, train, pts: p.pts, len: p.len, tiles: p.tiles, phase: 'go', cars: [], hudAt: -1, from: p.from, seed: p.seed, me: { dir: 1, s: 0, ln: 1, lx: train ? DRIVE.track : laneX(1), v: (train ? DRIVE.trainSpeed : DRIVE.speed) * 0.3, car: car ? { ...car } : { k: 'sedan', color: '#e5484d' } } };
+      root.classList.toggle('train', train);
+      if (!train) for (let s = 10; s < 110; s += 9) if (Math.random() < 0.6) { const c = spawn(Math.random() < 0.5 ? 1 : -1, s); if (!(c.dir === 1 && c.ln === 1 && s < 16)) R.cars.push(c); }
       mult = 1; root.hidden = false; card.hidden = true; chips(); Scene.setVisible(false); resize();
       last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
       return true;

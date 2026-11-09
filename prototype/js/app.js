@@ -1106,7 +1106,9 @@ const SHEETS = {
         <div class="act-grid">${MUSEUM_GIFT.amounts.map(n => `<button class="act-tile" data-act="museumGive" data-arg="${n}" ${S.me.coins >= n ? '' : 'disabled'}><span>💝</span><b>🪙${fmtNum(n)}</b><i>${t('md_fun', { n: MUSEUM_GIFT.fun })}</i></button>`).join('')}</div>`; }
     else if (key === 'museum|mystatue') body = `<p>${museumTier() && museumTier().statue ? t('md_statue_yes', { name: esc(S.me.name || '') }) : t('md_statue_no', { n: fmtNum(MUSEUM_GIFT.tiers[2].at), left: fmtNum(Math.max(0, MUSEUM_GIFT.tiers[2].at - museumGiven())) })}</p>`;
     else if (key === 'museum|shop') body = `<p class="muted small">${t('sp_souvenir_note')}</p><button class="btn primary block gap-top" data-act="souvenirBuy" ${S.me.coins >= VENUE.souvenir.price ? '' : 'disabled'}>🦖 ${t('sp_souvenir_btn', { n: VENUE.souvenir.price })}</button>`;
-    else if (key === 'station|ticket') body = `<p class="muted small">${t('sp_train_note', { f: VENUE.train.fun })}</p><div class="card">${visitorTowns().map(id => `<div class="list-item"><span class="big-emoji">${COMMUNITIES[id].flag}</span><div class="grow"><b>${nm(COMMUNITIES[id])}</b><div class="muted small">${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}</div></div><button class="btn small primary" data-act="trainGo" data-arg="${id}" ${S.me.coins >= VENUE.train.price ? '' : 'disabled'}>🚆 🪙${VENUE.train.price}</button></div>`).join('')}</div>`;
+    else if (key === 'station|ticket') { const from = whereNow(), dests = Object.keys(DREAM_AT).filter(id => id !== from && COMMUNITIES[id] && Drive.plan(from, id, 'train'));   // v0.61: real trains along the railway
+      body = !dests.length ? `<p class="muted">${t('tr_no_here')}</p>` : `<p class="muted small">${t('tr_note')}</p><div class="card">${dests.map(id => { const P = Drive.plan(from, id, 'train');
+        return `<div class="list-item"><span class="big-emoji">${COMMUNITIES[id].flag}</span><div class="grow"><b>${nm(COMMUNITIES[id])}</b> ${isTeamCity(id) ? '🏟️' : ''}<div class="muted small">${P.km} km · ${t('tr_mins', { m: P.mins })} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}</div></div><button class="btn small primary" data-act="trainGo" data-arg="${id}" ${S.me.coins >= P.cost ? '' : 'disabled'}>🚆 🪙${P.cost}</button></div>`; }).join('')}</div>`; }
     else if (key === 'station|board') body = `<div class="card">${Scene.trainBoard().slice(1).map(r => `<div class="list-item"><b>🚆 ${esc(r)}</b></div>`).join('')}</div><p class="muted small">${t('sp_board_note')}</p>`;
     else if (key === 'station|watch') body = once('trains', 'trains', `🚆 ${t('sp_trains_btn', { n: VENUE.trains.fun })}`);
     else if (key === 'suite|bed') body = once('bed', 'bed', `😴 ${t('sp_bed_btn', { n: VENUE.bed.fun })}`);
@@ -1798,7 +1800,8 @@ const ACT = {
     syncView();
     // v0.19: "straight there" goes the same way (by car if you have one), it just skips the time on the road
     const pick = UI.tripCar != null && !S.carAt && S.me.cars[UI.tripCar] ? UI.tripCar : null; UI.tripCar = null;
-    const car = S.me.cars[pick ?? S.me.car], useCar = !!car && (how === 'car' || how === 'now'), kind = !useCar ? 'walk' : CARS[car.k].kind === 'two' ? 'bike' : 'car';
+    const car = S.me.cars[pick ?? S.me.car], transit = how === 'bus' || how === 'metro', useCar = !transit && !!car && (how === 'car' || how === 'now') && !(S.trav && (!S.carAt || S.carAt.town !== VIEW_TOWN)), kind = transit ? how : !useCar ? 'walk' : CARS[car.k].kind === 'two' ? 'bike' : 'car';   // (v0.61: in a city you came to by train your car isn't there)
+    if (transit) { if (S.me.coins < TRANSIT[how]) { Sound.play('oops'); return snack(t('snack_poor')); } S.me.coins -= TRANSIT[how]; snack(`${how === 'bus' ? '🚌' : '🚇'} ${t('go_fare', { n: TRANSIT[how] })}`); }   // v0.61: the fare
     UI.tripTo = T.short;
     if (a.place === 'market') { const n = loadCargo(useCar ? 'car' : 'walk'); if (how !== 'now') snack(n ? `📦 ${t('mk_loaded', { n, cap: carryCap(useCar ? 'car' : 'walk') })}` : `📦 ${t('mk_nothing')}`); }
     Scene.travel(T.pt, kind, useCar ? car : null, arrive, a.id || null, a.place || null, useCar && pick !== null ? pick : undefined);
@@ -1878,13 +1881,16 @@ const ACT = {
   zooPlushBuy(k) { const r = buyZooPlush(k); if (r === 'ok') { Sound.play('collect'); snack(`${{ plushlion: '🦁', plushelephant: '🐘', plushgiraffe: '🦒', plushpenguin: '🐧' }[k]} ${t('sp_zooplush_ok', { name: nm(FURN[k]) })}`); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },   // v0.42
   souvenirBuy() { if (buySouvenir() === 'ok') { Sound.play('collect'); snack(`🦖 ${t('sp_souvenir_ok')}`); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },
   roomBook() { const r = bookRoom(); if (r === 'ok') { Sound.play('coins'); snack(`🔑 ${t('room_booked', { h: VENUE.room.checkout })}`); save(); } else if (r === 'poor') { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },
-  trainGo(town) {   // ride the train to look round a town nearby
+  trainGo(town) {   // v0.61: a ticket to another city: walk to the platform, ride the train (its own screen), get off there
     if (!COMMUNITIES[town] || UI.inVenue !== 'station') return;
-    if (trainRide() !== 'ok') { Sound.play('oops'); return snack(t('snack_poor')); }
-    closeSheet(); save(); Sound.play('chime');
-    S.away = { town, until: now() + SPECIAL.visitH * HOUR };   // v0.40: while you're there (a few hours) you can buy its specialties
-    Scene.shopGoTo('ticket', () => { UI.inVenue = null; UI.spotRes = null; ACT.worldVisit(town); snack(`🚆 ${t('sp_train_arrived', { town: nm(COMMUNITIES[town]) })} · 🧺 ${t('special_can_buy')}`); refresh(); });
+    const from = whereNow(), P = Drive.plan(from, town, 'train');
+    if (!P) return;
+    if (S.me.coins < P.cost) { Sound.play('oops'); return snack(t('snack_poor')); }
+    S.me.coins -= P.cost; if (onceToday('train')) addNeed('fun', VENUE.train.fun); closeSheet(); save(); Sound.play('chime');
+    Scene.shopGoTo('ticket', () => { UI.inVenue = null; UI.spotRes = null; Drive.open({ from, to: town, mode: 'train' }, o => trainArrived(o)); });
   },
+  goWork(key) { closeSheet(); if (S.trav) return snack(t('dr_away', { c: nm(COMMUNITIES[S.trav.town]) })); setTab('town'); openSheet('go', { place: key }); },   // v0.61
+  goStation() { closeSheet(); const here = whereNow(); if (here !== myTown()) { UI.tab = 'world'; UI.wtown = here; } else UI.tab = 'town'; syncView(); openSheet('go', { place: 'station' }); },   // v0.61
   gameGo(arg) {   // bowling or a race with someone: pay, walk over, play
     if (hungry()) { Sound.play('oops'); return snack(`🍔 ${t('too_hungry_play')}`); }   // v0.44: eat first
     const [k, id] = arg.split('|'), G = VENUE_GAMES[k];
@@ -2980,15 +2986,27 @@ const whereNow = () => (S.trav && COMMUNITIES[S.trav.town] ? S.trav.town : myTow
 function driveRow(id) {
   const from = whereNow();
   if (id === from) return S.trav ? `<p class="muted small gap-top">📍 ${t('dr_you_here')}</p>` : '';
-  const P = Drive.plan(from, id), car = S.me.cars[S.me.car], two = car && CARS[car.k].kind === 'two';
+  const P = Drive.plan(from, id), car = S.me.cars[S.me.car], two = car && CARS[car.k].kind === 'two', carTown = S.carAt && S.carAt.town ? S.carAt.town : myTown();
   if (!P) return '';
-  const can = car && !two && S.me.coins >= P.cost, why = !car ? t('dr_no_car') : two ? t('dr_two') : S.me.coins < P.cost ? t('snack_poor') : '';
+  const can = car && !two && S.me.coins >= P.cost && carTown === from, why = !car ? t('dr_no_car') : two ? t('dr_two') : carTown !== from ? t('dr_car_in', { c: nm(COMMUNITIES[carTown]) }) : S.me.coins < P.cost ? t('snack_poor') : '';
+  const TP = Drive.plan(from, id, 'train');   // v0.61: the train, from the station
+  const train = TP ? `<div class="row gap-top"><span class="grow small">🚆 ${t('tr_info', { km: TP.km, n: TP.cost, m: TP.mins })}</span><button class="btn small" data-act="goStation">${t('tr_go_station')}</button></div>` : `<p class="muted small">🚆 ${t(Drive.onRail(from) ? 'tr_no_there' : 'tr_no_here')}</p>`;
   const btn = (place, label) => `<button class="btn ${place ? '' : 'primary'} grow" data-act="driveTo" data-arg="${id}|${place || ''}" ${can ? '' : 'disabled'}>${label}</button>`;
   const games = isTeamCity(id) && id !== myTown() ? SPORT_KEYS.flatMap(sp => todayGames(sp).filter(G => G.h === arTeamIn(sp, id) && G.state !== 'done')) : [];
   return `<div class="card drive-card"><b>🚗 ${id === myTown() ? t('dr_home_title') : t('dr_title', { c: nm(COMMUNITIES[id]) })}</b>
     <div class="muted small">${t('dr_info', { km: P.km, via: P.legs.map(L => (L.e[4] === 'bridge' ? '🌉' : 'I-') + L.e[2]).join(' → '), m: Math.ceil(P.len * DRIVE.tilesPerUnit / DRIVE.speed / 60), n: P.cost })}</div>
     <div class="row gap-top">${btn('', id === myTown() ? `🏡 ${t('dr_go_home')}` : `🚗 ${t('dr_go')}`)}${games.length ? btn(AR_INDOOR.includes(games[0].sp) ? 'arena' : 'stadium', `${LEAGUES[games[0].sp].e} ${t('dr_go_game', { h: fmtHM(games[0].start) })}`) : ''}</div>
-    ${why ? `<p class="muted small">${why}</p>` : ''}<p class="muted small">🚆 ✈️ ${t('dr_later')}</p></div>`;
+    ${why ? `<p class="muted small">${why}</p>` : ''}${train}<p class="muted small">✈️ ${t('dr_later')}</p></div>`;
+}
+// v0.61: off the train: you're in that city's station (your car stays where you left it); a few hours to buy its
+// specialties too (v0.40). Home: in your own station.
+function trainArrived(o) {
+  const to = o.to, L = layoutOf(to), st = (L.stores || []).find(x => x[0] === 'station'), pt = st ? storeGeo(st).bay : L.places[0];
+  if (to === myTown()) { S.trav = null; S.away = null; UI.tab = 'town'; UI.wtown = null; }
+  else { S.trav = { town: to, at: now(), by: 'train' }; S.away = { town: to, until: now() + SPECIAL.visitH * HOUR }; UI.tab = 'world'; UI.wtown = to; }
+  UI.visit = null; UI.visitInside = false; setLevel(0); syncView();
+  Scene.arriveAt(pt, 'station'); save(); refresh();
+  setTimeout(() => { ACT.enterVenue('station'); snack(`🚆 ${t('tr_arrived', { c: nm(COMMUNITIES[to]) })}`); refresh(); }, 300);
 }
 // you've driven there: parked at the stadium / arena (or the main car park) and on foot; home: back in your own drive
 function driveArrived(o) {
@@ -3049,8 +3067,11 @@ function goTiles(T) {
   const chooser = pick !== null ? `<div class="sec-title">${t('go_which_car')}</div><div class="car-pick">${S.me.cars.map((c, i) => `<button class="car-chip ${i === pick ? 'on' : ''}" data-act="pickCar" data-arg="${i}">${thumbImg('car', c.k, { color: c.color }, 96, 64, 'thumb xs')}<span>${nm(CARS[c.k])}</span></button>`).join('')}</div>` : '';
   const tile = (how, ic, label, sub, on = true) => `<button class="act-tile" data-act="travel" data-arg="${how}" ${on ? '' : 'disabled'}><span>${ic}</span><b>${label}</b><i>${sub}</i></button>`;
   const secs = how => t('go_secs', { n: Scene.tripTime(T.pt, how, T.dest, T.place, pick ?? undefined) });
-  return `${chooser}<div class="act-grid three">
+  const TR = Scene.transit(), rush = rushNow();   // v0.61: buses everywhere, the subway in the team cities
+  return `${chooser}${rush ? `<p class="muted small">🚦 ${t('go_rush')}</p>` : ''}<div class="act-grid three">
     ${tile('walk', '🚶', t('go_walk'), secs('walk'))}
+    ${TR.bus > 1 ? tile('bus', '🚌', t('go_bus', { n: TRANSIT.bus }), secs('bus'), S.me.coins >= TRANSIT.bus) : ''}
+    ${TR.metro > 1 ? tile('metro', '🚇', t('go_metro', { n: TRANSIT.metro }), secs('metro'), S.me.coins >= TRANSIT.metro) : ''}
     ${car ? tile('car', two ? '🚲' : '🚗', t(two ? 'go_ride' : 'go_drive'), secs(two ? 'bike' : 'car')) : tile('car', '🚗', t('go_drive'), t('go_no_car'), false)}
     ${tile('now', '⚡', t('go_now'), t('go_now_sub'))}
   </div>`;
@@ -3104,7 +3125,8 @@ function jobSection(key) {
   else if (inShift(key)) body = `<button class="btn primary block" data-act="jobStart" data-arg="${key}">💼 ${t('job_start', { to: J.to, n: Math.round((shiftEnd(key) - now()) / HOUR * jobWage(key)) })}</button>`;
   else body = `<p class="muted">${t('job_closed', { from: J.from, to: J.to })}</p>`;
   const rel = mine ? `<div class="muted small">${t('job_rel', { n: S.job.rel })}${next ? ' · ' + t('job_next', { rank: nm(next), n: next.at }) : ''}</div><div class="bar warm"><i style="width:${S.job.rel}%"></i></div>` : '';
-  return `<div class="card job-card">${head}${rel}${body}${mine ? workmates(key) : ''}</div>`;
+  const commute = mine && !w && Scene.here() !== key ? `<button class="btn block gap-top" data-act="goWork" data-arg="${key}">🚌 ${t('job_commute')}</button>` : '';   // v0.61: how to get to work (bus, subway, car, on foot)
+  return `<div class="card job-card">${head}${rel}${body}${commute}${mine ? workmates(key) : ''}</div>`;
 }
 function placeBody(key) {
   if (key === 'school') {   // v0.22: evening classes

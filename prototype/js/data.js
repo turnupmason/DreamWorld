@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.60.0';
+const VERSION = '0.61.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -222,7 +222,11 @@ function zoneLayout(L, town, home) {
 const LAND = { parcel: 600, grow: 1.35, move: 500, refund: 0.5 };
 // Going somewhere in town (v0.12): tiles per second on foot, by bike, by car (sped up so trips take seconds).
 // Cars and bikes on the expressway go `highway` times faster (v0.16); on foot you only use local streets.
-const TRIP_SPEED = { walk: 3, bike: 6, car: 10, highway: 2.5 };
+const TRIP_SPEED = { walk: 3, bike: 6, car: 10, highway: 2.5, bus: 6.5, metro: 18 };   // v0.61: + the bus and the subway
+// v0.61 (Mason #30: "take the subway and the bus"): fares (coins, like a US city's), how far apart bus stops are along
+// a road (tiles), the most places a city's subway line stops at, and how much slower driving is in the rush hour
+// (the bus too: it's on the same roads; the subway isn't)
+const TRANSIT = { bus: 3, metro: 3, busEvery: 24, metroStops: 5, rushSlow: 1.5 };
 // v0.47: how fast each kind of car goes, compared with the traffic on its road (Mason #28: "every car its own speed:
 // sports cars fast, lorries slow"); your own car too (a faster car gets you there sooner)
 const CAR_PACE = { supercar: 1.3, champcar: 1.3, sports: 1.22, muscle: 1.18, convertible: 1.1, luxury: 1.06, sedan: 1, suv: 0.97, jeep: 0.95, mini: 0.95, minivan: 0.93, pickup: 0.92, boxtruck: 0.74, tractor: 0.5 };
@@ -899,7 +903,9 @@ const DREAM_PEAKS = [[215, 120], [250, 140], [180, 130], [300, 600], [330, 660],
 // km: kilometres a map unit; gas: coins a km; toll: coins a sea bridge; fast: the speed-up choices; laneW / median:
 // the road (three lanes each way); traffic: cars a tile (×near a city, ×in the rush hour); tunnel: how near a
 // mountain the road goes through it.
-const DRIVE = { tilesPerUnit: 3.5, speed: 16, km: 1, gas: 0.12, toll: 6, fast: [1, 3, 8], laneW: 1.15, median: 0.45, traffic: 0.05, city: 2, rush: 1.6, tunnel: 26 };
+// v0.61: trains: trainSpeed (tiles a second, twice a car), trainFare (coins a km, under gas), trainMin (the cheapest
+// ticket), track (each track's distance from the middle)
+const DRIVE = { trainSpeed: 32, trainFare: 0.07, trainMin: 8, track: 1.3, tilesPerUnit: 3.5, speed: 16, km: 1, gas: 0.12, toll: 6, fast: [1, 3, 8], laneW: 1.15, median: 0.45, traffic: 0.05, city: 2, rush: 1.6, tunnel: 26 };
 // your nearest team city (your teams, if your town hasn't got its own)
 function homeCity(t) { if (isTeamCity(t)) return t; const [x, y] = DREAM_AT[t] || [0, 0]; return TEAM_CITIES.slice().sort((a, b) => Math.hypot(DREAM_AT[a][0] - x, DREAM_AT[a][1] - y) - Math.hypot(DREAM_AT[b][0] - x, DREAM_AT[b][1] - y))[0]; }
 // v0.59: moving the whole town needs everyone who lives in it to say yes. Each one answers after `wait` seconds;

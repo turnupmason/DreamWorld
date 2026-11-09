@@ -247,6 +247,7 @@ const CAR_SPEC = {
   champcar:    { len: 2.1, wid: 1.02, sleek: 'super' },
   minivan:     { len: 2.1, wid: 0.95, body: 10,  cab: [0.25, 1.6],  cabH: 12 },
   boxtruck:    { len: 2.4, wid: 1.0,  body: 7,   cab: [1.6, 0.72],  cabH: 12, cargo: [0.05, 1.5, 24] },
+  bus:         { len: 3.4, wid: 1.0,  body: 8,   cab: [0.1, 3.2],   cabH: 13 },   // v0.61: the town bus
 };
 function carWheel(face, base, u, big) {
   const p = wallPt(face, base, u, 0), z = cam.z, k = big ? 1.35 : 1;

@@ -1025,3 +1025,4 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 .rt-card[hidden] { display: none; }
 .rt-card-in { background: var(--card, #fffdf8); border-radius: 22px; padding: 22px; width: min(320px, 86%); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
 .rt-card-in .big-emoji { font-size: 40px; }
+.rt.train .rt-btn { visibility: hidden; }   /* v0.61: no lanes on a train */

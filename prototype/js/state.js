@@ -256,6 +256,8 @@ const zoneKeyOf = id => { const l = lotOf(id); return (l && (streetsOf(townOfLot
 const zoneOf = id => ZONES[zoneKeyOf(id)];
 const houseLot = i => HOUSE_LOT[(HOUSES[i] || {}).id] || CORE_PARCELS;   // parcels a house needs
 const streetsOf = (t = VIEW_TOWN) => layoutOf(t).streets;
+// v0.61: the rush hour in the town you're looking at (more cars, slower roads)
+function rushNow() { const [h, m] = localHM(VIEW_TOWN), hr = h + m / 60; return RUSH.hours.some(([a, b]) => hr >= a && hr < b); }
 function myTown() { return townOfLot(S && S.lots.find(l => l.id === 'me')); }
 function townOf(id) { const l = lotOf(id); return l ? townOfLot(l) : HOME_TOWN; }
 function setViewTown(t) { VIEW_TOWN = COMMUNITIES[t] ? t : HOME_TOWN; ensureNPCs(VIEW_TOWN); }
