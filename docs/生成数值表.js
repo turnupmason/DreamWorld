@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, CENTRE_NEW, TOWER_STOREYS, BUILDING_FLOORS, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY, STATES, COUNTIES, TERRAINS, SPECIALTIES, FOLK_NAMES, TOWNSFOLK, SPECIAL})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY, STATES, COUNTIES, TERRAINS, SPECIALTIES, FOLK_NAMES, TOWNSFOLK, SPECIAL, CONTEST_FISH, SONGS})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -236,6 +236,27 @@ table(['镇', '州 / 省', '县', '地形', '物价', '工资', '特产（美元
 P('');
 P(`特产：在本县的超市（或者坐火车来的 ${D.SPECIAL.visitH} 小时里）买；当场吃加饱腹和娱乐，带走的可以送人（关系额外 +${D.SPECIAL.giftUp}）或者按 ${D.SPECIAL.sellBack * 100}% 卖掉。一共 ${Object.keys(D.SPECIALTIES).length} 种，买过的记进收集。吃喝玩的价钱（店里、餐厅、酒吧、商场、保龄球……）= 美东基础价 × 所在县的物价；打工时薪 = 基础时薪 × 你住的县的工资。`);
 P('');
+
+// v0.41: the amusement park and four more minigames
+P('### v0.41 游乐园和四个小游戏');
+P('');
+{ const V3 = D.VENUE, VG = D.VENUE_GAMES;
+  table(['事情', '花多少（美东价，按县物价乘）', '多久', '得到'], [
+    ['游乐园：摩天轮（你坐在车厢里转一圈）', `🪙${V3.wheel.base_price || V3.wheel.price}`, `${V3.wheel.sec} 秒`, `娱乐 +${V3.wheel.fun}`],
+    ['游乐园：过山车', `🪙${V3.coaster.base_price || V3.coaster.price}`, `${V3.coaster.sec} 秒`, `娱乐 +${V3.coaster.fun}`],
+    ['游乐园：旋转木马', `🪙${V3.carousel.base_price || V3.carousel.price}`, `${V3.carousel.sec} 秒`, `娱乐 +${V3.carousel.fun}`],
+    ['游乐园：碰碰车', `🪙${V3.bumper.base_price || V3.bumper.price}`, `${V3.bumper.sec} 秒`, `娱乐 +${V3.bumper.fun}`],
+    ['游乐园：棉花糖', `🪙${V3.candy.base_price || V3.candy.price}`, '马上', `饱腹 +${V3.candy.hunger}，娱乐 +${V3.candy.fun}`],
+    [`迷你高尔夫（游乐园，${VG.golf.holes} 个洞，每洞最多 ${VG.golf.max} 杆，总杆数少的赢）`, `🪙${VG.golf.base_price || VG.golf.price} 一场`, '一局', '和公园球赛一样（今天第一局娱乐 +20、社交 +10、关系 +4）'],
+    ['卡拉OK（游乐园的小舞台，你唱前半首、对方唱后半首，点得准的赢）', '免费', '一首', '同上'],
+    [`抓娃娃（保龄球馆和商场，每人 ${VG.claw.grabs} 次，抓得多的赢；抓到的娃娃归你）`, `🪙${VG.claw.base_price || VG.claw.price} 一局`, '一局', '同上，加上抓到的娃娃（集齐 6 个送超大泰迪熊）'],
+    [`钓鱼比赛（湖边，${VG.fishing.secs} 秒，钓上来的鱼总重最多的赢）`, '免费', `${VG.fishing.secs} 秒`, '同上，加上钓到的鱼（每条一份「鱼」进仓库）'],
+  ]);
+  P('');
+  table(['钓鱼比赛里会上钩的', '几率', '重量'], D.CONTEST_FISH.map(F => [`${F.e} ${F.zh} (${F.en})`, Math.round(F.p * 100) + '%', F.kg[1] ? `${F.kg[0]}–${F.kg[1]} kg（甩得越远越大）` : '0']));
+  P('');
+  P(`卡拉OK的歌（古老的儿歌，谁都可以唱）：${D.SONGS.map(g => `${g.e} ${g.zh} (${g.en})`).join('、')}。`);
+  P(''); }
 P('');
 P('## 手机：银行、贷款、股票（v0.26，v0.35 改成真实的银行）');
 P('');

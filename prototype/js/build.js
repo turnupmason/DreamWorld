@@ -2028,7 +2028,8 @@ function drawStore(st, ts) {
     wallRect(F, 0, 0.35, 0.65, 0, 18, '#7a3a30', '#fff', 1.4);
     wallLine(F, 0, 0.35, 0, 0.65, 18, '#fff', 1); wallLine(F, 0, 0.65, 0, 0.35, 18, '#fff', 1);
     gable(x + 0.2, y + 0.2, w - 0.4, d - 0.4, wh, 14, S2.roof, shade(S2.roof, 0.15));
-  } else if (CIVIC_WH[k]) b = drawCivic(k, G, x, y, w, d, wh, ts);   // v0.38: the new district's buildings
+  } else if (k === 'amuse') b = drawAmusement(G, x, y, w, d, ts);   // v0.41: rides in the open
+  else if (CIVIC_WH[k]) b = drawCivic(k, G, x, y, w, d, wh, ts);   // v0.38: the new district's buildings
   else {
     b = box(x, y, w, d, wh, S2.wall);
     wallRect(b.left, 0, 0, 1, 0, 3, shade(S2.wall, -0.3)); wallRect(b.right, 0, 0, 1, 0, 3, shade(S2.wall, -0.25));
@@ -2096,10 +2097,120 @@ function storeShow(st, objs, ts) {
   if (k === 'realty' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); line(p.x, p.y, p.x, p.y - 16 * z, '#8a5a36', 1.6 * z); rrect(p.x - 8 * z, p.y - 20 * z, 16 * z, 8 * z, 1.5 * z, '#fffaf0', '#e5484d', 1 * z); }); }
 }
 
+// ---------- v0.41: the amusement park's rides ----------
+// Drawn the same in town (from outside the fence) and inside the park. World coordinates; sc scales them (smaller in
+// town). rider: a look to put on the ride (you, while you ride it).
+const RIDE_COLS = ['#e5484d', '#f2c230', '#38a3e0', '#34b27b', '#a46ef0', '#ec6aa8', '#f28c28', '#2f6fb2'];
+function rideRider(x, y, z, look, ts) { drawPerson(x, y, z, { look, face: 1, view: 'front', energy: 'great', ts, seed: 3, pose: 'sit', seatH: 0, wave: Math.floor(ts / 600) % 2 === 0 }); }
+// a Ferris wheel standing at (px, py), facing you; R: its radius (px at zoom 1)
+function ferrisWheel(px, py, R, ts, rider, sc = 1) {
+  const z = cam.z * sc, b = iso(px, py), r = R * z, c = { x: b.x, y: b.y - r - 16 * z }, ang = ts / 9000;
+  ellipse(b.x, b.y, r * 0.75, r * 0.2, 'rgba(0,0,0,.12)');
+  [-1, 1].forEach(k => { line(b.x + k * r * 0.6, b.y, c.x, c.y, '#cfc9bd', 4 * z); line(b.x + k * r * 0.6, b.y - 2 * z, c.x, c.y, '#ebe6dc', 2 * z); });
+  circle(c.x, c.y, r, null, '#ebe6dc', 3 * z); circle(c.x, c.y, r * 0.9, null, '#d6d0c4', 1.4 * z);
+  for (let i = 0; i < 16; i++) { const a = ang + i / 16 * Math.PI * 2; line(c.x, c.y, c.x + Math.cos(a) * r, c.y + Math.sin(a) * r, 'rgba(235,230,220,.85)', 1 * z); }
+  circle(c.x, c.y, 5 * z, '#e5484d', '#ffffff', 1.2 * z);
+  for (let i = 0; i < 8; i++) {
+    const a = ang + i / 8 * Math.PI * 2, gx = c.x + Math.cos(a) * r, gy = c.y + Math.sin(a) * r, col = RIDE_COLS[i];
+    line(gx, gy, gx, gy + 4 * z, '#8a9099', 1.2 * z);
+    rrect(gx - 7 * z, gy + 3 * z, 14 * z, 12 * z, 4 * z, col, shade(col, -0.3), 0.7 * z);
+    rrect(gx - 5.5 * z, gy + 5 * z, 11 * z, 4.5 * z, 1.2 * z, 'rgba(220,240,255,.9)');
+    if (i === 0 && rider) { rideRider(gx, gy + 15 * z, z * 0.42, rider, ts); rrect(gx - 7 * z, gy + 10 * z, 14 * z, 5 * z, 2 * z, col); }
+    if (NIGHT > 0.3) glow(gx, gy + 9 * z, 10 * z, 0.4);
+  }
+  if (NIGHT > 0.3) for (let i = 0; i < 24; i++) { const a = ang + i / 24 * Math.PI * 2, q = { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r }; circle(q.x, q.y, 1.6 * z, RIDE_COLS[i % 8]); glow(q.x, q.y, 6 * z, 0.4); }
+}
+// a roller coaster: a loop of track round (cx, cy) (rx, ry tiles), up on posts with a big hill and a dip; a train of
+// three cars going round
+function coasterH(u) { return 14 + 34 * Math.pow(Math.max(0, Math.sin(u)), 2) + 12 * Math.pow(Math.sin(2 * u + 0.8), 2); }
+function coaster(cx, cy, rx, ry, ts, rider, sc = 1) {
+  const z = cam.z * sc, n = 64, pt = u => { const p = iso(cx + Math.cos(u) * rx, cy + Math.sin(u) * ry); return { g: p, t: up(p, coasterH(u) * z) }; };
+  const pts = Array.from({ length: n + 1 }, (_, i) => pt(i / n * Math.PI * 2));
+  for (let i = 0; i < n; i += 4) { const q = pts[i]; line(q.g.x, q.g.y, q.t.x, q.t.y, '#c9c3b7', 1.6 * z); if (i % 8 === 0) line(q.g.x - 3 * z, q.g.y, q.t.x, q.t.y, '#d6d0c4', 1 * z); }
+  const rail = (back) => { ctx.beginPath(); pts.forEach((q, i) => { const front = Math.sin(i / n * Math.PI * 2) > 0; if (front === back) { ctx.moveTo(q.t.x, q.t.y); return; } i ? ctx.lineTo(q.t.x, q.t.y) : ctx.moveTo(q.t.x, q.t.y); }); ctx.strokeStyle = '#e5484d'; ctx.lineWidth = 3.4 * z; ctx.lineJoin = 'round'; ctx.stroke(); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1 * z; ctx.stroke(); };
+  rail(true);
+  const u0 = (ts / 1000 * 0.9) % (Math.PI * 2);
+  for (let k = 0; k < 3; k++) {
+    const u = u0 - k * 0.16, q = pt(u), q2 = pt(u + 0.05), ang = Math.atan2(q2.t.y - q.t.y, q2.t.x - q.t.x), col = ['#f2c230', '#38a3e0', '#34b27b'][k];
+    ctx.save(); ctx.translate(q.t.x, q.t.y); ctx.rotate(ang);
+    rrect(-7 * z, -7 * z, 14 * z, 7 * z, 2 * z, col, shade(col, -0.35), 0.6 * z);
+    if (k === 0 && rider) { ctx.rotate(-ang); rideRider(0, -3 * z, z * 0.42, rider, ts); ctx.rotate(ang); rrect(-7 * z, -4 * z, 14 * z, 4 * z, 1.5 * z, col); }
+    else { circle(-2.5 * z, -9 * z, 2.3 * z, '#f3c59f'); circle(2.8 * z, -9 * z, 2.3 * z, '#d39a6c'); }
+    ctx.restore();
+  }
+  rail(false);
+}
+// a carousel at (px, py), r tiles round: a turning floor of horses going up and down under a striped roof
+function carousel(px, py, r, ts, rider, sc = 1) {
+  const z = cam.z * sc, c = iso(px, py), rx = r * 34 * z, ry = r * 17 * z, H = 46 * z, ang = ts / 2400;
+  ellipse(c.x, c.y + 3 * z, rx * 1.05, ry * 1.05, 'rgba(0,0,0,.14)');
+  ellipse(c.x, c.y + 2 * z, rx, ry, '#c99a6b'); ellipse(c.x, c.y, rx, ry, '#f4ead8', '#c9893a', 1.2 * z);
+  const horses = Array.from({ length: 6 }, (_, i) => { const a = ang + i / 6 * Math.PI * 2; return { i, a, x: c.x + Math.cos(a) * rx * 0.72, y: c.y + Math.sin(a) * ry * 0.72, bob: Math.sin(ts / 400 + i * 1.7) * 4 * z }; }).sort((p, q) => p.y - q.y);
+  const horse = h => {
+    line(h.x, h.y, h.x, h.y - H, '#e8c66a', 1.4 * z);
+    const hy = h.y - 16 * z + h.bob, col = ['#ffffff', '#f2c6d8', '#c9e6f7', '#ffffff', '#f7e3a8', '#d8f0c8'][h.i], dir = Math.cos(h.a) > 0 ? -1 : 1;
+    ellipse(h.x, hy, 9 * z, 4.5 * z, col, '#8a6a4a', 0.6 * z);
+    ellipse(h.x + dir * 8 * z, hy - 5 * z, 3.2 * z, 4.5 * z, col, '#8a6a4a', 0.6 * z);
+    line(h.x - 5 * z, hy + 3 * z, h.x - 6 * z, hy + 9 * z, '#8a6a4a', 1.2 * z); line(h.x + 5 * z, hy + 3 * z, h.x + 6 * z, hy + 9 * z, '#8a6a4a', 1.2 * z);
+    if (h.i === 0 && rider) rideRider(h.x, hy + 2 * z, z * 0.45, rider, ts);
+  };
+  horses.filter(h => h.y < c.y).forEach(horse);
+  rrect(c.x - 4 * z, c.y - H, 8 * z, H, 2 * z, '#e8c66a');
+  horses.filter(h => h.y >= c.y).forEach(horse);
+  const top = c.y - H, apex = { x: c.x, y: top - 22 * z };
+  for (let k = 0; k < 12; k++) {   // the striped roof
+    const a0 = k / 12 * Math.PI * 2 + ang * 0.3, a1 = (k + 1) / 12 * Math.PI * 2 + ang * 0.3;
+    if (Math.sin((a0 + a1) / 2) < -0.2) continue;
+    poly([apex, { x: c.x + Math.cos(a0) * rx * 1.08, y: top + Math.sin(a0) * ry * 1.08 }, { x: c.x + Math.cos(a1) * rx * 1.08, y: top + Math.sin(a1) * ry * 1.08 }], k % 2 ? '#ffffff' : '#e5484d');
+  }
+  for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; if (Math.sin(a) < -0.3) continue; const q = { x: c.x + Math.cos(a) * rx * 1.08, y: top + Math.sin(a) * ry * 1.08 }; circle(q.x, q.y + 2 * z, 2.2 * z, k % 2 ? '#f2c230' : '#e5484d'); if (NIGHT > 0.3) glow(q.x, q.y, 6 * z, 0.4); }
+  circle(apex.x, apex.y, 3 * z, '#f2c230');
+}
+// bumper cars: a fenced floor (x, y, w, d tiles) with a net roof on poles; little cars bumping round
+function bumperCars(x, y, w, d, ts, rider, sc = 1) {
+  const z = cam.z * sc;
+  flatRect(x, y, w, d, '#5b6470'); flatRect(x + 0.15, y + 0.15, w - 0.3, d - 0.3, '#6c7682');
+  const cars = [0, 1, 2, 3].map(i => { const t = ts / 1000 * (0.55 + i * 0.12) + i * 1.9; return { i, x: x + 0.6 + (w - 1.2) * (0.5 + 0.5 * Math.sin(t * 1.3 + i)), y: y + 0.6 + (d - 1.2) * (0.5 + 0.5 * Math.sin(t * 0.9 + i * 2.1)) }; }).sort((a, b) => a.x + a.y - b.x - b.y);
+  cars.forEach(cr => {
+    const p = iso(cr.x, cr.y), col = RIDE_COLS[cr.i * 2];
+    line(p.x, p.y - 10 * z, p.x, p.y - 34 * z, '#8a9099', 1 * z);
+    ellipse(p.x, p.y, 13 * z, 7 * z, '#2d2d2d'); ellipse(p.x, p.y - 4 * z, 12 * z, 6.5 * z, col, shade(col, -0.3), 0.8 * z);
+    if (cr.i === 0 && rider) rideRider(p.x, p.y - 2 * z, z * 0.45, rider, ts);
+    else { circle(p.x, p.y - 12 * z, 3.3 * z, ['#f3c59f', '#d39a6c', '#9a6440', '#ffe0c4'][cr.i]); }
+  });
+  [[x, y], [x + w, y], [x, y + d], [x + w, y + d]].forEach(([px, py]) => { const a = iso(px, py), b = up(a, 34 * z); line(a.x, a.y, b.x, b.y, '#c9cfd6', 1.6 * z); });
+  const T = (px, py) => up(iso(px, py), 34 * z);
+  poly([T(x, y), T(x + w, y), T(x + w, y + d), T(x, y + d)], 'rgba(60,70,90,.12)', 'rgba(200,205,215,.8)', 1 * z);
+  for (let k = 1; k < 4; k++) { const a = T(x + w * k / 4, y), b = T(x + w * k / 4, y + d); line(a.x, a.y, b.x, b.y, 'rgba(200,205,215,.6)', 0.6 * z); }
+  if (NIGHT > 0.3) for (let k = 0; k < 4; k++) { const q = T(x + w * (k + 0.5) / 4, y + d / 2); glow(q.x, q.y + 6 * z, 18 * z, 0.5); }
+}
+// the park seen from the town: a fenced lawn with paths, the wheel, the coaster, the carousel, the bumper cars and a
+// gateway with the park's name. G: storeGeo; returns its box like box() does.
+function drawAmusement(G, x, y, w, d, ts) {
+  const z = cam.z, sc = 0.55, along = w >= d, at = (fx, fy) => (along ? [x + fx * w, y + fy * d] : [x + (1 - fy) * w, y + fx * d]);
+  flatRect(x, y, w, d, '#9fd07c');
+  const [p0x, p0y] = at(0.05, 0.62), [p1x, p1y] = at(0.95, 0.66); flatRect(Math.min(p0x, p1x), Math.min(p0y, p1y), Math.abs(p1x - p0x) || 0.8, Math.abs(p1y - p0y) || 0.8, '#e6dccb');
+  const [q0x, q0y] = at(0.48, 0.62), [q1x, q1y] = at(0.54, 1.0); flatRect(Math.min(q0x, q1x), Math.min(q0y, q1y), Math.abs(q1x - q0x) || 0.8, Math.abs(q1y - q0y) || 0.8, '#e6dccb');
+  const fence = (ax, ay, bx, by) => { const a = iso(ax, ay), b = iso(bx, by); line(a.x, a.y - 5 * z, b.x, b.y - 5 * z, '#f4ead8', 1.6 * z); for (let k = 0; k <= 10; k++) { const q = lerp(a, b, k / 10); line(q.x, q.y, q.x, q.y - 6 * z, '#e8dcc6', 1.2 * z); } };
+  fence(x, y, x + w, y); fence(x, y, x, y + d);
+  const [cx, cy] = at(0.66, 0.3); coaster(cx, cy, along ? w * 0.27 : w * 0.22, along ? d * 0.2 : d * 0.27, ts, null, 1.15);
+  const [fx, fy] = at(0.2, 0.3); ferrisWheel(fx, fy, 60, ts, null, 1);
+  const [bx, by] = at(0.64, 0.74); bumperCars(bx - 2, by - 1.4, 4, 2.8, ts, null, 1);
+  const [kx, ky] = at(0.22, 0.76); carousel(kx, ky, 1.7, ts, null, 1);
+  fence(x + w, y, x + w, y + d); fence(x, y + d, x + w, y + d);
+  // the gateway where you go in: two posts and a striped arch with the name
+  const gx = G.front === 'S' ? [x + w / 2, y + d] : G.front === 'N' ? [x + w / 2, y] : G.front === 'E' ? [x + w, y + d / 2] : [x, y + d / 2], ax = G.front === 'S' || G.front === 'N';
+  const pa = iso(gx[0] - (ax ? 1.3 : 0), gx[1] - (ax ? 0 : 1.3)), pb = iso(gx[0] + (ax ? 1.3 : 0), gx[1] + (ax ? 0 : 1.3));
+  [pa, pb].forEach(p => rrect(p.x - 2.5 * z, p.y - 30 * z, 5 * z, 30 * z, 1.5 * z, '#e5484d'));
+  ctx.beginPath(); ctx.moveTo(pa.x, pa.y - 30 * z); ctx.quadraticCurveTo((pa.x + pb.x) / 2, (pa.y + pb.y) / 2 - 48 * z, pb.x, pb.y - 30 * z); ctx.strokeStyle = '#f2c230'; ctx.lineWidth = 6 * z; ctx.stroke(); ctx.strokeStyle = '#e5484d'; ctx.lineWidth = 2 * z; ctx.setLineDash([4 * z, 4 * z]); ctx.stroke(); ctx.setLineDash([]);
+  if (z > 0.18) { const m = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 - 40 * z }; circle(m.x, m.y, 7 * z, '#ffffff', '#e5484d', 1.2 * z); emoji('🎡', m.x, m.y + 1 * z, 9 * z); }
+  [at(0.4, 0.55), at(0.9, 0.5), at(0.08, 0.92)].forEach(([bx2, by2], i) => { const p = iso(bx2, by2), wv = Math.sin(ts / 400 + i) * 1.5 * z; line(p.x, p.y, p.x + wv, p.y - 22 * z, '#888', 0.6 * z); circle(p.x + wv, p.y - 26 * z, 4 * z, RIDE_COLS[(i * 3) % 8]); });   // balloons
+  return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
+}
 // v0.38: the new district's buildings: a hospital (floors of windows, a red cross, a helipad), a bowling alley (a
 // giant pin on the roof), a swimming centre (a glass front and a glass roof), a museum (columns and a pediment) and a
 // train station (brick, with a clock tower). G: storeGeo; returns the box like box() does.
-const CIVIC_WH = { hospital: 62, bowling: 30, aquatic: 26, museum: 34, station: 30 };
+const CIVIC_WH = { hospital: 62, bowling: 30, aquatic: 26, museum: 34, station: 30, amuse: 150 };
 function drawCivic(k, G, x, y, w, d, wh, ts) {
   const S2 = STORES[k], z = cam.z, side = G.front === 'E' || G.front === 'W', showDoor = G.front === 'S' || G.front === 'E', lit = NIGHT > 0.3;
   const glass = lit ? '#ffe39a' : '#a9dcf5', zh = curLang() === 'zh';

@@ -132,7 +132,10 @@ const Games = (() => {
   function finger(kind2, x, y, label2) {
     const u = (T * 0.9) % 1;
     ctx.save();
-    if (kind2 === 'up') {
+    if (kind2 === 'down') {   // v0.41: pull back
+      ctx.globalAlpha = 0.35 * (1 - u); line(x, y, x, y + 90 * u, '#fff', 6);
+      ctx.globalAlpha = u < 0.85 ? 1 : (1 - u) / 0.15; emoji('👆', x + 8, y + 26 + 90 * u, 34);
+    } else if (kind2 === 'up') {
       ctx.globalAlpha = 0.35 * (1 - u); line(x, y, x, y - 90 * u, '#fff', 6);
       ctx.globalAlpha = u < 0.85 ? 1 : (1 - u) / 0.15; emoji('👆', x + 8, y + 26 - 90 * u, 34);
     } else { const sc = 1 - Math.abs(Math.sin(u * Math.PI)) * 0.15; ctx.globalAlpha = 0.9; circle(x, y, 18 * (1 + u), null, `rgba(255,255,255,${1 - u})`, 3); emoji('👆', x + 8, y + 30 * sc, 34); }
@@ -902,7 +905,365 @@ const Games = (() => {
   }
   const FOLK_RACE = [{ skin: '#d39a6c', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', shirt: '#34b27b' }, { skin: '#ffe0c4', hair: 'long', hairCol: '#e9cf7a', mob: 'walk', body: 'regular', shirt: '#a46ef0' }];
 
-  const MAKE = { tennis: Tennis, basketball: Hoops, soccer: Penalty, bowling: Bowling, race: Race };
+  // =========================================================================== mini golf (v0.41, the amusement park)
+  // Three holes: a straight one with two posts, a corner to bank off, one with a windmill whose sails close the gap.
+  // Pull back from anywhere and let go (further back = harder); the ball rolls, bounces off the edges and drops in if
+  // it isn't going too fast. You play a hole, then they do; fewest strokes wins (at most 6 a hole).
+  function Golf() {
+    const GG = VENUE_GAMES.golf, sk = mate.skill, R = 0.075, CUP = 0.13, FR = 1.35;
+    const HOLES = [
+      { pts: [[-1.6, 0], [1.6, 0], [1.6, 9], [-1.6, 9]], tee: [0, 0.8], cup: [0, 8.1], posts: [[-0.6, 4.2], [0.65, 5.7]] },
+      { pts: [[-1.6, 0], [1.6, 0], [1.6, 5.4], [5.8, 5.4], [5.8, 8.4], [-1.6, 8.4]], tee: [0, 0.8], cup: [4.7, 6.9], posts: [], via: [0, 6.9] },
+      { pts: [[-1.6, 0], [1.6, 0], [1.6, 10], [-1.6, 10]], tee: [0, 0.8], cup: [0, 9.1], posts: [], mill: 6 },
+    ];
+    let hi = 0, who = 0, st = 'aim', ball = null, wait = 0, aim = null, trail = [], aiAt = 0, shots = 0;
+    const strokes = [[0, 0, 0], [0, 0, 0]], hole = () => HOLES[hi];
+    const total = w => strokes[w].reduce((a, b) => a + b, 0);
+    function walls() { const H2 = hole(), out = H2.pts.map((p, i) => [p, H2.pts[(i + 1) % H2.pts.length]]); if (H2.mill) out.push([[-1.6, H2.mill], [-0.42, H2.mill]], [[0.42, H2.mill], [1.6, H2.mill]]); return out; }
+    const sail = () => T * 1.1, millShut = () => { const psi = ((sail() + Math.PI / 2) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2); return psi < 0.36 || psi > Math.PI / 2 - 0.36; };
+    function reset() { const H2 = hole(); ball = { x: H2.tee[0], y: H2.tee[1], vx: 0, vy: 0, in: false }; st = who === 0 ? 'aim' : 'ai'; aiAt = T + 1.1; trail = []; }
+    reset(); say(t('mg_g_hole', { i: 1 }), '', '#fff', 1.2);
+    function shoot(dx, dy, sp) { const n = Math.hypot(dx, dy) || 1; ball.vx = dx / n * sp; ball.vy = dy / n * sp; strokes[who][hi]++; st = 'roll'; Sound.play('tap'); if (!who) shots++; }
+    function bounce(nx, ny, px, py, rr) { const vn = ball.vx * nx + ball.vy * ny; if (vn < 0) { ball.vx -= 1.75 * vn * nx; ball.vy -= 1.75 * vn * ny; if (-vn > 0.7) Sound.play('pop'); } ball.x = px + nx * rr; ball.y = py + ny * rr; }
+    function physics(dt) {
+      const v = Math.hypot(ball.vx, ball.vy);
+      if (v > 0) { const nv = Math.max(0, v - FR * dt); ball.vx *= nv / v; ball.vy *= nv / v; }
+      ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+      for (const [a, b] of walls()) {
+        const ex = b[0] - a[0], ey = b[1] - a[1], u = cl(((ball.x - a[0]) * ex + (ball.y - a[1]) * ey) / (ex * ex + ey * ey), 0, 1), qx = a[0] + ex * u, qy = a[1] + ey * u, d = Math.hypot(ball.x - qx, ball.y - qy);
+        if (d < R && d > 1e-6) bounce((ball.x - qx) / d, (ball.y - qy) / d, qx, qy, R);
+      }
+      for (const [px, py] of hole().posts) { const d = Math.hypot(ball.x - px, ball.y - py), rr = R + 0.17; if (d < rr) bounce((ball.x - px) / d, (ball.y - py) / d, px, py, rr); }
+      const H2 = hole();
+      if (H2.mill && Math.abs(ball.y - H2.mill) < R * 1.5 && Math.abs(ball.x) < 0.42 && millShut() && ball.vy > 0) { ball.vy = -ball.vy * 0.55; ball.y = H2.mill - R * 1.5; Sound.play('pop'); }
+      const dc = Math.hypot(ball.x - H2.cup[0], ball.y - H2.cup[1]), sp = Math.hypot(ball.vx, ball.vy);
+      if (dc < CUP && sp < 2.6) { ball.in = true; ball.x = H2.cup[0]; ball.y = H2.cup[1]; ball.vx = ball.vy = 0; }
+      else if (dc < CUP * 0.7) { ball.vx += (ball.x - H2.cup[0]) * 3; ball.vy += (ball.y - H2.cup[1]) * 3; }   // too fast: it hops over the lip
+    }
+    function step(dt) {
+      if (st === 'roll') {
+        for (let k = 0; k < 4; k++) physics(dt / 4);
+        trail.push([ball.x, ball.y]); if (trail.length > 24) trail.shift();
+        if (ball.in) { st = 'holed'; wait = T + 1.4; const n = strokes[who][hi]; say(n === 1 ? t('mg_g_ace') : t('mg_g_in', { n }), who ? esc(mate.name) : '', who ? '#fff' : '#ffe066', 1.3); Sound.play(n <= 2 ? 'cheer' : 'clang'); }
+        else if (Math.hypot(ball.vx, ball.vy) < 0.04) {
+          ball.vx = ball.vy = 0; trail = [];
+          if (strokes[who][hi] >= GG.max) { strokes[who][hi] = GG.max + 1; st = 'holed'; wait = T + 1.2; say(t('mg_g_pick'), '', '#fff', 1.1); }
+          else { st = who ? 'ai' : 'aim'; aiAt = T + 0.9; }
+        }
+      } else if (st === 'ai' && T > aiAt) {
+        const H2 = hole(), tgt = H2.via && ball.y < 5.3 ? H2.via : H2.cup;
+        const dx = tgt[0] - ball.x, dy = tgt[1] - ball.y, d = Math.hypot(dx, dy), ang = Math.atan2(dx, dy) + (1 - sk) * 0.13 * gauss();
+        const need = Math.sqrt(2 * FR * d) * (tgt === H2.cup ? 1.07 : 1.3) * (1 + (1 - sk) * 0.2 * gauss());
+        if (H2.mill && ball.y < H2.mill) {   // they time it so the gap is open when the ball gets there
+          const dm = H2.mill - ball.y, tt = (need - Math.sqrt(Math.max(0, need * need - 2 * FR * dm))) / FR;
+          const shutAt = x => { const psi = (((T + x) * 1.1 + Math.PI / 2) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2); return psi < 0.45 || psi > Math.PI / 2 - 0.45; };
+          if (shutAt(tt) || (Math.random() < sk && (shutAt(tt - 0.15) || shutAt(tt + 0.15)))) return;
+        }
+        shoot(Math.sin(ang), Math.cos(ang), cl(need, 0.8, 7));
+      } else if (st === 'holed' && T > wait) {
+        if (who === 0) { who = 1; reset(); say(t('mg_g_their', { name: mate.name }), '', '#fff', 1.0); }
+        else if (hi < HOLES.length - 1) { hi++; who = 0; reset(); say(t('mg_g_hole', { i: hi + 1 }), '', '#fff', 1.2); }
+        else { st = 'end'; const a = total(0), b = total(1); setTimeout(() => finish({ won: a < b ? true : a > b ? false : null, me: a, them: b, strokes: a }), 700); }
+      }
+    }
+    // from the screen back to the green
+    function ground(sx, sy) { const k = (sy - V.hor) / V.h; return k > 0 ? { x: (sx - V.cx) / k, y: V.F / k - V.D } : null; }
+    function aimVec() {
+      if (!aim) return null;
+      const g0 = ground(aim.x0, aim.y0), g1 = ground(aim.x, aim.y), len = Math.hypot(aim.x - aim.x0, aim.y - aim.y0);
+      return g0 && g1 && len > 12 ? { dx: g0.x - g1.x, dy: g0.y - g1.y, p: cl(len / (H * 0.32), 0.05, 1) } : null;
+    }
+    function ptr(type, x, y) {
+      if (st !== 'aim') { aim = null; return; }
+      if (type === 'down') aim = { x0: x, y0: y, x, y };
+      else if (type === 'move' && aim) { aim.x = x; aim.y = y; }
+      else if (type === 'up' && aim) { aim.x = x; aim.y = y; const a = aimVec(); aim = null; if (a) shoot(a.dx, a.dy, a.p * 7); }
+    }
+    function input() { /* (ptr does it) */ }
+    function cam() {
+      const H2 = hole(), xs = H2.pts.map(p => p[0]), ys = H2.pts.map(p => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), len = Math.max(...ys);
+      fit(-0.7, 0.88, Math.max(2.1, (x1 - x0) / 2 + 0.5), len + 0.4, 0.22, 11);
+      V.cx = W / 2 - (x0 + x1) / 2 * (V.F / (len * 0.45 + V.D));
+    }
+    function draw() {
+      cam();
+      sky(V.hor + 6, '#bfe6f7', '#eaf7fb');
+      { const q = P(-9, 40, 0), r = 5 * q.k; circle(q.x, q.y - r - 4, r, null, 'rgba(240,236,228,.75)', 2); for (let i = 0; i < 8; i++) { const a = T / 9 + i / 8 * Math.PI * 2; circle(q.x + Math.cos(a) * r, q.y - r - 4 + Math.sin(a) * r, 2.5, RIDE_COLS[i]); } }   // the park's wheel, far away
+      grect(-40, -4, 40, 60, '#8cc46b');
+      treeLine(16, -16, 16, 2.4, 4.2);
+      const H2 = hole();
+      walls().forEach(([a, b]) => gpoly([[a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], 0.16], [a[0], a[1], 0.16]], '#8a5a36'));
+      gpoly(H2.pts, '#3fa55a');
+      H2.pts.length === 4 && [1.5, 4.5, 7.5].forEach(y => { if (y < H2.pts[2][1] - 0.5) grect(-1.6, y, 1.6, y + 1.2, '#46ad61'); });
+      walls().forEach(([a, b]) => seg3([a[0], a[1], 0.16], [b[0], b[1], 0.16], 0.07, '#f4ead8'));
+      H2.posts.forEach(([px, py]) => { post(px, py, 0, 0.35, 0.34, '#e5484d'); const q = P(px, py, 0.35); ellipse(q.x, q.y, 0.17 * q.k, 0.07 * q.k, '#f28c8c'); });
+      const cp = P(H2.cup[0], H2.cup[1], 0); ellipse(cp.x, cp.y, CUP * cp.k, CUP * 0.42 * cp.k, '#16301d');
+      if (!(ball && ball.in)) { post(H2.cup[0], H2.cup[1], 0, 1.1, 0.03, '#f4f4f0'); const f0 = P(H2.cup[0], H2.cup[1], 1.1), f1 = P(H2.cup[0] + 0.35, H2.cup[1], 1.0), f2 = P(H2.cup[0], H2.cup[1], 0.9); pg([[f0.x, f0.y], [f1.x + Math.sin(T * 5) * 1.5, f1.y], [f2.x, f2.y]], '#e5484d'); }
+      if (H2.mill) {   // the windmill: a little house over the gap, its sails turning in front
+        const m = H2.mill + 0.15;
+        gpoly([[-0.8, m, 0], [0.8, m, 0], [0.8, m, 1.0], [-0.8, m, 1.0]], '#f4ead8'); gpoly([[-0.9, m, 1.0], [0.9, m, 1.0], [0, m, 1.6]], '#e5484d');
+        gpoly([[-0.42, m - 0.01, 0], [0.42, m - 0.01, 0], [0.42, m - 0.01, 0.4], [-0.42, m - 0.01, 0.4]], '#3b2f28');
+        for (let k = 0; k < 4; k++) { const a = sail() + k * Math.PI / 2, hub = [0, m - 0.05, 1.05], tip = [Math.cos(a) * 1.0, m - 0.05, 1.05 + Math.sin(a) * 1.0], sd = [Math.cos(a + 0.25) * 0.9, m - 0.05, 1.05 + Math.sin(a + 0.25) * 0.9];
+          const A = P(...hub), B = P(...tip), C = P(...sd); pg([[A.x, A.y], [B.x, B.y], [C.x, C.y]], '#ffffff'); line(A.x, A.y, B.x, B.y, '#8a6a4a', 1.5); }
+        const hb = P(0, m - 0.06, 1.05); circle(hb.x, hb.y, 0.08 * hb.k, '#8a6a4a');
+      }
+      trail.forEach((p, i) => { const q = P(p[0], p[1], 0.02); circle(q.x, q.y, Math.max(1, 0.03 * q.k), `rgba(255,255,255,${i / trail.length * 0.5})`); });
+      const L = who ? mate.look : S.me.look;
+      if (ball && !ball.in) {
+        if (st !== 'roll') { townie(L, ball.x - 0.85, ball.y - 0.1, { view: 'back', turn: [0.6, -1], seed: who ? 5 : 3 }); seg3([ball.x - 0.08, ball.y - 0.02, 0.03], [ball.x - 0.62, ball.y - 0.08, 0.8], 0.03, '#4a4f57'); }
+        shadow(ball.x, ball.y, R * 1.2, 0.25); const q = P(ball.x, ball.y, R); circle(q.x, q.y, Math.max(2.5, R * q.k), '#ffffff', '#c9cfd6', 1);
+      }
+      const a = aimVec();
+      if (a) { const n = Math.hypot(a.dx, a.dy) || 1; for (let k = 1; k <= 8; k++) { const u = k / 8 * (0.6 + a.p * 3.4), q = P(ball.x + a.dx / n * u, ball.y + a.dy / n * u, 0.02); circle(q.x, q.y, Math.max(2, 0.05 * q.k), a.p > 0.8 ? '#ff6b6b' : a.p > 0.45 ? '#ffd36b' : '#ffffff'); } }
+    }
+    function hint() { if (phase !== 'play' || st !== 'aim' || shots > 1 || aim) return null; const q = P(ball.x, ball.y, 0); return ['down', q.x, q.y - 20, t('mg_g_pull')]; }
+    function hud() { const row = w => `<small>${strokes[w].map((n, i) => (i <= hi ? n || '·' : '·')).join(' ')}</small>`; return { me: total(0), them: total(1), meSub: row(0), themSub: row(1), mid: `⛳ ${t('mg_g_holeN', { i: hi + 1, n: HOLES.length })}` }; }
+    return { step, draw, input, ptr, hint, hud, dbg: () => ({ st, hi, who, ball: { ...ball }, strokes, shut: millShut() }) };
+  }
+
+  // =========================================================================== claw machine (v0.41)
+  // Seen from the front. Drag left and right to move the claw over a toy, let go to drop it. It closes on whatever is
+  // under it: the nearer the middle, the better it holds, and it can still slip on the way up. You and them take turns;
+  // most toys wins. The toys you win are yours.
+  function Claw() {
+    const CG = VENUE_GAMES.claw, sk = mate.skill, keys = Object.keys(MALL.plush), TOY = { plushbear: '#a0703f', plushbunny: '#f4f0ea', plushcat: '#f2a65a', plushdino: '#6fbf73', plushduck: '#f2d24b', plushpanda: '#f4f4f0' };
+    let toys = [], claw = { u: 0.55, tu: 0.55, v: 0.06, open: 1, hold: null, slip: false }, who = 0, left = [CG.grabs, CG.grabs], won = [[], []], st = 'aim', wait = 0, falling = [], dragging = false;
+    const BX = () => ({ l: W * 0.1, r: W * 0.9, t: H * 0.2, b: H * 0.82 }), X = u => { const B = BX(); return B.l + u * (B.r - B.l); }, Y = v => { const B = BX(); return B.t + v * (B.b - B.t); };
+    const RU = 0.085;   // a toy's size (box widths)
+    const rV = () => { const B = BX(); return RU * (B.r - B.l) * 0.62 / (B.b - B.t); };   // its radius, in box heights
+    function fill() {
+      let i = 0; const rv = rV();
+      for (let row = 0; row < 3 && toys.length < 13; row++) for (let u = 0.3 + row * 0.04; u < 0.95 && toys.length < 13; u += RU * 1.45) { const v = 0.96 - rv - row * rv * 1.55; if (toys.some(q => Math.abs(q.u - u) < RU * 0.8 && Math.abs(q.v - v) < rv)) continue; toys.push({ k: keys[(i++ * 5 + row) % keys.length], u: u + (hash(u * 9, row) - 0.5) * 0.02, v, rot: (hash(u, row) - 0.5) * 0.7 }); }
+    }
+    fill();
+    const surface = u => { let top = 0.97; const rv = rV(); toys.forEach(tq => { if (Math.abs(tq.u - u) < RU) top = Math.min(top, tq.v - rv); }); return top; };
+    function step(dt) {
+      falling = falling.filter(f => { f.v += f.sp * dt; f.sp += 2.5 * dt; if (f.v >= f.to) { if (f.into) won[f.who].push(f.k); else toys.push({ k: f.k, u: f.u, v: f.to, rot: f.rot }); return false; } return true; });
+      if (st === 'aim' || st === 'ai') { claw.u += (claw.tu - claw.u) * Math.min(1, dt * 6); if (st === 'ai' && T > wait && Math.abs(claw.u - claw.tu) < 0.01) st = 'drop'; return; }
+      if (st === 'drop') { claw.v += 0.6 * dt; if (claw.v >= surface(claw.u) - 0.02) { st = 'close'; wait = T + 0.45; Sound.play('tick'); } return; }
+      if (st === 'close') {
+        claw.open = Math.max(0, (wait - T) / 0.45);
+        if (T >= wait) {
+          let best = null, bd = 1e9; toys.forEach(tq => { const d = Math.abs(tq.u - claw.u) + Math.max(0, claw.v - tq.v) * 0.2; if (d < bd) { bd = d; best = tq; } });
+          const dx = best ? Math.abs(best.u - claw.u) : 1, p = 0.82 - dx / (RU * 1.15) * 0.9 - (who ? (1 - sk) * 0.15 : 0);   // (a real claw machine isn't easy)
+          if (best && dx < RU * 1.15 && Math.random() < p) { claw.hold = best; toys = toys.filter(q => q !== best); claw.slip = Math.random() < 0.27; }
+          st = 'up';
+        }
+        return;
+      }
+      if (st === 'up') {
+        claw.v -= 0.5 * dt;
+        if (claw.hold && claw.slip && claw.v < 0.45) { falling.push({ k: claw.hold.k, u: claw.u, v: claw.v + 0.08, sp: 0.2, to: surface(claw.u) + 0.02, rot: claw.hold.rot }); claw.hold = null; claw.slip = false; say(t('mg_c_slip'), '', '#fff', 0.9); Sound.play('oops'); }
+        if (claw.v <= 0.06) { claw.v = 0.06; st = 'carry'; }
+        return;
+      }
+      if (st === 'carry') { claw.u += (0.09 - claw.u) * Math.min(1, dt * 3); if (Math.abs(claw.u - 0.09) < 0.01) { st = 'drop2'; wait = T + 0.4; claw.open = 1; if (claw.hold) { falling.push({ k: claw.hold.k, u: 0.09, v: 0.12, sp: 0.4, to: 0.92, into: true, who, rot: 0 }); say(who ? t('mg_c_their', { name: mate.name }) : t('mg_c_got'), '', who ? '#fff' : '#ffe066', 1.1); Sound.play(who ? 'pop' : 'cheer'); } else Sound.play('chime'); claw.hold = null; } return; }
+      if (st === 'drop2' && T >= wait && !falling.length) {
+        left[who]--;
+        if (toys.length < 6) fill();
+        if (!left[0] && !left[1]) { st = 'end'; const a = won[0].length, b = won[1].length; setTimeout(() => finish({ won: a > b ? true : a < b ? false : null, me: a, them: b, toys: won[0].slice() }), 600); return; }
+        who = left[1 - who] ? 1 - who : who; claw.tu = 0.55;
+        if (who) { const pick = toys.slice().sort((p, q) => p.v - q.v)[Math.floor(Math.random() * Math.min(4, toys.length))]; claw.tu = cl(pick.u + gauss() * (1 - sk) * 0.05, 0.25, 0.95); st = 'ai'; wait = T + 0.8; }
+        else st = 'aim';
+      }
+    }
+    function ptr(type, x) {
+      if (st !== 'aim') return;
+      const B = BX(), u = cl((x - B.l) / (B.r - B.l), 0.22, 0.96);
+      if (type === 'down') { dragging = true; claw.tu = u; }
+      else if (type === 'move' && dragging) claw.tu = u;
+      else if (type === 'up' && dragging) { dragging = false; claw.tu = u; st = 'drop'; claw.u = u; Sound.play('tap'); }
+    }
+    function input() { /* (ptr does it) */ }
+    function toyAt(k, x, y, s, rot) {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0);
+      circle(0, 0, s, TOY[k], shade(TOY[k], -0.35), 1.2); circle(-s * 0.6, -s * 0.75, s * 0.32, TOY[k], shade(TOY[k], -0.35), 1); circle(s * 0.6, -s * 0.75, s * 0.32, TOY[k], shade(TOY[k], -0.35), 1);
+      ctx.restore(); emoji(MALL.plush[k], x, y + s * 0.15, s * 1.25);
+    }
+    function draw() {
+      const B = BX(), w = B.r - B.l, s = RU * w * 0.62;
+      const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#2a1d3f'); bg.addColorStop(1, '#4a2f5f'); ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < 18; i++) circle((i * 97) % W, (i * 53) % (H * 0.15) + 6, 2, i % 2 ? '#ffd36b' : '#ec6aa8');
+      rrect(B.l - 16, B.t - 56, w + 32, B.b - B.t + 96, 22, '#ec6aa8', '#b0407a', 3);
+      rrect(B.l, B.t - 42, w, 34, 10, '#ffd36b'); txt(`🧸 ${t('mg_c_title')}`, W / 2, B.t - 25, 17, '#7a2a52');
+      const gl = ctx.createLinearGradient(0, B.t, 0, B.b); gl.addColorStop(0, '#3a2c55'); gl.addColorStop(1, '#5a4a7a'); ctx.fillStyle = gl; ctx.fillRect(B.l, B.t, w, B.b - B.t);
+      ctx.fillStyle = '#6b5a8a'; ctx.fillRect(B.l, Y(0.97), w, B.b - Y(0.97));
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(B.l, Y(0.66), X(0.18) - B.l, B.b - Y(0.66)); line(X(0.18), Y(0.66), X(0.18), B.b, '#ffd36b', 3); txt(`⬇ ${t('mg_c_out')}`, X(0.09), Y(0.72), 12, '#ffd36b');
+      toys.slice().sort((p, q) => p.v - q.v).forEach(tq => toyAt(tq.k, X(tq.u), Y(tq.v), s, tq.rot));
+      falling.forEach(f => toyAt(f.k, X(f.u), Y(f.v), s, f.rot));
+      // the rail, the cable and the claw
+      line(B.l + 4, Y(0.03), B.r - 4, Y(0.03), '#c9cfd6', 4);
+      const cx = X(claw.u), cy = Y(claw.v); rrect(cx - 14, Y(0.03) - 7, 28, 14, 4, '#9aa3ad'); line(cx, Y(0.03), cx, cy - 10, '#2d2d2d', 2);
+      if (claw.hold) toyAt(claw.hold.k, cx, cy + s * 0.9, s, claw.hold.rot);
+      circle(cx, cy - 8, 10, '#d6d0c4', '#8a9099', 1.5);
+      const op = 0.25 + claw.open * 0.65;
+      [-1, 1].forEach(k => { ctx.beginPath(); ctx.moveTo(cx + k * 6, cy - 4); ctx.quadraticCurveTo(cx + k * (8 + op * 16), cy + 10, cx + k * (4 + op * 8), cy + 26); ctx.strokeStyle = '#8a9099'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke(); });
+      line(cx, cy, cx, cy + 22 - op * 4, '#8a9099', 3);
+      ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.beginPath(); ctx.moveTo(B.l + w * 0.55, B.t); ctx.lineTo(B.l + w * 0.75, B.t); ctx.lineTo(B.l + w * 0.4, B.b); ctx.lineTo(B.l + w * 0.2, B.b); ctx.closePath(); ctx.fill();
+      for (let i = 0; i < 14; i++) { const on = (Math.floor(T * 4) + i) % 2; circle(B.l - 8 + (w + 16) * i / 13, B.b + 30, 3.5, on ? '#ffd36b' : '#7a2a52'); }
+      txt(who ? t('mg_c_turn_them', { name: mate.name }) : t('mg_c_turn_me'), W / 2, B.b + 14, 13, '#fff6d8');
+    }
+    function hint() { return phase === 'play' && st === 'aim' && left[0] === CG.grabs && !dragging ? ['tap', X(claw.u), Y(0.5), t('mg_c_drag')] : null; }
+    function hud() { return { me: `🧸${won[0].length}`, them: `🧸${won[1].length}`, meSub: `<small>${t('mg_c_left', { n: left[0] })}</small>`, themSub: `<small>${t('mg_c_left', { n: left[1] })}</small>`, mid: `🕹️ ${t('mg_c_title')}` }; }
+    return { step, draw, input, ptr, hint, hud, dbg: () => ({ st, who, left, won, claw: { ...claw }, toys: toys.length }) };
+  }
+
+  // =========================================================================== karaoke (v0.41, the amusement park's stage)
+  // A song in two halves: you sing the first, they sing the second. Each note slides in from the right with its word;
+  // tap as it reaches the ring (right on it: perfect). The one who hits more of their notes wins.
+  function Karaoke() {
+    const song = SONGS[Math.floor(Math.random() * SONGS.length)], spb = 60 / song.bpm, LEAD = 2.2, zh = curLang() === 'zh', sk = mate.skill;
+    const notes = [], lines = [];
+    let tb = 3.2;
+    song.lines.forEach(([w, line2]) => { const ln = { w, notes: [] }; line2.forEach(([m, beats, wz, we]) => { const n = { t: tb, m, w, word: zh ? wz : we, beats, judge: null, line: lines.length }; notes.push(n); ln.notes.push(n); tb += beats * spb; }); lines.push(ln); tb += spb; });
+    const endT = tb + 1.0, pts = [0, 0], max = [0, 0];
+    notes.forEach(n => { max[n.w] += 100; });
+    let st = 'sing', flash = [], told = false;
+    Sound.duck(true);
+    say(`${song.e} ${zh ? song.zh : song.en}`, t('mg_k_you_first'), '#ffe066', 1.8);
+    const judge = (n, j) => { n.judge = j; pts[n.w] += j === 'perfect' ? 100 : j === 'good' ? 60 : 0; if (j !== 'miss') Sound.note(n.m, n.beats * spb * 0.9, n.w ? 0.08 : 0.16); flash.push({ n, j, t0: T }); };
+    function step() {
+      notes.forEach(n => {
+        if (n.judge) return;
+        if (n.w === 1 && T >= n.t) { const r = Math.random(); judge(n, r < 0.42 + sk * 0.4 ? 'perfect' : r < 0.86 + sk * 0.1 ? 'good' : 'miss'); }
+        else if (n.w === 0 && T > n.t + 0.24) judge(n, 'miss');
+      });
+      if (st === 'sing' && T > endT) { st = 'end'; Sound.duck(false); const a = Math.round(pts[0] / max[0] * 100), b = Math.round(pts[1] / max[1] * 100); finish({ won: a > b ? true : a < b ? false : null, me: a + '%', them: b + '%', pct: a }); }
+      const half = notes.find(n => n.w === 1); if (half && !told && T > half.t - 1.6) { told = true; say(t('mg_k_their', { name: mate.name }), '', '#fff', 1.2); }
+    }
+    function tap() {
+      let best = null, bd = 0.24;
+      notes.forEach(n => { if (n.w === 0 && !n.judge && Math.abs(T - n.t) < bd) { bd = Math.abs(T - n.t); best = n; } });
+      if (!best) return;
+      judge(best, bd < 0.09 ? 'perfect' : 'good');
+      pop(t(bd < 0.09 ? 'mg_k_perfect' : 'mg_k_good'), W * 0.2, H * 0.62, bd < 0.09 ? '#ffe066' : '#fff');
+    }
+    function ptr(type) { if (type === 'down' && st === 'sing') tap(); }
+    function input() { /* (ptr does it) */ }
+    function draw() {
+      const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#1d1430'); bg.addColorStop(1, '#3a2152'); ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      for (let k = 0; k < 3; k++) { const a = Math.sin(T * 0.8 + k * 2) * 0.5, sx = W * (0.2 + k * 0.3); ctx.save(); ctx.globalAlpha = 0.12; ctx.fillStyle = ['#ffd36b', '#ec6aa8', '#7ab0ff'][k]; ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx + Math.sin(a) * H * 0.6 - 60, H * 0.62); ctx.lineTo(sx + Math.sin(a) * H * 0.6 + 60, H * 0.62); ctx.closePath(); ctx.fill(); ctx.restore(); }
+      [0, 1].forEach(side => { ctx.fillStyle = '#8a1f2f'; ctx.beginPath(); const x0 = side ? W : 0, dir = side ? -1 : 1; ctx.moveTo(x0, 0); ctx.quadraticCurveTo(x0 + dir * W * 0.16, H * 0.3, x0 + dir * W * 0.05, H * 0.6); ctx.lineTo(x0, H * 0.6); ctx.closePath(); ctx.fill(); });
+      ctx.fillStyle = '#5a4030'; ctx.fillRect(0, H * 0.56, W, H * 0.06);
+      // the singers on the stage: whoever's singing has the microphone
+      const now = notes.find(n => !n.judge && n.t > T - 0.3) || notes[notes.length - 1], singing = now ? now.w : 0;
+      [[S.me.look, W * 0.32, 0], [mate.look, W * 0.68, 1]].forEach(([L, x, w]) => {
+        const sc = Math.min(W, H) / 150, bobY = w === singing ? Math.abs(Math.sin(T * 6)) * 3 : 0;
+        drawPerson(x, H * 0.565 - bobY, sc, { look: L, face: w ? -1 : 1, view: 'front', energy: 'great', ts: T * 1000, seed: w ? 5 : 3, pose: 'stand', wave: w === singing && Math.floor(T * 2) % 2 === 0 });
+        if (w === singing) emoji('🎤', x + (w ? -14 : 14) * sc, H * 0.565 - 30 * sc - bobY, 16 * sc);
+      });
+      // the words on the screen up top: the line being sung, lit up as it goes
+      const ln = lines[now ? now.line : 0], sy = H * 0.13;
+      rrect(W * 0.06, sy - 26, W * 0.88, 52, 10, 'rgba(10,8,20,.75)', '#ffd36b', 1.5);
+      if (ln) { const words = ln.notes, gap = zh ? 0 : 4; ctx.font = `900 ${zh ? 22 : 17}px ${UI_FONT}`; const widths = words.map(n => ctx.measureText(n.word).width + gap), tw = widths.reduce((a, b) => a + b, 0); let xx = W / 2 - tw / 2;
+        words.forEach((n, i) => { const done = n.judge || T >= n.t; txt(n.word, xx + widths[i] / 2, sy, zh ? 22 : 17, done ? (n.w ? '#7ab0ff' : '#ffe066') : '#ffffff'); xx += widths[i]; }); }
+      // the notes sliding in: tap as they reach the ring
+      const ly = H * 0.75, rx = W * 0.2, pps = (W * 0.85) / LEAD;
+      rrect(0, ly - 54, W, 108, 0, 'rgba(0,0,0,.25)');
+      circle(rx, ly, 26, 'rgba(255,255,255,.08)', '#ffffff', 3);
+      notes.forEach(n => {
+        const x = rx + (n.t - T) * pps, y = ly - (n.m - 64) * 3.2;
+        if (x < -30 || x > W + 30) return;
+        if (n.judge && n.judge !== 'miss') return;
+        const col = n.w ? '#5b8de0' : '#ec6aa8';
+        circle(x, y, 20, n.judge === 'miss' ? '#6b6478' : col, '#ffffff', 2);
+        txt(n.word, x, y, zh ? 15 : 11, '#ffffff');
+      });
+      flash = flash.filter(f => T - f.t0 < 0.5);
+      flash.forEach(f => { if (f.j === 'miss') return; const u = (T - f.t0) / 0.5; ctx.save(); ctx.globalAlpha = 1 - u; circle(rx, ly - (f.n.m - 64) * 3.2, 20 + u * 26, null, f.n.w ? '#7ab0ff' : '#ffe066', 4); ctx.restore(); });
+    }
+    function hint() { const n = notes.find(x => x.w === 0 && !x.judge); return phase === 'play' && n && n === notes[0] && T > n.t - 1.0 ? ['tap', W * 0.2, H * 0.75, t('mg_k_tap')] : null; }
+    function hud() { const pc = w => Math.round(pts[w] / max[w] * 100) + '%'; return { me: pc(0), them: pc(1), mid: `${song.e} ${zh ? song.zh : song.en}` }; }
+    return { step, draw, input, ptr, hint, hud, end: () => Sound.duck(false), dbg: () => ({ st, pts, notes: notes.map(n => [n.t.toFixed(2), n.w, n.judge]) }) };
+  }
+
+  // =========================================================================== fishing contest (v0.41, at the lake)
+  // A minute on the jetty with them and two others. Swipe up to cast (a longer swipe goes further: bigger fish, but
+  // they take longer to bite); when the float bobs, tap to strike; then hold to reel in and let go when the line gets
+  // too tight (red: it snaps). Most kilos wins.
+  function Fishing() {
+    const FG = VENUE_GAMES.fishing, sk = mate.skill, LEN = FG.secs;
+    const ang = [{ x: -3.3, look: FOLK_RACE[0], ai: 0.45 }, { x: -1.0, me: true }, { x: 1.2, mate: true, ai: 0.3 + sk * 0.55 }, { x: 3.4, look: FOLK_RACE[1], ai: 0.5 }]
+      .map((a, i) => ({ ...a, kg: 0, n: 0, next: rnd(7, 14) * (1.2 - (a.ai || 0.5) * 0.5), flash: -9, last: null, bx: a.x * 1.3 + (i - 1.5) * 0.4, by: 7 + i * 1.3 }));
+    const me = ang[1], them = ang[2];
+    let st = 'idle', bob = null, fish = null, tension = 0, reel = false, biteAt = 0, biteEnd = 0, show = null, casts = 0, lf = 0;
+    function pickFish() { let r = Math.random(); for (const F of CONTEST_FISH) { if (r < F.p) return F; r -= F.p; } return CONTEST_FISH[0]; }
+    const kgOf = (F, far) => +(F.kg[0] + Math.random() * (F.kg[1] - F.kg[0]) * (0.7 + far * 0.5)).toFixed(1);
+    function step(dt) {
+      if (T >= LEN && st !== 'end') { st = 'end'; setTimeout(() => finish({ won: me.kg > them.kg ? true : me.kg < them.kg ? false : null, me: me.kg.toFixed(1) + 'kg', them: them.kg.toFixed(1) + 'kg', kg: +me.kg.toFixed(1), fish: me.n }), 500); return; }
+      if (st === 'end') return;
+      ang.forEach(a => { if (a.me || T < a.next) return; const F = pickFish(), kg = kgOf(F, 0.5); a.kg += kg; if (kg) a.n++; a.flash = T; a.last = F; a.lastKg = kg; a.next = T + rnd(9, 16) * (1.3 - a.ai * 0.6); if (a === them) Sound.play('pop'); });
+      if (st === 'cast') { bob.fly = Math.min(1, bob.fly + dt * 1.6); if (bob.fly >= 1) { st = 'wait'; biteAt = T + rnd(1.2, 3.4) + lf * 1.6; Sound.play('splash'); } }
+      else if (st === 'wait' && T >= biteAt) { st = 'bite'; biteEnd = T + 0.95; Sound.play('tick'); }
+      else if (st === 'bite' && T > biteEnd) { st = 'wait'; biteAt = T + rnd(1.5, 3.5); say(t('mg_f_away'), '', '#fff', 0.9); }
+      else if (st === 'reel') {
+        if (reel) { tension += (0.26 + fish.fight * 0.2) * dt; fish.dist -= (tension < 0.92 ? 4.2 : 1.0) * dt; }
+        else { tension -= 0.75 * dt; fish.dist += fish.fight * 0.45 * dt; }
+        if (Math.random() < dt * 0.9) tension += 0.1 * fish.fight;
+        tension = Math.max(0, tension);
+        bob.y = fish.dist; bob.x += Math.sin(T * 7) * 0.02;
+        if (tension >= 1) { st = 'idle'; fish = null; bob = null; reel = false; say(t('mg_f_snap'), '', '#fff', 1.1); Sound.play('oops'); }
+        else if (fish.dist <= 0.6) { me.kg += fish.kg; if (fish.kg) me.n++; show = { F: fish.F, kg: fish.kg, t0: T }; st = 'idle'; bob = null; fish = null; reel = false; Sound.play(show.kg ? 'cheer' : 'pop'); }
+      }
+    }
+    function ptr(type) {
+      if (type === 'down') { if (st === 'bite') { const F = pickFish(), kg = kgOf(F, lf); fish = { F, kg, dist: bob.y, fight: 0.5 + kg * 0.13 }; tension = 0.25; st = 'reel'; reel = true; Sound.play('tap'); return; } if (st === 'reel') reel = true; }
+      if (type === 'up') reel = false;
+    }
+    function input(sw) {
+      if (st !== 'idle' || T >= LEN) return;
+      if (sw.tap || sw.dy > -24) return;
+      lf = cl(sw.len / (H * 0.42), 0.15, 1); casts++;
+      bob = { x: cl(me.x + sw.dx / W * 5, -4, 4), y: 2.5 + lf * 13, fly: 0 }; st = 'cast'; Sound.play('tap');
+    }
+    function cam() { fit(-0.5, 0.86, 5.2, 24, 0.36, 5); }
+    function draw() {
+      cam();
+      sky(V.hor + 4, '#a9d8f2', '#e6f5fb');
+      grect(-60, 26, 60, 60, '#7fb36a'); treeLine(27.5, -30, 30, 2.3, 5.5);
+      gpoly([[-60, -1], [60, -1], [60, 26], [-60, 26]], '#4f9fd0');
+      for (let k = 0; k < 30; k++) { const u = (k * 0.37 + T * 0.02) % 1, v = (k * 0.61) % 1, q = P(-14 + u * 28, 1 + v * 24, 0); ellipse(q.x, q.y, 0.5 * q.k, 0.06 * q.k, 'rgba(255,255,255,.28)'); }
+      grect(-5.2, -2.6, 5.2, -0.1, '#a8835a'); for (let x = -5; x <= 5; x += 0.7) seg3([x, -2.6, 0], [x, -0.1, 0], 0.02, 'rgba(90,60,30,.35)');
+      [-5, -1.7, 1.7, 5].forEach(x => post(x, -0.1, -0.6, 0.35, 0.18, '#7a5a3a'));
+      ang.forEach(a => {   // the floats
+        const mine = a.me, bx = mine ? (bob ? bob.x : null) : a.bx, by = mine ? (bob ? bob.y : null) : a.by;
+        const tip = [a.x + 0.7, 0.8, 2.3];
+        if (bx !== null) {
+          let z = 0; if (mine && st === 'cast') z = Math.sin(bob.fly * Math.PI) * 2.5;
+          const fy = mine && st === 'cast' ? -0.2 + (by + 0.2) * bob.fly : by, fx = mine && st === 'cast' ? a.x + 0.7 + (bx - a.x - 0.7) * bob.fly : bx;
+          const dip = mine && st === 'bite' ? Math.abs(Math.sin(T * 14)) * 0.12 : !mine && T - a.flash < 0.5 ? 0.15 : Math.sin(T * 2 + a.x) * 0.02;
+          seg3(tip, [fx, fy, z + 0.05 - dip], 0.01, 'rgba(255,255,255,.7)');
+          const q = P(fx, fy, z + 0.05 - dip); circle(q.x, q.y, Math.max(3, 0.1 * q.k), '#e5484d', '#ffffff', 1.4);
+          if (mine && st === 'bite') txt('❗', q.x, q.y - 24, 20, '#ffe066');
+          if (!mine && T - a.flash < 1.2 && a.last) { const u = (T - a.flash) / 1.2; ctx.save(); ctx.globalAlpha = 1 - u; txt(`${a.last.e} +${(a.lastKg || 0).toFixed(1)}kg`, q.x, q.y - 20 - u * 30, 13, '#fff'); ctx.restore(); }
+        }
+      });
+      ang.forEach(a => {   // the anglers on the jetty, seen from behind, rods out
+        const L = a.me ? S.me.look : a.mate ? mate.look : a.look;
+        townie(L, a.x, -0.9, { view: 'back', seed: a.me ? 3 : a.mate ? 5 : 7 });
+        seg3([a.x + 0.25, -0.75, 1.0], [a.x + 0.7, 0.8, 2.3], 0.03, '#5a3e28');
+      });
+      if (st === 'reel') {   // how tight the line is
+        const bx = W - 34, by = H * 0.3, bh = H * 0.36;
+        rrect(bx - 10, by, 20, bh, 8, 'rgba(0,0,0,.35)', '#ffffff', 1.5);
+        const f = Math.min(1, tension), col = f > 0.85 ? '#ff4d4d' : f > 0.6 ? '#ffd36b' : '#5ad17a';
+        rrect(bx - 7, by + bh * (1 - f) + 3, 14, bh * f - 6 > 0 ? bh * f - 6 : 0, 5, col);
+        txt('🎣', bx, by - 14, 16);
+        txt(reel ? t('mg_f_reeling') : t('mg_f_hold'), W / 2, H * 0.62, 15, reel ? '#ffe066' : '#fff');
+      }
+      if (show && T - show.t0 < 1.8) { const u = Math.min(1, (T - show.t0) * 4); ctx.save(); ctx.translate(W / 2, H * 0.42); ctx.scale(u, u); rrect(-110, -50, 220, 100, 18, 'rgba(255,253,248,.95)', '#ffd36b', 3); emoji(show.F.e, -60, 0, 44); txt(nm(show.F), 30, -14, 17, '#3b3125', 'center', 800); txt(show.kg ? `${show.kg.toFixed(1)} kg` : '😅', 30, 16, 20, '#e5484d'); ctx.restore(); }
+    }
+    function hint() {
+      if (phase !== 'play') return null;
+      if (st === 'idle' && casts < 2) return ['up', W / 2, H * 0.82, t('mg_f_cast')];
+      if (st === 'bite') return ['tap', W / 2, H * 0.7, t('mg_f_strike')];
+      return null;
+    }
+    function hud() { return { me: me.kg.toFixed(1) + 'kg', them: them.kg.toFixed(1) + 'kg', meSub: `<small>🐟×${me.n}</small>`, themSub: `<small>🐟×${them.n}</small>`, mid: `🎣 ${Math.max(0, Math.ceil(LEN - T))}″` }; }
+    return { step, draw, input, ptr, hint, hud, dbg: () => ({ st, me: me.kg, them: them.kg, tension, fish, bob }) };
+  }
+
+  const MAKE = { tennis: Tennis, basketball: Hoops, soccer: Penalty, bowling: Bowling, race: Race, golf: Golf, claw: Claw, karaoke: Karaoke, fishing: Fishing };
 
   // ---------- the screen: a canvas, the score at the top, cards for how to play and for the result ----------
   function build() {
@@ -910,12 +1271,14 @@ const Games = (() => {
     root.innerHTML = `<canvas class="mg-cv"></canvas><div class="mg-top"></div><div class="mg-card" hidden></div>`;
     document.querySelector('.screen').appendChild(root);
     cv = root.querySelector('.mg-cv'); g = cv.getContext('2d'); top = root.querySelector('.mg-top'); card = root.querySelector('.mg-card');
-    cv.addEventListener('pointerdown', e => { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) { /* fine */ } const r = cv.getBoundingClientRect(); ptr = { x0: e.clientX - r.left, y0: e.clientY - r.top, t0: performance.now(), T0: T }; });
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) { /* fine */ } const r = cv.getBoundingClientRect(); ptr = { x0: e.clientX - r.left, y0: e.clientY - r.top, t0: performance.now(), T0: T }; if (phase === 'play' && G && G.ptr) G.ptr('down', ptr.x0, ptr.y0); });
+    cv.addEventListener('pointermove', e => { if (!ptr || phase !== 'play' || !G || !G.ptr) return; const r = cv.getBoundingClientRect(); G.ptr('move', e.clientX - r.left, e.clientY - r.top); });   // v0.41: dragging, holding
     cv.addEventListener('pointerup', e => {
       if (!ptr) return;
       const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, dx = x - ptr.x0, dy = y - ptr.y0, len = Math.hypot(dx, dy);
       const sw = { dx, dy, len, tap: len < 16, x: len < 16 ? ptr.x0 : x, y: len < 16 ? ptr.y0 : y, ms: performance.now() - ptr.t0, T0: ptr.T0 };   // T0: when the finger went down (that's when you swing)
       ptr = null;
+      if (phase === 'play' && G && G.ptr) G.ptr('up', x, y);
       if (phase === 'play' && G) G.input(sw);
     });
     cv.addEventListener('pointercancel', () => { ptr = null; });
@@ -944,10 +1307,10 @@ const Games = (() => {
       <div class="mg-p r"><div><b>${esc(mate.name)}</b><span class="mg-n">${h.them}</span>${h.themSub || ''}</div>${avatar(mate.look)}</div></div>`;
   }
   function howTo() {
-    const k = { tennis: 't', basketball: 'b', soccer: 's', bowling: 'w', race: 'r' }[kind], e = (BALL_GAMES[kind] || VENUE_GAMES[kind]).e;
-    const n = { tennis: BALL_GAMES.tennis.to, basketball: BALL_GAMES.basketball.spots, soccer: BALL_GAMES.soccer.kicks, bowling: VENUE_GAMES.bowling.frames, race: VENUE_GAMES.race.len }[kind];
+    const k = { tennis: 't', basketball: 'b', soccer: 's', bowling: 'w', race: 'r', golf: 'g', claw: 'c', karaoke: 'k', fishing: 'f' }[kind], e = (BALL_GAMES[kind] || VENUE_GAMES[kind]).e;
+    const n = { tennis: BALL_GAMES.tennis.to, basketball: BALL_GAMES.basketball.spots, soccer: BALL_GAMES.soccer.kicks, bowling: VENUE_GAMES.bowling.frames, race: VENUE_GAMES.race.len, golf: VENUE_GAMES.golf.holes, claw: VENUE_GAMES.claw.grabs, karaoke: 2, fishing: VENUE_GAMES.fishing.secs }[kind];
     card.innerHTML = `<div class="mg-box"><div class="mg-big">${e}</div><h2>${t('mg_' + k + '_title')}</h2><p class="muted">${t('mg_with', { name: esc(mate.name) })}</p>
-      <div class="mg-how"><div><span class="mg-fing">${kind === 'soccer' ? '👆' : '👆'}</span>${t('mg_' + k + '_how1')}</div><div><span>🎯</span>${t('mg_' + k + '_how2')}</div><div><span>🏁</span>${t('mg_' + k + '_how3', { n, s: BALL_GAMES.basketball.shots, x: VENUE_GAMES.bowling.strike, p: VENUE_GAMES.bowling.spare })}</div></div>
+      <div class="mg-how"><div><span class="mg-fing">${kind === 'soccer' ? '👆' : '👆'}</span>${t('mg_' + k + '_how1')}</div><div><span>🎯</span>${t('mg_' + k + '_how2')}</div><div><span>🏁</span>${t('mg_' + k + '_how3', { n, s: BALL_GAMES.basketball.shots, x: VENUE_GAMES.bowling.strike, p: VENUE_GAMES.bowling.spare, m: VENUE_GAMES.golf.max })}</div></div>
       <button class="btn primary block" data-mg="start">${t('mg_start')}</button></div>`;
     card.hidden = false;
   }
@@ -991,7 +1354,7 @@ const Games = (() => {
   }
   function close() {
     if (!root) return;
-    cancelAnimationFrame(raf); root.hidden = true; phase = 'off'; G = null;
+    cancelAnimationFrame(raf); root.hidden = true; phase = 'off'; if (G && G.end) G.end(); G = null;
     Scene.setVisible(true);
     const f = onClose; onClose = null; if (f) f();
   }
@@ -1011,6 +1374,7 @@ const Games = (() => {
     // for testing: run frames now (a background tab doesn't animate), swipe or tap, look inside
     _tick(n = 1, dt = 1 / 60, noDraw = false) { for (let i = 0; i < n; i++) tick(dt, noDraw); if (noDraw && G) drawHud(); },
     _input(sw) { if (G) G.input({ dx: 0, dy: 0, len: 0, tap: false, x: W / 2, y: H / 2, ...sw }); },
+    _ptr(type, x, y) { if (G && G.ptr) G.ptr(type, x, y); },   // (testing, v0.41)
     _go() { card.hidden = true; phase = 'play'; },
     _g: () => (G ? G.dbg() : null),
     _T: () => T,

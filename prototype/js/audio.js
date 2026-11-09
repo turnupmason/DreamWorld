@@ -170,6 +170,10 @@ const Sound = (() => {
     // Which tune plays: home, town, inside, shop or world.
     setScene(s) { if (THEMES[s] && s !== scene) { scene = s; lastMotif = []; } },
     play(name) { if (!ac || !sfxOn || !FX[name]) return; try { FX[name](ac.currentTime + 0.01); } catch (e) { /* audio is optional */ } },
+    // v0.41: one sung note (karaoke): a MIDI pitch, for dur seconds
+    note(n, dur = 0.4, vol = 0.14) { if (!ac || !sfxOn) return; try { const t0 = ac.currentTime + 0.01; tone(sfx, midi(n), t0, dur, { type: 'triangle', vol, attack: 0.02, release: dur }); tone(sfx, midi(n + 12), t0, dur * 0.6, { type: 'sine', vol: vol * 0.3, attack: 0.02, release: dur * 0.6 }); } catch (e) { /* audio is optional */ } },
+    // v0.41: the background music quietly under the karaoke
+    duck(on) { if (!music || !ac) return; music.gain.setTargetAtTime(musicOn ? (on ? 0.06 : 0.3) : 0, ac.currentTime, 0.3); },
     setMusic(on) { musicOn = on; if (music) music.gain.setTargetAtTime(on ? 0.3 : 0, ac.currentTime, 0.4); },
     setSfx(on) { sfxOn = on; if (sfx) sfx.gain.setTargetAtTime(on ? 0.55 : 0, ac.currentTime, 0.2); if (!on) setRain(false); },
     // Called every second with the time of day and the weather.

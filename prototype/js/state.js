@@ -1855,6 +1855,14 @@ function clawTry() {
   if (S.mall.plush.length >= Object.keys(MALL.plush).length && !S.mall.bigTeddy) { S.mall.bigTeddy = true; S.me.store['room:bigteddy'] = (S.me.store['room:bigteddy'] || 0) + 1; return { r: 'win', k, big: true }; }   // v0.20: the full set
   return { r: 'win', k };
 }
+// v0.41: a toy you grabbed in the claw machine game: into your storage; all six and the giant teddy is yours too
+function clawPrize(k) {
+  S.mall = S.mall || { plush: [] }; S.mall.plush = S.mall.plush || [];
+  const key = 'room:' + k; S.me.store[key] = (S.me.store[key] || 0) + 1;
+  if (!S.mall.plush.includes(k)) S.mall.plush.push(k);
+  if (S.mall.plush.length >= Object.keys(MALL.plush).length && !S.mall.bigTeddy) { S.mall.bigTeddy = true; S.me.store['room:bigteddy'] = (S.me.store['room:bigteddy'] || 0) + 1; return 'big'; }
+  return 'ok';
+}
 function eatFood(k) {
   const f = MALL.foods[k];
   if (!f) return 'no';
@@ -2394,6 +2402,12 @@ function sportDone(kind, id, res) {
   R.p++; if (res.won) R.w++;
   if (kind === 'basketball' || kind === 'bowling') R.best = Math.max(R.best || 0, res.me || 0);
   if (kind === 'race' && res.time) R.best = R.best ? Math.min(R.best, res.time) : res.time;   // v0.38: your fastest length
+  // v0.41: fewest strokes round the mini golf, your best karaoke score, the most kilos fished, all the toys you've grabbed
+  if (kind === 'golf' && res.strokes) R.best = R.best ? Math.min(R.best, res.strokes) : res.strokes;
+  if (kind === 'karaoke' && res.pct !== undefined) R.best = Math.max(R.best || 0, res.pct);
+  if (kind === 'fishing' && res.kg !== undefined) R.best = Math.max(R.best || 0, res.kg);
+  if (kind === 'claw') { (res.toys || []).forEach(clawPrize); R.best = (R.best || 0) + (res.toys || []).length; }
+  if (kind === 'fishing' && res.fish) addBarn(S.me, 'fish', res.fish);
   if (!out.first) { addNeed('fun', BALL.againFun); out.fun = BALL.againFun; return out; }
   addNeed('fun', BALL.fun); out.fun = BALL.fun;
   if (id && id !== 'court') {

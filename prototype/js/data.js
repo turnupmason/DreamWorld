@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.40.0';
+const VERSION = '0.41.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -946,6 +946,7 @@ const STORES = {
   // a town moves
   hospital:  { e: '🚑', zh: '医院', en: 'Hospital', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#f4f7f9', roof: '#e5484d' },
   bowling:   { e: '🎳', zh: '保龄球馆', en: 'Bowling alley', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#33407a', roof: '#f2c230' },
+  amuse:     { e: '🎡', zh: '游乐园', en: 'Amusement park', cats: [], civic: true, late: 2, w: 16, d: 11, wall: '#f4ead8', roof: '#e5484d' },   // v0.41: rides out in the open, after the interstate is built
   aquatic:   { e: '🏊', zh: '游泳馆', en: 'Swimming centre', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#e6f3fa', roof: '#38a3e0' },
   museum:    { e: '🦖', zh: '博物馆', en: 'Museum', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#efe8da', roof: '#8a7a5a' },
   station:   { e: '🚉', zh: '火车站', en: 'Train station', cats: [], civic: true, late: true, w: 10, d: 6, wall: '#c98a5a', roof: '#3d4a66' },
@@ -1296,7 +1297,7 @@ function buildLayout(id, flip) {
       if (o.road) { const r = o.road; r.o = r.o || r.slice(); if (S0) r[3] = blvd[1]; else if (district === 'E') r[2] = blvd[0]; else r[0] = blvd[2]; }
       else roads.push([...o.seg, 'street']);
     } }
-  Object.entries(STORES).filter(([, s]) => s.w && s.late).forEach(placeStore);   // v0.38: the new ones in what's left
+  Object.entries(STORES).filter(([, s]) => s.w && s.late === true).forEach(placeStore);   // v0.38: the new ones in what's left (v0.41: late 2 = after the interstate)
   // v0.39: the interstate (FREEWAY), along the far edge of the new district: three lanes each way with a concrete
   // barrier between. On the town side a two-way frontage road (the avenues and streets that ran to the edge now end on
   // it); on the far side a short one-way frontage road. Slip ramps join both to the freeway, and an avenue from the
@@ -1377,6 +1378,9 @@ function buildLayout(id, flip) {
   // edge of town (with its ramps through the woods) is still there. `flyovers` stays as an empty list.
   const flyovers = [], labels = B.labels.map(([k, x, y]) => [k, fx(x), y]);
   labels.push(['area_new', (blvd[0] + blvd[2]) / 2 + (vert(blvd) ? 0 : 0), vert(blvd) ? (blvd[1] + blvd[3]) / 2 : blvd[1] - 13]);   // v0.38
+  // v0.41: the big places that came after the interstate (an amusement park…): along the boulevard in what's still free
+  if (fwy) { roads.filter(r => r[4] === 'frontage' || r.o).forEach(r => busyRects.push(r.slice(0, 4))); busyRects.push(...roads.filter(r => !busyRects.some(q => q[0] === r[0] && q[1] === r[1] && q[2] === r[2] && q[3] === r[3])).map(r => r.slice(0, 4))); }
+  Object.entries(STORES).filter(([, s]) => s.w && s.late === 2).forEach(placeStore);
   if (fwy) labels.push(['area_freeway', ...(fwy.axis === 'x' ? [fwy.over.s + 45, fwy.c - 3] : [fwy.c + 3, fwy.over.s + 45])]);   // v0.39
   return {
     id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers, fwy,
@@ -1474,6 +1478,7 @@ const JOBS = {
   // v0.38: the new buildings
   hospital: { zh: '医院护工', en: 'Care assistant', wage: 19, from: 7, to: 15 },
   bowling:  { zh: '保龄球馆店员', en: 'Bowling alley crew', wage: 15, from: 14, to: 22 },
+  amuse:    { zh: '游乐园操作员', en: 'Ride operator', wage: 16, from: 10, to: 18 },   // v0.41
   aquatic:  { zh: '救生员', en: 'Lifeguard', wage: 18, from: 10, to: 18 },
   museum:   { zh: '博物馆讲解员', en: 'Museum guide', wage: 21, from: 9, to: 17 },
   station:  { zh: '列车员', en: 'Train conductor', wage: 30, from: 6, to: 14 },
@@ -1576,6 +1581,9 @@ const VENUE = {
   groceries: { price: 40, items: { tomato: 2, potato: 2, egg: 2, milk: 1 } },   // a bag of groceries from the supermarket, to cook with
   // v0.38 (the games themselves are VENUE_GAMES)
   arcade: { price: 2, fun: 5, sec: 6 },                         // a go on an arcade machine at the bowling alley
+  // v0.41: the amusement park's rides (pay each time; you ride along) and its cotton candy
+  wheel: { price: 6, fun: 10, sec: 14 }, coaster: { price: 8, fun: 14, sec: 10 }, carousel: { price: 4, fun: 8, sec: 10 }, bumper: { price: 5, fun: 10, sec: 10 },
+  candy: { price: 4, hunger: 10, fun: 4, sec: 3 },
   dive: { fun: 8, sec: 6 },                                     // the diving board at the swimming centre
   sauna: { fun: 6, sec: 12 },                                   // a sit in the sauna
   visit: { social: 10, sec: 10 },                               // keep a patient in hospital company for a while
@@ -1594,6 +1602,12 @@ const VENUE = {
 // race, one length of `len` metres (tap left, right, left… to swim). price: what a game costs (the lane and the shoes).
 const VENUE_GAMES = {
   bowling: { e: '🎳', frames: 5, strike: 10, spare: 5, price: 8, place: 'bowling', spot: 'lane' },
+  // v0.41: mini golf (3 holes, fewest strokes, at most 6 a hole), karaoke (a song in two halves), the claw machine
+  // (3 grabs each; the toys you win are yours: the bowling alley's and the mall's), a fishing contest (at the lake)
+  golf: { e: '⛳', holes: 3, max: 6, price: 10, place: 'amuse', spot: 'golf' },
+  karaoke: { e: '🎤', price: 0, place: 'amuse', spot: 'stage' },
+  claw: { e: '🧸', grabs: 3, price: 5, place: 'bowling', places: ['bowling', 'mall'], spot: 'claw' },
+  fishing: { e: '🎣', secs: 60, price: 0, place: 'lake' },
   race:    { e: '🏊', len: 25, price: 0, place: 'aquatic', spot: 'race' },
 };
 // v0.38: what's on the cards in the museum's four halls (one a day each)
@@ -1620,7 +1634,7 @@ const MUSEUM_FACTS = {
   ],
 };
 const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas', 'tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist',
-  'hospital', 'bowling', 'aquatic', 'museum', 'station'];   // v0.37 / v0.38: + the new ones
+  'hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse'];   // v0.37 / v0.38 / v0.41: + the new ones
 // The fire station's tips, one a day.
 const FIRE_TIPS = [
   { zh: '家里装一个烟雾报警器，每个月按一下试试。', en: 'Fit a smoke alarm at home and press its test button once a month.' },
@@ -1840,8 +1854,35 @@ function localCost() { try { return typeof VIEW_TOWN !== 'undefined' && COMMUNIT
     if (!o || typeof o[key] !== 'number') return;
     const base = o[key];
     Object.defineProperty(o, 'base_' + key, { value: base, enumerable: false });
-    Object.defineProperty(o, key, { get: () => Math.max(1, Math.round(base * localCost())), enumerable: true, configurable: true });
+    Object.defineProperty(o, key, { get: () => (base ? Math.max(1, Math.round(base * localCost())) : 0), enumerable: true, configurable: true });   // (free stays free)
   };
   Object.values(VENUE).forEach(v => localize(v)); localize(SNACK); localize(MALL, 'movie'); localize(MALL, 'claw');
   Object.values(MALL.foods).forEach(f => localize(f)); Object.values(VENUE_GAMES).forEach(g => localize(g)); Object.values(SPECIALTIES).forEach(f => localize(f));
 })();
+
+// v0.41: what bites in the fishing contest (how likely, how heavy in kg); an old boot now and then
+const CONTEST_FISH = [
+  { k: 'bass', e: '🐟', zh: '鲈鱼', en: 'Bass', p: 0.34, kg: [0.4, 2.4] }, { k: 'trout', e: '🐟', zh: '鳟鱼', en: 'Trout', p: 0.26, kg: [0.3, 2] },
+  { k: 'carp', e: '🐠', zh: '鲤鱼', en: 'Carp', p: 0.18, kg: [1, 5.5] }, { k: 'catfish', e: '🐡', zh: '鲶鱼', en: 'Catfish', p: 0.12, kg: [1.5, 7] },
+  { k: 'koi', e: '🎏', zh: '金色锦鲤', en: 'Golden koi', p: 0.04, kg: [0.8, 2] }, { k: 'boot', e: '🥾', zh: '一只旧靴子', en: 'An old boot', p: 0.06, kg: [0, 0] },
+];
+// v0.41: karaoke songs (old nursery songs, free for anyone to sing). Each line: who sings it (0 you, 1 them) and its
+// notes: [MIDI pitch, beats, word in Chinese, word in English] (the two languages have the same number of syllables).
+const SONGS = [
+  { id: 'twinkle', e: '⭐', zh: '小星星', en: 'Twinkle, Twinkle, Little Star', bpm: 100, lines: [
+    [0, [[60, 1, '一', 'Twin'], [60, 1, '闪', 'kle'], [67, 1, '一', 'twin'], [67, 1, '闪', 'kle'], [69, 1, '亮', 'lit'], [69, 1, '晶', 'tle'], [67, 2, '晶', 'star']]],
+    [0, [[65, 1, '满', 'How'], [65, 1, '天', 'I'], [64, 1, '都', 'won'], [64, 1, '是', 'der'], [62, 1, '小', 'what'], [62, 1, '星', 'you'], [60, 2, '星', 'are']]],
+    [1, [[67, 1, '挂', 'Up'], [67, 1, '在', 'a'], [65, 1, '天', 'bove'], [65, 1, '上', 'the'], [64, 1, '放', 'world'], [64, 1, '光', 'so'], [62, 2, '明', 'high']]],
+    [1, [[67, 1, '好', 'Like'], [67, 1, '像', 'a'], [65, 1, '许', 'dia'], [65, 1, '多', 'mond'], [64, 1, '小', 'in'], [64, 1, '眼', 'the'], [62, 2, '睛', 'sky']]],
+  ] },
+  { id: 'jacques', e: '🔔', zh: '两只老虎', en: 'Frère Jacques', bpm: 112, lines: [
+    [0, [[60, 1, '两', 'Are'], [62, 1, '只', 'you'], [64, 1, '老', 'sleep'], [60, 1, '虎', 'ing']]],
+    [0, [[60, 1, '两', 'are'], [62, 1, '只', 'you'], [64, 1, '老', 'sleep'], [60, 1, '虎', 'ing']]],
+    [0, [[64, 1, '跑', 'Bro'], [65, 1, '得', 'ther'], [67, 2, '快', 'John']]],
+    [0, [[64, 1, '跑', 'Bro'], [65, 1, '得', 'ther'], [67, 2, '快', 'John']]],
+    [1, [[67, 0.5, '一', 'Morn'], [69, 0.5, '只', 'ing'], [67, 0.5, '没', 'bells'], [65, 0.5, '有', 'are'], [64, 1, '耳', 'ring'], [60, 1, '朵', 'ing']]],
+    [1, [[67, 0.5, '一', 'morn'], [69, 0.5, '只', 'ing'], [67, 0.5, '没', 'bells'], [65, 0.5, '有', 'are'], [64, 1, '尾', 'ring'], [60, 1, '巴', 'ing']]],
+    [1, [[60, 1, '真', 'Ding'], [55, 1, '奇', 'dang'], [60, 2, '怪', 'dong']]],
+    [1, [[60, 1, '真', 'ding'], [55, 1, '奇', 'dang'], [60, 2, '怪', 'dong']]],
+  ] },
+];

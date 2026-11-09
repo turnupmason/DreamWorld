@@ -2824,6 +2824,7 @@ const Scene = (() => {
     aquatic:    { wall: '#e6f3fa', roof: '#38a3e0', floor: ['#e8f1f5', '#dfe9ee'], till: '🎟️', clerk: { shirt: '#e5484d', top: 'polo', hair: 'short' } },
     museum:     { wall: '#efe8da', roof: '#8a7a5a', floor: ['#d9cfc2', '#cfc4b6'], till: '🎟️', clerk: { shirt: '#3b3125', top: 'jacket', inner: '#f4f4f0', hair: 'bun' } },
     station:    { wall: '#efe2d2', roof: '#3d4a66', floor: ['#d9d4ca', '#cfc9bd'], till: '🎫', clerk: { shirt: '#3d4a66', top: 'jacket', inner: '#f4f4f0', hat: 'cap', hatCol: '#3d4a66' } },
+    amuse:      { wall: '#f4ead8', roof: '#e5484d', floor: ['#a6d67f', '#9ccf76'], till: '🎟️', clerk: { shirt: '#e5484d', top: 'polo', hat: 'cap', hatCol: '#f2c230' } },   // v0.41
     suite:      { wall: '#f4ead8', roof: '#b08d57', floor: ['#c9a27a', '#bf9670'], till: '🛎️', clerk: { shirt: '#8a2a34', top: 'jacket' } },
   };
   const venueLook = k => VENUE_LOOK[k] && { ...(STORES[k] || {}), ...(PLACE_INFO[k] || {}), wall: VENUE_LOOK[k].wall || (STORES[k] || {}).wall || '#f1f0ea', roof: VENUE_LOOK[k].roof || (STORES[k] || {}).roof || '#c9893a' };
@@ -3116,7 +3117,7 @@ const Scene = (() => {
       furn('sofa', 2.8, 9.0, { tint: '#ec6aa8' }); furn('sofa', 7.8, 9.0, { tint: '#38d39f' });
       guest(3.4, 9.45, { pose: 'sit', seatH: 8.5, sit: 'chat', face: 1, back: true, dz: 0.3 }); guest(8.4, 9.45, { pose: 'sit', seatH: 8.5, sit: 'drink', face: 1, back: true, dz: 0.3 }); guest(9.3, 9.45, { pose: 'sit', seatH: 8.5, sit: 'phone', face: 1, back: true, dz: 0.3 });
       spot('arcade', 10.9, 0.3, 1.0, 0.8, { draw: 'arcade', stand: [11.4, 1.8], use: { at: [11.4, 1.35], pose: 'stand', view: 'back', turn: [0.1, -1] } });
-      dec('arcade', 12.1, 0.3, 1.0, 0.8, { i: 1 }); dec('clawbox', 13.3, 0.3, 1.1, 1.0); dec('arcade', 14.6, 0.3, 1.0, 0.8, { i: 2 });
+      dec('arcade', 12.1, 0.3, 1.0, 0.8, { i: 1 }); spot('claw', 13.3, 0.3, 1.1, 1.0, { draw: 'clawbox', stand: [13.85, 1.9] }); dec('arcade', 14.6, 0.3, 1.0, 0.8, { i: 2 });   // v0.41: a claw machine you really play
       who(12.6, 1.4, { ...back, scale: 0.75, look: 3 }); guest(15.1, 1.45, back);
       dec('shoecubby', 12.4, 3.9, 3.2, 0.5);
       spot('snack', 12.6, 8.8, 2.8, 0.8, { draw: 'snackbar', stand: [14.0, 10.3] });
@@ -3148,6 +3149,20 @@ const Scene = (() => {
       spot('shop', 12.6, 8.4, 2.8, 0.8, { draw: 'giftshop', stand: [14.0, 9.9] });
       furn('plant', 0.4, 0.4); furn('monstera', 15.2, 10.6);
       P = { RW: 16, RD: 12, door: [9.0, 11.3], counter: { x: 1.2, y: 10.0, w: 3.0, d: 0.9 } };
+    } else if (k === 'amuse') {   // v0.41: out in the open: the wheel and the coaster at the back, the carousel and the bumper cars, mini golf, a stage
+      const ride = (key, x, y, w, d, draw, stand) => spot(key, x, y, w, d, { draw, stand, use: { at: stand, pose: 'stand', ride: key } });
+      ride('wheel', 1.4, 1.2, 4.2, 1.6, 'ferris', [3.5, 3.6]);
+      ride('coaster', 8.0, 0.4, 13.0, 5.4, 'coasterride', [12.6, 6.6]);
+      ride('carousel', 1.4, 7.0, 4.4, 4.4, 'carouselride', [3.6, 12.2]);
+      ride('bumper', 13.6, 7.8, 7.0, 4.4, 'bumpers', [17.1, 12.9]);
+      spot('golf', 1.0, 13.6, 5.6, 3.2, { draw: 'minigolf', stand: [3.8, 17.3] });
+      spot('stage', 15.6, 13.6, 5.2, 2.8, { draw: 'stage', stand: [18.2, 17.2] });
+      spot('candy', 8.2, 13.8, 1.6, 1.0, { draw: 'candycart', stand: [9.0, 15.4] });
+      dec('balloons', 11.8, 13.8, 0.6, 0.6); dec('parktree', 7.0, 7.4, 0.8, 0.8); dec('parktree', 20.6, 6.4, 0.8, 0.8); dec('parktree', 0.6, 12.4, 0.8, 0.8);
+      guest(4.6, 3.9, { view: 'front', turn: [0.4, 1] }); guest(11.2, 7.0, { view: 'back', turn: [0.2, -1] }); guest(6.4, 11.8, { face: -1 }); guest(14.6, 13.0, { view: 'back', turn: [0.1, -1] });
+      guest(9.6, 15.6, { face: 1 }); guest(19.2, 6.9, { view: 'front', turn: [-0.4, 1] });
+      who(10.4, 8.6, { pose: 'stand', face: 1, scale: 0.72, look: 2 }); who(4.6, 15.8, { pose: 'stand', face: -1, scale: 0.72, look: 5 });
+      P = { RW: 22, RD: 18, door: [11, 17.4], counter: { x: 9.4, y: 10.2, w: 3.2, d: 0.9 }, open: true };
     } else if (k === 'station') {   // the platform at the back (trains come and go), the departures board, ticket machines, a coffee kiosk, benches
       dec('rails', 0, 0.15, 16, 1.5, { flat: true }); dec('platformedge', 0, 1.65, 16, 0.35, { flat: true });
       dec('train', 0, 0.2, 16, 1.4);
@@ -3580,6 +3595,32 @@ const Scene = (() => {
       case 'bigclock': { const tp = up(c, 94 * z), m = up(c, 70 * z); line(tp.x, tp.y, m.x, m.y - 8 * z, '#5b6470', 1 * z); circle(m.x, m.y, 8 * z, '#fffaf0', '#2d2d34', 1.4 * z); const tm = new Date();
         line(m.x, m.y, m.x + Math.sin(tm.getHours() / 6 * Math.PI) * 4 * z, m.y - Math.cos(tm.getHours() / 6 * Math.PI) * 4 * z, '#2d2d34', 1.2 * z); line(m.x, m.y, m.x + Math.sin(tm.getMinutes() / 30 * Math.PI) * 6 * z, m.y - Math.cos(tm.getMinutes() / 30 * Math.PI) * 6 * z, '#2d2d34', 0.8 * z); return true; }
       // ----- the hotel room -----
+      // ----- v0.41: the amusement park -----
+      case 'ferris': { const rd = meS.use && !meS.moving && meS.use.ride === 'wheel' ? S.me.look : null; flatRect(x - 0.2, y, d.w + 0.4, d.d, '#d9d4ca'); ferrisWheel(x + d.w / 2, y + d.d / 2, 92, ts, rd); return true; }
+      case 'coasterride': { const rd = meS.use && !meS.moving && meS.use.ride === 'coaster' ? S.me.look : null; coaster(x + d.w / 2, y + d.d / 2, d.w * 0.42, d.d * 0.42, ts, rd); return true; }
+      case 'carouselride': { const rd = meS.use && !meS.moving && meS.use.ride === 'carousel' ? S.me.look : null; carousel(x + d.w / 2, y + d.d / 2, d.w * 0.42, ts, rd); return true; }
+      case 'bumpers': { const rd = meS.use && !meS.moving && meS.use.ride === 'bumper' ? S.me.look : null; bumperCars(x, y, d.w, d.d, ts, rd); return true; }
+      case 'minigolf': {   // a little course: green carpet, a wooden edge, a windmill, the flag
+        flatRect(x, y, d.w, d.d, '#8a6a4a'); flatRect(x + 0.12, y + 0.12, d.w - 0.24, d.d - 0.24, '#3fa55a');
+        flatRect(x + 0.12, y + d.d * 0.45, d.w - 0.24, 0.4, '#4cb868');
+        const hole = iso(x + d.w * 0.82, y + d.d * 0.3); ellipse(hole.x, hole.y, 4 * z, 2 * z, '#1d2a1d'); line(hole.x, hole.y, hole.x, hole.y - 22 * z, '#f4f4f0', 1.2 * z); pg([[hole.x, hole.y - 22 * z], [hole.x + 9 * z, hole.y - 19 * z], [hole.x, hole.y - 16 * z]], '#e5484d');
+        const m = { x: x + d.w * 0.4, y: y + d.d * 0.35 }; box(m.x - 0.4, m.y - 0.3, 0.8, 0.6, 18, '#f4ead8', 0, { top: '#e5484d' }); const hub = up(iso(m.x, m.y + 0.3), 16 * z);
+        for (let k2 = 0; k2 < 4; k2++) { const a = t * 1.6 + k2 * Math.PI / 2; poly([hub, { x: hub.x + Math.cos(a - 0.18) * 16 * z, y: hub.y + Math.sin(a - 0.18) * 16 * z }, { x: hub.x + Math.cos(a + 0.18) * 16 * z, y: hub.y + Math.sin(a + 0.18) * 16 * z }], '#ffffff', '#8a6a4a', 0.6 * z); }
+        const bl = iso(x + d.w * 0.15, y + d.d * 0.8); circle(bl.x, bl.y - 1.5 * z, 2 * z, '#ffffff', '#c9cfd6', 0.5 * z);
+        if (z > 0.4) { const q = up(c, 30 * z); pill(`⛳ ${curLang() === 'zh' ? '迷你高尔夫' : 'Mini golf'}`, q.x, q.y, '#3fa55a', '#ffffff', `800 ${Math.max(8, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(12, 14 * z)); }
+        return true;
+      }
+      case 'stage': {   // a little stage with lights, speakers and a microphone: karaoke
+        box(x, y, d.w, d.d, 8, '#3a2f4a', 0, { top: '#5a4a72' });
+        [[0.08, '#e5484d'], [0.92, '#e5484d']].forEach(([u]) => { const a = iso(x + u * d.w, y + 0.2); box(x + u * d.w - 0.25, y + 0.1, 0.5, 0.5, 26, '#2d2d34', 8); });
+        const back = [iso(x, y), iso(x + d.w, y)]; poly([up(back[0], 8 * z), up(back[1], 8 * z), up(back[1], 52 * z), up(back[0], 52 * z)], '#6b2a6b'); for (let k2 = 0; k2 < 8; k2++) { const q = lerp(up(back[0], 52 * z), up(back[1], 52 * z), (k2 + 0.5) / 8); circle(q.x, q.y + 3 * z, 2 * z, Math.floor(t * 3 + k2) % 2 ? '#ffd36b' : '#ec6aa8'); if (NIGHT > 0.3) glow(q.x, q.y, 8 * z, 0.4); }
+        const mic = up(iso(x + d.w / 2, y + d.d * 0.6), 8 * z); line(mic.x, mic.y, mic.x, mic.y - 20 * z, '#2d2d2d', 1.4 * z); circle(mic.x, mic.y - 21 * z, 2.2 * z, '#8a9099');
+        if (z > 0.4) { const q = up(c, 62 * z); pill(`🎤 ${curLang() === 'zh' ? '卡拉OK' : 'Karaoke'}`, q.x, q.y, '#6b2a6b', '#ffe17a', `800 ${Math.max(8, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(12, 14 * z)); }
+        return true;
+      }
+      case 'candycart': { box(x, y, d.w, d.d, 14, '#f2a6c8', 0, { top: '#ffffff' }); const q = up(c, 14 * z); ellipse(q.x, q.y - 8 * z, 8 * z, 7 * z, '#f7c6dc'); line(q.x, q.y, q.x, q.y - 4 * z, '#ffffff', 1 * z); const r2 = up(c, 34 * z); for (let k2 = 0; k2 < 5; k2++) poly([r2, { x: r2.x - 16 * z + k2 * 8 * z, y: r2.y + 8 * z }, { x: r2.x - 8 * z + k2 * 8 * z, y: r2.y + 8 * z }], k2 % 2 ? '#ffffff' : '#ec6aa8'); return true; }
+      case 'balloons': { for (let k2 = 0; k2 < 5; k2++) { const wv = Math.sin(t * 2 + k2) * 1.6 * z, q = { x: c.x + (k2 - 2) * 4 * z + wv, y: c.y - 34 * z - (k2 % 2) * 6 * z }; line(c.x, c.y - 8 * z, q.x, q.y + 5 * z, '#888', 0.5 * z); ellipse(q.x, q.y, 4 * z, 5 * z, RIDE_COLS[k2]); } return true; }
+      case 'parktree': drawWildTree(x + 0.4, y + 0.4, 0.5, ts); return true;
       case 'kingbed': { box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 6, '#6b4428', 0); box(x, y, d.w, d.d, 4, '#ffffff', 6, { top: '#fbfbf7' }); box(x + 0.1, y + 0.15, 0.6, d.d - 0.3, 3, '#ffffff', 10, { shadow: false, top: '#ffffff' });
         box(x + 1.0, y + 0.05, d.w - 1.1, d.d - 0.1, 1.4, '#8a2a34', 10, { shadow: false, top: '#a23a44' }); box(x - 0.1, y - 0.05, 0.15, d.d + 0.1, 30, '#6b4428', 0, { shadow: false }); return true; }
       case 'minibar': { box(x, y, d.w, d.d, 18, '#3b3125', 0, { top: '#5a4632' }); const q = up(c, 18 * z); emoji('🍾', q.x - 4 * z, q.y, 8 * z); emoji('🥂', q.x + 5 * z, q.y + 1 * z, 8 * z); return true; }
@@ -3692,6 +3733,7 @@ const Scene = (() => {
   // You inside: walking, or sitting / lying / working out at something (meS.use).
   function drawMeShop(z, ts) {
     const U = meS.use;
+    if (U && U.ride && !meS.moving) return;   // v0.41: on a ride: the ride draws you
     if (U && !meS.moving) {
       const p = iso(U.at[0], U.at[1]);
       drawPerson(p.x, p.y - (U.lift || 0) * z, z, { look: S.me.look, face: U.face || 1, view: U.view || null, turn: U.turn || [0, -1], energy: energyLevel(), ts, seed: 3, pose: U.pose, moving: !!U.moving, phase: ts / (U.pose === 'bike' ? 120 : 80), noBike: true, seatH: U.seatH, sit: U.sit, dir: U.dir, matCol: '#38a3e0' });
