@@ -259,7 +259,11 @@ let CAR_REAR = false;
 const HL = () => (CAR_REAR ? '#e5484d' : '#fff6c8');
 // A car driving along a road in any of the 4 directions. Drawn along y (+y = towards you); along x it is the same
 // picture mirrored left-right on screen (in this view that swaps x and y); going away from you shows the back.
-function drawCarDir(c, px, py, dir, ts) {
+// v0.68: cars drawn smaller in town (CAR_SCALE, set by the scene while it draws), round where they stand
+let CAR_SCALE = 1;
+function carScaled(px, py, f) { if (CAR_SCALE === 1) return f(); const p = iso(px, py); ctx.save(); ctx.translate(p.x, p.y); ctx.scale(CAR_SCALE, CAR_SCALE); ctx.translate(-p.x, -p.y); try { return f(); } finally { ctx.restore(); } }
+function drawCarDir(c, px, py, dir, ts) { return carScaled(px, py, () => drawCarDir0(c, px, py, dir, ts)); }
+function drawCarDir0(c, px, py, dir, ts) {
   const two = CARS[c.k] && CARS[c.k].kind === 'two', s = CAR_SPEC[c.k] || CAR_SPEC.mini, len = two ? 1.6 : (s.len || 2.4);
   const p = iso(px, py);
   ctx.save();
@@ -271,9 +275,10 @@ function drawCarDir(c, px, py, dir, ts) {
 // ramps instead of sliding sideways. The picture is the one along +y, turned onto the heading; when its left side is
 // the one we see, mirrored across its length; going away from us, the car the other way round showing its back.
 // Bikes and scooters (drawn flat on screen) keep to the nearest of the four ways.
-function drawCarAng(c, px, py, ang, ts) {
+function drawCarAng(c, px, py, ang, ts) { return carScaled(px, py, () => drawCarAng0(c, px, py, ang, ts)); }
+function drawCarAng0(c, px, py, ang, ts) {
   let hx = Math.cos(ang), hy = Math.sin(ang);
-  if (CARS[c.k] && CARS[c.k].kind === 'two') return drawCarDir(c, px, py, Math.abs(hx) > Math.abs(hy) ? (hx > 0 ? '+x' : '-x') : (hy > 0 ? '+y' : '-y'), ts);
+  if (CARS[c.k] && CARS[c.k].kind === 'two') return drawCarDir0(c, px, py, Math.abs(hx) > Math.abs(hy) ? (hx > 0 ? '+x' : '-x') : (hy > 0 ? '+y' : '-y'), ts);
   const s = CAR_SPEC[c.k] || CAR_SPEC.mini, len = s.len || 2.4, rear = hx + hy < 0;
   if (rear) { hx = -hx; hy = -hy; }
   const mirror = hx > hy, m = mirror ? [-hy, hx, hx, hy] : [hy, hx, -hx, hy];

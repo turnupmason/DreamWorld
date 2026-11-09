@@ -467,10 +467,12 @@ function drawGlows() {
   GLOWS = [];
 }
 // How dark it is at this (simulated) time of day: 0 day, 1 night. With a community: its own local time.
+// v0.68 (Mason #33: "by the real time: light by 8, slowly darker, fully dark at 7 in the evening; the street lights come
+// on slowly"): DAYLIGHT (data.js) says when; between, it changes smoothly. The lamps' glow follows NIGHT.
 function nightAmount(ms, t) {
-  const d = new Date(ms), h = t ? localHour(t, ms) : d.getHours() + d.getMinutes() / 60;
-  if (h >= 7 && h < 17.5) return 0;
-  if (h >= 17.5 && h < 19.5) return (h - 17.5) / 2;
-  if (h >= 5.5 && h < 7) return 1 - (h - 5.5) / 1.5;
+  const d = new Date(ms), h = t ? localHour(t, ms) : d.getHours() + d.getMinutes() / 60, D = DAYLIGHT, sm = x => x * x * (3 - 2 * x);
+  if (h >= D.light && h < D.dimFrom) return 0;
+  if (h >= D.dimFrom && h < D.dark0) return sm((h - D.dimFrom) / (D.dark0 - D.dimFrom));
+  if (h >= D.dawn && h < D.light) return 1 - sm((h - D.dawn) / (D.light - D.dawn));
   return 1;
 }

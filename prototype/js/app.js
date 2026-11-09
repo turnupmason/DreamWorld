@@ -283,12 +283,16 @@ function renderOverlay() {
   fab.innerHTML = f; fab.hidden = !f;
   tray.hidden = !ed;
   if (ed) tray.innerHTML = trayHTML(ed);
-  const n = ripeCount(), busy = Scene.busy();
+  const n = ripeCount(), busy = Scene.busy(), away = S.trav && COMMUNITIES[S.trav.town] && S.trav.town !== myTown() ? S.trav.town : null;
+  if (UI.tab === 'home' && !UI.inside && !ed && away) {   // v0.68 (Mason #33): you're in another city: say so (no farm buttons: you aren't here)
+    hv.hidden = false; hv.className = 'harvest-all away'; hv.innerHTML = `🧳 ${t('away_banner', { c: nm(COMMUNITIES[away]) })}`; hv.dataset.act = 'findMe';
+  } else {
   const showHv = UI.tab === 'home' && !UI.inside && !ed && !S.live && (n > 0 || busy > 0);
   hv.hidden = !showHv;
   hv.className = 'harvest-all' + (busy > 0 ? ' busy' : '');
   hv.innerHTML = busy > 0 ? `✋ ${t('stop_jobs', { n: busy })}` : `🧺 ${t('harvest_all')} · ${n}`;
   hv.dataset.act = busy > 0 ? 'stopJobs' : 'harvestAll';
+  }
   lb.hidden = !S.live || ed;
   if (S.live) {
     const w = WORKOUTS[S.live.type];
@@ -298,7 +302,7 @@ function renderOverlay() {
   }
 }
 function overlaySig() {
-  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang, phoneBadge(), ['hunger', 'social', 'fun'].map(k => Math.round(needs()[k] / 5)).join(','), JSON.stringify(Scene.tripNow()), S.out ? S.out.place || S.out.id || 1 : 0, UI.inStore, UI.mallFloor, UI.inVenue, Scene.venueBusy()].join('|');
+  return [UI.tab, UI.inside, UI.visit, UI.wtown, VIEW_TOWN, S.trav ? S.trav.town : '', ripeCount(), Scene.busy(), S.live ? Math.floor(liveMin()) + ':' + S.live.hr : '', unreadMail(), S.pending.length, LEVEL, petAlertCount(), actionsLeft(), S.lang, phoneBadge(), ['hunger', 'social', 'fun'].map(k => Math.round(needs()[k] / 5)).join(','), JSON.stringify(Scene.tripNow()), S.out ? S.out.place || S.out.id || 1 : 0, UI.inStore, UI.mallFloor, UI.inVenue, Scene.venueBusy()].join('|');
 }
 // 1F 2F 3F … chips inside a house, plus ＋ to build another storey in your own.
 function floorChips(h) {
@@ -1121,9 +1125,9 @@ const SHEETS = {
         <div class="act-grid">${MUSEUM_GIFT.amounts.map(n => `<button class="act-tile" data-act="museumGive" data-arg="${n}" ${S.me.coins >= n ? '' : 'disabled'}><span>💝</span><b>🪙${fmtNum(n)}</b><i>${t('md_fun', { n: MUSEUM_GIFT.fun })}</i></button>`).join('')}</div>`; }
     else if (key === 'museum|mystatue') body = `<p>${museumTier() && museumTier().statue ? t('md_statue_yes', { name: esc(S.me.name || '') }) : t('md_statue_no', { n: fmtNum(MUSEUM_GIFT.tiers[2].at), left: fmtNum(Math.max(0, MUSEUM_GIFT.tiers[2].at - museumGiven())) })}</p>`;
     else if (key === 'museum|shop') body = `<p class="muted small">${t('sp_souvenir_note')}</p><button class="btn primary block gap-top" data-act="souvenirBuy" ${S.me.coins >= VENUE.souvenir.price ? '' : 'disabled'}>🦖 ${t('sp_souvenir_btn', { n: VENUE.souvenir.price })}</button>`;
-    else if (key === 'station|ticket') { const from = whereNow(), dests = Object.keys(DREAM_AT).filter(id => id !== from && COMMUNITIES[id] && Drive.plan(from, id, 'train'));   // v0.61: real trains along the railway
+    else if (key === 'station|ticket') { const from = whereNow(), dests = Object.keys(DREAM_AT).filter(id => id !== from && COMMUNITIES[id] && Drive.plan(from, id, 'train')).sort((a, b) => (b === myTown()) - (a === myTown()));   // (v0.68: home first)   // v0.61: real trains along the railway
       body = !dests.length ? `<p class="muted">${t('tr_no_here')}</p>` : `<p class="muted small">${t('tr_note')}</p><div class="card">${dests.map(id => { const P = Drive.plan(from, id, 'train');
-        return `<div class="list-item"><span class="big-emoji">${COMMUNITIES[id].flag}</span><div class="grow"><b>${nm(COMMUNITIES[id])}</b> ${isTeamCity(id) ? '🏟️' : ''}<div class="muted small">${P.km} km · ${t('tr_mins', { m: P.mins })} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}</div></div><button class="btn small primary" data-act="trainGo" data-arg="${id}" ${S.me.coins >= P.cost ? '' : 'disabled'}>🚆 🪙${P.cost}</button></div>`; }).join('')}</div>`; }
+        return `<div class="list-item ${id === myTown() ? 'home-row' : ''}"><span class="big-emoji">${id === myTown() ? '🏡' : COMMUNITIES[id].flag}</span><div class="grow"><b>${nm(COMMUNITIES[id])}</b> ${id === myTown() ? `<span class="tag ok">${t('ah_home_tag')}</span>` : isTeamCity(id) ? '🏟️' : ''}<div class="muted small">${P.km} km · ${t('tr_mins', { m: P.mins })} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}</div></div><button class="btn small primary" data-act="trainGo" data-arg="${id}" ${S.me.coins >= P.cost ? '' : 'disabled'}>🚆 🪙${P.cost}</button></div>`; }).join('')}</div>`; }
     else if (key === 'station|board') body = `<div class="card">${Scene.trainBoard().slice(1).map(r => `<div class="list-item"><b>🚆 ${esc(r)}</b></div>`).join('')}</div><p class="muted small">${t('sp_board_note')}</p>`;
     else if (key === 'station|watch') body = once('trains', 'trains', `🚆 ${t('sp_trains_btn', { n: VENUE.trains.fun })}`);
     else if (key === 'suite|bed') body = once('bed', 'bed', `😴 ${t('sp_bed_btn', { n: VENUE.bed.fun })}`);
@@ -3167,9 +3171,23 @@ function panelWorld() {
     <p class="muted note">${t('dm_sub')}</p>
     <div class="dm-legend">🏟️ ${t('dm_city')} · 🏘️ ${t('dm_town')} · <i class="lg-road"></i> ${t('dm_road')} · <i class="lg-rail"></i> ${t('dm_rail')} · ✈️ ${t('dm_airport')} · ⚓ ${t('dm_port')}</div>
     <button class="wmap-thumb" data-act="worldMapOpen"><canvas id="worldCanvas"></canvas><span class="wm-open">🔍 ${t('wm_open')}</span></button>
-    ${townMoveHtml()}${card}${countyCard(sel)}
+    ${townMoveHtml()}${awayHomeCard()}${card}${countyCard(sel)}
     ${list(TEAM_CITIES.filter(id => COMMUNITIES[id]), '🏟️ ' + t('dm_cities'))}${list(Object.keys(COMMUNITIES).filter(id => !isTeamCity(id)), '🏘️ ' + t('dm_towns'))}
     <p class="muted center">${t('dm_note')}</p>`;
+}
+// v0.68 (Mason #33: "in another city I didn't know how to get back, couldn't find myself"): where you are, where
+// home is, and every way back from here (drive if your car's here, the train, the plane, the ship), with a button each
+function awayHomeCard() {
+  const here = whereNow(), home = myTown();
+  if (here === home) return '';
+  const D = Drive.plan(here, home), T = Drive.plan(here, home, 'train'), A = Drive.plan(here, home, 'air'), Sh = Drive.plan(here, home, 'sea'), car = carWithYou() && D;
+  const row = (e, txt, act, arg, label) => `<div class="row gap-top"><span class="grow small">${e} ${txt}</span><button class="btn small primary" data-act="${act}" data-arg="${arg}">${label}</button></div>`;
+  return `<div class="card away-home"><b>🧳 ${t('ah_title', { c: nm(COMMUNITIES[here]), h: nm(COMMUNITIES[home]) })}</b>
+    ${car ? row('🚗', t('dr_info_short', { km: D.km, n: D.cost }), 'driveTo', home + '|', t('dr_go_home')) : D ? `<p class="muted small">🚗 ${t('ah_no_car', { c: nm(COMMUNITIES[(S.carAt && S.carAt.town) || home]) })}</p>` : ''}
+    ${T ? row('🚆', t('tr_info', { km: T.km, n: T.cost, m: T.mins }), 'goStation', '', t('tr_go_station')) : ''}
+    ${A ? row('✈️', t('fl_info', { km: A.km, n: A.cost, m: A.mins }), 'goHub', 'airport', t('hub_go_air')) : ''}
+    ${Sh ? row('⛴️', t('sh_info', { km: Sh.km, n: Sh.cost, m: Sh.mins }), 'goHub', 'port', t('hub_go_sea')) : ''}
+    <button class="btn block gap-top" data-act="findMe">📍 ${t('ah_see_me')}</button></div>`;
 }
 // v0.60 (Mason #30): driving to another place: where you are now (another city, or home), the way there, gas and tolls
 const whereNow = () => (S.trav && COMMUNITIES[S.trav.town] ? S.trav.town : myTown());
@@ -3211,11 +3229,11 @@ function flySailHtml(id) {
 const hubIn = (town, hub) => (layoutOf(town).stores || []).some(st => st[0] === hub);
 // the departures board at the airport / the port: everywhere you can go from here
 function hubBoard(hub) {
-  const air = hub === 'airport', from = whereNow(), list = (air ? DREAM_AIR : DREAM_PORT).filter(id => id !== from && COMMUNITIES[id]), tix = ticketsLeft(), e = air ? '✈️' : '⛴️', act = air ? 'flyGo' : 'sailGo';
+  const air = hub === 'airport', from = whereNow(), list = (air ? DREAM_AIR : DREAM_PORT).filter(id => id !== from && COMMUNITIES[id]).sort((a, b) => (b === myTown()) - (a === myTown())), tix = ticketsLeft(), e = air ? '✈️' : '⛴️', act = air ? 'flyGo' : 'sailGo';
   const car = !air && carWithYou();
   return `<p>${t(air ? 'hub_desc_air' : 'hub_desc_sea')}</p>${car ? `<p class="muted small">🚗 ${t('sh_car', { n: TRAVEL.shipCar })}</p>` : ''}<p class="muted small">🎟️ ${t('pass_tix', { n: tix })}</p>
     <div class="card">${list.map(id => { const P = Drive.plan(from, id, air ? 'air' : 'sea'); if (!P) return ''; const cost = P.cost + (car ? TRAVEL.shipCar : 0), c = COMMUNITIES[id];
-      return `<div class="list-item"><span class="big-emoji">${c.flag}</span><div class="grow"><b>${nm(c)}</b> ${isTeamCity(id) ? '🏟️' : ''}<div class="muted small">${P.km} km · ${t('tr_mins', { m: P.mins })} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}${(passport().st || {})[id] ? ' · 📕' : ''}</div></div>
+      return `<div class="list-item ${id === myTown() ? 'home-row' : ''}"><span class="big-emoji">${id === myTown() ? '🏡' : c.flag}</span><div class="grow"><b>${nm(c)}</b> ${id === myTown() ? `<span class="tag ok">${t('ah_home_tag')}</span>` : isTeamCity(id) ? '🏟️' : ''}<div class="muted small">${P.km} km · ${t('tr_mins', { m: P.mins })} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}${(passport().st || {})[id] ? ' · 📕' : ''}</div></div>
         ${tix ? `<button class="btn small" data-act="${act}" data-arg="${id}|tix">🎟️</button>` : ''}<button class="btn small primary" data-act="${act}" data-arg="${id}|" ${S.me.coins >= cost ? '' : 'disabled'}>${e} 🪙${cost}</button></div>`; }).join('')}</div>`;
 }
 function travelGo(mode, arg) {

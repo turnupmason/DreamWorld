@@ -795,7 +795,7 @@ const Scene = (() => {
   // Roads: street (2 wide, dashed centre line), avenue (3 wide, double yellow line), dirt (country road).
   // Roads (v0.13): a paved sidewalk along both sides (people walk there), the asphalt between, lane lines, and a
   // zebra crossing where a road meets another. Drawn in passes so crossings join up cleanly.
-  const SIDEWALK = { avenue: 0.5, avenue4: AVENUE4.sw, street: 0.42, lane: 0.36, dirt: 0, boulevard: 0.4, frontage: 0.45 };   // v0.38: + the new district's four-lane boulevard; v0.39: + the frontage roads
+  const SIDEWALK = { avenue: 0.5, avenue4: AVENUE4.sw, street: 0.3, lane: 0.36, dirt: 0, boulevard: 0.4, frontage: 0.45 };   // (v0.68: the street's narrower, so a car fits its lane)   // v0.38: + the new district's four-lane boulevard; v0.39: + the frontage roads
   // v0.47: the middle of a turning circle: just past the road's end, so the circle closes it off
   const culCentre = C => (C.h ? [C.x + C.sg * (C.r - 0.9), C.y] : [C.x, C.y + C.sg * (C.r - 0.9)]);
   function drawRoads(vr) {
@@ -2926,9 +2926,9 @@ const Scene = (() => {
     const N = roadNet();
     return dir === '+x' || dir === '-x' ? N.H.find(r => Math.abs(r.y - y) < 0.05 && x >= r.a - 0.7 && x <= r.b + 0.7) : N.V.find(r => Math.abs(r.x - x) < 0.05 && y >= r.a - 0.7 && y <= r.b + 0.7);
   }
-  const lanesOf = r => (!r ? [0.45] : r.kind === 'boulevard' ? [0.705, 1.635] : r.kind === 'avenue4' ? AVENUE4.lanes : r.kind === 'frontage' ? (r.ow ? [-0.52, 0.52] : [0.52]) : [0.45]);
+  const lanesOf = r => (!r ? [TOWN_CAR.lanes.street] : r.kind === 'boulevard' ? [0.705, 1.635] : r.kind === 'avenue4' ? AVENUE4.lanes : r.kind === 'frontage' ? (r.ow ? [-0.52, 0.52] : [0.52]) : [TOWN_CAR.lanes[r.kind] || TOWN_CAR.lanes.street]);   // (v0.68: the middle of each lane)
   // v0.57: half a car's length (cars are 1.6–2.4 long; gaps are measured bumper to bumper, not middle to middle)
-  const halfLen = c => (c.car && CARS[c.car.k] && CARS[c.car.k].kind === 'two' ? 0.45 : ((CAR_SPEC[c.car && c.car.k] || CAR_SPEC.sedan).len || 2) / 2);
+  const halfLen = c => (c.car && CARS[c.car.k] && CARS[c.car.k].kind === 'two' ? 0.45 : ((CAR_SPEC[c.car && c.car.k] || CAR_SPEC.sedan).len || 2) / 2) * TOWN_CAR.scale;   // (v0.68: as drawn)
   // v0.29: a car waits behind the one in front of it in its lane (a queue at the lights doesn't pile into one car)
   function blocked(c, others, reach = 2.7) {
     const v = DIRV[c.dir];
@@ -2981,7 +2981,7 @@ const Scene = (() => {
     // v0.58: on a curved road: keep right of the way it's heading
     if (!hi && !r && c.path && c.path.length && c.path[0][4]) {
       const q = c.path[0], dx = q[0] - c.x, dy = q[1] - c.y, d = Math.hypot(dx, dy) || 1, k2 = c.ox === undefined ? 1 : 1 - Math.exp(-dt * 5);
-      c.ox = (c.ox || 0) + (-dy / d * 0.55 - (c.ox || 0)) * k2; c.oy = (c.oy || 0) + (dx / d * 0.55 - (c.oy || 0)) * k2;
+      c.ox = (c.ox || 0) + (-dy / d * TOWN_CAR.lanes.bend - (c.ox || 0)) * k2; c.oy = (c.oy || 0) + (dx / d * TOWN_CAR.lanes.bend - (c.oy || 0)) * k2;
       return r;
     }
     // v0.47: off the road (a car park, a drive): no lane, it drives straight in or out and swings into its lane
@@ -3047,7 +3047,10 @@ const Scene = (() => {
       for (let u = a + 8; u < b - 8; u += TRANSIT.busEvery) {
         if (cross.some(([c0, c1]) => u > c0 - 3 && u < c1 + 3)) continue;
         const sd = k++ % 2 ? 1 : -1, lane = (lanesOf({ kind: r[4] }).slice(-1)[0] || 0.45) * sd;
-        list.push({ pt: h ? [u, m + sd * (hw - sw / 2)] : [m + sd * (hw - sw / 2), u], road: h ? [u, m] : [m, u], lane, h, sd, dir: h ? (sd > 0 ? '+x' : '-x') : (sd > 0 ? '-y' : '+y') });
+        const pt = h ? [u, m + sd * (hw - sw / 2)] : [m + sd * (hw - sw / 2), u], P = TL.park, fx0 = pt[0] - (h ? 1.3 : 0.4), fx1 = pt[0] + (h ? 1.3 : 0.4), fy0 = pt[1] - (h ? 0.4 : 1.3), fy1 = pt[1] + (h ? 0.4 : 1.3), out = sd * 0.6;   // v0.68: not where the shelter would stand on the park or a building
+        const foot = h ? [fx0, fy0 + out, fx1, fy1 + out] : [fx0 + out, fy0, fx1 + out, fy1];
+        if ((P && foot[2] > P.x && foot[0] < P.x + P.w && foot[3] > P.y && foot[1] < P.y + P.d) || bldRects().some(q => foot[2] > q[0] && foot[0] < q[2] && foot[3] > q[1] && foot[1] < q[3])) { k--; continue; }
+        list.push({ pt, road: h ? [u, m] : [m, u], lane, h, sd, dir: h ? (sd > 0 ? '+x' : '-x') : (sd > 0 ? '-y' : '+y') });
       }
     });
     BUS = { id: TL.id, list };
@@ -3196,7 +3199,7 @@ const Scene = (() => {
     const ms = now(), mine = trip && !trip.arrived && trip.town === VIEW_TOWN && (trip.legs[trip.li] || {}).ride;
     busLines().forEach(L => [1, -1].forEach(dir => { for (let i = 0; i < L.nb; i++) {
       if (mine && mine.no === L.no && mine.dir === dir && mine.i === i) continue;
-      const B = busS(L, dir, busTau(L, dir, i, ms)), [x, y] = linePt(L, B.s), q = linePt(L, B.s + dir * 0.6), ang = Math.atan2(q[1] - y, q[0] - x), ox = -Math.sin(ang) * 0.55, oy = Math.cos(ang) * 0.55;
+      const B = busS(L, dir, busTau(L, dir, i, ms)), [x, y] = linePt(L, B.s), q = linePt(L, B.s + dir * 0.6), ang = Math.atan2(q[1] - y, q[0] - x), ox = -Math.sin(ang) * 0.42, oy = Math.cos(ang) * 0.42;
       if (x < vr.x0 - 3 || x > vr.x1 + 3 || y < vr.y0 - 3 || y > vr.y1 + 3) continue;
       objs.push({ d: x + ox + y + oy + 0.6, f: () => drawCarAng({ k: 'bus', color: L.col, line: L.no }, x + ox, y + oy, ang, ts) });
     } }));
@@ -3387,7 +3390,7 @@ const Scene = (() => {
           trip.rideT = (trip.rideT || 0) + dt;
           if ((trip.rideT > 2 && B.stop && Math.abs(B.s - R1.s1) < 0.6) || trip.rideT > L.cyc) { const e = linePt(L, R1.s1); trip.x = e[0]; trip.y = e[1]; trip.path = []; trip.rideT = 0; nextLeg(false); return; }
           const [x, y] = linePt(L, B.s), q = linePt(L, B.s + R1.dir * 0.6), ang = Math.atan2(q[1] - y, q[0] - x);
-          trip.x = x; trip.y = y; trip.ang = ang; trip.ox = -Math.sin(ang) * 0.55; trip.oy = Math.cos(ang) * 0.55; trip.moving = !B.stop; trip.dir = Math.abs(q[0] - x) > Math.abs(q[1] - y) ? (q[0] > x ? '+x' : '-x') : (q[1] > y ? '+y' : '-y');
+          trip.x = x; trip.y = y; trip.ang = ang; trip.ox = -Math.sin(ang) * 0.42; trip.oy = Math.cos(ang) * 0.42; trip.moving = !B.stop; trip.dir = Math.abs(q[0] - x) > Math.abs(q[1] - y) ? (q[0] > x ? '+x' : '-x') : (q[1] > y ? '+y' : '-y');
           return;
         }
       } }
@@ -3878,8 +3881,8 @@ const Scene = (() => {
       who(5.5, 12.6, { staff: true, face: -1, prop: '🪣', look: { shirt: '#4f7a3a', top: 'polo', hat: 'cap', hatCol: '#c9b08a', hair: 'short', hairCol: '#2b1d14', skin: '#d39a6c' } });
       P = { RW: 22, RD: 18, door: [11, 17.4], counter: { x: 13.0, y: 15.0, w: 2.8, d: 0.9 }, open: true };
     } else if (k === 'stadium' || k === 'arena') {   // v0.42: (v0.59: the arena is laid out the same, indoors, without the batting cage) tiers of seats on two sides of the field, the scoreboard in the corner; along the front the hot dog stand and the batting cage
-      dec('standsback', 3.2, 0.1, 20.7, 2.9, { flat: true });
-      dec('pitch', 3.7, 3.5, 19.9, 10.2, { flat: true });
+      dec('standsback', 3.2, 0.1, 20.7, 2.9, { flat: true, noWalk: true });
+      dec('pitch', 3.7, 3.5, 19.9, 10.2, { flat: true, noWalk: true });   // (v0.68: nobody walks onto the field: the game is on)
       spot('board', 0.1, 0.1, 2.9, 2.9, { draw: 'scoreboard', stand: [4.4, 15.2] });
       spot('seats', 0.1, 3.1, 2.9, 11.4, { draw: 'stands', stand: [3.3, 15.0], use: { at: [3.3, 15.0], pose: 'sit', ride: 'seats' } });
       spot('hotdog', 9.4, 15.0, 1.8, 1.0, { draw: 'hotdogstand', stand: [10.3, 16.6] });
@@ -3924,7 +3927,7 @@ const Scene = (() => {
       furn('plant', 11.0, 7.6);
       P = { RW: 12, RD: 9, door: [3, 8.3], counter: { x: 7.0, y: 4.4, w: 3.2, d: 0.9 } };
     }
-    const solids = [...wares.map(w => [w.x, w.y, w.w, w.d]), ...decor.filter(d => !d.flat && !d.air && !d.base && d.kind !== 'person').map(d => [d.x, d.y, d.w, d.d])];
+    const solids = [...wares.map(w => [w.x, w.y, w.w, w.d]), ...decor.filter(d => (!d.flat || d.noWalk) && !d.air && !d.base && d.kind !== 'person').map(d => [d.x, d.y, d.w, d.d])];
     if (!P.noClerk) solids.push([P.counter.x, P.counter.y - 1.1, P.counter.w, P.counter.d + 1.1]);   // (v0.38: a hotel room has no counter)
     P = { k, n: wares.length, wares, decor, venue: true, ...P };
     { const home = VENUE_HOME[k] || (BUILDING_FLOORS[k] ? k : null), fl = home && BUILDING_FLOORS[home];   // v0.37: coming up (or down) in the lift, you step out by the lift
@@ -5393,7 +5396,11 @@ const Scene = (() => {
     return rankCache.total;
   }
   function nightTint() {
-    if (NIGHT > 0.01) { ctx.fillStyle = `rgba(22,32,72,${0.38 * NIGHT})`; ctx.fillRect(0, 0, W, H); }
+    if (NIGHT > 0.01) {   // v0.68 (Mason #33): really dark at night; a warm glow while the sun goes down
+      const dusk = Math.max(0, 1 - Math.abs(NIGHT - 0.35) / 0.35) * DAYLIGHT.dusk;
+      if (dusk > 0.01) { ctx.fillStyle = `rgba(255,140,60,${dusk.toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
+      ctx.fillStyle = `rgba(14,22,58,${(DAYLIGHT.dark * NIGHT).toFixed(3)})`; ctx.fillRect(0, 0, W, H);
+    }
     drawGlows();
   }
 
@@ -5827,6 +5834,10 @@ const Scene = (() => {
   // v0.43: a label you can tap: the hit gets the label's box once the labels are laid out
   const hitLabel = (H, pri, ...a) => { hits.push(H); label(...a, pri, H); };
   function render(ts) {
+    CAR_SCALE = mode === 'town' || mode === 'home' ? TOWN_CAR.scale : 1;   // v0.68: cars in town fit their lanes
+    try { render0(ts); } finally { CAR_SCALE = 1; }
+  }
+  function render0(ts) {
     if (!visible || !S || !W) return;
     setPal();
     const dt = Math.min(0.05, Math.max(0, (ts - lastTs) / 1000));
@@ -5876,7 +5887,7 @@ const Scene = (() => {
     let pt = null;
     if (mode === 'shop') pt = [meS.x, meS.y];
     else if (mode === 'town') pt = meInView();   // (v0.64: in any town you're in: another city too)
-    else if (mode === 'home' && owner === me.lot) { const [ox, oy] = origin(me.lot); pt = [ox + me.x, oy + me.y]; }
+    else if (mode === 'home' && owner === me.lot && atHomeNow() && !(S.trav && S.trav.town !== myTown())) { const [ox, oy] = origin(me.lot); pt = [ox + me.x, oy + me.y]; }   // (v0.68: not at home: no marker on an empty spot)
     if (!pt) return;
     const p = iso(pt[0], pt[1]), z = cam.z, k = (age * 1.4) % 1, a = Math.min(1, (4 - age) * 1.5);
     ctx.save(); ctx.globalAlpha = a;

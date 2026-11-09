@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.67.0';
+const VERSION = '0.68.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -264,6 +264,10 @@ const ROAD_KINDS = {
 // grows to AVENUE4.w tiles and gets two lanes each way (lane centres `lanes` from the middle, the inner one first).
 // Cars faster than `fast` (CAR_PACE) cruise in the inner (left) lane; the rest keep right and only pull out to pass.
 const AVENUE4 = { w: 4.5, sw: 0.45, lanes: [0.45, 1.35], fast: 1.05 };
+// v0.68 (Mason #33: "every car inside its lane lines; lots are out or on the line"): cars in town are drawn at
+// `scale` of their size so they fit a lane; lanes: where a lane's middle is (tiles from the road's middle) on the
+// roads with one lane each way, half way between the middle line and the kerb
+const TOWN_CAR = { scale: 0.66, lanes: { street: 0.36, avenue: 0.5, dirt: 0.5, lane: 0.4, bend: 0.37 } };
 const FREEWAY = { w: 9, lane: 1.1, gap: 2.5, front: 3, deck: 40, rise: 14, ramp: [30, 14], bridge: 44, cars: [1.0, 1.6], exit: 0.18, leave: 0.16 };
 
 // ---------- crops ----------
@@ -957,6 +961,10 @@ const FEED_PAGE = { per: 10, keepDays: 3 };
 // town's street plan is drawn (px a tile); zMax: the closest zoom (screen px a map px); plansAt / airAt: from this zoom
 // on, the towns' streets and the airports and ports show; tap: how near (screen px) a tap picks a place
 const WMAP_CFG = { townTile: 0.3, planPx: 3, zMax: 16, plansAt: 2.2, airAt: 1.4, tap: 30, runway: 26, runwayW: 2.4 };
+// v0.68 (Mason #33): day and night by each place's real clock: fully light from `light` (8:00) to `dimFrom` (16:00),
+// slowly darker till fully dark at `dark0` (19:00), light again from `dawn` (5:30); dark: how dark the night is;
+// dusk: how warm the sky goes while the sun sets
+const DAYLIGHT = { light: 8, dimFrom: 16, dark0: 19, dawn: 5.5, dark: 0.55, dusk: 0.1 };
 // your nearest team city (your teams, if your town hasn't got its own)
 function homeCity(t) { if (isTeamCity(t)) return t; const [x, y] = DREAM_AT[t] || [0, 0]; return TEAM_CITIES.slice().sort((a, b) => Math.hypot(DREAM_AT[a][0] - x, DREAM_AT[a][1] - y) - Math.hypot(DREAM_AT[b][0] - x, DREAM_AT[b][1] - y))[0]; }
 // v0.59: moving the whole town needs everyone who lives in it to say yes. Each one answers after `wait` seconds;
@@ -1385,7 +1393,7 @@ function widenAvenues(roads, solid, lake, park) {
 // across the corner between them: it leaves each road square-on and swings round in one smooth curve (a cubic
 // Bézier), `clear` tiles from anything built and away from crossings. The ones that save the most driving are kept.
 // w: the road (two lanes); step: how far apart the places it may start are; min / max: how long; apart: from each other.
-const BEND = { w: 2.3, clear: 1.6, step: 4, min: 20, max: 64, n: 3, apart: 9, sw: { street: 0.42, avenue: 0.5, avenue4: 0.45, boulevard: 0.4 } };
+const BEND = { w: 2.3, clear: 1.6, step: 4, min: 20, max: 64, n: 3, apart: 9, sw: { street: 0.3, avenue: 0.5, avenue4: 0.45, boulevard: 0.4 } };
 function findBends(world, roads, occ, lakeAt) {
   const X0 = Math.floor(world.x0), Y0 = Math.floor(world.y0), W = Math.ceil(world.x1) - X0 + 1, D = Math.ceil(world.y1) - Y0 + 1, grid = new Uint8Array(W * D);
   const mark = (a, b, c, d) => { for (let y = Math.max(0, Math.floor(b - Y0)); y < Math.min(D, Math.ceil(d - Y0)); y++) for (let x = Math.max(0, Math.floor(a - X0)); x < Math.min(W, Math.ceil(c - X0)); x++) grid[y * W + x] = 1; };
