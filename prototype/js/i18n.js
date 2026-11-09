@@ -1092,3 +1092,14 @@ Object.assign(STR.en, {
   mg_r_how3: 'First to swim {n} m wins', mg_r_set: 'On your marks…', mg_r_go: 'Beep!', mg_r_early: 'False start!', mg_r_early2: 'Wait for the whistle', mg_r_great: 'Great start!',
   mg_r_same: 'Off rhythm', mg_r_dive: 'Tap to dive in', mg_r_left: 'Tap left', mg_r_right: 'Tap right',
 });
+// ---------- v0.39: every kind of road: the interstate (tunnels, a bridge over the cross road, a sea bridge), lanes, stop signs, speed limits ----------
+Object.assign(STR.zh, {
+  area_freeway: '州际高速',
+  fwy_tunnel: '{name}隧道', fwy_exit: '出口', fwy_downtown: '镇中心', fwy_east: '往东', fwy_west: '往西', fwy_north: '往北', fwy_south: '往南',
+  sign_stop: '停',
+});
+Object.assign(STR.en, {
+  area_freeway: 'Interstate',
+  fwy_tunnel: '{name} Tunnel', fwy_exit: 'EXIT', fwy_downtown: 'Downtown', fwy_east: 'EAST', fwy_west: 'WEST', fwy_north: 'NORTH', fwy_south: 'SOUTH',
+  sign_stop: 'STOP',
+});

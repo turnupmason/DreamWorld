@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.38.0';
+const VERSION = '0.39.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -168,6 +168,25 @@ const LAND = { parcel: 600, grow: 1.35, move: 500, refund: 0.5 };
 // Going somewhere in town (v0.12): tiles per second on foot, by bike, by car (sped up so trips take seconds).
 // Cars and bikes on the expressway go `highway` times faster (v0.16); on foot you only use local streets.
 const TRIP_SPEED = { walk: 3, bike: 6, car: 10, highway: 2.5 };
+// v0.39: every kind of road. lanes: lanes each way (a one-way road has all of them going its way); mph / kmh: the speed
+// limit on its signs (mph in English, km/h in Chinese); spd: how fast the town's cars go on it (1 = an avenue).
+// street: two-way, two lanes (a dashed yellow line). avenue: two-way, two lanes, a double yellow line. boulevard: two
+// lanes each way and a planted median. frontage: the road beside the freeway (two-way, or one-way with two lanes).
+// lane: a little lane (some are one-way). dirt: a country road. freeway: the interstate (see FREEWAY).
+const ROAD_KINDS = {
+  dirt:      { e: '🌾', zh: '乡间土路',     en: 'Country road',  lanes: 1, mph: 15, kmh: 20,  spd: 0.6 },
+  lane:      { e: '🏘️', zh: '小巷',         en: 'Lane',          lanes: 1, mph: 15, kmh: 20,  spd: 0.7 },
+  street:    { e: '🛣️', zh: '双向两车道街道', en: 'Two-lane street', lanes: 1, mph: 25, kmh: 40,  spd: 0.85 },
+  avenue:    { e: '🛣️', zh: '双向两车道大道', en: 'Avenue',        lanes: 1, mph: 35, kmh: 60,  spd: 1 },
+  boulevard: { e: '🌳', zh: '双向四车道大马路', en: 'Four-lane boulevard', lanes: 2, mph: 45, kmh: 70, spd: 1.2 },
+  frontage:  { e: '↔️', zh: '高速辅路',      en: 'Frontage road',  lanes: 2, mph: 45, kmh: 70,  spd: 1.1 },
+  freeway:   { e: '🚀', zh: '双向六车道高速', en: 'Six-lane interstate', lanes: 3, mph: 65, kmh: 100, spd: 2.2 },
+};
+// v0.39: the interstate along the far edge of the new district (built in buildLayout). Sizes in tiles across it:
+// w: the whole roadway; lane: one lane; gap: grass between it and the frontage roads; front: a frontage road's width.
+// deck: how high the freeway's bridge over the cross road is (px at zoom 1); rise: how long its slopes are (tiles).
+// ramp: where the slip ramps leave / join it, in tiles from the cross road (out, in). bridge: the sea bridge's height.
+const FREEWAY = { w: 9, lane: 1.1, gap: 2.5, front: 3, deck: 40, rise: 14, ramp: [30, 14], bridge: 44, cars: [1.0, 1.6], exit: 0.18, leave: 0.16 };
 
 // ---------- crops ----------
 // grow: minutes to ripen. seed: price. yield: units per plot. sell: per unit. n: plants per plot. rare: only from real-life goals.
@@ -1136,6 +1155,69 @@ function buildLayout(id, flip) {
       else roads.push([...o.seg, 'street']);
     } }
   Object.entries(STORES).filter(([, s]) => s.w && s.late).forEach(placeStore);   // v0.38: the new ones in what's left
+  // v0.39: the interstate (FREEWAY), along the far edge of the new district: three lanes each way with a concrete
+  // barrier between. On the town side a two-way frontage road (the avenues and streets that ran to the edge now end on
+  // it); on the far side a short one-way frontage road. Slip ramps join both to the freeway, and an avenue from the
+  // boulevard passes under it there (the freeway rises on a bridge over it). Both ends go into a tunnel through a
+  // hill; by the sea (an E / W district) the south end runs out over a long bridge instead. Freeway coordinates: s
+  // along it (x in an S district, y in E / W), t across it (t > 0 on the right of traffic going +s).
+  const fwy = (() => {
+    const F = FREEWAY, S0 = district === 'S', E = district === 'E', town = S0 || !E ? -1 : 1;   // the side the town is on
+    const half = F.w / 2, tn = half + F.gap + F.front / 2, tOut = tn + F.front / 2;   // the frontage roads' middle / outer edge
+    const edge = S0 ? world.y1 : E ? world.x1 : world.x0;
+    const c = S0 ? Math.max(edge - 1, south ? hy + 2.5 : -1e9) + tOut : E ? edge - 1 + tOut : edge + 1 - tOut;
+    const acr = t => (S0 ? c + t : c - t), at = (s, t) => (S0 ? [s, c + t] : [c - t, s]);
+    const rectST = (s0, s1, t0, t1) => { const a = at(s0, t0), b = at(s1, t1); return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])]; };
+    const sA = r => (S0 ? r[0] : r[1]), sB = r => (S0 ? r[2] : r[3]);
+    // where it ends: a tunnel at each end, or (by the sea) the bridge out over the water
+    let ends;
+    if (S0) ends = [{ s: world.x0 - 7, k: 'tunnel', side: -1 }, { s: world.x1 + 7, k: 'tunnel', side: 1 }];
+    else {
+      let sea = null;
+      if (lake.sea) for (let s = world.y0; s < world.y1 + 40 && sea === null; s += 0.5) if ([-half, 0, half].some(t => lakeAt(...at(s, t)))) sea = s;
+      ends = [{ s: world.y0 - 16, k: 'tunnel', side: -1 }, sea !== null ? { s: sea - 1, k: 'bridge', side: 1, far: sea + 130 } : { s: world.y1 + 7, k: 'tunnel', side: 1 }];
+    }
+    const lo = ends[0].s + 3, hi = ends[1].s - 3, [rOut, rIn] = F.ramp;
+    // the cross road: one of the roads that ran to the edge, or a new avenue from the boulevard (in line with a road
+    // that meets the boulevard from the town side, if there's one), as close to the boulevard's middle as fits
+    const reach = roads.filter(r => r !== blvd && r[4] !== 'dirt' && r[4] !== 'lane' && (S0 ? vert(r) && r[3] >= edge - 0.5 : !vert(r) && (E ? r[2] >= edge - 0.5 : r[0] <= edge + 0.5)));
+    const mid = S0 ? (blvd[0] + blvd[2]) / 2 : (blvd[1] + blvd[3]) / 2, from = S0 ? blvd[3] : E ? blvd[2] : blvd[0], farIn = acr(-town * (tOut - F.front));
+    const crossRect = (u0, w) => (S0 ? [u0, from, u0 + w, farIn] : E ? [from, u0, farIn, u0 + w] : [farIn, u0, from, u0 + w]);
+    const others = busyRects.filter(q => !(q[0] === blvd[0] && q[1] === blvd[1] && q[2] === blvd[2] && q[3] === blvd[3]));
+    const clear = q => !others.some(r => q[0] < r[2] + 0.3 && r[0] < q[2] + 0.3 && q[1] < r[3] + 0.3 && r[1] < q[3] + 0.3) && ![0.1, 0.3, 0.5, 0.7, 0.9].some(k => lakeAt(q[0] + (q[2] - q[0]) * k, q[1] + (q[3] - q[1]) * k));
+    const fits = s => s - rOut - 2 >= lo && s + rOut + 2 <= hi;
+    const opts = [];
+    reach.forEach(r => { const s = (sA(r) + sB(r)) / 2; if (fits(s)) opts.push({ s, score: Math.abs(s - mid), r }); });
+    roads.forEach(r => {   // a road meeting the boulevard from the town side: carry it on across
+      if (r === blvd || r[4] === 'dirt' || (S0 ? !vert(r) || Math.abs(r[3] - blvd[1]) > 0.6 : vert(r) || (E ? Math.abs(r[2] - blvd[0]) > 0.6 : Math.abs(r[0] - blvd[2]) > 0.6))) return;
+      const w = Math.max(3, sB(r) - sA(r)), s = (sA(r) + sB(r)) / 2, q = crossRect(s - w / 2, w);   // in line with it
+      if (fits(s) && clear(q)) opts.push({ s, score: Math.abs(s - mid) + 4, q });
+    });
+    for (let u = Math.round(mid) - 70; u <= mid + 70; u += 1) { const q = crossRect(u - 1.5, 3); if (fits(u) && clear(q)) opts.push({ s: u, score: Math.abs(u - mid) + 14, q }); }
+    const best = opts.sort((a, b) => a.score - b.score)[0];
+    if (!best) return null;
+    const sx = best.s;
+    let cross;
+    if (best.r) { cross = best.r; cross.o = cross.o || cross.slice(); if (S0) cross[3] = farIn; else if (E) cross[2] = farIn; else cross[0] = farIn; }
+    else { cross = [...best.q, 'avenue']; roads.push(cross); }
+    // the frontage roads: the near one from the first road that reaches it to the last, the far one round the ramps
+    const sLo = Math.min(sx - 20, ...reach.filter(r => r !== cross).map(sA)), sHi = Math.max(sx + 20, ...reach.filter(r => r !== cross).map(sB));
+    const nearIn = acr(town * (tOut - F.front)), nearOut = acr(town * tOut);
+    reach.forEach(r => { if (r === cross) return; const e = S0 ? nearOut : nearOut; if (S0) r[3] = Math.min(nearOut, nearIn); else if (E) r[2] = Math.min(nearOut, nearIn); else r[0] = Math.max(nearOut, nearIn); });
+    roads.push([...rectST(sLo, sHi, town * (tOut - F.front), town * tOut), 'frontage']);
+    roads.push([...rectST(sx - 20, sx + 20, -town * (tOut - F.front), -town * tOut), 'frontage', -town]);
+    // slip ramps (in s, t): off the freeway's right-hand lane before the cross road, on again after it
+    const l2 = 0.2 + 0.3 + F.lane * 2.5, ramps = [];
+    [1, -1].forEach(d => {
+      ramps.push({ d, off: true, pts: [[sx - d * rOut, d * l2], [sx - d * (rOut - 5), d * (l2 + 0.65)], [sx - d * (rIn + 6), d * (tn - 2.3)], [sx - d * (rIn + 2), d * (tn - 0.4)], [sx - d * rIn, d * tn]] });
+      ramps.push({ d, off: false, pts: [[sx + d * rIn, d * tn], [sx + d * (rIn + 2), d * (tn - 0.4)], [sx + d * (rIn + 6), d * (tn - 2.3)], [sx + d * (rOut - 5), d * (l2 + 0.65)], [sx + d * rOut, d * l2]] });
+    });
+    // the town reaches out to it
+    if (S0) world.y1 = c + tOut + 3; else if (E) world.x1 = c + tOut + 3; else world.x0 = c - tOut - 3;
+    const num = (id.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0) + (flip ? 3 : 0)) % 9;
+    return { axis: S0 ? 'x' : 'y', c, town, half, tn, ends, over: { s: sx, half: (sB(cross) - sA(cross)) / 2 + 1.4, h: F.deck, rise: F.rise }, ramps,
+      no: S0 ? [10, 20, 40, 64, 70, 76, 80, 90, 94][num] : [5, 15, 25, 35, 45, 55, 65, 75, 95][num], exit: 8 + (num * 7) % 40 };
+  })();
   const P = box(B.park), loop = [];
   // v0.32: the loop keeps to the park's edge, and only moves in on the one side where a car park is inside the park
   const mg = { l: 1.5, r: 1.5, t: 1.5, b: 1.5 };
@@ -1153,8 +1235,9 @@ function buildLayout(id, flip) {
   // edge of town (with its ramps through the woods) is still there. `flyovers` stays as an empty list.
   const flyovers = [], labels = B.labels.map(([k, x, y]) => [k, fx(x), y]);
   labels.push(['area_new', (blvd[0] + blvd[2]) / 2 + (vert(blvd) ? 0 : 0), vert(blvd) ? (blvd[1] + blvd[3]) / 2 : blvd[1] - 13]);   // v0.38
+  if (fwy) labels.push(['area_freeway', ...(fwy.axis === 'x' ? [fwy.over.s + 45, fwy.c - 3] : [fwy.c + 3, fwy.over.s + 45])]);   // v0.39
   return {
-    id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers,
+    id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers, fwy,
     centre, plaza, shops, pocket: B.pocket ? box(B.pocket) : null,
     park: box(B.park), lake, fields: B.fields.map(f => box(f)),
     places: [...B.places.map(([x, y]) => [fx(x), y]), vert(blvd) ? [(blvd[0] + blvd[2]) / 2, (blvd[1] + blvd[3]) / 2] : [(blvd[0] + blvd[2]) / 2, blvd[3] + 0.6]], labels,

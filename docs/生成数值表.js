@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, CENTRE_NEW, TOWER_STOREYS, BUILDING_FLOORS, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -213,6 +213,18 @@ table(['事情', '花多少', '多久', '得到'], [
   [`酒店：订一晚客房（住到第二天 ${V2.room.checkout}:00）`, `🪙${V2.room.price}`, '马上', '电梯能上客房'], ['客房：躺大床（每天一次）', '免费', `${V2.bed.sec} 秒`, gain(V2.bed)], ['客房：泡澡（每天一次）', '免费', `${V2.bath.sec} 秒`, gain(V2.bath)]]);
 P('');
 P(`博物馆知识卡：${Object.entries(D.MUSEUM_FACTS).map(([k, L]) => L.length + ' 张').join(' + ')}，每个厅每天换一张。`);
+P('');
+// v0.39: every kind of road
+P('### v0.39 道路种类');
+P('');
+table(['路', '每个方向几条车道', '限速牌（英文 / 中文）', '镇上的车开多快（大道 = 1）'], Object.values(D.ROAD_KINDS).map(r => [`${r.e} ${r.zh} (${r.en})`, r === D.ROAD_KINDS.frontage ? '双向时 1，单行时 2' : r.lanes, `${r.mph} mph / ${r.kmh} 公里`, `×${r.spd}`]));
+P('');
+{ const L = D.buildLayout('grid', false), F = L.fwy, FW = D.FREEWAY;
+  P(`州际高速（每个镇都有，在新区最外边）：路面 ${FW.w} 格宽，每个方向 ${FW.lane} 格宽的车道 3 条，中间水泥隔离墩；镇这边一条双向辅路（原来通到镇边的大道都接上它），对面一条单行双车道辅路；离立交 ${FW.ramp[0]} 格的地方下高速、${FW.ramp[1]} 格的地方接上辅路（上高速反过来）。立交那里高速架在桥上（${FW.deck} 像素高，两头各 ${FW.rise} 格的坡），一条大道从桥下穿过去通到大马路。两头钻进山里的隧道；海边的镇（南边是海）南头是 ${FW.bridge} 像素高的斜拉跨海大桥。`);
+  P('');
+  P(`高速上的车：每个方向每 0.7–2 秒从隧道（或大桥那头）开出来一辆，大约 ${Math.round(FW.exit * 100)}% 会在出口下高速开进镇里；镇上新出发的车大约 ${Math.round(FW.leave * 100)}% 会开上匝道离开。车靠右行驶，前面慢就从左边超车；大约一半的车超完会回右边。梧桐镇是 I-${F.no}，出口 ${F.exit}。`);
+  P(''); }
+P('路口：两条大道（或大道和大马路）相交、或者街道整个穿过大道的地方有红绿灯（12 秒一轮）；其余路口小路那边有停车让行牌（车停 0.8 秒再走），两条小路相交就四个方向都停。乡间土路没有牌子。');
 P('');
 P('## 手机：银行、贷款、股票（v0.26，v0.35 改成真实的银行）');
 P('');
