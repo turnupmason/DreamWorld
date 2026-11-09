@@ -2938,14 +2938,14 @@ function drawDreamMap(cv) {
 }
 // v0.63: the map into any context (already scaled / moved): the plane and the ship draw a close-up piece of it.
 // bare: without the labels, the airports, ports and compass (they draw their own)
-function drawDreamMapTo(g, bare) {
+function drawDreamMapTo(g, bare, s = 1) {   // (v0.65: s: map px per screen px when zoomed, so lines and signs stay the same size on screen)
   const dark = document.body.classList.contains('dark'), W = DREAM_MAP.w * DM_S, H = DREAM_MAP.h * DM_S, S0 = DM_S;
   const sea = g.createLinearGradient(0, 0, 0, H); sea.addColorStop(0, dark ? '#1e3a56' : '#b9e2f6'); sea.addColorStop(1, dark ? '#142a40' : '#8ccbea');
   g.fillStyle = sea; g.fillRect(0, 0, W, H);
   g.strokeStyle = dark ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.55)'; g.lineWidth = 1.2;
   for (let k = 0; k < 80; k++) { const x = hash(k, 3) * W, y = hash(k, 4) * H; g.beginPath(); g.arc(x, y, 4, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
   const land = new Path2D(); DREAM_LAND.forEach(pts => dmShape(land, pts));
-  g.strokeStyle = dark ? 'rgba(90,150,190,.25)' : 'rgba(255,255,255,.6)'; g.lineWidth = 14; g.lineJoin = 'round'; g.stroke(land);
+  g.strokeStyle = dark ? 'rgba(90,150,190,.25)' : 'rgba(255,255,255,.6)'; g.lineWidth = 14 * Math.max(0.35, s); g.lineJoin = 'round'; g.stroke(land);
   g.save(); g.translate(0, 5); g.fillStyle = dark ? 'rgba(0,0,0,.35)' : 'rgba(40,90,120,.2)'; g.fill(land); g.restore();
   g.fillStyle = dark ? '#3c5a3a' : '#b9dc8c'; g.fill(land);
   g.save(); g.clip(land);
@@ -2959,19 +2959,19 @@ function drawDreamMapTo(g, bare) {
   woods.forEach(([x, y, rx, ry], fi) => { for (let k = 0; k < 26; k++) { const a = hash(k, fi * 5) * Math.PI * 2, r = Math.sqrt(hash(k, fi * 5 + 1)), tx = (x + Math.cos(a) * r * rx) * S0, ty = (y + Math.sin(a) * r * ry) * S0; g.fillStyle = k % 3 ? (dark ? '#2d5a33' : '#5fa356') : (dark ? '#25502b' : '#4f9448'); g.beginPath(); g.arc(tx, ty, 2.8, 0, Math.PI * 2); g.fill(); } });
   peaks.forEach(([x, y]) => { const px = x * S0, py = y * S0; g.fillStyle = dark ? '#6a6f68' : '#9a9f8e'; g.beginPath(); g.moveTo(px - 8, py + 4); g.lineTo(px, py - 9); g.lineTo(px + 8, py + 4); g.closePath(); g.fill(); g.fillStyle = '#f7fafb'; g.beginPath(); g.moveTo(px - 3, py - 4); g.lineTo(px, py - 9); g.lineTo(px + 3, py - 4); g.closePath(); g.fill(); });
   g.restore();
-  g.strokeStyle = dark ? '#5d8455' : '#f7f1d8'; g.lineWidth = 2.2; g.stroke(land);
+  g.strokeStyle = dark ? '#5d8455' : '#f7f1d8'; g.lineWidth = 2.2 * s; g.stroke(land);
   // the railway (under the roads): a dark line with ties
-  DREAM_RAIL.forEach(([a, b, bend = 30]) => { const P = dreamRoadPts(a, b, bend).map(q => q.map(v => v * S0)); g.strokeStyle = dark ? '#a99a86' : '#6b5a48'; g.lineWidth = 1.6; g.setLineDash([]); g.beginPath(); P.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke();
-    g.lineWidth = 4; g.setLineDash([1, 5]); g.stroke(); g.setLineDash([]); });
+  DREAM_RAIL.forEach(([a, b, bend = 30]) => { const P = dreamRoadPts(a, b, bend).map(q => q.map(v => v * S0)); g.strokeStyle = dark ? '#a99a86' : '#6b5a48'; g.lineWidth = 1.6 * s; g.setLineDash([]); g.beginPath(); P.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke();
+    g.lineWidth = 4 * s; g.setLineDash([1 * s, 5 * s]); g.stroke(); g.setLineDash([]); });
   // the interstates: a white casing, the yellow road; the sea bridges with piers; a shield with the number
   DREAM_ROADS.forEach(([a, b, no, bend, kind]) => {
     const P = dreamRoadPts(a, b, bend).map(q => q.map(v => v * S0)), path = () => { g.beginPath(); P.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); };
     g.lineCap = 'round'; g.lineJoin = 'round';
-    if (kind === 'bridge') { P.forEach((q, i) => { if (i % 2) { g.fillStyle = dark ? '#8a8f96' : '#a7adb5'; g.fillRect(q[0] - 1, q[1], 2, 5); } }); }
-    path(); g.strokeStyle = dark ? '#2b2b30' : '#ffffff'; g.lineWidth = 6; g.stroke();
-    path(); g.strokeStyle = kind === 'bridge' ? '#c9cfd6' : '#f2b33d'; g.lineWidth = 3.2; g.stroke();
-    const m = P[Math.floor(P.length / 2)]; g.fillStyle = '#2f5fa8'; g.strokeStyle = '#fff'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(m[0] - 7, m[1] - 7); g.lineTo(m[0] + 7, m[1] - 7); g.lineTo(m[0] + 7, m[1] + 1); g.quadraticCurveTo(m[0], m[1] + 8, m[0] - 7, m[1] + 1); g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = '#fff'; g.font = `900 7px ${UI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(no), m[0], m[1] - 2);
+    if (kind === 'bridge') { P.forEach((q, i) => { if (i % 2) { g.fillStyle = dark ? '#8a8f96' : '#a7adb5'; g.fillRect(q[0] - s, q[1], 2 * s, 5 * s); } }); }
+    path(); g.strokeStyle = dark ? '#2b2b30' : '#ffffff'; g.lineWidth = 6 * s; g.stroke();
+    path(); g.strokeStyle = kind === 'bridge' ? '#c9cfd6' : '#f2b33d'; g.lineWidth = 3.2 * s; g.stroke();
+    const m = P[Math.floor(P.length / 2)]; g.fillStyle = '#2f5fa8'; g.strokeStyle = '#fff'; g.lineWidth = 1.2 * s; g.beginPath(); g.moveTo(m[0] - 7 * s, m[1] - 7 * s); g.lineTo(m[0] + 7 * s, m[1] - 7 * s); g.lineTo(m[0] + 7 * s, m[1] + s); g.quadraticCurveTo(m[0], m[1] + 8 * s, m[0] - 7 * s, m[1] + s); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#fff'; g.font = `900 ${7 * s}px ${UI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(no), m[0], m[1] - 2 * s);
   });
   if (bare) return;
   // airports and ports at their own spots (v0.63: where the planes take off and the ships sail from)
@@ -2986,6 +2986,144 @@ function drawDreamMapTo(g, bare) {
   g.fillStyle = dark ? 'rgba(38,34,30,.75)' : 'rgba(255,253,248,.85)'; g.beginPath(); g.arc(cxp, cyp, 22, 0, Math.PI * 2); g.fill();
   [[0, -1, '#e5484d'], [0, 1, '#8b8274'], [1, 0, '#8b8274'], [-1, 0, '#8b8274']].forEach(([dx, dy, col]) => { g.fillStyle = col; g.beginPath(); g.moveTo(cxp + dx * 17, cyp + dy * 17); g.lineTo(cxp - dy * 4, cyp + dx * 4); g.lineTo(cxp + dy * 4, cyp - dx * 4); g.closePath(); g.fill(); });
 }
+// ================= v0.65 (Mason #32): the world map =================
+// On the World page: a small picture of the whole map (tap it). Full screen: drag to move, pinch / the mouse wheel /
+// ± to zoom; the closer you look, the more you see: from WMAP_CFG.airAt the airports (a runway and a terminal) and the
+// ports (a pier), from WMAP_CFG.plansAt every town's own streets, canals, buildings and homes (drawn once from its
+// layout, then kept). Lines and signs keep their size on screen. Tap a place to pick it.
+const BIGMAP = { el: null, cv: null, g: null, x: 0, y: 0, z: 1, W: 0, H: 0, ptrs: new Map(), tap: null, raf: 0, pinch: null };
+const TOWN_PLANS = {};
+const DMW = () => DREAM_MAP.w * DM_S, DMH = () => DREAM_MAP.h * DM_S;
+const wmFit = () => Math.min(BIGMAP.W / DMW(), BIGMAP.H / DMH());
+// a town's street plan, drawn once: its ground, homes, the square, canals, every road (curves too), the buildings
+function townPlan(id) {
+  const dark = document.body.classList.contains('dark'), key = id + (dark ? ':d' : '');
+  if (TOWN_PLANS[key]) return TOWN_PLANS[key];
+  const L = layoutOf(id), Wd = L.world, px = WMAP_CFG.planPx, w = Wd.x1 - Wd.x0, d = Wd.y1 - Wd.y0, cv = document.createElement('canvas');
+  cv.width = Math.ceil(w * px); cv.height = Math.ceil(d * px);
+  const q = cv.getContext('2d'); q.scale(px, px); q.translate(-Wd.x0, -Wd.y0);
+  q.fillStyle = dark ? 'rgba(58,60,54,.94)' : 'rgba(238,233,218,.96)'; q.beginPath(); q.roundRect(Wd.x0, Wd.y0, w, d, 10); q.fill();
+  (L.fields || []).forEach(F => { q.fillStyle = dark ? '#5a4a34' : '#d9c08a'; q.fillRect(F.x, F.y, F.w, F.d); q.strokeStyle = dark ? '#6d5a40' : '#b99b62'; q.lineWidth = 0.5; for (let x = F.x + 2; x < F.x + F.w; x += 3) { q.beginPath(); q.moveTo(x, F.y + 0.5); q.lineTo(x, F.y + F.d - 0.5); q.stroke(); } });   // the farm fields
+  if (L.park) { const P = L.park; q.fillStyle = dark ? '#35603a' : '#9fd27f'; q.beginPath(); q.roundRect(P.x, P.y, P.w, P.d, 3); q.fill();
+    if (L.parkLoop) { q.strokeStyle = dark ? '#8a8270' : '#e8dcc0'; q.lineWidth = 1.2; q.beginPath(); L.parkLoop.forEach(([x, y], i) => (i ? q.lineTo(x, y) : q.moveTo(x, y))); q.closePath(); q.stroke(); } }
+  (L.pocket ? [].concat(L.pocket) : []).forEach(P => { if (P && P.w) { q.fillStyle = dark ? '#35603a' : '#a9d98a'; q.fillRect(P.x, P.y, P.w, P.d); } });
+  if (L.lake) { const K = L.lake; q.fillStyle = dark ? '#2c5878' : '#8fcbe8'; q.beginPath(); q.ellipse(K.x, K.y, K.rx, K.ry, 0, 0, Math.PI * 2); q.fill(); q.strokeStyle = dark ? '#3f6f92' : '#d8eef8'; q.lineWidth = 0.8; q.stroke(); }
+  allLots(id).forEach(l => { const [ox, oy] = lotOrigin(l.id), lw = lotW(l.id);
+    q.fillStyle = dark ? '#3f5a3a' : '#bfdc9a'; q.fillRect(ox + 0.4, oy + 0.4, lw - 0.8, LOT_D - 0.8);
+    q.fillStyle = dark ? '#8a7f70' : '#d9a37a'; q.fillRect(ox + lw / 2 - 3, oy + 2, 6, 6); });
+  if (L.centre) { const C = L.centre; q.fillStyle = dark ? '#5a564e' : '#dccfb8'; q.fillRect(C.x, C.y, C.w, C.d); }
+  (L.water || []).forEach(([x0, y0, x1, y1]) => { q.fillStyle = dark ? '#2c5878' : '#8fcbe8'; q.fillRect(x0, y0, x1 - x0, y1 - y0); });
+  const ROADC = { street: '#9aa1a8', avenue: '#7d848b', avenue4: '#727981', boulevard: '#6c737b', lane: '#b0b5ba', dirt: '#c2a77c', frontage: '#9aa1a8' };
+  (L.roads || []).forEach(([x0, y0, x1, y1, kind]) => { q.fillStyle = ROADC[kind] || '#9aa1a8'; q.fillRect(x0, y0, x1 - x0, y1 - y0);
+    if (['avenue', 'avenue4', 'boulevard'].includes(kind)) { const hz = x1 - x0 >= y1 - y0; q.strokeStyle = '#f2c230'; q.lineWidth = 0.35; q.beginPath(); if (hz) { q.moveTo(x0, (y0 + y1) / 2); q.lineTo(x1, (y0 + y1) / 2); } else { q.moveTo((x0 + x1) / 2, y0); q.lineTo((x0 + x1) / 2, y1); } q.stroke(); } });
+  (L.bends || []).forEach(B => { q.strokeStyle = ROADC.avenue; q.lineWidth = 4; q.lineCap = 'round'; q.beginPath(); B.pts.forEach(([x, y], i) => (i ? q.lineTo(x, y) : q.moveTo(x, y))); q.stroke(); });
+  if (L.highway && L.highway.pts) { q.strokeStyle = dark ? '#8a9097' : '#5f666e'; q.lineWidth = 5; q.lineCap = 'butt'; q.beginPath(); L.highway.pts.forEach(([x, y], i) => (i ? q.lineTo(x, y) : q.moveTo(x, y))); q.stroke(); }
+  (L.stores || []).forEach(([k, x, y, sw = 6, sd = 5.5]) => { const big = ['stadium', 'arena', 'mall', 'hospital', 'station'].includes(k);
+    q.fillStyle = big ? (dark ? '#7a6a64' : '#e6c9b8') : (dark ? '#6c6a64' : '#f4ead8'); q.strokeStyle = dark ? '#a39b8c' : '#9a8a72'; q.lineWidth = 0.3; q.fillRect(x, y, sw, sd); q.strokeRect(x, y, sw, sd);
+    const e = (STORES[k] || {}).e; if (e) { q.font = `${Math.min(sw, sd) * 0.6}px ${EMOJI_FONT}`; q.textAlign = 'center'; q.textBaseline = 'middle'; q.fillStyle = '#000'; q.fillText(e, x + sw / 2, y + sd / 2); } });
+  (L.shops || []).forEach(([k, x, y, sw = 6, sd = 5.5]) => { q.fillStyle = dark ? '#6c6a64' : '#f4ead8'; q.strokeStyle = dark ? '#a39b8c' : '#9a8a72'; q.lineWidth = 0.3; q.fillRect(x, y, sw, sd); q.strokeRect(x, y, sw, sd);
+    const e = ((STORES[k] || PLACE_INFO[k]) || {}).e; if (e) { q.font = `${Math.min(sw, sd) * 0.6}px ${EMOJI_FONT}`; q.textAlign = 'center'; q.textBaseline = 'middle'; q.fillStyle = '#000'; q.fillText(e, x + sw / 2, y + sd / 2); } });
+  return (TOWN_PLANS[key] = { cv, Wd, w, d });
+}
+// every town's street plan in its place on the map (map px); seen(x, y, margin): only those on screen
+function drawTownPlans(g, alpha = 1, seen = () => true) {
+  Object.keys(DREAM_AT).filter(id => COMMUNITIES[id]).forEach(id => {
+    const [cx, cy] = dmXY(id); if (!seen(cx, cy, 60)) return;
+    const P = townPlan(id), k = WMAP_CFG.townTile * DM_S, w = P.w * k, d = P.d * k;
+    g.save(); g.globalAlpha = alpha; g.drawImage(P.cv, cx - w / 2, cy - d / 2, w, d); g.restore();
+  });
+}
+function worldMapBuild() {
+  const el = document.createElement('div'); el.className = 'wm-full'; el.hidden = true;
+  el.innerHTML = `<canvas class="wm-cv"></canvas><div class="wm-top"><b>🌍 ${t('dm_title')}</b><button class="wm-x" data-wm="close">✕</button></div>
+    <div class="wm-zoom"><button data-wm="in">＋</button><button data-wm="out">－</button><button data-wm="me">📍</button></div><div class="wm-hint">${t('wm_hint')}</div>`;
+  document.querySelector('.screen').appendChild(el);
+  BIGMAP.el = el; BIGMAP.cv = el.querySelector('.wm-cv'); BIGMAP.g = BIGMAP.cv.getContext('2d');
+  el.addEventListener('click', e => { const b = e.target.closest('[data-wm]'); if (!b) return; const a = b.dataset.wm; Sound.play('tick');
+    if (a === 'close') worldMapClose(); else if (a === 'in' || a === 'out') wmZoomAt(BIGMAP.W / 2, BIGMAP.H / 2, a === 'in' ? 1.7 : 1 / 1.7); else if (a === 'me') { const [x, y] = dmXY(whereNow()); BIGMAP.x = x; BIGMAP.y = y; BIGMAP.z = Math.max(BIGMAP.z, WMAP_CFG.plansAt * 1.4); wmDraw(); } });
+  const cv = BIGMAP.cv, pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); BIGMAP.ptrs.set(e.pointerId, pos(e)); BIGMAP.tap = BIGMAP.ptrs.size === 1 ? { at: pos(e), t: performance.now() } : null; BIGMAP.pinch = null; });
+  cv.addEventListener('pointermove', e => {
+    if (!BIGMAP.ptrs.has(e.pointerId)) return;
+    const p = pos(e), old = BIGMAP.ptrs.get(e.pointerId); BIGMAP.ptrs.set(e.pointerId, p);
+    if (BIGMAP.tap && Math.hypot(p[0] - BIGMAP.tap.at[0], p[1] - BIGMAP.tap.at[1]) > 8) BIGMAP.tap = null;
+    if (BIGMAP.ptrs.size === 1) { BIGMAP.x -= (p[0] - old[0]) / BIGMAP.z; BIGMAP.y -= (p[1] - old[1]) / BIGMAP.z; wmClamp(); wmDraw(); }
+    else if (BIGMAP.ptrs.size === 2) { const [a, b] = [...BIGMAP.ptrs.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (BIGMAP.pinch) { BIGMAP.x -= (m[0] - BIGMAP.pinch.m[0]) / BIGMAP.z; BIGMAP.y -= (m[1] - BIGMAP.pinch.m[1]) / BIGMAP.z; wmZoomAt(m[0], m[1], d / BIGMAP.pinch.d); }
+      BIGMAP.pinch = { d, m }; }
+  });
+  const up = e => { const tp = BIGMAP.tap; BIGMAP.ptrs.delete(e.pointerId); if (BIGMAP.ptrs.size < 2) BIGMAP.pinch = null; if (tp && performance.now() - tp.t < 500) wmTap(tp.at); BIGMAP.tap = null; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', e => { BIGMAP.ptrs.delete(e.pointerId); BIGMAP.tap = null; BIGMAP.pinch = null; });
+  cv.addEventListener('wheel', e => { e.preventDefault(); const p = pos(e); wmZoomAt(p[0], p[1], Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  new ResizeObserver(() => { if (!el.hidden) wmResize(); }).observe(el);
+}
+function wmResize() { const r = BIGMAP.el.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1); BIGMAP.W = r.width; BIGMAP.H = r.height; BIGMAP.cv.width = r.width * dpr; BIGMAP.cv.height = r.height * dpr; wmClamp(); wmDraw(); }
+function wmClamp() {   // (the view stays on the map: centred when the map is smaller than the screen)
+  BIGMAP.z = Math.max(wmFit(), Math.min(WMAP_CFG.zMax, BIGMAP.z));
+  const hw = BIGMAP.W / 2 / BIGMAP.z, hh = BIGMAP.H / 2 / BIGMAP.z;
+  BIGMAP.x = DMW() <= hw * 2 ? DMW() / 2 : Math.max(hw, Math.min(DMW() - hw, BIGMAP.x));
+  BIGMAP.y = DMH() <= hh * 2 ? DMH() / 2 : Math.max(hh, Math.min(DMH() - hh, BIGMAP.y));
+}
+function wmZoomAt(sx, sy, k) {
+  const wx = BIGMAP.x + (sx - BIGMAP.W / 2) / BIGMAP.z, wy = BIGMAP.y + (sy - BIGMAP.H / 2) / BIGMAP.z;
+  BIGMAP.z *= k; wmClamp(); BIGMAP.x = wx - (sx - BIGMAP.W / 2) / BIGMAP.z; BIGMAP.y = wy - (sy - BIGMAP.H / 2) / BIGMAP.z; wmClamp(); wmDraw();
+}
+const wmScreen = (x, y) => [BIGMAP.W / 2 + (x - BIGMAP.x) * BIGMAP.z, BIGMAP.H / 2 + (y - BIGMAP.y) * BIGMAP.z];
+function wmTap([sx, sy]) {
+  let best = null, bd = WMAP_CFG.tap;
+  Object.keys(DREAM_AT).filter(id => COMMUNITIES[id]).forEach(id => { const [x, y] = wmScreen(...dmXY(id)), dd = Math.hypot(x - sx, y - sy); if (dd < bd) { bd = dd; best = id; } });
+  if (!best) return;
+  Sound.play('select'); UI.wsel = best; worldMapClose();
+  setTimeout(() => { const c = document.querySelector('.world-card'); if (c) c.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 60);
+}
+function wmDraw() { if (BIGMAP.raf) return; BIGMAP.raf = requestAnimationFrame(() => { BIGMAP.raf = 0; wmPaint(); }); }
+function wmPaint() {
+  const g = BIGMAP.g, W = BIGMAP.W, H = BIGMAP.H, z = BIGMAP.z, dpr = BIGMAP.cv.width / Math.max(1, W), dark = document.body.classList.contains('dark'), S0 = DM_S, s = Math.min(1, 1 / z);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = dark ? '#1a3550' : '#a3d6ef'; g.fillRect(0, 0, W, H);
+  g.save(); g.translate(W / 2 - BIGMAP.x * z, H / 2 - BIGMAP.y * z); g.scale(z, z);
+  drawDreamMapTo(g, true, s);
+  const x0 = BIGMAP.x - W / 2 / z, x1 = BIGMAP.x + W / 2 / z, y0 = BIGMAP.y - H / 2 / z, y1 = BIGMAP.y + H / 2 / z, seen = (x, y, m) => x > x0 - m && x < x1 + m && y > y0 - m && y < y1 + m;
+  // the towns' own streets
+  const fade = Math.max(0, Math.min(1, (z - WMAP_CFG.plansAt) / 0.8));
+  if (fade > 0) drawTownPlans(g, fade, seen);
+  // airports: a runway and a terminal; ports: a pier
+  const fa = Math.max(0, Math.min(1, (z - WMAP_CFG.airAt) / 0.6));
+  if (fa > 0) {
+    DREAM_AIR.forEach(id => { const [ax, ay] = DREAM_AIR_AT[id].map(v => v * S0), L = WMAP_CFG.runway * S0, w2 = WMAP_CFG.runwayW * S0; if (!seen(ax, ay, L)) return;
+      g.save(); g.globalAlpha = fa; g.translate(ax, ay); g.rotate(-0.35);
+      g.fillStyle = '#8f949a'; g.fillRect(-L / 2 - w2 * 0.4, -w2 * 0.9, L + w2 * 0.8, w2 * 1.8); g.fillStyle = '#4b4f55'; g.fillRect(-L / 2, -w2 / 2, L, w2);
+      g.strokeStyle = '#fff'; g.lineWidth = w2 * 0.08; g.setLineDash([w2 * 0.6, w2 * 0.5]); g.beginPath(); g.moveTo(-L / 2 + w2, 0); g.lineTo(L / 2 - w2, 0); g.stroke(); g.setLineDash([]);
+      g.fillStyle = dark ? '#7d848b' : '#d8dde3'; g.fillRect(-L * 0.22, w2 * 1.1, L * 0.44, w2 * 1.3); g.fillStyle = '#9fc6e0'; g.fillRect(-L * 0.2, w2 * 1.15, L * 0.4, w2 * 0.35);
+      g.restore(); });
+    DREAM_PORT.forEach(id => { const [px, py] = DREAM_PORT_AT[id].map(v => v * S0), [cx, cy] = dmXY(id), a = Math.atan2(cy - py, cx - px), u = 3 * S0; if (!seen(px, py, 30)) return;
+      g.save(); g.globalAlpha = fa; g.translate(px, py); g.rotate(a); g.fillStyle = '#b08a5e'; g.fillRect(-u, -u * 0.5, u * 5, u); g.fillRect(-u * 0.6, -u * 2, u * 0.7, u * 4);
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(-u * 1.6, -u * 1.6, u * 0.55, 0, Math.PI * 2); g.fill(); g.fillStyle = '#e5484d'; g.beginPath(); g.arc(-u * 1.6, -u * 1.6, u * 0.3, 0, Math.PI * 2); g.fill(); g.restore(); });
+  }
+  g.restore();
+  // on screen: the places' names (a town's at its top edge once its streets show), the airports and ports, you
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  const here = whereNow(), sel = UI.wsel, k2 = WMAP_CFG.townTile * S0 * z;
+  const pill = (txt, x, y, bg, fg, sz) => { g.font = `800 ${sz}px ${UI_FONT},${EMOJI_FONT}`; const tw = g.measureText(txt).width + sz; g.fillStyle = bg; g.beginPath(); g.roundRect(x - tw / 2, y - sz * 0.9, tw, sz * 1.8, sz * 0.9); g.fill(); g.fillStyle = fg; g.fillText(txt, x, y + 0.5); };
+  if (fa > 0) { g.globalAlpha = fa;
+    DREAM_AIR.forEach(id => { const [x, y] = wmScreen(...DREAM_AIR_AT[id].map(v => v * S0)); if (x > -60 && x < W + 60 && y > -30 && y < H + 30) pill(`✈️ ${t('wm_airport', { c: nm(COMMUNITIES[id]) })}`, x, y + Math.max(16, WMAP_CFG.runwayW * S0 * z * 2.6), 'rgba(47,95,168,.9)', '#fff', 11); });
+    DREAM_PORT.forEach(id => { const [x, y] = wmScreen(...DREAM_PORT_AT[id].map(v => v * S0)); if (x > -60 && x < W + 60 && y > -30 && y < H + 30) pill(`⚓ ${t('wm_port', { c: nm(COMMUNITIES[id]) })}`, x, y + 18, 'rgba(31,122,70,.9)', '#fff', 11); });
+    g.globalAlpha = 1; }
+  Object.keys(DREAM_AT).filter(id => COMMUNITIES[id]).forEach(id => {
+    const c = COMMUNITIES[id], [x, y0] = wmScreen(...dmXY(id)), y = fade > 0.5 ? y0 - (layoutOf(id).world.y1 - layoutOf(id).world.y0) * k2 / 2 - 6 : y0;
+    if (x < -80 || x > W + 80 || y < -30 || y > H + 30) return;
+    if (fade < 0.5) { g.fillStyle = id === sel ? '#ef7d3c' : isTeamCity(id) ? '#2f5fa8' : '#5d5448'; g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(x, y0, id === sel ? 7 : 5, 0, Math.PI * 2); g.fill(); g.stroke(); }
+    pill(`${id === myTown() ? '🏡' : isTeamCity(id) ? '🏟️' : c.flag} ${nm(c)}`, x, y - (fade < 0.5 ? 16 : 0), id === sel ? '#ef7d3c' : 'rgba(255,253,248,.95)', id === sel ? '#fff' : '#3b3125', isTeamCity(id) ? 13 : 12);
+    if (id === here) pill(`📍 ${t('you_here')}`, x, y - (fade < 0.5 ? 40 : 24), '#e5484d', '#fff', 11);
+  });
+}
+function worldMapOpen() {
+  if (!BIGMAP.el) worldMapBuild();
+  BIGMAP.el.hidden = false; Scene.setVisible(false);
+  const [x, y] = dmXY(COMMUNITIES[UI.wsel] ? UI.wsel : whereNow());
+  BIGMAP.x = x; BIGMAP.y = y; BIGMAP.ptrs.clear(); wmResize(); BIGMAP.z = wmFit() * 1.6; wmClamp(); wmDraw();
+}
+function worldMapClose() { if (BIGMAP.el) BIGMAP.el.hidden = true; syncView(); refresh(); }
 // who lives in your town (they all have to say yes to a move): your friends whose homes are here
 const townMembers = () => S.friends.filter(f => townOf(f.id) === myTown());
 // this place's teams, today's home games and where (stadium / arena)
@@ -3027,7 +3165,7 @@ function panelWorld() {
   return `<div class="world-head"><h1 class="panel-title">🌍 ${t('dm_title')}</h1><button class="btn small" data-act="passport">📕 ${t('pass_btn', { n: stampCount(), total: Object.keys(COMMUNITIES).length })}</button></div>
     <p class="muted note">${t('dm_sub')}</p>
     <div class="dm-legend">🏟️ ${t('dm_city')} · 🏘️ ${t('dm_town')} · <i class="lg-road"></i> ${t('dm_road')} · <i class="lg-rail"></i> ${t('dm_rail')} · ✈️ ${t('dm_airport')} · ⚓ ${t('dm_port')}</div>
-    <div class="wmap-scroll dm"><div class="wmap" style="width:${W}px;height:${H}px"><canvas id="worldCanvas" style="width:${W}px;height:${H}px"></canvas>${pins}</div></div>
+    <button class="wmap-thumb" data-act="worldMapOpen"><canvas id="worldCanvas"></canvas><span class="wm-open">🔍 ${t('wm_open')}</span></button>
     ${townMoveHtml()}${card}${countyCard(sel)}
     ${list(TEAM_CITIES.filter(id => COMMUNITIES[id]), '🏟️ ' + t('dm_cities'))}${list(Object.keys(COMMUNITIES).filter(id => !isTeamCity(id)), '🏘️ ' + t('dm_towns'))}
     <p class="muted center">${t('dm_note')}</p>`;
@@ -3348,14 +3486,17 @@ function afterWorld(wx) {
   const cv = $('#worldCanvas');
   if (!cv) return;
   drawDreamMap(cv);   // v0.59
-  const sc = $('.wmap-scroll'), id = COMMUNITIES[UI.wsel] ? UI.wsel : myTown();
-  if (UI.wscroll) { const [x, y] = dmXY(id); sc.scrollLeft = x - sc.clientWidth / 2; sc.scrollTop = y - sc.clientHeight / 2; UI.wscroll = false; }
-  else if (wx != null) sc.scrollLeft = wx;
+  // v0.65: the small picture: home, the place picked and you on it
+  const g = cv.getContext('2d'), mark = (id, col, r) => { const [x, y] = dmXY(id); g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); g.stroke(); };
+  Object.keys(DREAM_AT).filter(id => COMMUNITIES[id]).forEach(id => mark(id, isTeamCity(id) ? '#2f5fa8' : '#5d5448', 4));
+  if (COMMUNITIES[UI.wsel]) mark(UI.wsel, '#ef7d3c', 8);
+  mark(whereNow(), '#e5484d', 6);
 }
 Object.assign(ACT, {
   world() { closeSheet(); UI.wtown = null; UI.visit = null; UI.visitInside = false; UI.wsel = UI.wsel || myTown(); UI.wscroll = true; setTab('world'); },
   worldMap() { UI.wtown = null; UI.visit = null; UI.visitInside = false; setLevel(0); UI.wscroll = true; syncView(); },
   worldPick(id) { UI.wsel = id; UI.wscroll = true; },
+  worldMapOpen() { worldMapOpen(); },   // v0.65
   worldRegion(r) { UI.wregion = UI.wregion === r ? null : r; const c = Object.keys(COMMUNITIES).find(id => COMMUNITIES[id].region === r); if (c && UI.wregion) UI.wsel = c; UI.wscroll = true; },
   // look around a community (your own one is the Town tab)
   worldVisit(id) {

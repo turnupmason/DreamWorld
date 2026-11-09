@@ -1039,3 +1039,16 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 
 .feed-pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0 4px; }   /* v0.64 */
 .game-card .gm-one { border-top: 1px solid var(--line, #e6dccb); margin-top: 8px; padding-top: 6px; } .game-card .gm-one.live { border-top-color: #e5484d; }   /* v0.64: one sport's game */
+
+/* v0.65: the world map: a small picture on the page, the big map full screen */
+.wmap-thumb { position: relative; display: block; width: 100%; padding: 0; border: 0; border-radius: 18px; overflow: hidden; background: #a3d6ef; box-shadow: 0 2px 10px rgba(0,0,0,.12); margin: 8px 0 12px; cursor: zoom-in; }
+.wmap-thumb canvas { display: block; width: 100%; height: auto; }
+.wmap-thumb .wm-open { position: absolute; right: 10px; bottom: 10px; background: rgba(255,253,248,.95); color: #3b3125; font-weight: 800; font-size: 13px; padding: 7px 12px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.wm-full { position: absolute; inset: 0; z-index: 45; background: #a3d6ef; touch-action: none; user-select: none; -webkit-user-select: none; }
+.wm-full[hidden] { display: none; }
+.wm-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.wm-top { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: center; padding: max(12px, env(safe-area-inset-top)) 14px 10px; background: linear-gradient(rgba(25,25,35,.55), rgba(25,25,35,0)); color: #fff; font-size: 17px; text-shadow: 0 1px 2px rgba(0,0,0,.4); pointer-events: none; }
+.wm-top .wm-x { pointer-events: auto; width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(255,255,255,.92); font-size: 18px; font-weight: 900; color: #3b3125; }
+.wm-zoom { position: absolute; right: 12px; bottom: max(80px, calc(env(safe-area-inset-bottom) + 70px)); display: flex; flex-direction: column; gap: 8px; }
+.wm-zoom button { width: 46px; height: 46px; border-radius: 50%; border: 0; background: rgba(255,255,255,.94); font-size: 22px; font-weight: 900; color: #3b3125; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.wm-hint { position: absolute; left: 12px; right: 70px; bottom: max(14px, env(safe-area-inset-bottom)); background: rgba(30,30,40,.6); color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 12px; pointer-events: none; }

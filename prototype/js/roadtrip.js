@@ -359,6 +359,7 @@ const Drive = (() => {
     const sea = tg.createLinearGradient(0, 0, 0, DREAM_MAP.h * DM_S); sea.addColorStop(0, dark ? '#1e3a56' : '#b9e2f6'); sea.addColorStop(1, dark ? '#142a40' : '#8ccbea');   // (the same sea past the map's edges)
     tg.fillStyle = sea; tg.fillRect(x0, y0, mw, mh);
     drawDreamMapTo(tg, true);
+    drawTownPlans(tg, 1, (x, y, m) => x > x0 - m && x < x0 + mw + m && y > y0 - m && y < y0 + mh + m);   // v0.65: the towns' streets below you
     tile = { cv: cvT, x0, y0, x1: x0 + mw, y1: y0 + mh, k, dark };
     return tile;
   }
@@ -376,7 +377,8 @@ const Drive = (() => {
     if (air) {
       R.p.rw.forEach(([ax, ay]) => runway(SX(ax * DM_S), SY(ay * DM_S), R.p.hd, zoom));
       placeLabels(SX, SY, zoom, alt);
-      clouds(cx, cy, zoom, alt, ts, 1.25, 0.6);
+      clouds(cx, cy, zoom, alt, ts, 1.25, 0.5, true);   // their shadows on the ground
+      clouds(cx, cy, zoom, alt, ts, 1.25, 0.5);
       const sh = 1 - alt * 0.3; plane(sx + alt * 34, sy + alt * 50, R.hd, 0.95 * sh, `rgba(20,30,40,${(0.3 - alt * 0.18).toFixed(3)})`);
       plane(sx, sy, R.hd, 1 + (1 - alt) * 0.08, null);
       clouds(cx, cy, zoom, alt, ts, 1.6, 0.35);   // a few higher up, over the plane
@@ -422,15 +424,41 @@ const Drive = (() => {
     if (!col) { g.strokeStyle = '#9aa3ad'; g.lineWidth = 0.8; g.stroke(); g.fillStyle = '#2f7cff'; g.fillRect(-31, -1, 9, 2); g.fillStyle = '#3d4a5c'; g.beginPath(); g.ellipse(24, 0, 3.2, 2.6, 0, 0, Math.PI * 2); g.fill(); }
     g.restore();
   }
-  // soft clouds in their own layer (f: how much faster than the ground they slide past: nearer the camera)
-  function clouds(cx, cy, zoom, alt, ts, f, dens) {
+  // v0.65 (Mason #32: "why are the clouds round? make real clouds"): cumulus seen from above, drawn once as pictures:
+  // a long, uneven heap of puffs (big in the middle, small cauliflower bumps round the edge), soft edges, the
+  // sunny side bright, the side away from the sun grey-blue; and each one's own dark shape for its shadow on the ground
+  let CLOUD_PICS = null;
+  // a soft blur that works everywhere: down to a third and back up (the puffs melt into one heap)
+  function soften(c) { const s = document.createElement('canvas'); s.width = c.width / 3; s.height = c.height / 3; const sq = s.getContext('2d'); sq.imageSmoothingQuality = 'high'; sq.drawImage(c, 0, 0, s.width, s.height);
+    const o = document.createElement('canvas'); o.width = c.width; o.height = c.height; const oq = o.getContext('2d'); oq.imageSmoothingQuality = 'high'; oq.globalAlpha = 0.55; oq.drawImage(c, 0, 0); oq.globalAlpha = 0.75; oq.drawImage(s, 0, 0, c.width, c.height); return o; }
+  function cloudPics() {
+    if (CLOUD_PICS) return CLOUD_PICS;
+    CLOUD_PICS = [];
+    for (let v = 0; v < 6; v++) {
+      const w = 300, h = 200, puffs = [], n = 26 + v * 4, stretch = 0.75 + rnd(v, 1, 9) * 0.6;
+      for (let k = 0; k < n; k++) {   // a heap: puffs scattered round a wobbly long shape, smaller towards the edge
+        const a = rnd(v, k, 1) * Math.PI * 2, r = Math.pow(rnd(v, k, 2), 0.7), wob = 1 + 0.25 * Math.sin(a * 3 + v);
+        puffs.push([w / 2 + Math.cos(a) * r * w * 0.3 * stretch * wob, h / 2 + Math.sin(a) * r * h * 0.24 * wob, (1 - r * 0.62) * (18 + rnd(v, k, 3) * 20)]);
+      }
+      const pic = (shade) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const q = c.getContext('2d');
+        if (shade) { puffs.forEach(([x, y, r]) => { const gr = q.createRadialGradient(x, y, 0, x, y, r * 1.15); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.7, 'rgba(0,0,0,.9)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); q.fillStyle = gr; q.beginPath(); q.arc(x, y, r * 1.15, 0, Math.PI * 2); q.fill(); }); return soften(c); }
+        puffs.forEach(([x, y, r]) => { const gr = q.createRadialGradient(x + r * 0.2, y + r * 0.3, 0, x + r * 0.2, y + r * 0.3, r * 1.2); gr.addColorStop(0, 'rgba(158,175,200,.8)'); gr.addColorStop(0.75, 'rgba(172,188,210,.55)'); gr.addColorStop(1, 'rgba(165,182,206,0)'); q.fillStyle = gr; q.beginPath(); q.arc(x + r * 0.2, y + r * 0.3, r * 1.2, 0, Math.PI * 2); q.fill(); });   // the shaded side
+        puffs.slice().sort((a, b) => a[1] - b[1]).forEach(([x, y, r]) => { const gr = q.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.1, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.55, 'rgba(250,252,255,.97)'); gr.addColorStop(0.85, 'rgba(232,238,247,.75)'); gr.addColorStop(1, 'rgba(232,238,247,0)'); q.fillStyle = gr; q.beginPath(); q.arc(x, y, r, 0, Math.PI * 2); q.fill(); });   // the sunny tops
+        return soften(c); };
+      CLOUD_PICS.push({ c: pic(false), sh: pic(true), w, h });
+    }
+    return CLOUD_PICS;
+  }
+  // clouds in their own layer (f: how much faster than the ground they slide past: nearer the camera); shadow: draw
+  // their shadows on the ground instead
+  function clouds(cx, cy, zoom, alt, ts, f, dens, shadow) {
     if (alt < 0.15) return;
-    const z = zoom * f, C = 70, x0 = cx * f - W / 2 / z, y0 = cy * f - H / 2 / z, a = Math.min(1, (alt - 0.15) / 0.5) * (f > 1.4 ? 0.55 : 0.8);
-    for (let j = Math.floor(y0 / C) - 1; j <= Math.ceil((y0 + H / z) / C) + 1; j++) for (let i = Math.floor(x0 / C) - 1; i <= Math.ceil((x0 + W / z) / C) + 1; i++) {
-      if (rnd(i, j, f * 10) > dens * 0.6) continue;
-      const wx = (i + rnd(i, j, 2)) * C + ts / 900, wy = (j + rnd(i, j, 3)) * C, r = 14 + rnd(i, j, 4) * 22, X = W / 2 + (wx - cx * f) * z, Y = H / 2 + (wy - cy * f) * z;
-      g.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
-      for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(X + (rnd(i, j, k + 5) - 0.5) * r * 1.6 * z, Y + (rnd(i, j, k + 11) - 0.5) * r * 0.8 * z, r * (0.5 + rnd(i, j, k + 17) * 0.4) * z, 0, Math.PI * 2); g.fill(); }
+    const P = cloudPics(), z = zoom * f, C = 90, x0 = cx * f - W / 2 / z, y0 = cy * f - H / 2 / z, a = Math.min(1, (alt - 0.15) / 0.5) * (shadow ? 0.16 : f > 1.4 ? 0.7 : 0.95);
+    for (let j = Math.floor(y0 / C) - 2; j <= Math.ceil((y0 + H / z) / C) + 2; j++) for (let i = Math.floor(x0 / C) - 2; i <= Math.ceil((x0 + W / z) / C) + 2; i++) {
+      if (rnd(i, j, f * 10) > dens * 0.55) continue;
+      const pic = P[Math.floor(rnd(i, j, 6) * P.length)], sc = (0.35 + rnd(i, j, 4) * 0.45) * z, wx = (i + rnd(i, j, 2)) * C + ts / 900, wy = (j + rnd(i, j, 3)) * C;
+      const X = W / 2 + (wx - cx * f) * z + (shadow ? 26 : 0), Y = H / 2 + (wy - cy * f) * z + (shadow ? 40 : 0), rot = (rnd(i, j, 5) - 0.5) * 1.2;
+      g.save(); g.globalAlpha = a; g.translate(X, Y); g.rotate(rot); g.scale(sc, sc); g.drawImage(shadow ? pic.sh : pic.c, -pic.w / 2, -pic.h / 2); g.restore();
     }
   }
   // little white waves on the water (they bob)

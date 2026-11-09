@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.64.0';
+const VERSION = '0.65.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -913,7 +913,7 @@ const DRIVE = { trainSpeed: 32, trainFare: 0.07, trainMin: 8, track: 1.3, tilesP
 // passport. Each airport and port has its own spot on the map (the airport on land beside its place, the port's
 // dock in the water off it). Planes fly straight from airport to airport; ships find the shortest way by sea (worked
 // out on a grid of the water, then pulled straight).
-const DREAM_AIR_AT = { wutong: [168, 318], london: [536, 168], seoul: [912, 205], rio: [470, 668], sydney: [1085, 668], capetown: [676, 712] };
+const DREAM_AIR_AT = { wutong: [180, 315], london: [549, 164], seoul: [924, 209], rio: [465, 658], sydney: [1097, 665], capetown: [668, 697] };   // (v0.65: just outside each town's streets)
 const DREAM_PORT_AT = { palmbay: [483, 489], rio: [549, 705], capetown: [717, 747], sydney: [1083, 591], kyoto: [1089, 213], fjord: [657, 45], london: [459, 129] };
 // airSpeed / shipSpeed: tiles a second at ×1 (a car does 16); airBase + airFare a km, shipBase + shipFare a km
 // (+ shipCar when your car comes along); runway, climb, desc: map units on the runway, climbing and coming down;
@@ -951,6 +951,11 @@ Object.entries(TRAVEL_SOUV).forEach(([id, [e, price, zh, en]]) => { FURN['tv_' +
 // v0.64 (Mason #32: "too much to scroll in the news"): the news shows `per` a page; news older than keepDays days is
 // cleared away by itself (gifts you haven't opened yet stay until you do)
 const FEED_PAGE = { per: 10, keepDays: 3 };
+// v0.65 (Mason #32: "the world map: a small picture, then zoom in and out yourself; zoomed in you must see every road,
+// the airports too"): townTile: map units a town tile takes on the map (a town ~55 units across); planPx: how sharp a
+// town's street plan is drawn (px a tile); zMax: the closest zoom (screen px a map px); plansAt / airAt: from this zoom
+// on, the towns' streets and the airports and ports show; tap: how near (screen px) a tap picks a place
+const WMAP_CFG = { townTile: 0.3, planPx: 3, zMax: 16, plansAt: 2.2, airAt: 1.4, tap: 30, runway: 26, runwayW: 2.4 };
 // your nearest team city (your teams, if your town hasn't got its own)
 function homeCity(t) { if (isTeamCity(t)) return t; const [x, y] = DREAM_AT[t] || [0, 0]; return TEAM_CITIES.slice().sort((a, b) => Math.hypot(DREAM_AT[a][0] - x, DREAM_AT[a][1] - y) - Math.hypot(DREAM_AT[b][0] - x, DREAM_AT[b][1] - y))[0]; }
 // v0.59: moving the whole town needs everyone who lives in it to say yes. Each one answers after `wait` seconds;
