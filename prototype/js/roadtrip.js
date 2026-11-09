@@ -204,15 +204,45 @@ const Drive = (() => {
       [-1, 1].forEach(d => { const [wx, wy] = W2(E.s - 6, d * (T + 2.2)); objs.push({ d: wx + wy + 6, f: () => { box(wx - 0.9, wy - 12, 1.8, 12, 4, '#d8d2c4', 0, { top: '#e8e2d4' }); } }); });
     });
   }
-  // a train: four carriages one behind the other along its track (white with a coloured band, windows)
+  // v0.66 (Mason #32: "the train is ugly, a squashed box"): a real intercity train: five tall carriages on bogies
+  // with wheels, a white body with a blue band and a red stripe, a row of windows, doors, gangways between the
+  // carriages, a pantograph on the roof under the wire, and a streamlined nose with a windscreen and lights at each end
+  // (yours is blue-banded, the ones the other way red)
   function trainObjs(c, s0, s1, z, objs) {
-    const n = 4, L = 3.2, col = c === R.me ? '#2f7cff' : '#e5484d', x = c.dir > 0 ? DRIVE.track : -DRIVE.track;
+    const n = 5, L = 3.6, gap = 0.3, band = c === R.me ? '#2f5fa8' : '#c0392b', x = c.dir > 0 ? DRIVE.track : -DRIVE.track, B = 3.2, H = 21, w = 1.15, lit = NIGHT > 0.3;
     for (let k = 0; k < n; k++) {
-      const s = c.dir > 0 ? c.s - k * (L + 0.25) : c.s + k * (L + 0.25);
-      if (s < s0 - 4 || s > s1 + 4) continue;
-      const [wx, wy] = W2(s, x);
-      objs.push({ d: wx + wy + 0.8, f: () => { const b = box(wx - 0.55, wy - L / 2, 1.1, L, 16, '#f4f6f8', 0, { top: '#e1e6ec' });
-        [b.left, b.right].forEach(face => { wallRect(face, 0, 0.02, 0.98, 3, 5.5, col); for (let i = 0; i < 4; i++) wallRect(face, 0, 0.08 + i * 0.23, 0.24 + i * 0.23, 8, 13, NIGHT > 0.3 ? '#ffe39a' : '#3d4a5c'); }); } });
+      const s = c.dir > 0 ? c.s - k * (L + gap) : c.s + k * (L + gap);
+      if (s < s0 - 5 || s > s1 + 5) continue;
+      const [wx, wy] = W2(s, x), first = k === 0, last = k === n - 1;
+      // which end has a nose: the front of the train and its back. Ours goes away from us (its back is the end nearest
+      // us, at +y); the other way, the front is nearest us
+      const noseNear = c.dir > 0 ? last : first, noseFar = c.dir > 0 ? first : last, nl = 0.9;
+      objs.push({ d: wx + wy + 0.8, f: () => {
+        const x0 = wx - w / 2, y0 = wy - L / 2 + (noseFar ? nl : 0), y1 = wy + L / 2 - (noseNear ? nl : 0), P3 = (px, py, h) => up(iso(px, py), h * z);
+        [0.18, 0.82].forEach(u => { const by = wy - L / 2 + u * L; box(x0 + 0.12, by - 0.45, w - 0.24, 0.9, B, '#3a3f47', 0, { shadow: false, top: '#4a5059' });
+          [-0.3, 0.3].forEach(v => { const q = iso(x0 + w, by + v); circle(q.x, q.y - 1.8 * z, 2.2 * z, '#2d2d34', '#7a828c', 0.7 * z); }); });   // bogies and wheels
+        if (noseFar) {   // a nose going away from us: its slope and its side
+          poly([P3(x0 + w, y0, B), P3(x0 + w, y0 - nl, B), P3(x0 + w, y0 - nl, B + H * 0.42), P3(x0 + w, y0, B + H)], '#e9edf1', '#c9cfd6', 0.5 * z);
+          poly([P3(x0, y0, B + H), P3(x0 + w, y0, B + H), P3(x0 + w, y0 - nl, B + H * 0.42), P3(x0, y0 - nl, B + H * 0.42)], '#dfe4ea');
+        }
+        const body = box(x0, y0, w, y1 - y0, H, '#f4f6f8', B, { top: '#e3e8ee' });
+        const side = [iso(x0 + w, y1), iso(x0 + w, y0)], end = [iso(x0, y1), iso(x0 + w, y1)];
+        wallRect(side, B, 0, 1, 0, 1.4, '#3a3f47');
+        wallRect(side, B, 0, 1, 3.2, 4.2, '#e5484d'); wallRect(side, B, 0, 1, 4.6, 7.2, band);   // the stripes
+        for (let i = 0; i < 6; i++) { const u0 = 0.2 + i * 0.1; wallRect(side, B, u0, u0 + 0.075, 10, 15.5, lit ? '#ffe39a' : '#33414f'); }   // windows
+        [[0.05, 0.15], [0.85, 0.95]].forEach(([u0, u1]) => { wallRect(side, B, u0, u1, 1.4, 17, '#d5dae0'); wallRect(side, B, u0 + 0.015, u1 - 0.015, 10, 15.5, lit ? '#ffe39a' : '#33414f'); wallLine(side, B, (u0 + u1) / 2, 1.4, (u0 + u1) / 2, 17, '#9aa3ad', 0.5); });   // doors
+        if (first && c.dir > 0 || last && c.dir < 0) { const a = P3(x0 + w / 2, wy, B + H), b = P3(x0 + w / 2 - 0.4, wy, B + H + 7), d2 = P3(x0 + w / 2, wy + 0.5, B + H + 12); line(a.x, a.y, b.x, b.y, '#5b6470', 1.2 * z); line(b.x, b.y, d2.x, d2.y, '#5b6470', 1.2 * z); }   // the pantograph
+        if (noseNear) {   // a nose towards us: the side of its slope, the slope with the windscreen, the face with lights
+          poly([P3(x0 + w, y1, B), P3(x0 + w, y1 + nl, B), P3(x0 + w, y1 + nl, B + H * 0.42), P3(x0 + w, y1, B + H)], '#e9edf1', '#c9cfd6', 0.5 * z);
+          poly([P3(x0, y1, B + H), P3(x0 + w, y1, B + H), P3(x0 + w, y1 + nl, B + H * 0.42), P3(x0, y1 + nl, B + H * 0.42)], '#dfe4ea');
+          poly([P3(x0 + 0.12, y1 + 0.12, B + H * 0.92), P3(x0 + w - 0.12, y1 + 0.12, B + H * 0.92), P3(x0 + w - 0.12, y1 + nl * 0.8, B + H * 0.5), P3(x0 + 0.12, y1 + nl * 0.8, B + H * 0.5)], lit ? '#ffe39a' : '#2c3b4c');
+          poly([P3(x0, y1 + nl, B), P3(x0 + w, y1 + nl, B), P3(x0 + w, y1 + nl, B + H * 0.42), P3(x0, y1 + nl, B + H * 0.42)], '#f4f6f8', '#c9cfd6', 0.5 * z);
+          const fr = [iso(x0, y1 + nl), iso(x0 + w, y1 + nl)]; wallRect(fr, B, 0, 1, 3.2, 4.2, '#e5484d'); wallRect(fr, B, 0, 1, 4.6, 6.4, band);
+          const tail = c.dir > 0; [0.2, 0.8].forEach(u => { const p = up(lerp(fr[0], fr[1], u), (B + 2.2) * z); circle(p.x, p.y, 1.3 * z, tail ? '#e5484d' : '#fff6c8'); if (lit) glow(p.x, p.y, 20 * z, 0.7); });
+        } else if (!last || c.dir < 0) {   // a gangway to the next carriage
+          wallRect(end, B, 0.25, 0.75, 1, 18, '#3a3f47');
+        }
+      } });
     }
   }
   // a green board on two posts: what it says depends on the kind

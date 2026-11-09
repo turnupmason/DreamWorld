@@ -1617,7 +1617,7 @@ const Scene = (() => {
   function townCentre(objs, vr, ts, lv, out) {
     const C = TL.centre;
     storeObjs(objs, vr, ts);
-    transitObjs(objs, vr);   // v0.61: bus stops, subway entrances   // v0.18: the stores draw even when the town centre is off screen
+    transitObjs(objs, vr, ts); busObjs(objs, vr, ts);   // v0.61: bus stops, subway entrances (v0.66: + the buses on their lines)   // v0.18: the stores draw even when the town centre is off screen
     if (!boxVisible(C.x - 1, C.y - 1, C.x + C.w + 1, C.y + C.d + 1, vr)) return;
     flatRect(C.x, C.y, C.w, C.d, '#e8e0cf');
     if (cam.z > 0.14) for (let x = C.x + 0.5; x < C.x + C.w; x += 5) flatRect(x, C.y, 0.08, C.d, 'rgba(160,140,110,.12)');
@@ -3059,22 +3059,147 @@ const Scene = (() => {
     if (isTeamCity(VIEW_TOWN)) {
       const N = roadNet(), anchors = [[TL.plaza.x + LOT_W / 2, TL.plaza.y + LOT_D + 0.5], ...['station', 'stadium', 'mall', 'hotel', 'hospital', 'arena', 'museum'].map(k => { const st = (TL.stores || []).find(x => x[0] === k); return st ? storeGeo(st).bay : null; }).filter(Boolean)];
       const pts = anchors.slice(0, TRANSIT.metroStops + 2).map(p => { const R2 = nearestRoad(N, p); if (!R2) return null; const r = R2.r, h = r.y !== undefined, hw = h ? (r.y1 - r.y0) / 2 : (r.x1 - r.x0) / 2, sd = h ? Math.sign(p[1] - r.y) || 1 : Math.sign(p[0] - r.x) || 1;
-        return { pt: h ? [R2.pt[0], r.y + sd * (hw + 0.6)] : [r.x + sd * (hw + 0.6), R2.pt[1]] }; }).filter(Boolean);
+        return { pt: h ? [R2.pt[0], r.y + sd * (hw + 0.6)] : [r.x + sd * (hw + 0.6), R2.pt[1]], h, sd }; }).filter(Boolean);
       const left = pts.slice(); let cur = left.shift(); if (cur) list.push(cur);   // one line through them, nearest next
       while (left.length && list.length < TRANSIT.metroStops) { left.sort((a, b) => Math.hypot(a.pt[0] - cur.pt[0], a.pt[1] - cur.pt[1]) - Math.hypot(b.pt[0] - cur.pt[0], b.pt[1] - cur.pt[1])); cur = left.shift(); if (!list.some(q => Math.hypot(q.pt[0] - cur.pt[0], q.pt[1] - cur.pt[1]) < 8)) list.push(cur); }
     }
     METRO = { id: TL.id, list };
     return list;
   }
-  function transitObjs(objs, vr) {
+  function transitObjs(objs, vr, ts) {
     const z = cam.z;
     if (z < 0.2) return;
-    busStops().forEach(B => { const [x, y] = B.pt; if (x < vr.x0 - 2 || x > vr.x1 + 2 || y < vr.y0 - 2 || y > vr.y1 + 2) return;   // a shelter and a sign
-      objs.push({ d: x + y + 0.3, f: () => { const ox = B.h ? 0 : -B.sd * 0.15, oy = B.h ? -B.sd * 0.15 : 0; box(x - 0.45 + ox, y - 0.2 + oy, B.h ? 0.9 : 0.4, B.h ? 0.4 : 0.9, 13, 'rgba(180,215,235,.55)', 0, { top: '#2e9b5a', shadow: false });
-        const q = iso(x + (B.h ? 0.6 : 0), y + (B.h ? 0 : 0.6)); line(q.x, q.y, q.x, q.y - 22 * z, '#8e959c', 1.2 * z); rrect(q.x - 5 * z, q.y - 28 * z, 10 * z, 8 * z, 2 * z, '#2e9b5a'); emoji('🚌', q.x, q.y - 24 * z, 5.5 * z); } }); });
-    metroStops().forEach(M => { const [x, y] = M.pt; if (x < vr.x0 - 2 || x > vr.x1 + 2 || y < vr.y0 - 2 || y > vr.y1 + 2) return;   // stairs down and a red M
-      objs.push({ d: x + y + 0.3, f: () => { box(x - 0.6, y - 0.6, 1.2, 1.2, 4, '#5b6470', 0, { top: '#2a2d33' }); const q = up(iso(x + 0.6, y - 0.6), 4 * z); line(q.x, q.y, q.x, q.y - 22 * z, '#5b6470', 1.4 * z); circle(q.x, q.y - 26 * z, 6 * z, '#e5484d', '#fff', 1 * z);
-        ctx.font = `900 ${7 * z}px ${UI_FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('M', q.x, q.y - 25.6 * z); } }); });
+    busLines();   // (the stops know their lines)
+    // v0.66 (Mason #32: "the green box is ugly: a real bus shelter"): a glass shelter on a paved pad: a glass back and
+    // sides with dark frames, a roof that overhangs, a bench inside, a lit advert at one end, and a pole with a sign
+    // showing the numbers of the lines that stop here (in their colours)
+    busStops().forEach(B => { const [x, y] = B.pt; if (x < vr.x0 - 3 || x > vr.x1 + 3 || y < vr.y0 - 3 || y > vr.y1 + 3) return;
+      const W2 = (u, v) => (B.h ? [x + u, y + B.sd * v] : [x + B.sd * v, y + u]);
+      const R = (u0, u1, v0, v1) => { const a = W2(u0, v0), b = W2(u1, v1); return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])]; };
+      objs.push({ d: x + y + 0.4, f: () => {
+        const glass = 'rgba(205,232,244,.22)', frame = '#3d4a5c', parts = [], Q = (u, v, hh) => up(iso(...W2(u, v)), hh * z);
+        const part = (r, h, col, base, o, extra) => parts.push({ d: r[0] + r[2] / 2 + r[1] + r[3] / 2, f: () => { box(r[0], r[1], r[2], r[3], h, col, base || 0, { shadow: false, ...(o || {}) }); if (extra) extra(); } });
+        const pane = (u0, v0, u1, v1, hh) => () => { [[u0, v0], [u1, v1]].forEach(([u, v]) => { const a2 = Q(u, v, 0), b2 = Q(u, v, hh); line(a2.x, a2.y, b2.x, b2.y, frame, 1.3 * z); });   // a glass pane in a dark frame
+          [0, 3, hh].forEach(hh2 => { const a2 = Q(u0, v0, hh2), b2 = Q(u1, v1, hh2); line(a2.x, a2.y, b2.x, b2.y, frame, (hh2 ? 1.1 : 1.4) * z); });
+          const m0 = Q((u0 + u1) / 2, (v0 + v1) / 2, 0), m1 = Q((u0 + u1) / 2, (v0 + v1) / 2, hh); line(m0.x, m0.y, m1.x, m1.y, frame, 0.8 * z);
+          const g0 = Q(u0 + (u1 - u0) * 0.15, v0 + (v1 - v0) * 0.15, hh * 0.8), g1 = Q(u0 + (u1 - u0) * 0.35, v0 + (v1 - v0) * 0.35, hh * 0.45); line(g0.x, g0.y, g1.x, g1.y, 'rgba(255,255,255,.55)', 1 * z); };   // a glint
+        const pad = R(-1.25, 1.25, -0.35, 0.55); flatRect(pad[0], pad[1], pad[2], pad[3], '#d6cfc2', 'rgba(0,0,0,.08)');
+        part(R(-0.6, 0.6, 0.14, 0.32), 4, '#a0703f', 0, { top: '#c08850' });   // the bench
+        part(R(-1, 1, 0.38, 0.42), 15, glass, 0, { top: frame }, pane(-1, 0.4, 1, 0.4, 15));   // the glass back
+        part(R(-1.02, -0.98, -0.05, 0.42), 15, glass, 0, { top: frame }, pane(-1, -0.05, -1, 0.42, 15));   // a glass end
+        part(R(0.96, 1.04, -0.05, 0.42), 14, '#f2a23a', 0, { top: frame });   // the advert at the other end (lit at night)
+        [[-1, -0.3], [1, -0.3]].forEach(([u, v]) => part(R(u - 0.04, u + 0.04, v - 0.04, v + 0.04), 15, frame, 0, { top: frame }));   // posts at the front
+        part(R(-1.18, 1.18, -0.42, 0.48), 1.2, '#4b5a6e', 15, { top: '#6d7f95' });   // the roof, out over where you wait
+        parts.sort((a, b) => a.d - b.d).forEach(p => p.f());
+        { const a2 = Q(-1.18, -0.42, 15.6), b2 = Q(1.18, -0.42, 15.6); line(a2.x, a2.y, b2.x, b2.y, TRANSIT.lineCols[((B.lines || [1])[0] - 1) % TRANSIT.lineCols.length], 1.6 * z); }   // a coloured edge on the roof
+        const ad = up(iso(...W2(1, 0.15)), 8 * z); if (NIGHT > 0.3) glow(ad.x, ad.y, 18 * z, 0.5);
+        const [px, py] = W2(-1.45, -0.2), q = iso(px, py), L = B.lines || [];   // the pole and the sign with the line numbers
+        line(q.x, q.y, q.x, q.y - 28 * z, '#8e959c', 1.4 * z);
+        const sw2 = Math.max(1, L.length) * 9 * z + 4 * z; rrect(q.x - sw2 / 2, q.y - 38 * z, sw2, 11 * z, 2.5 * z, '#ffffff', '#3d4a5c', 0.8 * z);
+        L.forEach((no, k) => { const cx = q.x - sw2 / 2 + 2 * z + 4.5 * z + k * 9 * z; circle(cx, q.y - 32.5 * z, 4 * z, TRANSIT.lineCols[(no - 1) % TRANSIT.lineCols.length]);
+          ctx.font = `900 ${5.5 * z}px ${UI_FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(no), cx, q.y - 32.3 * z); });
+        emoji('🚌', q.x, q.y - 39 * z, 7 * z);
+      } }); });
+    // v0.66 (Mason #32: "a subway entrance going down and coming up, not a black thing"): an opening in the pavement
+    // with stairs going down into the dark, railings round three sides, and a pillar with the lit red M
+    metroStops().forEach(M => { const [x, y] = M.pt; if (x < vr.x0 - 3 || x > vr.x1 + 3 || y < vr.y0 - 3 || y > vr.y1 + 3) return;
+      const h = M.h !== false, sd = M.sd || 1, W2 = (u, v) => (h ? [x + u, y + sd * v] : [x + sd * v, y + u]);
+      objs.push({ d: x + y + 0.5, f: () => {
+        const P = (u, v, hh = 0) => up(iso(...W2(u, v)), hh * z), quad = (pts, col) => poly(pts, col);
+        const a0 = W2(-1.35, -0.15), a1 = W2(1.35, 1.25); flatRect(Math.min(a0[0], a1[0]), Math.min(a0[1], a1[1]), Math.abs(a1[0] - a0[0]), Math.abs(a1[1] - a0[1]), '#bfb8ab');   // the pavement round it
+        const hole = [P(-1, 0.1), P(1, 0.1), P(1, 1), P(-1, 1)];
+        quad(hole, '#1e2026');
+        ctx.save(); ctx.beginPath(); hole.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.clip();
+        const N = 8, dd = 2 / N;   // the steps: down from u = -1 (street level) to u = +1 (deep), lighter near the top
+        for (let k = 0; k < N; k++) { const u0 = -1 + k * dd, u1 = u0 + dd, hh = -(k + 1) * 3.2, lit = 0.75 - k * 0.08;
+          quad([P(u0, 0.12, hh + 3.2), P(u0, 0.98, hh + 3.2), P(u0, 0.98, hh), P(u0, 0.12, hh)], shade('#9aa0a8', -0.2 - k * 0.07));   // the riser
+          quad([P(u0, 0.12, hh), P(u1, 0.12, hh), P(u1, 0.98, hh), P(u0, 0.98, hh)], `rgba(${Math.round(200 * lit)},${Math.round(204 * lit)},${Math.round(210 * lit)},1)`); }   // the tread
+        ctx.restore();
+        const rail = (pts) => { pts.forEach(([u, v]) => { const b = P(u, v), t2 = P(u, v, 8); line(b.x, b.y, t2.x, t2.y, '#5b6470', 1.2 * z); }); for (let i = 1; i < pts.length; i++) { const p = P(...pts[i - 1], 8), q2 = P(...pts[i], 8); line(p.x, p.y, q2.x, q2.y, '#5b6470', 1.6 * z); } };
+        rail([[-1, 0.08], [0, 0.08], [1, 0.08]]); rail([[-1, 1.02], [0, 1.02], [1, 1.02]]); rail([[1, 0.08], [1, 0.55], [1, 1.02]]);   // round three sides (the open end is where you go in)
+        const pl = P(-1.25, 1.15), top = P(-1.25, 1.15, 30); line(pl.x, pl.y, top.x, top.y, '#3d4a5c', 2.2 * z);   // the M pillar
+        circle(top.x, top.y - 2 * z, 6.5 * z, '#e5484d', '#ffffff', 1.2 * z);
+        ctx.font = `900 ${7.5 * z}px ${UI_FONT}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('M', top.x, top.y - 1.6 * z);
+        if (NIGHT > 0.3) glow(top.x, top.y - 2 * z, 22 * z, 0.8);
+      } }); });
+  }
+  // ---------- v0.66 (Mason #32: "many bus lines, running round; you wait at the stop") ----------
+  // The town's bus lines: the stops are shared out by direction from the town square into TRANSIT.busLines (+1 in a
+  // team city) parts; each line runs from the stop nearest the square out through its part (nearest next) and back,
+  // a loop along the roads. Buses run both ways round each loop all day, about TRANSIT.headway seconds apart, and wait
+  // TRANSIT.dwell seconds at each stop; where a bus is comes from the clock, so everyone sees the same buses.
+  let LINES = { id: '', list: [] };
+  const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  function busLines() {
+    if (LINES.id === TL.id) return LINES.list;
+    const ST = busStops(), list = [];
+    ST.forEach(s => { s.lines = []; });
+    if (ST.length >= 3) {
+      const C = TL.centre ? [TL.centre.x + TL.centre.w / 2, TL.centre.y + TL.centre.d / 2] : [TL.world.x1 / 2, TL.world.y1 / 2];
+      const hub = ST.slice().sort((a, b) => dist2(a.pt, C) - dist2(b.pt, C))[0], ang = s => Math.atan2(s.pt[1] - C[1], s.pt[0] - C[0]);
+      const others = ST.filter(s => s !== hub).sort((a, b) => ang(a) - ang(b)), n = Math.max(1, Math.min(TRANSIT.busLines + (isTeamCity(VIEW_TOWN) ? 1 : 0), Math.floor(others.length / 2)));
+      for (let k = 0; k < n; k++) {
+        const part = others.slice(Math.floor(k * others.length / n), Math.floor((k + 1) * others.length / n)), order = [hub], left = part.slice();
+        while (left.length) { const last = order[order.length - 1]; left.sort((a, b) => dist2(a.road, last.road) - dist2(b.road, last.road)); order.push(left.shift()); }
+        const pts = [order[0].road.slice(0, 2)], at = [];
+        order.forEach((A, i) => { at.push(pts.length - 1); const B = order[(i + 1) % order.length]; route(A.road, B.road, false).forEach(p => { if (dist2(p, pts[pts.length - 1]) > 0.05) pts.push([p[0], p[1]]); }); if (dist2(B.road, pts[pts.length - 1]) > 0.05) pts.push(B.road.slice(0, 2)); });
+        const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + dist2(pts[i], pts[i - 1]));
+        const len = cum[cum.length - 1] || 1, stopS = at.map(i => cum[i]), v = TRIP_SPEED.bus, cyc = len / v + order.length * TRANSIT.dwell, nb = Math.max(1, Math.round(cyc / TRANSIT.headway));
+        const L = { no: k + 1, col: TRANSIT.lineCols[k % TRANSIT.lineCols.length], stops: order, pts, cum, len, stopS, cyc, nb };
+        order.forEach(s => { if (!s.lines.includes(L.no)) s.lines.push(L.no); });
+        list.push(L);
+      }
+    }
+    LINES = { id: TL.id, list };
+    return list;
+  }
+  // where along its loop a bus is at cycle time τ (going round dir = 1 or the other way, -1), and whether it's at a stop
+  function busS(L, dir, tau) {
+    const v = TRIP_SPEED.bus, S0 = dir > 0 ? L.stopS.slice() : L.stopS.map(s => (L.len - s) % L.len).sort((a, b) => a - b);
+    let t = ((tau % L.cyc) + L.cyc) % L.cyc, s = 0;
+    for (let k = 0; k <= S0.length; k++) {
+      const next = k < S0.length ? S0[k] : L.len, run = (next - s) / v;
+      if (t < run) return { s: dir > 0 ? s + t * v : (L.len - (s + t * v)) % L.len, stop: false };
+      t -= run; s = next;
+      if (k < S0.length) { if (t < TRANSIT.dwell) return { s: dir > 0 ? s : (L.len - s) % L.len, stop: true }; t -= TRANSIT.dwell; }
+    }
+    return { s: 0, stop: true };
+  }
+  // a point on the loop at s: where, and which way the road goes there
+  function linePt(L, s) {
+    s = ((s % L.len) + L.len) % L.len;
+    let i = 1; while (i < L.pts.length - 1 && L.cum[i] < s) i++;
+    const a = L.pts[i - 1], b = L.pts[i], k = L.cum[i] > L.cum[i - 1] ? (s - L.cum[i - 1]) / (L.cum[i] - L.cum[i - 1]) : 0;
+    return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, Math.atan2(b[1] - a[1], b[0] - a[0])];
+  }
+  const busTau = (L, dir, i, ms) => ms / 1000 + i * L.cyc / L.nb + (dir < 0 ? L.cyc / (2 * L.nb) + L.no * 3.7 : L.no * 7.3);
+  // how long till a bus of this line, going dir, is at the stop with loop place s (seconds from ms), and which bus
+  function busWait(L, dir, sStop, ms) {
+    let best = null;
+    for (let i = 0; i < L.nb; i++) for (let w = 0; w < L.cyc + 1; w += 0.5) {
+      const B = busS(L, dir, busTau(L, dir, i, ms + w * 1000));
+      if (B.stop && Math.abs(B.s - sStop) < 0.6) { if (!best || w < best.w) best = { w, i }; break; }
+      if (best && w > best.w) break;
+    }
+    return best || { w: L.cyc, i: 0 };
+  }
+  // the way along the loop from s0 to s1 going dir (points), and how far
+  function lineWay(L, s0, s1, dir) {
+    const far = ((dir > 0 ? s1 - s0 : s0 - s1) % L.len + L.len) % L.len, out = [];
+    for (let d = 0.8; d < far; d += 0.8) { const p = linePt(L, s0 + dir * d); out.push([p[0], p[1]]); }
+    const e = linePt(L, s1); out.push([e[0], e[1]]);
+    return { pts: out, far };
+  }
+  // the buses on screen (not the one you're riding: that one is you)
+  function busObjs(objs, vr, ts) {
+    if (cam.z < 0.12) return;
+    const ms = now(), mine = trip && !trip.arrived && trip.town === VIEW_TOWN && (trip.legs[trip.li] || {}).ride;
+    busLines().forEach(L => [1, -1].forEach(dir => { for (let i = 0; i < L.nb; i++) {
+      if (mine && mine.no === L.no && mine.dir === dir && mine.i === i) continue;
+      const B = busS(L, dir, busTau(L, dir, i, ms)), [x, y] = linePt(L, B.s), q = linePt(L, B.s + dir * 0.6), ang = Math.atan2(q[1] - y, q[0] - x), ox = -Math.sin(ang) * 0.55, oy = Math.cos(ang) * 0.55;
+      if (x < vr.x0 - 3 || x > vr.x1 + 3 || y < vr.y0 - 3 || y > vr.y1 + 3) continue;
+      objs.push({ d: x + ox + y + oy + 0.6, f: () => drawCarAng({ k: 'bus', color: L.col, line: L.no }, x + ox, y + oy, ang, ts) });
+    } }));
   }
   // ---------- going somewhere in town (v0.12; v0.19: from where you are, and by car from where it's parked) ----------
   // Where you are is kept in S.out (null = at home) and where your car is in S.carAt (null = in your drive). A trip is a
@@ -3128,6 +3253,7 @@ const Scene = (() => {
     if (how === 'bus' || how === 'metro') {   // v0.61: walk to the stop, ride, walk from the stop
       // v0.62 (Mason #30: "the shortest way to everywhere, no detours"): try the few stops nearest each end and take the
       // pair that gets you there soonest (walking + riding); the subway goes straight between two stations
+      if (how === 'bus') { const B2 = busTrip(from, to); if (B2) return B2; }   // v0.66: on a line, waiting for its bus
       const ST = how === 'bus' ? busStops() : metroStops(), near = p => ST.slice().sort((a, b) => Math.hypot(a.pt[0] - p[0], a.pt[1] - p[1]) - Math.hypot(b.pt[0] - p[0], b.pt[1] - p[1])).slice(0, 4);
       const plen = (p0, P) => { let d = 0, [x, y] = p0; P.forEach(q => { d += Math.hypot(q[0] - x, q[1] - y); x = q[0]; y = q[1]; }); return d; };
       const walkTo = new Map(), walkFrom = new Map(), WS = TRIP_SPEED.walk, RS = TRIP_SPEED[how];
@@ -3157,9 +3283,31 @@ const Scene = (() => {
     if (!bay.home && far > 0.6) legs.push({ how: 'walk', from: bay.pt, path: far < 7 && !throughBld(bay.pt, to) ? [to] : route(bay.pt, to) });   // v0.47: round a building, not through it
     return legs;
   }
+  // v0.66: the best bus: on any line, either way round, from one of the line's stops near you to one near where you're
+  // going: walking there, waiting for the bus (from the timetable), riding (with its stops on the way), walking on
+  function busTrip(from, to) {
+    const Ls = busLines(); if (!Ls.length) return null;
+    const WS = TRIP_SPEED.walk, ms = now(), plen = (p0, P) => { let d = 0, [x, y] = p0; P.forEach(q => { d += Math.hypot(q[0] - x, q[1] - y); x = q[0]; y = q[1]; }); return d; };
+    const rTo = new Map(), rFrom = new Map(), wTo = s => { if (!rTo.has(s)) rTo.set(s, route(from, s.pt)); return rTo.get(s); }, wFrom = s => { if (!rFrom.has(s)) rFrom.set(s, route(s.pt, to)); return rFrom.get(s); };
+    const near = (L, p) => L.stops.map((s, k) => ({ s, k })).sort((a, b) => dist2(a.s.pt, p) - dist2(b.s.pt, p)).slice(0, 3);
+    let best = null;
+    Ls.forEach(L => near(L, from).forEach(a => near(L, to).forEach(b => { if (a.s === b.s) return; [1, -1].forEach(dir => {
+      const sA = L.stopS[a.k], sB = L.stopS[b.k], far = ((dir > 0 ? sB - sA : sA - sB) % L.len + L.len) % L.len, between = L.stopS.filter(x => { const f = ((dir > 0 ? x - sA : sA - x) % L.len + L.len) % L.len; return f > 0.1 && f < far - 0.1; }).length;
+      const pa = wTo(a.s), wA = plen(from, pa) / WS, ride = far / TRIP_SPEED.bus + between * TRANSIT.dwell, pb = wFrom(b.s), wB = plen(b.s.pt, pb) / WS;
+      if (best && wA + ride + wB > best.tm) return;
+      const W = busWait(L, dir, sA, ms + wA * 1000), tm = wA + W.w + ride + wB;
+      if (!best || tm < best.tm) best = { L, a, b, dir, sA, sB, far, between, pa, pb, W, tm };
+    }); })));
+    if (!best) return null;
+    const { L, a, b, dir, sA, sB, far } = best, way = lineWay(L, sA, sB, dir);
+    return [{ how: 'walk', from, path: best.pa },
+      { how: 'wait', from: a.s.pt, path: [], wait: best.W.w, line: L.no },
+      { how: 'bus', from: a.s.road, path: way.pts, car: true, transit: true, veh: { k: 'bus', color: L.col, line: L.no }, bay: { pt: b.s.pt, dir: b.s.dir }, ride: { no: L.no, dir, i: best.W.i, s0: sA, s1: sB, far }, dwellSecs: best.between * TRANSIT.dwell },
+      { how: 'walk', from: b.s.pt, path: best.pb }];
+  }
   // Travel time in "local street" units: expressway legs count less (v0.16).
   const legLen = L => { let d = 0, [x, y] = L.from, hw = false; L.path.forEach(([a, b, h = 0, f = 0]) => { const q = Math.hypot(a - x, b - y); d += q / (f && hw ? TRIP_SPEED.highway : h > 0 ? 1.5 : 1); hw = !!f; x = a; y = b; }); return d; };
-  const tripSecs = legs => legs.reduce((t, L) => t + legLen(L) / (TRIP_SPEED[L.how] || 3), 0);
+  const tripSecs = legs => legs.reduce((t, L) => t + legLen(L) / (TRIP_SPEED[L.how] || 3) + (L.wait || 0) + (L.dwellSecs || 0), 0);   // (v0.66: + waiting for the bus, its stops)
   // v0.29: stop on the way (to go somewhere else instead, or just to stay): you stay right where you are. A car pulls
   // over to the kerb (after coming down off the flyover), and you get out beside it. Still walking out to your car at
   // home: you just go back in.
@@ -3225,6 +3373,24 @@ const Scene = (() => {
     if (!trip) return;
     if (trip.town !== VIEW_TOWN || mode !== 'town') { const f = trip.done, tw = trip.town; finishTripNow(true); if (f) LATE = { town: tw, f: { f, until: now() + 2 * MIN } }; return; }
     if (trip.arrived) return;
+    { const LW = trip.legs[trip.li];   // v0.66: at the stop till your bus pulls in; then you go with it, stop by stop
+      if (LW && LW.how === 'wait') {
+        trip.moving = false; trip.waitT = (trip.waitT || 0) + dt;
+        const R1 = (trip.legs[trip.li + 1] || {}).ride, L = R1 && busLines().find(l => l.no === R1.no), B = L && busS(L, R1.dir, busTau(L, R1.dir, R1.i, now()));
+        if (!L || (B.stop && Math.abs(B.s - R1.s0) < 0.6) || trip.waitT > (L ? L.cyc + 5 : 0)) { trip.waitT = 0; trip.rideT = 0; nextLeg(false); }
+        return;
+      }
+      if (LW && LW.ride) {
+        const R1 = LW.ride, L = busLines().find(l => l.no === R1.no);
+        if (L) {
+          const B = busS(L, R1.dir, busTau(L, R1.dir, R1.i, now()));
+          trip.rideT = (trip.rideT || 0) + dt;
+          if ((trip.rideT > 2 && B.stop && Math.abs(B.s - R1.s1) < 0.6) || trip.rideT > L.cyc) { const e = linePt(L, R1.s1); trip.x = e[0]; trip.y = e[1]; trip.path = []; trip.rideT = 0; nextLeg(false); return; }
+          const [x, y] = linePt(L, B.s), q = linePt(L, B.s + R1.dir * 0.6), ang = Math.atan2(q[1] - y, q[0] - x);
+          trip.x = x; trip.y = y; trip.ang = ang; trip.ox = -Math.sin(ang) * 0.55; trip.oy = Math.cos(ang) * 0.55; trip.moving = !B.stop; trip.dir = Math.abs(q[0] - x) > Math.abs(q[1] - y) ? (q[0] > x ? '+x' : '-x') : (q[1] > y ? '+y' : '-y');
+          return;
+        }
+      } }
     if (trip.inCar && trip.path.length && !trip.h && mustStop(trip) && (trip.waited = (trip.waited || 0) + dt) < 12) return;   // v0.22: red light (v0.47: for the way you turn)
     if (trip.inCar && trip.path.length && !mustStop(trip)) trip.waited = 0;
     if (trip.inCar) laneStep(trip, dt, CARS_OUT.town === trip.town ? CARS_OUT.list.filter(o => o.alpha > 0.3) : null);   // v0.39: in your lane (you pass slow cars too)
@@ -3260,6 +3426,7 @@ const Scene = (() => {
     }
     if (trip.inCar) { const off = (trip.h || 0) > 1 ? [0, 0] : [trip.ox || 0, trip.oy || 0]; ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarAng({ ...trip.car, plate: stateOf(myTown()).plate }, trip.x + off[0], trip.y + off[1], trip.ang === undefined ? Math.atan2(...(DIRV[trip.dir] || [0, 1]).slice().reverse()) : trip.ang, ts); ctx.restore(); return; }   // v0.24: on the right (v0.39: in its lane)
     drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' }); needBubble(p, z, ts);
+    if (LG && LG.how === 'wait' && z > 0.25) label(`🚌 ${t('bus_wait', { n: LG.line })}`, p.x, p.y - 62 * z, TRANSIT.lineCols[(LG.line - 1) % TRANSIT.lineCols.length], '#ffffff', `800 12px ${UI_FONT},${EMOJI_FONT}`, 22, 5);   // v0.66
     carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
   }
@@ -6346,6 +6513,10 @@ const Scene = (() => {
     tripTime(to, how, dest, place, pick) { if (!S) return 0; TRIP_CAR = pick === undefined ? null : pick; try { const L = planTrip(to, how, dest, place), slow = rushNow() ? TRANSIT.rushSlow : 1;   // v0.61: the roads are slower in the rush hour (not the subway)
       return Math.max(1, Math.round(L.reduce((t2, l) => t2 + tripSecs([l]) * (l.car ? slow : 1), 0))); } finally { TRIP_CAR = null; } },
     transit() { if (!S) return { bus: 0, metro: 0 }; TL = layoutOf(VIEW_TOWN); return { bus: busStops().length, metro: metroStops().length }; },   // v0.61
+    _bus() { TL = layoutOf(VIEW_TOWN); return busLines().map(L => ({ no: L.no, stops: L.stops.length, len: Math.round(L.len), cyc: Math.round(L.cyc), nb: L.nb, first: L.stops[0].pt, pts: L.stops.map(s => s.pt) })); },   // (testing) v0.66
+    _lookAt(x, y, z) { flyTo(x, y, z, true); },
+    _metro() { TL = layoutOf(VIEW_TOWN); return metroStops().map(m => m.pt); },
+    _tripInfo() { return trip && { li: trip.li, how: (trip.legs[trip.li] || {}).how, legs: trip.legs.map(l => l.how + (l.wait ? ':' + Math.round(l.wait) : '') + (l.ride ? ':L' + l.ride.no + (l.ride.dir > 0 ? '+' : '-') : '')), x: +trip.x.toFixed(1), y: +trip.y.toFixed(1), inCar: trip.inCar, arrived: trip.arrived }; },
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
     showMe() { if (mode !== 'town') return false; const p = meInView(); if (!p) return false; flyTo(p[0], p[1], Math.max(ME_ZOOM, cam.z), true); follow = false; return true; },   // v0.64

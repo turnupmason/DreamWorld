@@ -319,6 +319,7 @@ function drawCar(c, x, y, ts) {
   if (def.kind === 'two') return drawTwoWheeler(c, x, y, ts);
   if (c.k === 'camper') return drawCamper(c, x, y);
   if (c.k === 'tractor') return drawTractor(c, x, y, ts);
+  if (c.k === 'bus') return drawBus(c, x, y, ts);   // v0.66
   const s = CAR_SPEC[c.k] || CAR_SPEC.mini, cx = x + (1 - s.wid) / 2, base = 3.5 + (s.lift || 0);
   if (s.sleek) return drawSleekCar(c, cx, y, s, ts);
   if (s.shape) return drawShapedCar(c, cx, y, s, ts);
@@ -413,6 +414,26 @@ function drawSleekCar(c, x, y, s, ts) {
 }
 // Everyday cars with their own silhouettes (v0.13): a round hatchback, a three-box sedan, an open convertible and a
 // long luxury car. Seen from the front-right: the front (+y) and the right side (+x) show.
+// v0.66 (Mason #32: "the bus is ugly, a green rectangle"): a city bus: tall, in its line's colour with a white roof
+// and a dark skirt, a long row of windows with pillars, two sets of doors, a big windscreen with the route number lit
+// in orange above it, headlights, wheels in their arches and an air-conditioning box on the roof
+function drawBus(c, x, y, ts) {
+  const z = cam.z, s = CAR_SPEC.bus, w = s.wid, L = s.len, col = c.color || '#2e9b5a', base = 2.6, H = 15, glass = NIGHT > 0.3 ? '#ffe39a' : '#2c3b4c';
+  const ctr = iso(x + w / 2, y + L / 2);
+  ellipse(ctr.x, ctr.y + 2 * z, (w + L) * 15 * z, (w + L) * 7 * z, 'rgba(0,0,0,.24)');
+  const side = [iso(x + w, y + L), iso(x + w, y)], front = [iso(x, y + L), iso(x + w, y + L)];
+  box(x, y, w, L, H, col, base, { top: '#f4f6f8' });
+  wallRect(side, base, 0, 1, 0, 2.2, '#2f3338'); wallRect(front, base, 0, 1, 0, 2.2, '#2f3338');   // the dark skirt
+  wallRect(side, base, 0.02, 0.98, 6.6, 7.4, '#ffffff');   // a white line under the windows
+  for (let k = 0; k < 7; k++) { const u0 = 0.25 + k * 0.105; if (u0 + 0.085 > 0.97) break; wallRect(side, base, u0, u0 + 0.085, 8.2, 13.6, glass); }   // the side windows
+  [[0.04, 0.2], [0.55, 0.69]].forEach(([u0, u1]) => { wallRect(side, base, u0, u1, 1.2, 13.6, '#3d4a5c'); wallLine(side, base, (u0 + u1) / 2, 1.2, (u0 + u1) / 2, 13.6, '#8e959c', 0.6); wallRect(side, base, u0 + 0.01, u1 - 0.01, 8.2, 13.2, glass); });   // two doors
+  wallRect(front, base, 0.06, 0.94, 6, 12.8, glass);   // the windscreen
+  wallRect(front, base, 0.14, 0.86, 13.2, 14.6, '#1d1d1f');   // the route number
+  if (z > 0.35 && c.line) carText(front, base, 0.5, 13.95, String(c.line), 1.5 * z, '#ffb020', false);
+  [0.14, 0.86].forEach(u => { const p = up(lerp(front[0], front[1], u), (base + 3.4) * z); circle(p.x, p.y, 1.1 * z, HL()); if (NIGHT > 0.3 && !CAR_REAR) glow(p.x, p.y, 16 * z, 0.6); });
+  [0.14, 0.8].forEach(u => { const p = lerp(side[0], side[1], u); tyre(p.x, p.y, AXIS_Y, 4.6 * z, '#c9ced4'); });
+  box(x + 0.22, y + L * 0.42, w - 0.44, 0.9, 2.2, '#dfe4ea', base + H, { top: '#eef1f4', shadow: false });   // the air conditioning
+}
 function drawShapedCar(c, x, y, s, ts) {
   const z = cam.z, col = c.color, w = s.wid, L = s.len, glass = '#2c3b4c', glassHi = '#44607a', chrome = '#e8edf2';
   const ctr = iso(x + w / 2, y + L / 2), at = (px, py, h) => up(iso(px, py), h * z);
