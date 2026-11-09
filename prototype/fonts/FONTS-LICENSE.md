@@ -1,6 +1,6 @@
 # 字体许可 · Font licenses
 
-游戏用了两套免费、可商用的开源字体（SIL Open Font License 1.1）。`fonts/` 里的文件是它们的子集（只保留游戏用到的字），由 `tools/make_fonts.py` 生成。
+游戏用了三套免费、可商用的开源字体（SIL Open Font License 1.1）。`fonts/` 里的文件是它们的子集（只保留游戏用到的字），由 `tools/make_fonts.py` 生成。
 
 ## Nunito（英文和数字）· `nunito.woff2`
 
@@ -14,6 +14,12 @@ Copyright © 2018—2022 Cyano Hao.
 Portions © 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
 
 来源：https://github.com/CyanoHao/Resource-Han-Rounded （发布包 RHR-CN，Medium 和 Bold）。我们做了子集化（只保留游戏文字和 3,755 个常用字），并按 OFL 的要求把字体内部名称改成「MirrorTown Round」，不使用保留名称。
+
+## 站酷快乐体 ZCOOL KuaiLe（标题）· `cute-game.woff2`
+
+Copyright 2018 The ZCOOL KuaiLe Project Authors (https://github.com/googlefonts/zcool-kuaile)
+
+来源：https://github.com/google/fonts/tree/main/ofl/zcoolkuaile （v0.43.1 加的，用在标题、按钮、楼名牌上）。我们做了子集化（只保留游戏文字里它有的字），字体内部名称改成「MirrorTown Cute」。
 
 ## SIL Open Font License 1.1
 

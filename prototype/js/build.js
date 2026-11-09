@@ -2069,7 +2069,7 @@ function drawStore(st, ts) {
   }
   if (NIGHT > 0.3) { const p = iso(x + w / 2, y + d); glow(p.x, p.y - 10 * z, 60 * z, 0.9); }
   const s = up(iso(x + w / 2, y + d / 2), (wh + (k === 'ranch' || k === 'nursery' ? 18 : k === 'station' ? 36 : k === 'museum' ? 16 : k === 'bowling' ? 84 : 6)) * z);
-  if (z > 0.1) label(`${S2.e} ${nm(S2)}`, s.x, s.y - 6 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z), 2);   // v0.43: drawn last, never covered or overlapping
+  if (z > 0.1) label(`${S2.e} ${nm(S2)}`, s.x, s.y - 6 * z, '#fffdf8', '#3b3125', `800 ${Math.max(10, 13 * z)}px ${CUTE_FONT},${EMOJI_FONT}`, Math.max(16, 23 * z), 2);   // v0.43: drawn last, never covered or overlapping
   return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 30 * z, y1: iso(x + w, y + d).y };
 }
 // Things on show in the car park (cars at the dealer, a police car, plants, a little pen, the pet shop dog, a sign),

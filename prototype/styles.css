@@ -351,6 +351,7 @@ body.ob-mode .hud, body.ob-mode .tabbar, body.ob-mode .ctxbar, body.ob-mode .fab
 
 /* ================= v0.5 look: rounded type, soft cards, clearer hierarchy ================= */
 :root {
+  --font-cute: "MT Nunito", "MT Cute", "MT Round", ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --font: "MT Nunito", "MT Round", ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --shadow: 0 2px 12px rgba(90, 60, 20, .07), 0 0 0 1px rgba(120, 90, 40, .05);
   --shadow-up: 0 8px 26px rgba(70, 45, 10, .16);
@@ -891,3 +892,6 @@ body.dark .nt-top b, body.dark .nt-text { color: #f4ece0; }
 body.dark .place-chips span { background: #3a3128; color: #f2d2a8; }
 body.dark .place-pic { background: radial-gradient(ellipse at 50% 85%, #3c4a33 0%, #2b3a48 70%); }
 body.dark .place-staff { color: #cdbfae; }
+/* v0.43.1: ZCOOL KuaiLe (站酷快乐体) for titles, section titles, tabs and the big buttons; the rest stays round and easy to read */
+h1, h2, h3, .panel-title, .sec-title, .tabbar .tab, .btn.primary, .place-chips span, .ph-head b, .mg-box h2, .mg-final, .feed-group, .nt-top b { font-family: var(--font-cute); }
+.place-head h2, .panel-title { letter-spacing: .02em; }

@@ -1839,7 +1839,7 @@ const Scene = (() => {
       const rk = ranking();
       // label sizes follow the zoom, so zoomed far out the names don't cover the town
       const fs = Math.round(clamp(7 + z * 40, 9, 13)), small = Math.round(clamp(6 + z * 30, 8.5, 11));
-      if (z < 0.17) TL.labels.forEach(([key, x, y]) => { const c = iso(x, y); label(key === 'area_maple' && VIEW_TOWN !== HOME_TOWN ? nm(COMMUNITIES[VIEW_TOWN]) : t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs}px ${UI_FONT},${EMOJI_FONT}`, fs + 9, 0.5); });
+      if (z < 0.17) TL.labels.forEach(([key, x, y]) => { const c = iso(x, y); label(key === 'area_maple' && VIEW_TOWN !== HOME_TOWN ? nm(COMMUNITIES[VIEW_TOWN]) : t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs + 1}px ${CUTE_FONT},${EMOJI_FONT}`, fs + 10, 0.5); });
       // zoomed all the way out: the neighbouring villages, and a way on to the world map
       if (z < 0.1) {
         [[WX1 + 40, (WY0 + WY1) / 2 - 20, 'out_east'], [(WX0 + WX1) / 2 + 30, WY1 + 40, 'out_south'], [WX0 - 34, WY1 + 34, 'out_west']].filter(([x, y]) => !inLake(x, y)).forEach(([x, y, key]) => { const c = iso(x, y); label(t(key), c.x, c.y, 'rgba(255,255,255,.82)', '#5d5448', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8, 0.4); });
@@ -1855,7 +1855,7 @@ const Scene = (() => {
         const label = S.calm ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode: names only
         hitLabel({ kind: 'lot', owner: tp.h.id, pri: 1 }, mine ? 5 : 3, label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 9);
       });
-      if (out.hall) { const { x: px, y: py } = TL.plaza; hitLabel({ kind: 'plaza', pri: 1 }, 4, VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22); }
+      if (out.hall) { const { x: px, y: py } = TL.plaza; hitLabel({ kind: 'plaza', pri: 1 }, 4, VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `800 13px ${CUTE_FONT},${EMOJI_FONT}`, 23); }
       return;
     }
   }
@@ -4486,7 +4486,7 @@ const Scene = (() => {
     if (z < 0.4) for (const c of outChunks()) {   // v0.40: the county's other towns
       if (!c.name || c.x > vr.x1 || c.x + S2 < vr.x0 || c.y > vr.y1 || c.y + S2 < vr.y0) continue;
       const p = iso(c.x + S2 / 2, c.y + S2 / 2);
-      label(`🏘️ ${curLang() === 'zh' ? c.name[0] : c.name[1]}`, p.x, p.y - 60 * z, 'rgba(255,253,248,.92)', '#3b3125', `800 ${Math.max(10, 13 * Math.min(1, z * 3))}px ${UI_FONT},${EMOJI_FONT}`, Math.max(18, 22 * Math.min(1, z * 3)), 1);
+      label(`🏘️ ${curLang() === 'zh' ? c.name[0] : c.name[1]}`, p.x, p.y - 60 * z, 'rgba(255,253,248,.92)', '#3b3125', `800 ${Math.max(10, 13 * Math.min(1, z * 3))}px ${CUTE_FONT},${EMOJI_FONT}`, Math.max(18, 22 * Math.min(1, z * 3)), 1);
     }
   }
   // A few house styles for the villages around town (a short list, so their pictures can be reused).

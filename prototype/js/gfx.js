@@ -8,6 +8,9 @@ let NIGHT = 0;     // 0 = day, 1 = night: windows and lamps light up
 let GLOWS = [];    // light sources collected while drawing, painted over the night tint
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 const UI_FONT = '"MT Nunito","MT Round",ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei UI",sans-serif';
+// v0.43.1: the cute title font (ZCOOL KuaiLe) for building names and place names drawn in the scene
+const CUTE_FONT = '"MT Nunito","MT Cute","MT Round",ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei UI",sans-serif';
+if (typeof document !== 'undefined' && document.fonts && document.fonts.load) document.fonts.load('800 20px "MT Cute"', '镜像小镇体育场动物园').catch(() => {});   // the canvas can only use it once it's loaded
 
 // ---------- math ----------
 const iso = (x, y) => ({ x: (x - y) * TW / 2 * cam.z + cam.x, y: (x + y) * TH / 2 * cam.z + cam.y });
