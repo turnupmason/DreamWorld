@@ -2634,7 +2634,12 @@ function start() {
   checkDay();
   simFriends();
   setTab('home');
+  // v0.63.1: you're away in another city (drove, took the train, flew or sailed there): open there, standing where you were
+  // (after the whole script has loaded: the world view needs things defined further down)
+  const away = S.trav && COMMUNITIES[S.trav.town] && S.trav.town !== myTown() ? S.trav.town : null;
   refresh();
+  if (away) setTimeout(() => { if (UI.tab !== 'home' || tutStep()) return; UI.tab = 'world'; UI.wtown = away; syncView(); refresh();
+    setTimeout(() => { if (S.out && S.out.town === away && UI.tab === 'world') Scene.arriveAt(S.out.pt, S.out.place); snack(`📍 ${t('trav_open_here', { c: nm(COMMUNITIES[away]) })}`); }, 300); }, 0);
   postNative({ type: 'ready' });
   if (tutStep()) runCoach();
   else {
