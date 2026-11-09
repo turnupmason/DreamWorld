@@ -945,3 +945,35 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 .ph-type input { flex: 1; min-width: 0; border: 0; border-radius: 18px; padding: 9px 13px; font: inherit; font-size: 14px; background: rgba(255,255,255,.95); color: #1d1d1f; }
 .ph-send { border: 0; border-radius: 18px; padding: 0 14px; font: inherit; font-weight: 800; background: #0a84ff; color: #fff; }
 .warn-text { color: #d9534f; }   /* v0.52 */
+/* v0.54: the leagues on the phone */
+.tlogo { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid; font-size: 14px; flex: none; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.tlogo.big { width: 64px; height: 64px; font-size: 34px; border-width: 4px; }
+.jersey { width: 54px; height: 54px; }
+.ph-team { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 6px 0; }
+.lg-chips, .lg-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0; flex-wrap: nowrap; }
+.lg-chips .chip, .lg-tabs .chip { flex: none; background: rgba(255,255,255,.14); color: #fff; border: 0; }
+.lg-chips .chip.on, .lg-tabs .chip.on { background: #fff; color: #1d1d1f; }
+.ph-badge.in { position: static; display: inline-block; margin-left: 2px; }
+.lg-game { background: rgba(255,255,255,.12); border-radius: 16px; padding: 8px 10px; margin-top: 8px; }
+.lg-st { font-size: 11px; opacity: .8; margin-bottom: 4px; }
+.lg-side { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; color: #fff; padding: 4px 0; font-size: 14px; text-align: left; cursor: pointer; }
+.lg-side span { flex: 1; }
+.lg-side b { min-width: 38px; text-align: right; }
+.lg-side i { font-style: normal; font-size: 12px; font-weight: 800; background: #2e9b5a; border-radius: 10px; padding: 2px 7px; }
+.lg-side.won b { color: #7be38f; }
+.lg-side.picked span::after { content: ' 🎟️'; }
+.lg-bar { display: flex; height: 5px; border-radius: 3px; overflow: hidden; margin-top: 4px; background: rgba(255,255,255,.2); }
+.lg-table { background: rgba(255,255,255,.1); border-radius: 14px; overflow: hidden; }
+.lg-tr { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-bottom: 1px solid rgba(255,255,255,.1); background: none; color: #fff; font-size: 12.5px; text-align: left; cursor: pointer; }
+.lg-tr > span:first-child { width: 16px; opacity: .7; }
+.lg-tr > span:nth-child(3), .lg-tr > span:nth-child(4), .lg-tr > span:nth-child(5) { width: 40px; text-align: right; }
+.lg-tr.head { font-weight: 800; opacity: .75; cursor: default; }
+.lg-tr.mine { background: rgba(242,194,48,.18); }
+.lg-tr .tlogo { width: 20px; height: 20px; font-size: 11px; border-width: 2px; vertical-align: middle; }
+.ph-row.sm { padding: 5px 2px; font-size: 13px; }
+.ph-row.sm .tlogo { width: 22px; height: 22px; font-size: 12px; }
+.win { color: #7be38f; } .loss { color: #ff8a8a; }
+.bet-chips { flex-wrap: wrap; }
+.bet-chips .ph-btn { display: flex; flex-direction: column; align-items: center; min-width: 64px; }
+.bet-chips small { font-size: 10px; opacity: .85; }
+.lg-side span.tlogo { flex: none; }   /* v0.54: the logo stays round */

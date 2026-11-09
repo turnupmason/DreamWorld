@@ -1337,3 +1337,32 @@ Object.assign(STR.en, {
   zone_rule: '{zone}: {a}–{b} plots a home, up to {max}', zone_full_title: 'No more land on this street',
   zone_full: 'You have {n} plots; in the {zone} a home can have at most {max}. For more land and a bigger house, move to a street with big lots like the Estates (🏰).', zone_you_get: 'Your lot there',
 });
+// v0.54: the leagues and coin bets
+Object.assign(STR.zh, {
+  ph_sports: '体育', lg_record: '战绩（胜–负）', lg_pts: '得分 : 失分', lg_rating: '实力分（Elo）', lg_season_games: '本赛季 36 场',
+  lg_bet_title: '竞猜', lg_vs: '对 {name}', lg_chance: '获胜概率', lg_odds: '赔率', lg_calm: '安静模式里没有竞猜。', lg_stake: '押多少（赢了拿回）',
+  lg_bet_note: '只用游戏金币，输了不退。每天最多押 🪙{n}（今天还能押 🪙{left}）。赔率 = 获胜概率的倒数，抽 {m}%。',
+  lg_tab_today: '今天', lg_tab_table: '积分榜', lg_tab_sched: '赛程', lg_tab_mine: '我的竞猜',
+  lg_off: '第 {s} 赛季结束 · {n} 天后新赛季', lg_round: '第 {s} 赛季 · 第 {r} / {n} 轮', lg_final: '完场', lg_pen: '点球', lg_ot: '加时', lg_live: '进行中',
+  lg_today: '今天的比赛（{h}:00 开始）', lg_how: '每支球队和另外 9 支各打 4 场，一共 36 场。赛季开始都是 0 胜 0 负、50% 对 50%；之后按战绩算胜率：赢了强队涨得多，赢了弱队涨得少，平手的两队一场大约差 2–3%。点队伍押金币，开赛前都能押。',
+  lg_off_note: '休赛期，{n} 天后新赛季开打。上赛季的最终排名：', lg_round_n: '第 {r} 轮',
+  lg_bets_n: '一共押了', lg_bets_won: '赢了 {n} 次', lg_bets_net: '净输赢', lg_open: '等结果', lg_settled: '已结算', lg_none: '还没有', lg_coins_only: '竞猜只用游戏里的金币，不能用真钱，也换不成真钱。',
+  lg_table: '积分榜', lg_team: '球队', lg_wl: '胜–负', lg_pct: '胜率', lg_form: '近况',
+  lg_no_calm: '安静模式里没有竞猜', lg_no_off: '现在是休赛期', lg_no_closed: '比赛已经开始了，不能再押', lg_no_already: '这场已经押过了', lg_no_poor: '金币不够', lg_no_cap: '今天已经押满 🪙{n} 了，明天再来',
+  lg_placed: '押了 🪙{n}：{name}赢', lg_won_snack: '竞猜赢了！拿回 🪙{n}', lg_lost_snack: '{n} 场竞猜没猜中',
+  lg_today_snack: '今天有 {n} 场比赛{mine}，打开手机里的「体育」看看', lg_push_title: '今天的比赛', lg_push_body: '今天有 {n} 场比赛，看看谁会赢', lg_push_bet: '你押的比赛结束了，看看结果',
+});
+Object.assign(STR.en, {
+  ph_sports: 'Sports', lg_record: 'Record (W–L)', lg_pts: 'Points for : against', lg_rating: 'Rating (Elo)', lg_season_games: 'This season’s 36 games',
+  lg_bet_title: 'Bet', lg_vs: 'vs {name}', lg_chance: 'Chance to win', lg_odds: 'Odds', lg_calm: 'No betting in calm mode.', lg_stake: 'Stake (you get back)',
+  lg_bet_note: 'Game coins only; a lost bet is gone. Up to 🪙{n} a day (🪙{left} left today). Odds = 1 / chance, less {m}%.',
+  lg_tab_today: 'Today', lg_tab_table: 'Table', lg_tab_sched: 'Schedule', lg_tab_mine: 'My bets',
+  lg_off: 'Season {s} is over · new season in {n} days', lg_round: 'Season {s} · round {r} / {n}', lg_final: 'Final', lg_pen: 'pens', lg_ot: 'OT', lg_live: 'Live',
+  lg_today: 'Today’s games ({h}:00)', lg_how: 'Every team plays each of the other 9 four times: 36 games. A season starts at 0–0 and 50 / 50; then the chances follow the results: beating a strong team counts for more than beating a weak one, about 2–3 % a game between even teams. Tap a team to bet coins, any time before kick-off.',
+  lg_off_note: 'The break between seasons: a new one starts in {n} days. Last season’s final table:', lg_round_n: 'Round {r}',
+  lg_bets_n: 'Bets placed', lg_bets_won: '{n} won', lg_bets_net: 'Net', lg_open: 'Waiting', lg_settled: 'Settled', lg_none: 'None yet', lg_coins_only: 'Bets use game coins only: no real money, and they can’t be turned into real money.',
+  lg_table: 'Table', lg_team: 'Team', lg_wl: 'W–L', lg_pct: 'Pct', lg_form: 'Streak',
+  lg_no_calm: 'No betting in calm mode', lg_no_off: 'It’s the break between seasons', lg_no_closed: 'The game has started: betting is closed', lg_no_already: 'You already bet on this game', lg_no_poor: 'Not enough coins', lg_no_cap: 'You’ve staked 🪙{n} today: come back tomorrow',
+  lg_placed: '🪙{n} on {name} to win', lg_won_snack: 'Bet won! 🪙{n} back', lg_lost_snack: '{n} bets didn’t come in',
+  lg_today_snack: '{n} games today{mine}: open Sports on your phone', lg_push_title: 'Today’s games', lg_push_body: '{n} games today: who will win?', lg_push_bet: 'A game you bet on has finished: see how it went',
+});

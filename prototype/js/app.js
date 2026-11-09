@@ -1514,6 +1514,12 @@ const ACT = {
   // v0.43: the mail app opens your mail right here, with a way back to the phone
   phone(arg) { if (arg === 'mail') return openSheet('mail', 'phone'); if (arg === 'map') { closeSheet(); return ACT.findMe(); } if (typeof arg === 'string' && arg.startsWith('texts|')) seeTexts(arg.split('|')[1]); openSheet('phone', arg || 'home'); },
   phoneCall(id) { const r = callPerson(id); if (r === 'ok') { Sound.play('chime'); save(); } openSheet('phone', 'call|' + id + '|' + r); },
+  betPlace(arg) {   // v0.54
+    const [sp, g, pick, stake] = arg.split('|'), r = placeBet(sp, +g, +pick, +stake);
+    if (r !== 'ok') { Sound.play('oops'); return snack(t('lg_no_' + r, { n: BETS.dayMax })); }
+    Sound.play('coins'); snack(`🎟️ ${t('lg_placed', { n: stake, name: teamName(sp, +pick) })}`); save(); syncSportReminders();
+    UI.sheet = { type: 'phone', arg: `sports|${sp}|today` }; renderSheet();
+  },
   phoneText(a) { const [id, i] = a.split('|'); textPerson(id, +i); seeTexts(id); Sound.play('tick'); save(); renderSheet(); },
   // v0.51 (Mason #29): in your own words; they work out what you meant (talk.js) and answer a moment later
   phoneSend(id) {
@@ -3126,6 +3132,17 @@ const petAlertCount = () => (S ? myPets().filter(a => petAsks(a).length).length 
 const petAskText = (name, kind, need) => t(need === 'clean' ? 'pet_ask_clean_' + kind : 'pet_ask_' + need, { name: esc(name) });
 let petSyncAt = 0, petAnim = null;
 // Tell the iPhone app when each pet will next need something, so it can remind you even when the game is closed.
+// v0.54: tell the phone when today's and the next days' games are, and when the games you bet on finish
+function syncSportReminders() {
+  if (!S) return;
+  const off = now() - Date.now(), items = [], si = seasonNow();
+  if (S.sportRemind !== false && !si.off) for (let d = 0; d < 3 && si.day + d < SEASON.days; d++) {
+    const r = si.day + d, at = roundDay(si.s, r) + 10 * HOUR, mine = SPORT_KEYS.flatMap(k => roundGames(k, r).filter(G => [G.h, G.a].some(i => lgTeam(k, i).t === myTown())).map(G => `${LEAGUES[k].e} ${teamName(k, G.h)} – ${teamName(k, G.a)}`));
+    items.push({ id: 'day-' + si.s + '-' + r, at: Math.round(at - off), title: `🏟️ ${t('lg_push_title')}`, body: mine.length ? mine.slice(0, 3).join(' · ') : t('lg_push_body', { n: SPORT_KEYS.length * 5 }) });
+  }
+  (S.bets || []).forEach(b => items.push({ id: 'bet-' + b.id, at: Math.round(gameEnd(b.sp, b.s, b.r) - off), title: `🎟️ ${t('lg_push_bet')}`, body: teamName(b.sp, b.pick) }));
+  postNative({ type: 'sportReminders', items: items.filter(x => x.at > Date.now()) });
+}
 function syncPetReminders() {
   petSyncAt = Date.now();
   if (!S) return;
@@ -3375,6 +3392,8 @@ setInterval(() => {
   if (S.work && now() >= S.work.end) { const r = finishShift(); if (r) { Sound.play('coins'); snack(`💼 ${t(r.promoted ? 'job_promoted' : 'job_done', { n: r.pay, rank: nm(JOB_RANKS[jobRank()]) })}`); refresh(); } }
   if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }
   if (S.floodNews) { snack(`🌊 ${t('w_flooded', { n: S.floodNews })}`); S.floodNews = 0; }
+  if (!S.onboarding && S.bets && S.bets.length) { const done = settleBets(); if (done.length) { const w = done.filter(x => x.won); Sound.play(w.length ? 'coins' : 'oops'); snack(w.length ? `🎉 ${t('lg_won_snack', { n: w.reduce((n, x) => n + x.pay, 0) })}` : `😕 ${t('lg_lost_snack', { n: done.length })}`); save(); refresh(); } }   // v0.54
+  if (!S.onboarding && S.lgDay !== today() && new Date(now()).getHours() >= 9) { S.lgDay = today(); const si = seasonNow(); if (!si.off) { const mine = SPORT_KEYS.filter(k => todayGames(k).some(G => [G.h, G.a].some(i => lgTeam(k, i).t === myTown()))); snack(`🏟️ ${t('lg_today_snack', { n: SPORT_KEYS.length * 5, mine: mine.map(k => LEAGUES[k].e).join('') })}`); } save(); syncSportReminders(); }   // v0.54: today's games
   // trophies: celebrate each new one (once)
   if (!S.onboarding) {
     const tn = trophyNews();
@@ -3386,7 +3405,7 @@ setInterval(() => {
     const news = petNews();
     news.forEach(n => { addFeed({ kind: 'pet', from: 'me', pet: n.a.id, need: n.need }); snack(petAskText(n.a.name, n.a.k, n.need)); });
     if (news.length) { save(); refresh(); }
-    if (Date.now() - petSyncAt > 10 * MIN) syncPetReminders();
+    if (Date.now() - petSyncAt > 10 * MIN) { syncPetReminders(); syncSportReminders(); }
   }
   Sound.ambience(NIGHT > 0.5, weatherNow().kind);
   if (S.weatherReal && (!S.weather || !S.weather.real || now() - S.weather.at > 30 * MIN) && Date.now() - weatherTried > 5 * MIN) realWeather(false);
@@ -3548,7 +3567,70 @@ function needBars() {
 }
 
 // ---------- v0.26: the phone ----------
-function phoneBadge() { try { return unreadTexts() + unreadMail() + (bank().loans.some(l => l.late) ? 1 : 0); } catch (e) { return 0; } }   // v0.26: letters live in the phone too
+function phoneBadge() { try { return unreadTexts() + unreadMail() + (bank().loans.some(l => l.late) ? 1 : 0) + betNews(); } catch (e) { return 0; } }
+// ---------- v0.54: the five leagues on your phone (league.js does the seasons) ----------
+const betNews = () => (S.betLog || []).filter(b => b.at > (S.betSeen || 0)).length;   // bets settled since you last looked
+const pctTxt = p => Math.round(p * 100) + '%';
+function teamLogo(sp, i, big) { const T = lgTeam(sp, i); return `<span class="tlogo${big ? ' big' : ''}" style="background:${T.c[0]};border-color:${T.c[1]}">${T.e}</span>`; }
+// a little jersey in the team's colours (v0.55 dresses the fans in them)
+function jersey(sp, i, n = '', away = false) { const T = lgTeam(sp, i), body = away ? '#f4f6f8' : T.c[0], trim = away ? T.c[0] : T.c[1]; return `<svg class="jersey" viewBox="0 0 40 40"><path d="M13 4 L5 9 L2 18 L9 20 L10 37 L30 37 L31 20 L38 18 L35 9 L27 4 Q20 9 13 4 Z" fill="${body}" stroke="${trim}" stroke-width="2.4"/><path d="M13 4 Q20 9 27 4" fill="none" stroke="${trim}" stroke-width="3"/><text x="20" y="29" text-anchor="middle" font-size="11" font-weight="900" fill="${trim}">${n}</text></svg>`; }   // the home shirt; away: white with the team's colour
+function sportsScreen(scr, a, b, arg) {
+  const si = seasonNow(), head = (title, back = 'home') => `<div class="ph-head"><button class="ph-back" data-act="phone" data-arg="${back}">‹</button><b>${title}</b></div>`;
+  if (scr === 'team') {   // one team: its logo, jersey, record and all its games
+    const sp = a, i = +b, T = lgTeam(sp, i), L = league(sp), R2 = L.rec[i], rows = [];
+    L.rounds.forEach((pr, r) => pr.forEach(([h, aw], g) => { if (h !== i && aw !== i) return; const res = L.res[r] && L.res[r][g], o = h === i ? aw : h, home = h === i;
+      rows.push(`<div class="ph-row sm"><span class="muted">${r + 1}</span>${teamLogo(sp, o)}<div class="grow">${home ? '🏠 ' : '✈️ '}${esc(teamName(sp, o))}</div>${res ? `<b class="${(res.hw ? res.h : res.a) === i ? 'win' : 'loss'}">${home ? res.hs : res.as}–${home ? res.as : res.hs}</b>` : `<span class="ph-muted">${fmtDay(roundDay(si.s, r))}</span>`}</div>`); }));
+    return head(`${LEAGUES[sp].e} ${esc(teamName(sp, i))}`, `sports|${sp}|table`) + `<div class="ph-team">${teamLogo(sp, i, true)}${jersey(sp, i, 10)}${jersey(sp, i, 7, true)}</div>
+      <div class="ph-card"><div class="row between"><span>${t('lg_record')}</span><b>${R2.w}–${R2.l}</b></div><div class="row between"><span>${t('lg_pts')}</span><b>${R2.pf} : ${R2.pa}</b></div><div class="row between"><span>${t('lg_rating')}</span><b>${Math.round(L.elo[i])}</b></div></div>
+      <div class="ph-sub">${t('lg_season_games')}</div>${rows.join('')}`;
+  }
+  if (scr === 'sbet') {   // betting on one side of one of today's games
+    const sp = a, g = +b, pick = +String(arg).split('|')[3], G = todayGames(sp)[g];
+    if (!G) return sportsScreen('sports', sp, 'today');
+    const p = pick === G.h ? G.p : 1 - G.p, odds = betOdds(p), o = pick === G.h ? G.a : G.h, left = BETS.dayMax - stakedToday();
+    const chips = BETS.chips.map(n => `<button class="ph-btn go" data-act="betPlace" data-arg="${sp}|${g}|${pick}|${n}" ${G.state === 'soon' && S.me.coins >= n && n <= left ? '' : 'disabled'}>🪙${n}<small>→ 🪙${Math.round(n * odds)}</small></button>`).join('');
+    return head(`${LEAGUES[sp].e} ${t('lg_bet_title')}`, `sports|${sp}|today`) + `<div class="ph-card big center">${teamLogo(sp, pick, true)}<b>${esc(teamName(sp, pick))}</b><span class="ph-muted">${t('lg_vs', { name: esc(teamName(sp, o)) })} · ${fmtClock(G.start)}</span>
+      <div class="row between gap-top"><span>${t('lg_chance')}</span><b>${pctTxt(p)}</b></div><div class="row between"><span>${t('lg_odds')}</span><b>×${odds.toFixed(2)}</b></div></div>
+      ${S.calm ? `<p class="ph-muted">${t('lg_calm')}</p>` : `<div class="ph-sub">${t('lg_stake')}</div><div class="ph-acts bet-chips">${chips}</div>`}
+      <p class="ph-muted small">${t('lg_bet_note', { n: BETS.dayMax, left: Math.max(0, left), m: Math.round(BETS.margin * 100) })}</p>`;
+  }
+  const sp = LEAGUES[a] ? a : 'football', tab = b || 'today', L = league(sp);
+  if (tab === 'mine') S.betSeen = now();
+  const chips = SPORT_KEYS.map(k => `<button class="chip ${k === sp ? 'on' : ''}" data-act="phone" data-arg="sports|${k}|${tab}">${LEAGUES[k].e} ${nm(LEAGUES[k])}</button>`).join('');
+  const tabs = ['today', 'table', 'sched', 'mine'].map(k => `<button class="chip ${k === tab ? 'on' : ''}" data-act="phone" data-arg="sports|${sp}|${k}">${t('lg_tab_' + k)}${k === 'mine' && betNews() ? ` <em class="ph-badge in">${betNews()}</em>` : ''}</button>`).join('');
+  const season = si.off ? t('lg_off', { s: si.s + 1, n: si.left }) : t('lg_round', { s: si.s + 1, r: si.day + 1, n: SEASON.days });
+  let body = '';
+  const game = G => {   // one game: both teams, the chances, the bet buttons (or the score)
+    const mine = (S.bets || []).find(x => x.sp === sp && x.s === G.s && x.r === G.r && x.g === G.g), res = G.res;
+    const side = (i, p) => `<button class="lg-side ${res && (res.hw ? res.h : res.a) === i ? 'won' : ''} ${mine && mine.pick === i ? 'picked' : ''}" data-act="${G.state === 'soon' && !S.calm && !mine ? 'phone' : 'phone'}" data-arg="${G.state === 'soon' && !S.calm && !mine ? `sbet|${sp}|${G.g}|${i}` : `team|${sp}|${i}`}">${teamLogo(sp, i)}<span>${esc(teamName(sp, i))}</span><b>${res ? (i === G.h ? res.hs : res.as) : pctTxt(p)}</b>${G.state === 'soon' && !S.calm && !mine ? `<i>×${betOdds(p).toFixed(2)}</i>` : ''}</button>`;
+    const st = res ? `${t('lg_final')}${res.note ? ' · ' + t('lg_' + res.note) : ''}` : G.state === 'live' ? `🔴 ${t('lg_live')}` : `🕐 ${fmtClock(G.start)}`;
+    return `<div class="lg-game"><div class="lg-st">${st}${mine ? ` · 🎟️ 🪙${mine.stake} ×${mine.odds.toFixed(2)}` : ''}</div>${side(G.h, G.p)}${side(G.a, 1 - G.p)}<div class="lg-bar"><i style="width:${Math.round(G.p * 100)}%;background:${lgTeam(sp, G.h).c[0]}"></i><i style="flex:1;background:${lgTeam(sp, G.a).c[0]}"></i></div></div>`;
+  };
+  if (tab === 'today') {
+    const gs = todayGames(sp);
+    body = gs.length ? `<div class="ph-sub">${t('lg_today', { h: LEAGUES[sp].hour })}</div>${gs.map(game).join('')}<p class="ph-muted small">${t('lg_how')}</p>`
+      : `<div class="ph-card">${t('lg_off_note', { n: si.left })}</div>` + standingsHtml(sp, true);
+  } else if (tab === 'table') body = standingsHtml(sp, false);
+  else if (tab === 'sched') {
+    const from = si.off ? 0 : si.day, rs = [];
+    if (!si.off && si.day > 0) rs.push([si.day - 1, roundGames(sp, si.day - 1)]);
+    for (let r = from + (si.off ? 0 : 1); r < Math.min(SEASON.days, from + (si.off ? 3 : 4)); r++) rs.push([r, roundGames(sp, r, si.off ? si.s + 1 : si.s)]);
+    body = rs.map(([r, gs]) => `<div class="ph-sub">${t('lg_round_n', { r: r + 1 })} · ${fmtDay(gs[0] ? gs[0].start : roundDay(si.s, r))} ${LEAGUES[sp].hour}:00</div>` + gs.map(G => `<div class="ph-row sm">${teamLogo(sp, G.h)}<span class="grow">${esc(teamName(sp, G.h))}</span><b>${G.res ? `${G.res.hs}–${G.res.as}` : pctTxt(G.p)}</b><span class="grow right">${esc(teamName(sp, G.a))}</span>${teamLogo(sp, G.a)}</div>`).join('')).join('');
+  } else {
+    const T2 = betTotals(), open = (S.bets || []).map(x => `<div class="ph-row sm">${LEAGUES[x.sp].e}${teamLogo(x.sp, x.pick)}<span class="grow">${esc(teamName(x.sp, x.pick))}</span><b>🪙${x.stake} ×${x.odds.toFixed(2)}</b></div>`).join('');
+    const log = (S.betLog || []).slice().reverse().map(x => `<div class="ph-row sm">${LEAGUES[x.sp].e}${teamLogo(x.sp, x.pick)}<span class="grow">${esc(teamName(x.sp, x.pick))} <small class="ph-muted">${x.hs}–${x.as}</small></span><b class="${x.won ? 'win' : 'loss'}">${x.won ? '+🪙' + (x.pay - x.stake) : '−🪙' + x.stake}</b></div>`).join('');
+    body = `<div class="ph-card"><div class="row between"><span>${t('lg_bets_n')}</span><b>${T2.n} · ${t('lg_bets_won', { n: T2.won })}</b></div><div class="row between"><span>${t('lg_bets_net')}</span><b class="${T2.net >= 0 ? 'win' : 'loss'}">${T2.net >= 0 ? '+' : '−'}🪙${Math.abs(T2.net)}</b></div></div>
+      <div class="ph-sub">${t('lg_open')}</div>${open || `<p class="ph-muted">${t('lg_none')}</p>`}<div class="ph-sub">${t('lg_settled')}</div>${log || `<p class="ph-muted">${t('lg_none')}</p>`}
+      <p class="ph-muted small">${t('lg_coins_only')}</p>`;
+  }
+  return head(`🏟️ ${t('ph_sports')}`) + `<div class="ph-muted center small">${season}</div><div class="chips-row lg-chips">${chips}</div><div class="chips-row lg-tabs">${tabs}</div>${body}`;
+}
+function standingsHtml(sp, short) {
+  const rows = standings(sp), L = league(sp);
+  return `<div class="ph-sub">${t('lg_table')}</div><div class="lg-table"><div class="lg-tr head"><span>#</span><span class="grow">${t('lg_team')}</span><span>${t('lg_wl')}</span><span>${t('lg_pct')}</span><span>${t('lg_form')}</span></div>`
+    + rows.slice(0, short ? 5 : 10).map((x, k) => `<button class="lg-tr ${lgTeam(sp, x.i).t === myTown() ? 'mine' : ''}" data-act="phone" data-arg="team|${sp}|${x.i}"><span>${k + 1}</span><span class="grow">${teamLogo(sp, x.i)} ${esc(teamName(sp, x.i))}</span><span>${x.w}–${x.l}</span><span>${x.w + x.l ? (x.w / (x.w + x.l)).toFixed(3).replace(/^0/, '') : '.500'}</span><span>${x.streak || '–'}</span></button>`).join('') + `</div>`;
+}
+const fmtDay = ms => { const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()}`; };   // v0.26: letters live in the phone too
 function loanBtn(kind, k, wid) { const q = loanQuote(kind, k), ok = loanCheck(kind, k) === 'ok';
   return `<button class="btn block gap-top" data-act="loanAsk" data-arg="${wid}">🏦 ${t('loan_btn', { n: q.down.toLocaleString(), d: q.perDay.toLocaleString(), y: q.years })}</button>${ok ? '' : `<p class="muted small center">${t('loan_no_' + loanCheck(kind, k), { n: fmtNum(q.perDay), r: fmtNum(loanRoom()) })}</p>`}`; }   // v0.35: the offer opens even when the bank would say no, so you see why
 // buy a car at the dealer: paid in full; the dealer brings it home the next morning (v0.34: for a delivery fee)
@@ -3577,7 +3659,7 @@ function phoneScreen(arg) {
     const app = (k, e, bg, label, n) => `<button class="ph-app" data-act="phone" data-arg="${k}"><i style="background:${bg}">${e}</i>${label}${n ? `<em class="ph-badge">${n}</em>` : ''}</button>`;
     body = `<div class="ph-clock">${fmtClock(now())}</div><div class="ph-date">${d.getMonth() + 1}/${d.getDate()} · ${weatherPill().replace(/<[^>]+>/g, ' ').trim()}</div>
       <div class="ph-apps">${app('contacts', '📇', '#34c759', t('ph_contacts'))}${app('texts', '💬', '#30a2ff', t('ph_texts'), unread)}${app('bank', '🏦', '#ff9f0a', t('ph_bank'), late ? '!' : 0)}
-      ${app('stocks', '📈', '#1c1c1e', t('ph_stocks'))}${app('mail', '✉️', '#5e5ce6', t('ph_mail'), unreadMail())}${app('map', '📍', '#ff375f', t('ph_map'))}</div>`;
+      ${app('stocks', '📈', '#1c1c1e', t('ph_stocks'))}${app('mail', '✉️', '#5e5ce6', t('ph_mail'), unreadMail())}${app('map', '📍', '#ff375f', t('ph_map'))}${app('sports', '🏟️', '#2e9b5a', t('ph_sports'), betNews())}</div>`;
   } else if (scr === 'contacts') {
     const cs = contacts(), group = (kind, label) => { const g = cs.filter(c => c.kind === kind || (kind === 'work' && (c.kind === 'boss' || c.kind === 'mate'))); return g.length ? `<div class="ph-sub">${label}</div>` + g.map(c => { const w = whoIs(c.id); return w ? `<button class="ph-row" data-act="phone" data-arg="person|${c.id}">${avatar(w.look)}<div class="grow"><b>${esc(w.name)}</b><div class="ph-muted">${c.kind === 'boss' ? '💼 ' + t('boss') : c.kind === 'mate' ? '💼 ' + t('coworker') : t('rel_level', { n: (S.rel || {})[c.id] || 0 })}</div></div><span>›</span></button>` : ''; }).join('') : ''; };
     body = head(`📇 ${t('ph_contacts')}`) + (group('family', '👪 ' + t('family')) + group('friend', '💛 ' + t('ph_friends')) + group('work', '💼 ' + t('ph_work')) + group('neighbour', '🏡 ' + t('ph_people')) || `<p class="ph-muted">${t('ph_no_contacts')}</p>`);
@@ -3610,6 +3692,8 @@ function phoneScreen(arg) {
       const txt = last ? textOf(last) : '…';
       return `<button class="ph-row" data-act="phone" data-arg="texts|${id}">${avatar(w.look)}<div class="grow"><b>${esc(w.name)}</b><div class="ph-muted">${esc(txt)}</div></div>${n ? `<em class="ph-badge">${n}</em>` : ''}</button>`; }).join('') || `<p class="ph-muted">${t('ph_no_texts')}</p>`)
       + `<button class="ph-btn block" data-act="phone" data-arg="contacts">✏️ ${t('ph_new_text')}</button>`;
+  } else if (scr === 'sports' || scr === 'team' || scr === 'sbet') {   // v0.54: the leagues
+    body = sportsScreen(scr, a, b, arg);
   } else if (scr === 'bank') {
     const B = bank(), st = stocksValue(), debt = debtLeft();
     body = head(`🏦 ${t('ph_bank')}`) + `<div class="ph-card big"><span class="ph-muted">${t('bank_net')}</span><b>${coin(assetValue(S.me))}</b>${debt ? `<span class="ph-muted small">${t('bank_debt', { n: Math.ceil(debt).toLocaleString() })}</span>` : ''}</div>

@@ -51,11 +51,13 @@ final class AppleSignIn: NSObject, ASAuthorizationControllerDelegate, ASAuthoriz
 /// Pet reminders as local notifications: the game sends the next time each pet will need food, water,
 /// a clean litter box / a walk, or some love, as `{type: "petReminders", items: [{id, at, title, body}]}`
 /// (`at` in milliseconds since 1970). We replace all earlier pet reminders with these. An empty list turns them off.
+/// v0.54: the same for the sports leagues (`{type: "sportReminders", items}`: today's games, a game you bet on ends),
+/// with their own prefix so the two lists don't replace each other.
 enum PetReminders {
-    static func schedule(_ items: [[String: Any]]) {
+    static func schedule(_ items: [[String: Any]], prefix: String = "pet-") {
         let center = UNUserNotificationCenter.current()
         center.getPendingNotificationRequests { pending in
-            let old = pending.map { $0.identifier }.filter { $0.hasPrefix("pet-") }
+            let old = pending.map { $0.identifier }.filter { $0.hasPrefix(prefix) }
             center.removePendingNotificationRequests(withIdentifiers: old)
             guard !items.isEmpty else { return }
             center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
@@ -71,7 +73,7 @@ enum PetReminders {
                     content.body = item["body"] as? String ?? ""
                     content.sound = .default
                     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
-                    center.add(UNNotificationRequest(identifier: "pet-" + id, content: content, trigger: trigger))
+                    center.add(UNNotificationRequest(identifier: prefix + id, content: content, trigger: trigger))
                 }
             }
         }

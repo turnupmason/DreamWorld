@@ -54,6 +54,7 @@ ios/
 | Swift → 网页 | `window.onNativeWorkout(json)` | 正在进行的训练 {active, type, start, hr}，小人同步做这个运动 |
 | 网页 → Swift | `postMessage({type: 'signIn', provider: 'apple'})` | 点「通过 Apple 登录」（v0.8.0）。Swift 弹出苹果的登录框 |
 | Swift → 网页 | `window.onNativeSignIn(json)` | 登录结果 {ok, provider, id, email, name}；失败是 {ok: false, error}，游戏会提示并先用模拟登录 |
+| 网页 → Swift | `postMessage({type: 'sportReminders', items: [{id, at, title, body}]})` | v0.54：体育联赛的提醒（每天 10 点今天的比赛、你押的比赛结束），和宠物提醒一样排本地通知，标识以 `sport-` 开头，不会覆盖宠物提醒。 |
 | 网页 → Swift | `postMessage({type: 'petReminders', items: [{id, at, title, body}]})` | 宠物下一次需要喂饭 / 换水 / 铲猫砂或遛狗 / 陪伴的时间（毫秒时间戳）。Swift 删掉旧的宠物提醒，按这些时间排本地通知；空列表 = 关掉提醒。第一次会请求通知权限 |
 
 网页端的处理在 `prototype/js/app.js`（`window.onNativeHealth` / `onNativeWorkout`）和 `prototype/js/state.js`（`applyNative`、`startLive`）。
@@ -73,6 +74,7 @@ ios/
 
 - `PetReminders.schedule` 用 `UNUserNotificationCenter` 排本地通知（标识都以 `pet-` 开头），不需要服务器。游戏设置里和宠物页都可以关掉「宠物提醒」。
 - 第一次有提醒要排时会弹出系统的通知权限请求。
+- v0.54：`schedule(items, prefix:)` 多了前缀参数，体育提醒用 `sport-`（`GameView.swift` 的 `case "sportReminders"`）。
 
 **以上 Swift 代码在 Windows 上写的，没经过编译器，等 Mason 在 Mac 上编译。**
 

@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.53.0';
+const VERSION = '0.54.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -1931,6 +1931,51 @@ const TEAM_MASCOTS = [
   { e: '🦉', zh: '猫头鹰', en: 'Owls', col: '#7a5a9a' }, { e: '🐯', zh: '猛虎', en: 'Tigers', col: '#f28c28' }, { e: '🐆', zh: '美洲豹', en: 'Jaguars', col: '#2f9a5a' },
   { e: '🦓', zh: '斑马', en: 'Zebras', col: '#2d2d34' },
 ];
+// v0.54 (Mason #29): five leagues of 10 teams. Each team is a town's (`t`, its name in front) with a mascot (`e`, the
+// logo) and its colours (`c`: the shirt and the trim, for its logo and jersey). A season: every team plays each of the
+// other nine 4 times = 36 games, one round a day (`hour`: when that sport's games start, local time; `len`: how
+// many hours a game takes), then `rest` days off. `score`: how scores look in that sport.
+const LEAGUES = {
+  football: { e: '🏈', zh: '橄榄球', en: 'Football', hour: 13, len: 3, score: 'football', teams: [
+    { t: 'wutong', e: '🐻', zh: '熊', en: 'Bears', c: ['#7a2e2e', '#f2c230'] }, { t: 'vermont', e: '🐎', zh: '野马', en: 'Mustangs', c: ['#e9a23b', '#1f3a6b'] },
+    { t: 'palmbay', e: '🦈', zh: '鲨鱼', en: 'Sharks', c: ['#1e8fa8', '#f4efe4'] }, { t: 'cactus', e: '🐍', zh: '响尾蛇', en: 'Rattlers', c: ['#c8653c', '#2d2d2d'] },
+    { t: 'banff', e: '🐺', zh: '雪狼', en: 'Wolves', c: ['#4a5a78', '#c9cfd6'] }, { t: 'sydney', e: '⚡', zh: '雷霆', en: 'Thunder', c: ['#5a2d82', '#f2c230'] },
+    { t: 'london', e: '🏴‍☠️', zh: '海盗', en: 'Pirates', c: ['#2d2d2d', '#e5484d'] }, { t: 'capetown', e: '🦬', zh: '野牛', en: 'Bison', c: ['#6b4428', '#e8dcc4'] },
+    { t: 'rio', e: '🦅', zh: '海鹰', en: 'Seahawks', c: ['#1f3a6b', '#7fd36a'] }, { t: 'fjord', e: '🪓', zh: '伐木工', en: 'Lumberjacks', c: ['#2e6b3a', '#f4efe4'] }] },
+  soccer: { e: '⚽', zh: '足球', en: 'Soccer', hour: 15, len: 2, score: 'soccer', teams: [
+    { t: 'wutong', e: '🦁', zh: '联', en: 'United', c: ['#c9433b', '#ffffff'] }, { t: 'london', e: '🦉', zh: '竞技', en: 'Athletic', c: ['#2f4a8a', '#ffffff'] },
+    { t: 'holland', e: '🌷', zh: '郁金香', en: 'Tulips', c: ['#f28c28', '#ffffff'] }, { t: 'provence', e: '🌻', zh: '向日葵', en: 'Sunflowers', c: ['#f2c230', '#2f4a8a'] },
+    { t: 'rio', e: '🐦', zh: '金丝雀', en: 'Canaries', c: ['#f2c230', '#2e9b5a'] }, { t: 'andes', e: '☕', zh: '咖啡人', en: 'Coffee Growers', c: ['#6b4428', '#f2c230'] },
+    { t: 'capetown', e: '⭐', zh: '星辰', en: 'Stars', c: ['#2d2d2d', '#f2c230'] }, { t: 'seoul', e: '🐯', zh: '猛虎', en: 'Tigers', c: ['#e5484d', '#1f3a6b'] },
+    { t: 'kyoto', e: '🌸', zh: '樱花', en: 'Blossoms', c: ['#e98bb0', '#ffffff'] }, { t: 'sydney', e: '🐬', zh: '海豚', en: 'Dolphins', c: ['#38a3e0', '#ffffff'] }] },
+  baseball: { e: '⚾', zh: '棒球', en: 'Baseball', hour: 18, len: 3, score: 'baseball', teams: [
+    { t: 'wutong', e: '🧦', zh: '红袜', en: 'Red Socks', c: ['#c9433b', '#1f3a6b'] }, { t: 'vermont', e: '🐦', zh: '蓝鸟', en: 'Blue Jays', c: ['#2f6fb2', '#ffffff'] },
+    { t: 'palmbay', e: '⛵', zh: '海盗船', en: 'Buccaneers', c: ['#2d2d2d', '#f2c230'] }, { t: 'cactus', e: '☀️', zh: '太阳', en: 'Suns', c: ['#f28c28', '#5a2d82'] },
+    { t: 'banff', e: '🦫', zh: '河狸', en: 'Beavers', c: ['#8a5a36', '#f4efe4'] }, { t: 'kyoto', e: '🐯', zh: '老虎', en: 'Tigers', c: ['#f2c230', '#2d2d2d'] },
+    { t: 'seoul', e: '🦡', zh: '獾', en: 'Badgers', c: ['#5b6470', '#ffffff'] }, { t: 'hangzhou', e: '✨', zh: '星辰', en: 'Stars', c: ['#1f3a6b', '#f2c230'] },
+    { t: 'andes', e: '☄️', zh: '彗星', en: 'Comets', c: ['#5a2d82', '#f2c230'] }, { t: 'rio', e: '🦭', zh: '海狮', en: 'Sea Lions', c: ['#1e8fa8', '#c9cfd6'] }] },
+  hockey: { e: '🏒', zh: '冰球', en: 'Hockey', hour: 19, len: 2.5, score: 'hockey', teams: [
+    { t: 'wutong', e: '🍁', zh: '枫叶', en: 'Maple Leafs', c: ['#1f3a6b', '#ffffff'] }, { t: 'vermont', e: '🦌', zh: '驼鹿', en: 'Moose', c: ['#6b4428', '#f2c230'] },
+    { t: 'banff', e: '🐻‍❄️', zh: '北极熊', en: 'Polar Bears', c: ['#f4f6f8', '#2f6fb2'] }, { t: 'fjord', e: '🛡️', zh: '维京人', en: 'Vikings', c: ['#2e6b3a', '#f2c230'] },
+    { t: 'holland', e: '⛸️', zh: '冰刀', en: 'Skaters', c: ['#f28c28', '#2d2d2d'] }, { t: 'london', e: '🦅', zh: '鱼鹰', en: 'Ospreys', c: ['#2d2d2d', '#e5484d'] },
+    { t: 'seoul', e: '🐆', zh: '雪豹', en: 'Snow Leopards', c: ['#c9cfd6', '#2d2d2d'] }, { t: 'kyoto', e: '❄️', zh: '暴风雪', en: 'Blizzard', c: ['#5a2d82', '#c9cfd6'] },
+    { t: 'hangzhou', e: '🦉', zh: '雪鸮', en: 'Snowy Owls', c: ['#e8dcc4', '#2d2d2d'] }, { t: 'provence', e: '🏔️', zh: '冰川', en: 'Glaciers', c: ['#38a3e0', '#ffffff'] }] },
+  basketball: { e: '🏀', zh: '篮球', en: 'Basketball', hour: 20, len: 2.5, score: 'basketball', teams: [
+    { t: 'wutong', e: '🚀', zh: '火箭', en: 'Rockets', c: ['#e5484d', '#c9cfd6'] }, { t: 'palmbay', e: '🌊', zh: '海浪', en: 'Waves', c: ['#38a3e0', '#ffffff'] },
+    { t: 'cactus', e: '🔥', zh: '凤凰', en: 'Phoenix', c: ['#f28c28', '#5a2d82'] }, { t: 'vermont', e: '🐂', zh: '公牛', en: 'Bulls', c: ['#c9433b', '#2d2d2d'] },
+    { t: 'sydney', e: '⛈️', zh: '雷鸣', en: 'Thunder', c: ['#2f6fb2', '#f28c28'] }, { t: 'hangzhou', e: '🐼', zh: '熊猫', en: 'Pandas', c: ['#2d2d2d', '#ffffff'] },
+    { t: 'seoul', e: '🐉', zh: '青龙', en: 'Dragons', c: ['#2e9b5a', '#f2c230'] }, { t: 'provence', e: '👑', zh: '国王', en: 'Kings', c: ['#5a2d82', '#c9cfd6'] },
+    { t: 'rio', e: '🦜', zh: '鹦鹉', en: 'Macaws', c: ['#2e9b5a', '#e5484d'] }, { t: 'capetown', e: '🦊', zh: '狐狸', en: 'Foxes', c: ['#f28c28', '#ffffff'] }] },
+};
+// The season's clock (local midnights from `epoch`), and how win chances work: every team starts at `start` (so
+// every first game is 50 / 50); after each game the winner takes `k` × (1 − its chance) from the loser (Elo):
+// beating a stronger team counts for more than beating a weaker one, about 2–3 % a game between even teams.
+// How good each team really is this season (hidden, `spread` around the start) decides the games, so the chances
+// shown catch up with it as the season goes on.
+const SEASON = { days: 36, rest: 3, epoch: new Date(2026, 10, 2).getTime(), start: 1500, k: 24, spread: 110 };
+// Coin bets (only game coins, never real money): one team to win a game; pays stake × odds. odds = (1 − margin) /
+// chance. chips: the stakes; dayMax: the most you can stake in a day. In calm mode there's no betting.
+const BETS = { chips: [10, 50, 100, 500], dayMax: 2000, margin: 0.06, minOdds: 1.05, keep: 40 };
 const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas', 'tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist',
   'hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium'];   // v0.37 / v0.38 / v0.41 / v0.42: + the new ones
 // The fire station's tips, one a day.
