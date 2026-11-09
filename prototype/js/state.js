@@ -2681,33 +2681,7 @@ function buyZooPlush(k) {
   S.me.coins -= V.price; const key = 'room:' + k; S.me.store[key] = (S.me.store[key] || 0) + 1;
   return 'ok';
 }
-// every town's team (the town's name and its mascot) and the sport it plays
-function teamOf(town) {
-  const c = COMMUNITIES[town] || {}, M = TEAM_MASCOTS[Math.max(0, Object.keys(COMMUNITIES).indexOf(town)) % TEAM_MASCOTS.length];
-  return { town, e: M.e, col: M.col, zh: (c.zh || '') + M.zh + '队', en: `${c.en || ''} ${M.en}` };
-}
-const stadiumSport = town => (STADIUM.baseball.includes(town) ? 'baseball' : 'soccer');
-// The game at the stadium in `town` (town time): the one that's on, or the last one today (finished), or nothing yet.
-// The same for everyone: who they play, and the runs (each inning, top and bottom) or goals (each 10 minutes), come
-// from the town and the day. Returns { sport, on, done, home, away, score: [home, away], part, top, minute, next }.
-function stadiumGame(town, ms = now()) {
-  const sport = stadiumSport(town), SP = STADIUM.sports[sport], h = localHour(town, ms), L = STADIUM.len;
-  const next = STADIUM.slots.find(s0 => h < s0);
-  let slot = -1; STADIUM.slots.forEach((s0, i) => { if (h >= s0) slot = i; });
-  if (slot < 0) return { sport, on: false, done: false, next };
-  const prog = Math.min(1, (h - STADIUM.slots[slot]) / L), on = prog < 1;
-  const r = seeded(hashStr(`game:${town}:${dayKey(ms)}:${slot}`) + 11);
-  const rivals = Object.keys(COMMUNITIES).filter(id => id !== town && stadiumSport(id) === sport), away = rivals[Math.floor(r() * rivals.length)];
-  const n = SP.parts, runs = [[], []];   // [home, away], one number per inning / spell
-  for (let i = 0; i < n; i++) [1, 0].forEach(w => { const x = r(); runs[w].push(sport === 'baseball' ? (x < 0.66 ? 0 : x < 0.85 ? 1 : x < 0.94 ? 2 : x < 0.98 ? 3 : 4) : (x < 0.85 ? 0 : x < 0.985 ? 1 : 2)); });
-  const sum = a => a.reduce((p, q) => p + q, 0);
-  if (sport === 'baseball' && sum(runs[0]) === sum(runs[1])) runs[0][n - 1]++;   // no ties in baseball: a walk-off in the ninth
-  // how far it's got: baseball in half innings (the visitors bat first), soccer in spells
-  const halves = Math.floor(prog * n * 2), spells = Math.floor(prog * n);
-  const upTo = (w, i) => (sport === 'baseball' ? (w === 1 ? 2 * i : 2 * i + 1) < halves : i < spells);
-  const score = [0, 1].map(w => (on ? runs[w].filter((_, i) => upTo(w, i)) : runs[w]).reduce((p, q) => p + q, 0));
-  return { sport, on, done: !on, slot, home: town, away, score, runs, part: Math.min(n, Math.floor(halves / 2) + 1), top: halves % 2 === 0, minute: Math.min(90, Math.floor(prog * 90) + 1), next, prog };
-}
+// (v0.55: the stadium plays the league games: arena.js)
 
 // ---------- v0.44: saves from before v0.44 ----------
 // Wood becomes coins (D243); ripe crops start their fresh time now and every farm gets a starter bag of feed, so

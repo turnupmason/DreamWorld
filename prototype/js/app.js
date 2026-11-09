@@ -1082,8 +1082,8 @@ const SHEETS = {
     else if (key === 'zoo|petting') body = once('petting', 'petting', `🐐 ${t('sp_petting_btn', { n: VENUE.petting.fun })}`);
     else if (key === 'zoo|shop') body = `<p class="muted small">${t('sp_zooplush_note')}</p><div class="act-grid">${ZOO_SHOP.map(pk => `<button class="act-tile" data-act="zooPlushBuy" data-arg="${pk}" ${S.me.coins >= VENUE.zooplush.price ? '' : 'disabled'}><span>${{ plushlion: '🦁', plushelephant: '🐘', plushgiraffe: '🦒', plushpenguin: '🐧' }[pk]}</span><b>${nm(FURN[pk])}</b><i>🪙${VENUE.zooplush.price}${S.me.store['room:' + pk] ? ' · ' + t('sp_zooplush_have', { n: S.me.store['room:' + pk] }) : ''}</i></button>`).join('')}</div>`;
     else if (key === 'zoo|kiosk') body = snackBtn('zoo');
-    else if (key === 'stadium|seats') { const g = stadiumGame(VIEW_TOWN); body = gameCard(VIEW_TOWN) + (g.on ? go('match', `🎟️ ${t('sp_match_btn', { n: VENUE.match.price, f: VENUE.match.fun })}`, S.me.coins >= VENUE.match.price) : once('tour', 'tour', `👀 ${t('sp_tour_btn', { n: VENUE.tour.fun })}`)); }
-    else if (key === 'stadium|board') body = gameCard(VIEW_TOWN) + `<p class="muted small">${t('sp_board_games', { a: STADIUM.slots[0], b: STADIUM.slots[1], n: STADIUM.len })}</p>`;
+    else if (key === 'stadium|seats') { const g = arenaNow(VIEW_TOWN); body = gameCard(VIEW_TOWN) + (!g.off && g.state === 'live' ? go('match', `🎟️ ${t('sp_match_btn', { n: VENUE.match.price, f: VENUE.match.fun })}`, S.me.coins >= VENUE.match.price) : once('tour', 'tour', `👀 ${t('sp_tour_btn', { n: VENUE.tour.fun })}`)); }
+    else if (key === 'stadium|board') body = gameCard(VIEW_TOWN) + `<p class="muted small">${t('sp_board_games')}</p>`;
     else if (key === 'stadium|hotdog') body = go('hotdog', `🌭 ${t('sp_hotdog_btn', { n: VENUE.hotdog.price, h: VENUE.hotdog.hunger })}`, S.me.coins >= VENUE.hotdog.price);
     else if (key === 'stadium|cage') body = gameBlock('derby');
     else if (key === 'aquatic|race') body = gameBlock('race');
@@ -1930,7 +1930,7 @@ const ACT = {
     if (act === 'rest') return useK(S.sick && S.sick.med ? SICK.restSec : 6, () => { if (S.sick && S.sick.med && restInBed(SICK.restSec)) { Sound.play('levelup'); snack(`🎉 ${t('sp_cured')}`); save(); refresh(); } else fin('😌', t('sp_rested')); });
     // v0.37: the new places. Paid things: you pay, sit down, enjoy it. Free ones: once a day (the pool twice).
     const PAID = { dinner: '🍝', drink: '🍹', tea: '🫖', book: '📖', arcade: '🕹️', wheel: '🎡', coaster: '🎢', carousel: '🎠', bumper: '🚗', candy: '🍭', giraffefeed: '🦒', hotdog: '🌭', match: '🏟️' };   // v0.41: + the rides; v0.42: + the zoo, the stadium
-    if (act === 'match' && !stadiumGame(VIEW_TOWN).on) { Sound.play('oops'); return snack(t('sp_match_over')); }   // v0.42: it finished while you were deciding
+    if (act === 'match' && arenaNow(VIEW_TOWN).state !== 'live') { Sound.play('oops'); return snack(t('sp_match_over')); }   // v0.42: it finished while you were deciding
     if (PAID[act]) { if (S.me.coins < VENUE[act].price) { Sound.play('oops'); return snack(t('snack_poor')); } return useK(VENUE[act].sec, () => { if (venueBuy(act) === 'ok') fin(PAID[act], t('sp_' + act + '_done')); }); }
     if (act === 'date' || act === 'lounge') {   // someone you know joins you
       if (act === 'date' && S.me.coins < VENUE.date.price) { Sound.play('oops'); return snack(t('snack_poor')); }
@@ -3542,14 +3542,16 @@ function placeCard(key) {
 }
 // v0.42: how far a hit went, in metres (Chinese) or feet (English)
 const derbyDist = m => (curLang() === 'zh' ? Math.round(m) : Math.round(m * 3.281));
-// v0.42: the game at the stadium: who's playing, the score and how far it's got (or when the next one is)
+// v0.42: the game at the stadium (v0.55: the league game that's on here, with its score and clock; and today's games here)
 function gameCard(town) {
-  const g = stadiumGame(town), SP = STADIUM.sports[g.sport], H = teamOf(town), nextT = g.next ? t('gm_next', { h: g.next }) : t('gm_tomorrow', { h: STADIUM.slots[0] });
-  if (!g.on && !g.done) return `<div class="card"><b>${SP.e} ${nextT}</b><p class="muted small">${t('gm_home', { team: esc(nm(H)), sport: nm(SP) })}</p></div>`;
-  const A = teamOf(g.away), ord = n => (curLang() === 'zh' ? n : n + ((n % 100 > 10 && n % 100 < 14) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'));
-  const st = g.done ? t('gm_final') : g.sport === 'baseball' ? t(g.top ? 'gm_top' : 'gm_bot', { n: ord(g.part) }) : t('gm_min', { n: g.minute });
-  return `<div class="card game-card"><div class="muted small">${SP.e} ${nm(SP)} · ${g.on ? '🔴 ' : ''}${st}${g.done ? ' · ' + nextT : ''}</div>
-    <div class="gm-row"><span>${A.e} ${esc(nm(A))}</span><b>${g.score[1]}</b></div><div class="gm-row"><span>${H.e} ${esc(nm(H))}</span><b>${g.score[0]}</b></div></div>`;
+  const A = arenaNow(town);
+  if (A.off) return `<div class="card"><b>🏟️ ${t('ar_off', { n: A.si.left })}</b></div>`;
+  const L = LEAGUES[A.sp], tm = i => `${teamLogo(A.sp, i)} <span>${esc(teamName(A.sp, i))}</span>`, soon = A.state === 'soon';
+  const st = A.state === 'live' ? `🔴 ${A.clock}` : A.state === 'done' ? A.clock : t('ar_starts', { h: fmtHM(A.start) });
+  const list = A.day.map(G => `<div class="small ${G.sp === A.sp ? '' : 'muted'}">${fmtHM(G.start)} ${LEAGUES[G.sp].e} ${esc(teamName(G.sp, G.a))} @ ${esc(teamName(G.sp, G.h))} · ${t(G.kind === 'home' ? 'ar_home' : 'ar_guest')}</div>`).join('');
+  return `<div class="card game-card"><div class="muted small">${L.e} ${nm(L)} · ${st}</div>
+    <div class="gm-row"><span class="lg-side">${tm(A.a)}</span><b>${soon ? '' : A.score[1]}</b></div><div class="gm-row"><span class="lg-side">${tm(A.h)}</span><b>${soon ? '' : A.score[0]}</b></div>
+    <div class="muted small gap-top">${t('ar_today')}</div>${list}</div>`;
 }
 function snackBtn(key) { return `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${{ cafe: '☕', station: '☕', bowling: '🌭', zoo: '🍿' }[key] || '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`; }
 function workmates(key) {

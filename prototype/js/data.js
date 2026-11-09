@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.54.0';
+const VERSION = '0.55.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -1914,23 +1914,6 @@ const ZOO_FACTS = {
   ],
 };
 const ZOO_SHOP = ['plushlion', 'plushelephant', 'plushgiraffe', 'plushpenguin'];
-// v0.42: the stadium: two games a day in town time (starting at `slots`, `len` hours each). The home team plays the
-// town's own sport (baseball in the towns listed, soccer everywhere else) against a team from another town; the score
-// is the same for everyone (from the town and the day). parts: innings, or 10-minute spells of a soccer game.
-const STADIUM = {
-  slots: [13, 19], len: 3,
-  sports: { baseball: { e: '⚾', zh: '棒球', en: 'Baseball', parts: 9 }, soccer: { e: '⚽', zh: '足球', en: 'Soccer', parts: 9 } },
-  baseball: ['wutong', 'palmbay', 'cactus', 'vermont', 'banff', 'kyoto', 'seoul'],
-};
-// every town's team: the town's name and one of these (in the order of COMMUNITIES)
-const TEAM_MASCOTS = [
-  { e: '🐯', zh: '老虎', en: 'Tigers', col: '#f28c28' }, { e: '🐬', zh: '海豚', en: 'Dolphins', col: '#38a3e0' }, { e: '🦂', zh: '蝎子', en: 'Scorpions', col: '#c9893a' },
-  { e: '🦌', zh: '红鹿', en: 'Stags', col: '#b5302a' }, { e: '🐻', zh: '灰熊', en: 'Grizzlies', col: '#8a5a36' }, { e: '🐝', zh: '蜜蜂', en: 'Bees', col: '#f2c230' },
-  { e: '🦁', zh: '狮子', en: 'Lions', col: '#e5484d' }, { e: '🐺', zh: '灰狼', en: 'Wolves', col: '#6b7280' }, { e: '🦊', zh: '狐狸', en: 'Foxes', col: '#e86a2a' },
-  { e: '🐉', zh: '青龙', en: 'Dragons', col: '#34b27b' }, { e: '🦈', zh: '鲨鱼', en: 'Sharks', col: '#2f6fb2' }, { e: '🦅', zh: '雄鹰', en: 'Eagles', col: '#3d4a66' },
-  { e: '🦉', zh: '猫头鹰', en: 'Owls', col: '#7a5a9a' }, { e: '🐯', zh: '猛虎', en: 'Tigers', col: '#f28c28' }, { e: '🐆', zh: '美洲豹', en: 'Jaguars', col: '#2f9a5a' },
-  { e: '🦓', zh: '斑马', en: 'Zebras', col: '#2d2d34' },
-];
 // v0.54 (Mason #29): five leagues of 10 teams. Each team is a town's (`t`, its name in front) with a mascot (`e`, the
 // logo) and its colours (`c`: the shirt and the trim, for its logo and jersey). A season: every team plays each of the
 // other nine 4 times = 36 games, one round a day (`hour`: when that sport's games start, local time; `len`: how

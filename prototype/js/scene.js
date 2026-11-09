@@ -4189,51 +4189,23 @@ const Scene = (() => {
       case 'zoomap': { const a = iso(x + 0.2, y + 0.15), b2 = iso(x + d.w - 0.2, y + 0.15); [a, b2].forEach(q => line(q.x, q.y, q.x, q.y - 20 * z, '#7a5a3a', 1.4 * z)); poly([up(a, 18 * z), up(b2, 18 * z), up(b2, 34 * z), up(a, 34 * z)], '#fffaf0', '#7a5a3a', 1 * z);
         ['🦁', '🐘', '🐧', '🐼'].forEach((e, k2) => { const q = up(lerp(a, b2, 0.2 + k2 * 0.2), 26 * z); emoji(e, q.x, q.y, 5 * z); }); return true; }
       // ----- v0.42: the stadium -----
-      case 'stands': case 'standsback': {   // tiers of seats rising away from the field; full of people while a game is on (with a wave now and then)
-        const back = (d.draw || d.kind) === 'standsback', g = stadiumGame(VIEW_TOWN), team = teamOf(VIEW_TOWN), rows = 5;
-        const meRow = !back && meS.use && !meS.moving && meS.use.ride === 'seats' ? 1 : -1, wv = ((t % 24) / 24) * 1.8 - 0.4;
-        for (let r = rows - 1; r >= 0; r--) {
-          const h = 6 + r * 8, bx = back ? x : x + (rows - 1 - r) * d.w / rows, by = back ? y + (rows - 1 - r) * d.d / rows : y, bw = back ? d.w : d.w / rows, bd = back ? d.d / rows : d.d;
-          box(bx, by, bw, bd, h, '#aab2bb', 0, { top: '#cdd3d9', shadow: false });
-          const n = Math.round((back ? bw : bd) / 0.55);
-          for (let k2 = 0; k2 < n; k2++) {
-            const u = (k2 + 0.5) / n, sx = back ? bx + u * bw : bx + bw * 0.5, sy = back ? by + bd * 0.5 : by + u * bd, p = up(iso(sx, sy), h * z);
-            rrect(p.x - 3 * z, p.y - 3.5 * z, 6 * z, 3.5 * z, 1 * z, Math.floor(u * 6) % 2 ? team.col : '#8e99a6');
-            if (r === meRow && k2 === Math.floor(n * 0.62)) { drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', energy: 'great', ts, seed: 3, pose: 'sit', seatH: 0, wave: g.on && Math.floor(t * 1.5) % 3 === 0 }); continue; }
-            if (hash(k2, r + 7) > (g.on ? 0.85 : 0.05)) continue;
-            const lift = g.on ? Math.exp(-Math.pow((u - wv) * 7, 2)) * 7 : 0, i2 = k2 * 7 + r, shirt = i2 % 3 ? team.col : ['#ffffff', '#3d4a66', '#f2c230'][i2 % 3];
-            rrect(p.x - 2.6 * z, p.y - (9 + lift) * z, 5.2 * z, 6.5 * z, 2 * z, shirt);
-            circle(p.x, p.y - (11.6 + lift) * z, 2.4 * z, SKINS[i2 % 4]);
-            if (lift > 3) { line(p.x - 2 * z, p.y - (8 + lift) * z, p.x - 4 * z, p.y - (15 + lift) * z, SKINS[i2 % 4], 1 * z); line(p.x + 2 * z, p.y - (8 + lift) * z, p.x + 4 * z, p.y - (15 + lift) * z, SKINS[i2 % 4], 1 * z); }
-          }
-        }
+      case 'stands': case 'standsback': {   // v0.55: tiers of seats full of both teams' fans in their colours (arena.js)
+        const back = (d.draw || d.kind) === 'standsback', meRow = !back && meS.use && !meS.moving && meS.use.ride === 'seats' ? 1 : -1;
+        drawArenaStand(x, y, d.w, d.d, back, ts, arenaNow(VIEW_TOWN), meRow, S.me.look);
         return true;
       }
-      case 'pitch': {   // the field (the game on it while there is one) and a low padded wall round it
-        const g = stadiumGame(VIEW_TOWN), team = teamOf(VIEW_TOWN), lit = NIGHT > 0.3 && g.on;
+      case 'pitch': {   // the field with today's league game on it (arena.js), and a low padded wall round it in the home team's colour
+        const A = arenaNow(VIEW_TOWN), col = !A.off ? lgTeam(A.sp, A.h).c[0] : townTeam(VIEW_TOWN).T.c[0], lit = NIGHT > 0.3 && !A.off && A.state === 'live';
         flatRect(x - 0.3, y - 0.3, d.w + 0.6, d.d + 0.6, '#b88a5a');
-        flatRect(x, y, d.w, d.d, lit ? '#6cc25a' : '#5aa84f');
-        for (let k2 = 0; k2 < 12; k2++) if (k2 % 2) flatRect(x + k2 * d.w / 12, y, d.w / 12, d.d, 'rgba(255,255,255,.06)');
-        drawPitch(x, y, d.w, d.d, ts, stadiumSport(VIEW_TOWN), 'S', g, true);
-        box(x - 0.5, y + d.d + 0.3, d.w + 0.8, 0.16, 9, team.col, 0, { shadow: false, top: shade(team.col, 0.2) });
+        flatRect(x, y, d.w, d.d, !A.off && (A.sp === 'hockey' || A.sp === 'basketball') ? '#8e99a6' : lit ? '#6cc25a' : '#5aa84f');   // indoor sports: the arena floor
+        drawPitch(x, y, d.w, d.d, ts, A, true);
+        box(x - 0.5, y + d.d + 0.3, d.w + 0.8, 0.16, 9, col, 0, { shadow: false, top: shade(col, 0.2) });
         if (lit) [[x, y], [x + d.w, y], [x, y + d.d]].forEach(([lx, ly]) => { const q = iso(lx, ly); glow(q.x, q.y - 60 * z, 120 * z, 0.5); });
         return true;
       }
-      case 'scoreboard': {   // a big screen in the corner: who's playing, the score, and the inning / the minute (or when the next game is)
-        const g = stadiumGame(VIEW_TOWN), zh = curLang() === 'zh';
+      case 'scoreboard': {   // a big screen in the corner: the sport, the clock, both teams and the score (or when the next game is)
         box(x + 0.9, y + 0.9, d.w - 1.8, d.d - 1.8, 70, '#5b6470', 0, { top: '#6b7480' });
-        const q = up(iso(x + d.w / 2, y + d.d / 2), 70 * z), W2 = 76 * z, H2 = 50 * z;
-        rrect(q.x - W2 / 2, q.y - H2, W2, H2, 3 * z, '#1d1d22', '#9aa3ad', 1.6 * z);
-        if (z > 0.3) {
-          const row = (s2, yy, col, size = 7) => { ctx.font = `800 ${Math.max(5, size * z)}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = col; ctx.fillText(s2, q.x, yy); };
-          const SP = STADIUM.sports[stadiumSport(VIEW_TOWN)];
-          if (g.on || g.done) {
-            const H3 = teamOf(g.home), A3 = teamOf(g.away), sh = T3 => (zh ? TEAM_MASCOTS[Object.keys(COMMUNITIES).indexOf(T3.town) % TEAM_MASCOTS.length].zh : T3.en.split(' ').pop());
-            row(g.done ? (zh ? '终场' : 'FINAL') : g.sport === 'baseball' ? (zh ? `第 ${g.part} 局${g.top ? '上' : '下'}` : `${g.top ? 'TOP' : 'BOT'} ${g.part}`) : `${g.minute}′`, q.y - H2 + 9 * z, '#ffd36b', 6.5);
-            row(`${A3.e} ${sh(A3)}  ${g.score[1]}`, q.y - H2 + 22 * z, '#ffffff', 8);
-            row(`${H3.e} ${sh(H3)}  ${g.score[0]}`, q.y - H2 + 36 * z, '#ffffff', 8);
-          } else { row(`${SP.e} ${zh ? '下一场' : 'NEXT GAME'}`, q.y - H2 + 16 * z, '#ffd36b', 7); row(`${g.next}:00`, q.y - H2 + 32 * z, '#ffffff', 10); }
-        }
+        drawArenaBoard(up(iso(x + d.w / 2, y + d.d / 2), 70 * z), 80 * z, 50 * z, arenaNow(VIEW_TOWN));
         return true;
       }
       case 'hotdogstand': { const b = box(x, y, d.w, d.d, 16, '#e5484d', 0, { top: '#f2c230' }); [0.08, 0.92].forEach(u => wallLine(b.left, 0, u, 16, u, 38, '#c9cfd6', 1.2)); for (let k2 = 0; k2 < 6; k2++) wallRect(b.left, 0, k2 / 6, (k2 + 1) / 6, 36, 42, k2 % 2 ? '#ffffff' : '#e5484d');

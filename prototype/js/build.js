@@ -2400,73 +2400,13 @@ function drawZoo(G, x, y, w, d, ts) {
   if (NIGHT > 0.3) [pa, pb].forEach(p => glow(p.x, p.y - 32 * z, 16 * z, 0.6));
   return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
 }
-// ---------- v0.42: the stadium ----------
-// The playing field (world tiles x, y, w, d): a baseball diamond with home plate on the `front` side, or a soccer
-// pitch along its longer side; and, while a game is on (g: stadiumGame()), the two teams playing. big: real townies
-// (inside the stadium) instead of little figures (from the town).
-const PITCH_LOOKS = {};
-function pitchLook(col, i, cap) { const k = col + i + cap; return PITCH_LOOKS[k] || (PITCH_LOOKS[k] = { shirt: col, top: 'tshirt', skin: SKINS[i % 4], hair: ['short', 'curly', 'bun', 'buzz'][i % 4], hairCol: HAIR_COLORS[i % 3], body: 'regular', mob: 'walk', hat: cap ? 'cap' : undefined, hatCol: col }); }
-function drawPitch(x, y, w, d, ts, sport, front, g, big) {
-  const z = cam.z, t = ts / 1000, lines = 'rgba(255,255,255,.9)', lw = Math.max(0.8, (big ? 1.6 : 0.9) * z);
-  const seg = (a, b) => { const p = iso(...a), q = iso(...b); line(p.x, p.y, q.x, q.y, lines, lw); };
-  const fig = (wx, wy, col, i, run, o = {}) => {   // one player
-    const p = iso(wx, wy);
-    if (big) { drawPerson(p.x, p.y, z * 0.62, { look: pitchLook(col, i, sport === 'baseball'), face: o.face || (wx - wy > 0 ? 1 : -1), pose: run ? 'run' : 'stand', phase: t * 12 + i, ts, seed: i, view: o.view, after: o.after }); return; }
-    ellipse(p.x, p.y, 2.2 * z, 1 * z, 'rgba(0,0,0,.2)'); line(p.x, p.y - 1 * z, p.x, p.y - 4.6 * z, col, 2.4 * z); circle(p.x, p.y - 6 * z, 1.4 * z, SKINS[i % 4]);
-  };
-  const T = g && g.on ? [teamOf(g.home).col, teamOf(g.away).col] : null;
-  if (sport === 'baseball') {
-    // home plate in the corner nearest you, the foul lines along the two edges, second base straight up the middle
-    const s = Math.min(w, d) * 0.42, H = [x + w - Math.min(w, d) * 0.08, y + d - Math.min(w, d) * 0.08], at = (a, c) => [H[0] - a * s, H[1] - c * s];
-    const fan = []; for (let k = 0; k <= 16; k++) { const an = k / 16 * Math.PI / 2; fan.push(iso(...at(Math.cos(an) * 1.5, Math.sin(an) * 1.5))); }
-    poly([iso(...at(-0.15, -0.15)), iso(...at(-0.15, 1.5)), ...fan.reverse(), iso(...at(1.5, -0.15))], '#c9925a');
-    poly([iso(...at(0.14, 0.14)), iso(...at(0.86, 0.14)), iso(...at(0.86, 0.86)), iso(...at(0.14, 0.86))], '#6fbf5a');
-    const L = Math.min(w, d) * 0.9 / s; seg(at(0, 0), at(L, 0)); seg(at(0, 0), at(0, L));
-    [[0, 0], [1, 0], [1, 1], [0, 1]].forEach(([a, c]) => { const p = iso(...at(a, c)); poly([{ x: p.x, y: p.y - 2 * z }, { x: p.x + 3 * z, y: p.y }, { x: p.x, y: p.y + 2 * z }, { x: p.x - 3 * z, y: p.y }], '#ffffff'); });
-    const mound = iso(...at(0.47, 0.47)); ellipse(mound.x, mound.y, 7 * z, 3.5 * z, '#c08550');
-    if (!T) return;
-    // the visitors bat first: in the top of an inning the home team is out in the field
-    const fieldC = g.top ? T[0] : T[1], batC = g.top ? T[1] : T[0];
-    const C = 5, k = Math.floor(t / C), u = (t % C) / C, hit = hash(k, 3) < 0.38, LD = [1.2 + hash(k, 4) * 1.3, 1.2 + hash(k, 5) * 1.3];
-    const POS = [[0.47, 0.47], [-0.16, -0.16], [0.12, 0.9], [0.55, 1.18], [1.18, 0.55], [0.9, 0.12], [2.1, 0.8], [1.8, 1.8], [0.8, 2.1]];
-    const near = POS.reduce((bi, p, i) => (i > 1 && Math.hypot(p[0] - LD[0], p[1] - LD[1]) < Math.hypot(POS[bi][0] - LD[0], POS[bi][1] - LD[1]) ? i : bi), 2);
-    const e = hit ? Math.max(0, Math.min(1, (u - 0.42) / 0.4)) : 0;
-    const who = POS.map((p, i) => { const q = i === near && hit ? [p[0] + (LD[0] - p[0]) * e, p[1] + (LD[1] - p[1]) * e] : p; return { w: at(...q), col: fieldC, i, run: i === near && hit && e > 0 && e < 1 }; });
-    const ru = hit ? Math.max(0, Math.min(1, (u - 0.45) / 0.45)) : 0;
-    who.push({ w: hit && ru > 0 ? at(0, ru) : at(-0.05, 0.12), col: batC, i: 20, run: ru > 0 && ru < 1, bat: !hit || ru === 0 });
-    who.sort((a, b) => a.w[0] + a.w[1] - (b.w[0] + b.w[1])).forEach(o => fig(o.w[0], o.w[1], o.col, o.i, o.run, o.bat && big ? { view: 'back', after: () => line(4, -16, 13, -30 + (u > 0.38 && u < 0.5 ? 18 : 0), '#c99a5a', 1.6) } : {}));
-    // the ball: pitched, then hit out into the field
-    let bp = null;
-    if (u > 0.22 && u < 0.4) { const v = (u - 0.22) / 0.18; bp = up(iso(...at(0.47 * (1 - v), 0.47 * (1 - v))), (big ? 14 : 5) * z); }
-    else if (hit && u >= 0.4 && u < 0.82) { const v = (u - 0.4) / 0.42; bp = up(iso(...at(LD[0] * v, LD[1] * v)), Math.sin(v * Math.PI) * (big ? 70 : 30) * z + 4 * z); }
-    if (bp) circle(bp.x, bp.y, Math.max(1, (big ? 2.2 : 1.2) * z), '#ffffff', '#c9cfd6', 0.4 * z);
-    return;
-  }
-  // soccer: the pitch along the longer side
-  const long = w >= d, X0 = x + w * 0.06, Y0 = y + d * 0.06, W2 = w * 0.88, D2 = d * 0.88;
-  const at = (a, c) => (long ? [X0 + W2 * (a + 1) / 2, Y0 + D2 * (c + 1) / 2] : [X0 + W2 * (c + 1) / 2, Y0 + D2 * (a + 1) / 2]);
-  for (let k = 0; k < 10; k++) if (k % 2) poly([iso(...at(-1 + k / 5, -1)), iso(...at(-0.8 + k / 5, -1)), iso(...at(-0.8 + k / 5, 1)), iso(...at(-1 + k / 5, 1))], 'rgba(255,255,255,.07)');
-  [[[-1, -1], [1, -1]], [[1, -1], [1, 1]], [[1, 1], [-1, 1]], [[-1, 1], [-1, -1]], [[0, -1], [0, 1]]].forEach(([a, b]) => seg(at(...a), at(...b)));
-  [-1, 1].forEach(sd => { const bx = sd * 0.68; seg(at(sd, -0.45), at(bx, -0.45)); seg(at(bx, -0.45), at(bx, 0.45)); seg(at(bx, 0.45), at(sd, 0.45));
-    const g0 = at(sd * 1.03, -0.13), g1 = at(sd * 1.03, 0.13); [g0, g1].forEach(gp => { const p = iso(...gp); line(p.x, p.y, p.x, p.y - 7 * z, '#ffffff', 1.2 * z); }); const p0 = up(iso(...g0), 7 * z), p1 = up(iso(...g1), 7 * z); line(p0.x, p0.y, p1.x, p1.y, '#ffffff', 1.2 * z); });
-  { const c0 = iso(...at(0, 0)), r0 = Math.min(W2, D2) * 0.13; ellipse(c0.x, c0.y, r0 * 32 * z, r0 * 16 * z, null, lines, lw); }
-  if (!T) return;
-  const ball = [0.75 * Math.sin(t * 0.37) + 0.15 * Math.sin(t * 1.3), 0.7 * Math.sin(t * 0.53 + 1)];
-  const FORM = [[-0.95, 0], [-0.6, -0.6], [-0.65, -0.2], [-0.65, 0.2], [-0.6, 0.6], [-0.2, -0.65], [-0.25, -0.2], [-0.25, 0.2], [-0.2, 0.65], [0.15, -0.25], [0.15, 0.25]];
-  const ps = [];
-  [0, 1].forEach(side => FORM.forEach((f, i) => {
-    const bx = side ? -f[0] : f[0], by = side ? -f[1] : f[1], pull = i ? 0.35 : 0.06, jx = Math.sin(t * 0.9 + i * 2 + side) * 0.04;
-    const px = bx + (ball[0] - bx) * pull + jx, py = by + (ball[1] - by) * pull * 0.8, dist = Math.hypot(ball[0] - px, ball[1] - py);
-    ps.push({ w: at(Math.max(-1, Math.min(1, px)), Math.max(-1, Math.min(1, py))), col: i ? T[side] : shade(T[side], 0.35), i: i + side * 11, run: dist < 0.5 });
-  }));
-  ps.sort((a, b) => a.w[0] + a.w[1] - (b.w[0] + b.w[1])).forEach(o => fig(o.w[0], o.w[1], o.col, o.i, o.run));
-  const bp = iso(...at(...ball)); circle(bp.x, bp.y - 1 * z, Math.max(1, (big ? 2.4 : 1.2) * z), '#ffffff', '#2d2d2d', 0.4 * z);
-}
+// ---------- v0.42: the stadium (v0.55: the field and the game on it are in arena.js) ----------
 // the stadium seen from the town: a rounded bowl of stands round the field, floodlights at the corners, a scoreboard
 // over the far stands and flags on top
 function drawStadium(G, x, y, w, d, ts) {
   const z = cam.z, cx = x + w / 2, cy = y + d / 2, RX = w / 2 - 0.2, RY = d / 2 - 0.2, e = 0.5, H = 34, h0 = 8, N = 72;
-  const town = SCENE_TOWN, g = stadiumGame(town), sport = stadiumSport(town), team = teamOf(town), lit = NIGHT > 0.3, full = g.on;
+  const town = SCENE_TOWN, A = arenaNow(town), lit = NIGHT > 0.3, full = !A.off && A.state === 'live';   // v0.55: the league game (arena.js)
+  const own = townTeam(town).T, HT = !A.off ? lgTeam(A.sp, A.h) : own, AT = !A.off ? lgTeam(A.sp, A.a) : own, team = { col: HT.c[0] };
   const pt = (a, f) => { const c = Math.cos(a), s = Math.sin(a); return [cx + f * RX * Math.sign(c) * Math.pow(Math.abs(c), e), cy + f * RY * Math.sign(s) * Math.pow(Math.abs(s), e)]; };
   flatRect(x, y, w, d, '#cfd3d8');
   const corners = [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75].map(a => pt(a, 1.02)).sort((p, q) => p[0] + p[1] - (q[0] + q[1]));
@@ -2477,15 +2417,15 @@ function drawStadium(G, x, y, w, d, ts) {
   // the field
   const inner = Array.from({ length: N }, (_, i) => iso(...pt(i / N * Math.PI * 2, 0.62)));
   poly(inner, lit && full ? '#6cc25a' : '#5aa84f');
-  drawPitch(cx - RX * 0.52, cy - RY * 0.52, RX * 1.0, RY * 1.0, ts, sport, G.front, g, false);
+  drawPitch(cx - RX * 0.52, cy - RY * 0.52, RX * 1.0, RY * 1.0, ts, A, false);
   // the stands, far ones first; the seats in the home team's colour and grey, full of people while there's a game
   const segs = Array.from({ length: N }, (_, i) => { const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2, m = pt((a0 + a1) / 2, 0.8); return { i, a0, a1, k: m[0] + m[1] - cx - cy }; }).sort((p, q) => p.k - q.k);
   segs.forEach(sg => {
     const o0 = up(iso(...pt(sg.a0, 1)), H * z), o1 = up(iso(...pt(sg.a1, 1)), H * z), i0 = up(iso(...pt(sg.a0, 0.64)), h0 * z), i1 = up(iso(...pt(sg.a1, 0.64)), h0 * z);
-    const sect = Math.floor(sg.i / 6) % 2, col = sect ? team.col : '#9aa3ad';
+    const away = !A.off && (A.kind === 'home' ? sg.i % 24 < 6 : sg.i % 24 < 12), sect = Math.floor(sg.i / 6) % 2, col = sect ? (away ? AT.c[0] : HT.c[0]) : '#9aa3ad';   // v0.55: a block of away fans
     poly([o0, o1, i1, i0], shade(col, sg.k < 0 ? 0.05 : -0.1));
     for (let r = 1; r < 4; r++) { const a = lerp(i0, o0, r / 4), b = lerp(i1, o1, r / 4); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.25)', 0.6 * z); }
-    if (z > 0.3) for (let r = 0; r < 4; r++) { if (!full && hash(sg.i, r) > 0.12) continue; const q = lerp(lerp(i0, i1, hash(r, sg.i)), lerp(o0, o1, hash(r, sg.i)), (r + 0.5) / 4); circle(q.x, q.y - 1.2 * z, 1.1 * z, ['#f3c59f', '#d39a6c', '#9a6440', '#ffe0c4'][(sg.i + r) % 4]); }
+    if (z > 0.3) for (let r = 0; r < 7; r++) { if (!full && hash(sg.i, r) > 0.12) continue; const q = lerp(lerp(i0, i1, hash(r, sg.i)), lerp(o0, o1, hash(r, sg.i)), (r + 0.5) / 7), Tm = away ? AT : HT; circle(q.x, q.y - 0.4 * z, 1.2 * z, hash(sg.i, r + 3) < 0.75 ? Tm.c[0] : Tm.c[1]); circle(q.x, q.y - 1.9 * z, 0.9 * z, ['#f3c59f', '#d39a6c', '#9a6440', '#ffe0c4'][(sg.i + r) % 4]); }
   });
   // the outside wall where it faces you, with arches
   segs.forEach(sg => {
@@ -2501,7 +2441,7 @@ function drawStadium(G, x, y, w, d, ts) {
     line(sb.x - 8 * z, sb.y, sb.x - 8 * z, sb.y - 12 * z, '#5b6470', 1.6 * z); line(sb.x + 8 * z, sb.y, sb.x + 8 * z, sb.y - 12 * z, '#5b6470', 1.6 * z);
     rrect(sb.x - W2 / 2, sb.y - 12 * z - H2, W2, H2, 2 * z, '#1d1d22', '#5b6470', 0.8 * z);
     if (z > 0.3) { ctx.font = `900 ${Math.max(5, 6.5 * z)}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffd36b';
-      ctx.fillText(g.on || g.done ? `${g.score[0]} : ${g.score[1]}` : '– : –', sb.x, sb.y - 12 * z - H2 / 2); } }
+      ctx.fillText(!A.off && A.state !== 'soon' ? `${A.score[1]} : ${A.score[0]}` : '– : –', sb.x, sb.y - 12 * z - H2 / 2); } }
   corners.slice(2).forEach(tower);
   [0.3, 0.5, 0.7].forEach((u, i) => { const p = up(iso(...pt(Math.PI * (0.15 + u), 1)), H * z), wv = Math.sin(ts / 500 + i) * 2 * z; line(p.x, p.y, p.x, p.y - 14 * z, '#c9cfd6', 0.8 * z); pg([[p.x, p.y - 14 * z], [p.x + 8 * z + wv, p.y - 12 * z], [p.x, p.y - 9 * z]], i % 2 ? team.col : '#ffffff'); });
   return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };

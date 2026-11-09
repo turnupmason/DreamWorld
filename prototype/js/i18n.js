@@ -1172,7 +1172,7 @@ Object.assign(STR.en, {
 // ---------- v0.42: the zoo, the stadium, a home run derby ----------
 Object.assign(STR.zh, {
   st_short_zoo: '狮子、大象、长颈鹿、企鹅、猴子、熊猫，还能喂长颈鹿。', st_desc_zoo: '露天的动物园：狮子、大象、长颈鹿和斑马、企鹅、猴山、大熊猫，还有喂长颈鹿的高台、能摸小动物的农场和纪念品店。', vrole_zoo: '售票处',
-  st_short_stadium: '每天两场比赛，买票进去看；还有本垒打大赛。', st_desc_stadium: '本镇球队的主场。每天下午和晚上各一场比赛，比分大家看到的都一样；进去买票坐在看台上看，饿了买个热狗，旁边的击球笼还能玩本垒打大赛。', vrole_stadium: '售票处',
+  st_short_stadium: '联赛在这里打：两队球迷坐满看台，买票进去看；还有本垒打大赛。', st_desc_stadium: '体育联赛的比赛在这里打：本镇球队的主场比赛优先，没有就办这一轮别的比赛。一天通常两场，下午一场、晚上一场，比分和「体育」App 里一样。进去买票坐在看台上看，饿了买个热狗，旁边的击球笼还能玩本垒打大赛。', vrole_stadium: '售票处',
   sp_zoo_lion: '狮子', sp_zoo_lion_d: '雄狮在石头上晒太阳，母狮在下面散步。', sp_zoo_elephant: '大象', sp_zoo_elephant_d: '象妈妈带着小象，有时候用鼻子喷水。',
   sp_zoo_giraffe: '长颈鹿和斑马', sp_zoo_giraffe_d: '长颈鹿够树叶吃，斑马在低头吃草。', sp_zoo_penguin: '企鹅', sp_zoo_penguin_d: '有的在冰上摇摇摆摆，有的在水里游。',
   sp_zoo_monkey: '猴山', sp_zoo_monkey_d: '荡绳子、爬树，一刻不停。', sp_zoo_panda: '大熊猫', sp_zoo_panda_d: '抱着竹子慢慢嚼。',
@@ -1184,7 +1184,7 @@ Object.assign(STR.zh, {
   sp_stadium_seats: '看台', sp_stadium_seats_d: '坐下来看本镇球队比赛。', sp_stadium_board: '记分牌', sp_stadium_board_d: '今天的比赛和比分。',
   sp_stadium_hotdog: '热狗摊', sp_stadium_hotdog_d: '看球怎么能没有热狗。', sp_stadium_cage: '击球笼', sp_stadium_cage_d: '本垒打大赛：看谁打得又多又远。',
   sp_match_btn: '买票看比赛 🪙{n}（娱乐 +{f}）', sp_match_done: '太精彩了！', sp_match_over: '这场比赛刚结束', sp_tour_btn: '在空球场里转一转（娱乐 +{n}）', sp_tour_done: '原来球场这么大',
-  sp_hotdog_btn: '买一个热狗 🪙{n}（饱腹 +{h}）', sp_hotdog_done: '热乎乎的', sp_board_games: '每天两场：{a}:00 和 {b}:00 开始，每场大约 {n} 小时（按本镇时间）。比分对每个人都一样。',
+  sp_hotdog_btn: '买一个热狗 🪙{n}（饱腹 +{h}）', sp_hotdog_done: '热乎乎的', sp_board_games: '比赛就是「体育」App 里的联赛，比分对每个人都一样。在手机里还能看积分榜、赛程，开赛前押金币。', ar_off: '休赛期：{n} 天后新赛季开打', ar_starts: '{h} 开赛', ar_today: '今天在这里', ar_home: '本镇主场', ar_guest: '联赛承办',
   gm_next: '下一场 {h}:00 开始', gm_tomorrow: '下一场明天 {h}:00', gm_home: '主队：{team}（{sport}）', gm_final: '终场', gm_top: '第 {n} 局上半', gm_bot: '第 {n} 局下半', gm_min: '第 {n} 分钟',
   mg_play_derby: '本垒打大赛（每人 {n} 球）', mg_court_derby: '击球笼旁边的人', mg_price_derby: '一桶球 🪙{n}',
   mg_d_title: '本垒打大赛', mg_d_how1: '球投过来，飞到本垒上方的圈里时点屏幕挥棒', mg_d_how2: '点得正好打得最远；早一点往左飞，晚一点往右飞，太早太晚就打不到', mg_d_how3: '每人 {n} 球，本垒打多的赢；一样多就比最远的一球',
@@ -1193,7 +1193,7 @@ Object.assign(STR.zh, {
 });
 Object.assign(STR.en, {
   st_short_zoo: 'Lions, elephants, giraffes, penguins, monkeys, pandas, and you can feed the giraffes.', st_desc_zoo: 'An open-air zoo: lions, elephants, giraffes and zebras, penguins, a monkey island and giant pandas, with a platform for feeding the giraffes, a petting farm and a gift shop.', vrole_zoo: 'Tickets',
-  st_short_stadium: 'Two games a day: buy a ticket and watch. And a home run derby.', st_desc_stadium: 'The home ground of the town’s team. A game every afternoon and every evening, with the same score for everyone; buy a ticket and watch from the stands, grab a hot dog, and try the home run derby in the batting cage.', vrole_stadium: 'Tickets',
+  st_short_stadium: 'The league plays here: stands full of both teams’ fans. Buy a ticket and watch; and a home run derby.', st_desc_stadium: 'The league games are played here: the town’s own team’s home games first, otherwise another game from the round. Usually two a day, one in the afternoon and one in the evening, with the same score as in the Sports app. Buy a ticket and watch from the stands, grab a hot dog, and try the home run derby in the batting cage.', vrole_stadium: 'Tickets',
   sp_zoo_lion: 'Lions', sp_zoo_lion_d: 'The lion suns himself on the rock; the lioness walks below.', sp_zoo_elephant: 'Elephants', sp_zoo_elephant_d: 'A mother and her calf; now and then she sprays water with her trunk.',
   sp_zoo_giraffe: 'Giraffes and zebras', sp_zoo_giraffe_d: 'The giraffes reach for leaves; the zebras graze.', sp_zoo_penguin: 'Penguins', sp_zoo_penguin_d: 'Some waddle on the ice, some swim.',
   sp_zoo_monkey: 'Monkey island', sp_zoo_monkey_d: 'Swinging on ropes and climbing, never still.', sp_zoo_panda: 'Giant pandas', sp_zoo_panda_d: 'Hugging bamboo and chewing slowly.',
@@ -1205,7 +1205,7 @@ Object.assign(STR.en, {
   sp_stadium_seats: 'The stands', sp_stadium_seats_d: 'Sit down and watch the town’s team.', sp_stadium_board: 'Scoreboard', sp_stadium_board_d: 'Today’s game and the score.',
   sp_stadium_hotdog: 'Hot dog stand', sp_stadium_hotdog_d: 'No game is complete without one.', sp_stadium_cage: 'Batting cage', sp_stadium_cage_d: 'Home run derby: the most and the longest.',
   sp_match_btn: 'Buy a ticket and watch 🪙{n} (fun +{f})', sp_match_done: 'What a game!', sp_match_over: 'That game just finished', sp_tour_btn: 'Look round the empty stadium (fun +{n})', sp_tour_done: 'It’s so big inside',
-  sp_hotdog_btn: 'Buy a hot dog 🪙{n} (food +{h})', sp_hotdog_done: 'Nice and hot', sp_board_games: 'Two games a day, starting at {a}:00 and {b}:00 town time, about {n} hours each. The score is the same for everyone.',
+  sp_hotdog_btn: 'Buy a hot dog 🪙{n} (food +{h})', sp_hotdog_done: 'Nice and hot', sp_board_games: 'These are the league games from the Sports app, with the same score for everyone. On your phone: the table, the schedule, and bets before kick-off.', ar_off: 'The break between seasons: back in {n} days', ar_starts: 'Starts {h}', ar_today: 'Today here', ar_home: 'Home game', ar_guest: 'Hosting',
   gm_next: 'Next game at {h}:00', gm_tomorrow: 'Next game tomorrow at {h}:00', gm_home: 'Home team: {team} ({sport})', gm_final: 'Final', gm_top: 'Top of the {n}', gm_bot: 'Bottom of the {n}', gm_min: '{n}′',
   mg_play_derby: 'Home run derby ({n} pitches each)', mg_court_derby: 'Someone by the batting cage', mg_price_derby: 'A bucket of balls 🪙{n}',
   mg_d_title: 'Home run derby', mg_d_how1: 'The ball comes in: tap to swing as it reaches the ring over home plate', mg_d_how2: 'Right on time goes furthest; a bit early pulls it left, a bit late pushes it right; too early or late and you miss', mg_d_how3: '{n} pitches each; most home runs wins, and if it’s level, the longest hit',

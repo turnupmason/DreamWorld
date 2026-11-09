@@ -50,14 +50,19 @@ function league(sp, s = seasonNow().s) {
   while (L.done < SEASON.days && gameEnd(sp, s, L.done) <= t) { playRound(L, L.done); L.done++; }
   return L;
 }
+// how a game ends: decided by how good the two teams really are (not by the chances shown), so it can be worked out
+// before the game is over (the stadium uses it to show the score going up as the game goes on: v0.55)
+function gameResult(L, r, g) {
+  const k = SPORT_KEYS.indexOf(L.sp), [h, a] = L.rounds[r][g], pReal = eloP(L.strength[h] + 20, L.strength[a]);   // (a little home advantage in the real game)
+  const hw = lgRand(L.s * 101 + r, g, k + 3) < pReal, sc = lgScore(L.sp, L.s, r, g), [hs, as] = hw ? sc : [sc[1], sc[0]];
+  return { h, a, hs, as, hw, note: sc[2] || '' };
+}
 function playRound(L, r) {
-  const k = SPORT_KEYS.indexOf(L.sp);
   L.res[r] = L.rounds[r].map(([h, a], g) => {
-    const pShown = eloP(L.elo[h], L.elo[a]), pReal = eloP(L.strength[h] + 20, L.strength[a]);   // (a little home advantage in the real game)
-    const hw = lgRand(L.s * 101 + r, g, k + 3) < pReal, sc = lgScore(L.sp, L.s, r, g), [hs, as] = hw ? sc : [sc[1], sc[0]];
+    const pShown = eloP(L.elo[h], L.elo[a]), { hw, hs, as, note } = gameResult(L, r, g);
     const d = SEASON.k * ((hw ? 1 : 0) - pShown); L.elo[h] += d; L.elo[a] -= d;
     [[h, hw, hs, as], [a, !hw, as, hs]].forEach(([i, w, f, ag]) => { const R2 = L.rec[i]; if (w) R2.w++; else R2.l++; R2.pf += f; R2.pa += ag; R2.last.push(w ? 'W' : 'L'); });
-    return { h, a, hs, as, hw, p: pShown, note: sc[2] || '' };
+    return { h, a, hs, as, hw, p: pShown, note };
   });
 }
 // a winning and a losing score that look like the sport [winner, loser, note]: soccer can go to penalties, hockey to overtime

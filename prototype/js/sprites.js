@@ -189,6 +189,7 @@ function skeleton(pose, o) {
       k.prop = 'letter';
       break;
     }
+    default: if (SPORT_POSES[pose]) SPORT_POSES[pose](k, o);   // v0.55: the athletes' moves (arena.js)
   }
   if (o.wave || pose === 'wave') { k.arms[1].e = [5.5, -23.5]; k.arms[1].h = [8.5 + Math.sin(ts / 140) * 2, -31]; }
   return k;
@@ -277,6 +278,7 @@ function drawPerson(sx, sy, s, o) {
     if (k.prop === 'mat') pg([[-9, 0.5], [9, 0.5], [7, 2.5], [-11, 2.5]], o.matCol || '#8b7fe0');
     ctx.translate(0, -air);
     ctx.scale(BD.w, BD.h);   // v0.18: the body's build
+    if (k.propBack) drawProp(k, ts, B, o.back);   // v0.55: behind the body (a bat swung round behind the back)
     pPart(() => pArm(B(k.arms[0].s), B(k.arms[0].e), B(k.arms[0].h), C, true));
     pPart(() => pLeg(k.legs[0], lift, lean, C, true));
     if (!k.legFront) pPart(() => pLeg(k.legs[1], lift, lean, C));
@@ -287,7 +289,7 @@ function drawPerson(sx, sy, s, o) {
     if (k.legFront) pPart(() => pLeg(k.legs[1], lift, lean, C));
     unscaled(hx, hy, BD, () => drawHead(hx, hy, L, energy, ts, seed, T, !!o.back, k.sway, !!o.back));
     pPart(() => pArm(B(k.arms[1].s), B(k.arms[1].e), B(k.arms[1].h), C));
-    drawProp(k, ts, B, o.back);
+    if (!k.propBack) drawProp(k, ts, B, o.back);
   });
   sleepyZ(sx, sy, s, energy, ts, seed, 40 + air);
 }
@@ -302,7 +304,8 @@ function outfitOf(L) {
   const pants = L.pants || '#4a5a78', skin = L.skin || '#f3c59f';
   return { top, bot, dress, skirt, shirt: L.shirt || '#5aa2e0', pants, skin, inner: L.inner || '#f4f4f0',
     thigh: dress || skirt ? skin : pants, calf: dress || skirt || bot === 'shorts' ? skin : pants, hem: !dress && bot === 'shorts' ? shade(pants, -0.15) : null,
-    sleeve: { hoodie: 1, sweater: 1, jacket: 1, dress: 0.3 }[top] || 0.55, shoes: wearing(L, 'shoes'), shoeCol: L.shoeCol || '#3b3028' };
+    sleeve: { hoodie: 1, sweater: 1, jacket: 1, dress: 0.3 }[top] || 0.55, shoes: wearing(L, 'shoes'), shoeCol: L.shoeCol || '#3b3028',
+    trim: L.trim || null, num: L.num, stripes: L.stripes || null, ...(L.socks && bot === 'shorts' ? { calf: L.socks } : {}) };   // v0.55: a team kit (trim, a number, long socks)
 }
 // A hat on a head at (cx, cy). T: which way the face turns (the cap's brim points that way).
 function hat(cx, cy, L, T = 0.62, back = false) {
@@ -320,6 +323,20 @@ function hat(cx, cy, L, T = 0.62, back = false) {
     crown(cy - 1.4, R + 0.3, R + 0.5);
     pRect(cx - R - 0.3, cy - 3.8, 2 * R + 0.6, 3.6, 1.7, dk);   // the folded cuff
     if (!INK) for (let i = -4; i <= 4; i++) line(cx + i * 2.1, cy - 3.4, cx + i * 2.1, cy - 0.7, shade(col, -0.3), 0.5);
+  } else if (k === 'helmet') {   // v0.55: a sports helmet: shiny, a stripe down the middle; L.mask: a face cage, a visor or a batter's ear flap
+    const side = back || Math.abs(T) > 0.3, tr = L.hatTrim || '#ffffff';
+    if (L.mask === 'flap' && !back) pEll(cx + (side ? Math.sign(T) * (R - 1.4) : T * 3.4), cy - 2, side ? 4.6 : 7, side ? 1.5 : 2.1, dk);   // the brim
+    crown(cy - 1.1, R + 0.7, R + 0.4);
+    if (side && !back) pEll(cx - Math.sign(T) * 3.4, cy + 0.6, 3.2, 3.6, col);   // down over the ear on the side we see
+    else [-1, 1].forEach(g => pEll(cx + g * (R - 0.4), cy + 0.4, 2, 3.2, col));
+    if (!INK) {
+      const sx = cx - (back ? 0 : T) * 2.2; line(sx, cy - R - 1.8, sx, cy - 2.5, tr, 1.5);
+      ellipse(cx - T * 2 - 2.4, cy - R + 0.4, 2.4, 1.3, 'rgba(255,255,255,.45)', null, 0, -0.5);   // the shine
+      if (!back && L.mask === 'cage') { const m = '#c9cfd6', fx = cx + T * R * 0.55;
+        if (side) { const s2 = Math.sign(T); [[0, 1.2], [1.3, 4.2], [0.9, 6.8]].forEach(([dx, dy]) => line(cx + s2 * (R - 1.6), cy + dy - 0.5, cx + s2 * (R + 1.6 + dx), cy + dy, m, 0.8)); line(cx + s2 * (R + 1.8), cy + 0.6, cx + s2 * (R + 2.4), cy + 7, m, 0.8); }
+        else { [2.6, 5].forEach(dy => line(fx - 5.5, cy + dy, fx + 5.5, cy + dy, m, 0.9)); line(fx, cy + 1.6, fx, cy + 7, m, 0.8); } }
+      if (!back && L.mask === 'visor') { const fx = cx + T * R * 0.5; rrect(fx - (side ? 3 : 6.5) + (side ? Math.sign(T) * 4 : 0), cy - 0.4, side ? 6 : 13, 3.2, 1.2, 'rgba(190,225,255,.55)', 'rgba(255,255,255,.7)', 0.4); }
+    }
   } else if (k === 'sunhat') {
     pEll(cx, cy - 3.6, R + 4.8, 3.4, shade(col, -0.05));   // the wide brim
     crown(cy - 4.2, 7.2, 6.6);
@@ -474,12 +491,22 @@ function torsoSide(C, top, sway, back) {
   rrect(-6, top - 1, 3.2, 16, 1, shade(sh, -0.1));                    // the back is in shade
   if (!C.dress) rrect(-6, bot - 1.6, 12, 3, 0, shade(sh, -0.07));      // hem
   if (C.top === 'sweater') for (let i = -4; i <= 4.5; i += 1.1) line(i, bot - 1.5, i, bot + 0.6, shade(sh, -0.2), 0.45);
+  if (C.stripes) for (let i = -5; i <= 5; i += 2.2) rrect(i, top - 1, 1.1, 16, 0, C.stripes);   // v0.55: a referee
+  if (C.trim) { rrect(-6, bot - 3, 12, 1.1, 0, C.trim); rrect(-2.2, top - 0.4, 5.4, 1.2, 0.6, C.trim); }   // v0.55: a team kit
   ctx.restore();
+  if (C.num != null) kitNumber(C, 0.6, (top + bot) / 2 - 0.4, back ? 6.2 : 4.6);
   if (back) return;
   if (C.top === 'polo') { pg([[0.4, top + 0.3], [3.4, top + 0.5], [2, top + 2.6]], shade(sh, 0.25)); circle(2.6, top + 3.6, 0.42, '#fffaf0'); }
   if (C.top === 'hoodie') { line(2.4, top + 0.6, 2.8, top + 3.8, '#fffaf0', 0.55); rrect(0.6, -13.8, 4.1, 2.8, 1.2, shade(sh, -0.09)); }
   if (C.top === 'jacket') { rrect(2.4, top + 0.4, 2.4, bot - top - 1.2, 0.6, C.inner); line(2.4, top + 0.6, 2.4, bot - 0.8, shade(sh, -0.3), 0.55); }
   if (C.dress) rrect(-4, -11.9, 8.5, 1.3, 0.6, shade(sh, -0.12));     // sash
+}
+// v0.55: the number on a team shirt (in the trim colour)
+function kitNumber(C, x, y, size) {
+  if (INK) return;
+  ctx.font = `900 ${size}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 0.5; ctx.strokeStyle = shade(C.shirt, -0.25); ctx.strokeText(String(C.num), x, y);
+  ctx.fillStyle = C.trim || '#ffffff'; ctx.fillText(String(C.num), x, y);
 }
 // The same, front-on (drawn inside the turned transform of the front view).
 function torsoFront(C, sway, back, farSide, turned) {
@@ -493,7 +520,10 @@ function torsoFront(C, sway, back, farSide, turned) {
   if (turned) rrect(farSide > 0 ? 2.4 : -6.8, top - 1, 4.4, 16, 1, shade(sh, -0.1));   // the side turned away is in shade
   if (!C.dress) rrect(-6, bot - 1.7, 12, 3, 0, shade(sh, -0.07));
   if (C.top === 'sweater') for (let i = -4.4; i <= 4.5; i += 1.1) line(i, bot - 1.6, i, bot + 0.6, shade(sh, -0.2), 0.45);
+  if (C.stripes) for (let i = -5; i <= 5; i += 2.2) rrect(i, top - 1, 1.1, 16, 0, C.stripes);   // v0.55: a referee
+  if (C.trim) { rrect(-6, bot - 3, 12, 1.1, 0, C.trim); rrect(-2.6, top - 0.4, 5.2, 1.2, 0.6, C.trim); }   // v0.55: a team kit
   ctx.restore();
+  if (C.num != null) kitNumber(C, 0, (top + bot) / 2 + (back ? -0.6 : 0.6), back ? 7 : 4.6);
   if (back) return;
   if (C.top === 'polo') { pg([[-3, top + 0.3], [-0.2, top + 0.6], [-1.4, top + 2.7]], shade(sh, 0.25)); pg([[3, top + 0.3], [0.2, top + 0.6], [1.4, top + 2.7]], shade(sh, 0.25)); circle(0, top + 3.5, 0.42, '#fffaf0'); circle(0, top + 5.1, 0.42, '#fffaf0'); }
   if (C.top === 'hoodie') { line(-1.3, top + 0.5, -1.6, top + 4.2, '#fffaf0', 0.55); line(1.3, top + 0.5, 1.6, top + 4.2, '#fffaf0', 0.55); rrect(-3.3, -14.2, 6.6, 3.2, 1.4, shade(sh, -0.09)); }
@@ -576,6 +606,7 @@ function drawProp(k, ts, B, back) {
     circle(tip[0] + 3, 6 + bob, 1.2, '#e5484d');
   }
   if (k.prop === 'letter') { const [x, y] = hand(1); rrect(x - 1, y - 3.5, 6, 4, 0.5, '#fffaf0', '#c9b98f', 0.5); }
+  if (SPORT_PROPS[k.prop]) SPORT_PROPS[k.prop](k, ts, B, back);   // v0.55: bats, sticks, gloves, balls (arena.js)
   if (k.prop === 'notes') { const u = (ts / 900) % 1; ctx.save(); ctx.globalAlpha = 1 - u; ctx.font = '8px sans-serif'; ctx.fillStyle = '#6b5bd0'; ctx.fillText('♪', 8, -36 - u * 10); ctx.fillText('♫', -12, -32 - ((u + 0.5) % 1) * 10); ctx.restore(); }
 }
 

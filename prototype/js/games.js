@@ -1271,7 +1271,7 @@ const Games = (() => {
   function Derby() {
     const DG = VENUE_GAMES.derby, sk = mate.skill, N = DG.pitches, g = 9.8, DRAG = 0.0045, WIN = [0.045, 0.09, 0.15];
     const fence = a => 95 + 20 * Math.cos(2 * a);   // a: radians from straight out to centre field
-    const team = teamOf(myTown()), PITCH = { shirt: team.col, top: 'tshirt', skin: SKINS[2], hair: 'short', hairCol: HAIR_COLORS[0], mob: 'walk', hat: 'cap', hatCol: team.col };
+    const team = { col: townTeam(myTown()).T.c[0] }, PITCH = { shirt: team.col, top: 'tshirt', skin: SKINS[2], hair: 'short', hairCol: HAIR_COLORS[0], mob: 'walk', hat: 'cap', hatCol: team.col };
     const FIELD = [[-24, 78], [0, 92], [24, 78], [-14, 34], [14, 34], [18, 20], [-18, 20]].map((p, i) => ({ x: p[0], y: p[1], hx: p[0], hy: p[1], i }));
     const res = [[], []], best = [0, 0];
     let bat = 0, st = 'ready', pitch = null, ball = null, swingAt = -9, plan = null, outcome = '', wait = 0, taps = 0, over = false, flash = null, readyLeft = 0, trail = [];
