@@ -503,6 +503,15 @@ Object.assign(STR.en, {
 // ---------- v0.9 ----------
 Object.assign(STR.zh, {
   fab_world: '世界', world_title: '世界', world_sub: '全世界的玩家住在不同的社区。去别的社区逛逛，喜欢的话可以把家搬过去。',
+  dmr_na: '北美风', dmr_eu: '欧洲风', dmr_asia: '东亚风', dmr_sa: '南美风', dmr_af: '非洲风', dmr_oc: '大洋洲风',
+  dm_title: '梦想大陆 DreamWorld', dm_sub: '一整张我们自己的地图：10 座有球队的城市和 6 个小镇，州际公路把每个地方都连起来（海上有跨海大桥），还有铁路、机场和港口。',
+  dm_city: '球队城市', dm_town: '小镇', dm_road: '州际公路', dm_rail: '铁路', dm_airport: '机场', dm_port: '港口', dm_sea: '梦想海', dm_cities: '10 座球队城市', dm_towns: '小镇',
+  dm_note: '开车、坐火车飞机去别的城市在后面几版做（v0.60–v0.62）。原型里别的地方的居民是模拟的。',
+  city_no_team: '这里没有职业球队', city_nearest: '最近的主队城市：{c}', city_today: '今天的主场比赛', city_no_games: '今天没有主场比赛', venue_stadium: '体育场', venue_arena: '室内馆', venue_home_of: '主场球队',
+  arena_name: '{c}室内体育馆', arena_town: '社区体育馆',
+  tm_btn: '全镇搬到这里', tm_note: '只能住在自己的镇、在自己的镇买地。要搬就整个镇一起搬：镇上 {n} 位朋友都同意才行。（原型里家人的房子留在原来的镇。）',
+  tm_sent: '已经问了镇上 {n} 位朋友', tm_asking: '正在问大家要不要搬到{c}', tm_failed: '没搬成：{names} 不想搬', tm_failed_snack: '有人不同意，全镇没搬', tm_moved: '全镇搬到了{c}！', tm_ok: '知道了', tm_no_room: '那里的空地不够全镇的家搬过去', tm_cancel: '不搬了',
+  land_own_town: '只能在自己的镇买地；想住这里就全镇一起搬（世界页）',
   world_here: '你住这里', world_visit: '去看看', world_move: '搬到这里', world_my_town: '回我的小镇', world_all: '所有社区',
   world_pop: '{n} 户人家（邀请制）', world_parcel: '一块地 🪙{n} 起', world_free: '{n} 块空地', world_friends: '{n} 个朋友住这里',
   world_pick_land: '点一块「出售」的空地，就能把整个家搬过来',
@@ -517,6 +526,15 @@ Object.assign(STR.zh, {
 });
 Object.assign(STR.en, {
   fab_world: 'World', world_title: 'World', world_sub: 'Players all over the world live in different communities. Look around, and move your home if you like one.',
+  dmr_na: 'American style', dmr_eu: 'European style', dmr_asia: 'East Asian style', dmr_sa: 'South American style', dmr_af: 'African style', dmr_oc: 'Oceanian style',
+  dm_title: 'DreamWorld', dm_sub: 'One big map of our own: 10 team cities and 6 small towns, every place joined by interstates (with bridges over the sea), plus railways, airports and ports.',
+  dm_city: 'Team city', dm_town: 'Town', dm_road: 'Interstate', dm_rail: 'Railway', dm_airport: 'Airport', dm_port: 'Port', dm_sea: 'Dream Sea', dm_cities: 'The 10 team cities', dm_towns: 'Towns',
+  dm_note: 'Driving, trains and flights to other cities come in the next versions (v0.60–v0.62). In the prototype the people elsewhere are made up.',
+  city_no_team: 'No pro teams here', city_nearest: 'Nearest team city: {c}', city_today: 'Home games today', city_no_games: 'No home games today', venue_stadium: 'stadium', venue_arena: 'arena', venue_home_of: 'Home teams',
+  arena_name: '{c} Arena', arena_town: 'Sports Hall',
+  tm_btn: 'Move the town here', tm_note: 'You live, and buy land, only in your own town. To move, the whole town moves: all {n} friends here must say yes. (In the prototype your family’s homes stay behind.)',
+  tm_sent: 'Asked the {n} friends in town', tm_asking: 'Asking everyone about moving to {c}', tm_failed: 'Not moving: {names} said no', tm_failed_snack: 'Someone said no, so the town stays', tm_moved: 'The whole town moved to {c}!', tm_ok: 'OK', tm_no_room: 'There isn’t enough free land there for every home in town', tm_cancel: 'Never mind',
+  land_own_town: 'You can only buy land in your own town; to live here, move the whole town (World tab)',
   world_here: 'You live here', world_visit: 'Look around', world_move: 'Move here', world_my_town: 'My town', world_all: 'All communities',
   world_pop: '{n} homes (invite only)', world_parcel: 'Land from 🪙{n}', world_free: '{n} empty lots', world_friends: '{n} friends live here',
   world_pick_land: 'Tap an empty lot “for sale” to move your whole home here',
@@ -1172,7 +1190,7 @@ Object.assign(STR.en, {
 // ---------- v0.42: the zoo, the stadium, a home run derby ----------
 Object.assign(STR.zh, {
   st_short_zoo: '狮子、大象、长颈鹿、企鹅、猴子、熊猫，还能喂长颈鹿。', st_desc_zoo: '露天的动物园：狮子、大象、长颈鹿和斑马、企鹅、猴山、大熊猫，还有喂长颈鹿的高台、能摸小动物的农场和纪念品店。', vrole_zoo: '售票处',
-  st_short_stadium: '联赛在这里打：两队球迷坐满看台，买票进去看；还有本垒打大赛。', st_desc_stadium: '体育联赛的比赛在这里打：本镇球队的主场比赛优先，没有就办这一轮别的比赛。一天通常两场，下午一场、晚上一场，比分和「体育」App 里一样。进去买票坐在看台上看，饿了买个热狗，旁边的击球笼还能玩本垒打大赛。', vrole_stadium: '售票处',
+  st_short_stadium: '联赛在这里打：两队球迷坐满看台，买票进去看；还有本垒打大赛。', st_desc_stadium: '体育联赛的比赛在这里打：本镇球队的主场比赛优先，没有就办这一轮别的比赛。一天通常两场，下午一场、晚上一场，比分和「体育」App 里一样。进去买票坐在看台上看，饿了买个热狗，旁边的击球笼还能玩本垒打大赛。', vrole_stadium: '售票处', vrole_arena: '售票处',
   sp_zoo_lion: '狮子', sp_zoo_lion_d: '雄狮在石头上晒太阳，母狮在下面散步。', sp_zoo_elephant: '大象', sp_zoo_elephant_d: '象妈妈带着小象，有时候用鼻子喷水。',
   sp_zoo_giraffe: '长颈鹿和斑马', sp_zoo_giraffe_d: '长颈鹿够树叶吃，斑马在低头吃草。', sp_zoo_penguin: '企鹅', sp_zoo_penguin_d: '有的在冰上摇摇摆摆，有的在水里游。',
   sp_zoo_monkey: '猴山', sp_zoo_monkey_d: '荡绳子、爬树，一刻不停。', sp_zoo_panda: '大熊猫', sp_zoo_panda_d: '抱着竹子慢慢嚼。',
@@ -1182,7 +1200,7 @@ Object.assign(STR.zh, {
   sp_petting_btn: '进去摸摸小动物（娱乐 +{n}）', sp_petting_done: '小山羊蹭了蹭你的手',
   sp_zooplush_note: '玩偶放进仓库，进屋点「设计」就能摆出来。', sp_zooplush_have: '已有 {n} 个', sp_zooplush_ok: '{name}放进了仓库',
   sp_stadium_seats: '看台', sp_stadium_seats_d: '坐下来看本镇球队比赛。', sp_stadium_board: '记分牌', sp_stadium_board_d: '今天的比赛和比分。',
-  sp_stadium_bets: '竞猜窗口', sp_stadium_bets_d: '押今天的比赛：只有这里看得到胜率和赔率。', bw_intro: '今天还没开赛的比赛。点一支队看赔率、押金币。', bw_none: '今天的比赛都开打了，明天再来。', bw_mine: '我的彩票', bw_back: '换一场', sp_stadium_hotdog: '热狗摊', sp_stadium_hotdog_d: '看球怎么能没有热狗。', sp_stadium_cage: '击球笼', sp_stadium_cage_d: '本垒打大赛：看谁打得又多又远。',
+  st_desc_arena: '冰球和篮球在这里打主场。买票坐看台看，场边有竞猜窗口和热狗。', st_short_arena: '冰球、篮球的主场，室内。', sp_stadium_bets: '竞猜窗口', sp_stadium_bets_d: '押今天的比赛：只有这里看得到胜率和赔率。', bw_intro: '今天还没开赛的比赛。点一支队看赔率、押金币。', bw_none: '今天的比赛都开打了，明天再来。', bw_mine: '我的彩票', bw_back: '换一场', sp_stadium_hotdog: '热狗摊', sp_stadium_hotdog_d: '看球怎么能没有热狗。', sp_stadium_cage: '击球笼', sp_stadium_cage_d: '本垒打大赛：看谁打得又多又远。',
   sp_match_btn: '买票看比赛 🪙{n}（娱乐 +{f}）', sp_match_done: '太精彩了！', sp_match_over: '这场比赛刚结束', sp_tour_btn: '在空球场里转一转（娱乐 +{n}）', sp_tour_done: '原来球场这么大',
   sp_hotdog_btn: '买一个热狗 🪙{n}（饱腹 +{h}）', sp_hotdog_done: '热乎乎的', sp_board_games: '比赛就是「体育」App 里的联赛，比分对每个人都一样。在手机里看积分榜和赛程；押注在旁边的竞猜窗口。', ar_off: '休赛期：{n} 天后新赛季开打', ar_none: '今天这里没有比赛', ar_starts: '{h} 开赛', ar_today: '今天在这里', ar_home: '本镇主场', ar_guest: '联赛承办',
   gm_next: '下一场 {h}:00 开始', gm_tomorrow: '下一场明天 {h}:00', gm_home: '主队：{team}（{sport}）', gm_final: '终场', gm_top: '第 {n} 局上半', gm_bot: '第 {n} 局下半', gm_min: '第 {n} 分钟',
@@ -1193,7 +1211,7 @@ Object.assign(STR.zh, {
 });
 Object.assign(STR.en, {
   st_short_zoo: 'Lions, elephants, giraffes, penguins, monkeys, pandas, and you can feed the giraffes.', st_desc_zoo: 'An open-air zoo: lions, elephants, giraffes and zebras, penguins, a monkey island and giant pandas, with a platform for feeding the giraffes, a petting farm and a gift shop.', vrole_zoo: 'Tickets',
-  st_short_stadium: 'The league plays here: stands full of both teams’ fans. Buy a ticket and watch; and a home run derby.', st_desc_stadium: 'The league games are played here: the town’s own team’s home games first, otherwise another game from the round. Usually two a day, one in the afternoon and one in the evening, with the same score as in the Sports app. Buy a ticket and watch from the stands, grab a hot dog, and try the home run derby in the batting cage.', vrole_stadium: 'Tickets',
+  st_short_stadium: 'The league plays here: stands full of both teams’ fans. Buy a ticket and watch; and a home run derby.', st_desc_stadium: 'The league games are played here: the town’s own team’s home games first, otherwise another game from the round. Usually two a day, one in the afternoon and one in the evening, with the same score as in the Sports app. Buy a ticket and watch from the stands, grab a hot dog, and try the home run derby in the batting cage.', vrole_stadium: 'Tickets', vrole_arena: 'Tickets',
   sp_zoo_lion: 'Lions', sp_zoo_lion_d: 'The lion suns himself on the rock; the lioness walks below.', sp_zoo_elephant: 'Elephants', sp_zoo_elephant_d: 'A mother and her calf; now and then she sprays water with her trunk.',
   sp_zoo_giraffe: 'Giraffes and zebras', sp_zoo_giraffe_d: 'The giraffes reach for leaves; the zebras graze.', sp_zoo_penguin: 'Penguins', sp_zoo_penguin_d: 'Some waddle on the ice, some swim.',
   sp_zoo_monkey: 'Monkey island', sp_zoo_monkey_d: 'Swinging on ropes and climbing, never still.', sp_zoo_panda: 'Giant pandas', sp_zoo_panda_d: 'Hugging bamboo and chewing slowly.',
@@ -1203,7 +1221,7 @@ Object.assign(STR.en, {
   sp_petting_btn: 'Go in and pet them (fun +{n})', sp_petting_done: 'A little goat nuzzled your hand',
   sp_zooplush_note: 'Plushies go to your storage; place them with Design at home.', sp_zooplush_have: 'you have {n}', sp_zooplush_ok: '{name} is in your storage',
   sp_stadium_seats: 'The stands', sp_stadium_seats_d: 'Sit down and watch the town’s team.', sp_stadium_board: 'Scoreboard', sp_stadium_board_d: 'Today’s game and the score.',
-  sp_stadium_bets: 'Betting window', sp_stadium_bets_d: 'Bet on today’s games: the only place with chances and odds.', bw_intro: 'Today’s games that haven’t started. Tap a team for the odds and bet coins.', bw_none: 'Every game today has started. Come back tomorrow.', bw_mine: 'My tickets', bw_back: 'Another game', sp_stadium_hotdog: 'Hot dog stand', sp_stadium_hotdog_d: 'No game is complete without one.', sp_stadium_cage: 'Batting cage', sp_stadium_cage_d: 'Home run derby: the most and the longest.',
+  st_desc_arena: 'Hockey and basketball play their home games here. Buy a ticket and sit in the stands; betting window and hot dogs by the court.', st_short_arena: 'Home of hockey and basketball, indoors.', sp_stadium_bets: 'Betting window', sp_stadium_bets_d: 'Bet on today’s games: the only place with chances and odds.', bw_intro: 'Today’s games that haven’t started. Tap a team for the odds and bet coins.', bw_none: 'Every game today has started. Come back tomorrow.', bw_mine: 'My tickets', bw_back: 'Another game', sp_stadium_hotdog: 'Hot dog stand', sp_stadium_hotdog_d: 'No game is complete without one.', sp_stadium_cage: 'Batting cage', sp_stadium_cage_d: 'Home run derby: the most and the longest.',
   sp_match_btn: 'Buy a ticket and watch 🪙{n} (fun +{f})', sp_match_done: 'What a game!', sp_match_over: 'That game just finished', sp_tour_btn: 'Look round the empty stadium (fun +{n})', sp_tour_done: 'It’s so big inside',
   sp_hotdog_btn: 'Buy a hot dog 🪙{n} (food +{h})', sp_hotdog_done: 'Nice and hot', sp_board_games: 'These are the league games from the Sports app, with the same score for everyone. The table and schedule are on your phone; bets at the betting window.', ar_off: 'The break between seasons: back in {n} days', ar_none: 'No game here today', ar_starts: 'Starts {h}', ar_today: 'Today here', ar_home: 'Home game', ar_guest: 'Hosting',
   gm_next: 'Next game at {h}:00', gm_tomorrow: 'Next game tomorrow at {h}:00', gm_home: 'Home team: {team} ({sport})', gm_final: 'Final', gm_top: 'Top of the {n}', gm_bot: 'Bottom of the {n}', gm_min: '{n}′',

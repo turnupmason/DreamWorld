@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.58.0';
+const VERSION = '0.59.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -838,6 +838,66 @@ Object.assign(COMMUNITIES, {
   rio:     { zh: '海风湾', en: 'Sea Breeze Bay', place: { zh: '巴西 · 里约', en: 'Rio, Brazil' }, flag: '🇧🇷', lon: -43.2, lat: -22.9, theme: 'palm', price: 0.8, pop: 1120, region: 'sa' },
   capetown:{ zh: '好望角村', en: 'Cape Village', place: { zh: '南非 · 开普敦', en: 'Cape Town, South Africa' }, flag: '🇿🇦', lon: 18.4, lat: -33.9, theme: 'desert', price: 0.7, pop: 560, region: 'af' },
 });
+// ---------- v0.59 (Mason #30): DreamWorld: one big map of our own ----------
+// The ten team cities (every league has one team in each) and the six smaller towns. A team city has a stadium (the
+// outdoor sports) and an arena (hockey, basketball) where its teams play their home games; a town has the same
+// buildings but no pro teams (you watch your nearest city). Each city's stadium has its own look (STADIUM_LOOK):
+// roof: open / canopy (a white ring roof) / arch (a great arch over it) / pagoda (a tiled roof with upturned eaves) /
+// shells (sails like the opera house) / weave (a woven skin) / ring (a glowing ring of light) / arches (a Roman
+// arena of stone arches) / brick (an old brick ballpark); wall and trim colours; name.
+const TEAM_CITIES = ['wutong', 'vermont', 'palmbay', 'london', 'provence', 'seoul', 'kyoto', 'rio', 'sydney', 'capetown'];
+const STADIUM_LOOK = {
+  wutong:   { roof: 'open',   wall: '#d8dde3', trim: '#7a2e2e', zh: '梧桐体育场', en: 'Maple Field', tag: { zh: '加州阳光下的老球场', en: 'An old ground in the California sun' } },
+  vermont:  { roof: 'brick',  wall: '#a8503a', trim: '#2f6b3a', zh: '红枫球场', en: 'Red Maple Park', tag: { zh: '红砖拱门、绿色高墙', en: 'Red brick arches and a tall green wall' } },
+  palmbay:  { roof: 'canopy', wall: '#e9f4f4', trim: '#1e8fa8', zh: '椰林湾海滨球场', en: 'Palm Bay Beach Stadium', tag: { zh: '白色帆布顶，四周是棕榈树', en: 'A white sail roof among the palms' } },
+  london:   { roof: 'arch',   wall: '#e4e8ec', trim: '#2d2d2d', zh: '玫瑰拱门球场', en: 'Rose Arch Stadium', tag: { zh: '球场上空一道巨大的白色拱门', en: 'A great white arch over the ground' } },
+  provence: { roof: 'arches', wall: '#d9c39a', trim: '#5a2d82', zh: '薰衣草古罗马竞技场', en: 'Lavender Arena', tag: { zh: '两层石头拱门，像古罗马斗兽场', en: 'Two rows of stone arches, like a Roman arena' } },
+  seoul:    { roof: 'ring',   wall: '#dfe4ea', trim: '#e5484d', zh: '银杏光环体育场', en: 'Ginkgo Halo Stadium', tag: { zh: '一圈会变色的灯环', en: 'A ring of light that changes colour' } },
+  kyoto:    { roof: 'pagoda', wall: '#efe8dc', trim: '#c9433b', zh: '樱花町瓦顶球场', en: 'Sakura Hill Ballpark', tag: { zh: '翘角瓦顶，门口一座红鸟居', en: 'Upturned tiled eaves and a red torii gate' } },
+  rio:      { roof: 'canopy', wall: '#f4f6f8', trim: '#2e9b5a', zh: '海风湾大碗球场', en: 'Sea Breeze Bowl', tag: { zh: '巨大的白色环形顶，看台绿黄相间', en: 'A huge white ring roof, green and gold stands' } },
+  sydney:   { roof: 'shells', wall: '#f4f2ec', trim: '#38a3e0', zh: '桉树湾贝壳球场', en: 'Gum Tree Shells', tag: { zh: '几片白色贝壳一样的屋顶', en: 'White roofs like seashells' } },
+  capetown: { roof: 'weave',  wall: '#eef2f0', trim: '#6b4428', zh: '好望角编织球场', en: 'Cape Weave Stadium', tag: { zh: '编织一样的半透明外墙', en: 'A woven, see-through skin' } },
+};
+const isTeamCity = t => TEAM_CITIES.includes(t);
+// The map (map units; the world tab draws it 1:1). Each place's spot (DREAM_AT), the land (DREAM_LAND: soft shapes),
+// the regions in each country's style (DREAM_REGIONS: a tint and a label), the interstates between places
+// (DREAM_ROADS: [a, b, number, bend]: a curve bowed `bend` to the side; 'bridge' where it crosses the sea), the
+// railway between the team cities (DREAM_RAIL), airports and ports. Every place can be reached by road.
+const DREAM_MAP = { w: 1200, h: 820 };
+const DREAM_AT = {
+  banff: [215, 165], wutong: [135, 325], cactus: [262, 425], vermont: [405, 215], palmbay: [440, 470],
+  fjord: [655, 92], london: [505, 178], holland: [598, 196], provence: [622, 318],
+  seoul: [880, 196], hangzhou: [872, 372], kyoto: [1060, 262],
+  andes: [332, 618], rio: [488, 700], capetown: [690, 738], sydney: [1052, 676],
+};
+const DREAM_LAND = [
+  // the north-west (North American towns), joined to the north (Europe) and down to the south-west (South America)
+  [[70, 140], [140, 92], [250, 96], [360, 120], [455, 150], [470, 118], [540, 98], [600, 60], [680, 46], [740, 70], [770, 120], [840, 110], [930, 128],
+   [990, 168], [985, 230], [950, 300], [930, 380], [890, 430], [820, 450], [770, 430], [745, 470], [760, 560], [745, 660], [705, 772], [662, 778], [618, 690],
+   [600, 600], [580, 520], [550, 470], [500, 455], [470, 490], [500, 560], [550, 640], [540, 748], [470, 770], [400, 720], [330, 690], [285, 620], [280, 540],
+   [250, 480], [180, 410], [110, 380], [80, 300], [60, 220]],
+  [[1005, 220], [1060, 205], [1115, 230], [1125, 290], [1090, 320], [1030, 312], [1000, 270]],   // the island east of Asia (Kyoto)
+  [[950, 600], [1020, 585], [1110, 600], [1160, 650], [1140, 735], [1060, 768], [980, 748], [935, 690]],   // the island continent (Sydney)
+];
+const DREAM_REGIONS = [
+  { k: 'na', c: '#f2c230', at: [270, 300], r: [210, 170] }, { k: 'eu', c: '#7f6ad8', at: [610, 190], r: [150, 140] },
+  { k: 'asia', c: '#e5484d', at: [930, 280], r: [170, 160] }, { k: 'sa', c: '#2e9b5a', at: [430, 650], r: [140, 110] },
+  { k: 'af', c: '#e9a23b', at: [680, 610], r: [100, 170] }, { k: 'oc', c: '#38a3e0', at: [1050, 680], r: [110, 80] },
+];
+const DREAM_ROADS = [
+  ['banff', 'wutong', 5, 20], ['wutong', 'cactus', 10, -15], ['cactus', 'palmbay', 10, 20], ['banff', 'vermont', 90, -18], ['vermont', 'palmbay', 95, 22],
+  ['vermont', 'london', 80, -14], ['london', 'holland', 30, 10], ['holland', 'fjord', 6, -16], ['holland', 'provence', 7, 14], ['holland', 'seoul', 1, -26],
+  ['provence', 'hangzhou', 60, 30], ['seoul', 'hangzhou', 2, 18], ['seoul', 'kyoto', 3, -20, 'bridge'], ['cactus', 'andes', 45, 24], ['palmbay', 'rio', 75, -20],
+  ['andes', 'rio', 15, -18], ['provence', 'capetown', 11, -34], ['hangzhou', 'sydney', 88, 40, 'bridge'],
+];
+const DREAM_RAIL = [['wutong', 'vermont'], ['vermont', 'london'], ['london', 'provence'], ['provence', 'seoul'], ['seoul', 'kyoto'], ['vermont', 'palmbay'], ['palmbay', 'rio'], ['provence', 'capetown'], ['seoul', 'hangzhou'], ['hangzhou', 'sydney', 48]];
+const DREAM_AIR = ['wutong', 'london', 'seoul', 'rio', 'sydney', 'capetown'];
+const DREAM_PORT = ['palmbay', 'rio', 'capetown', 'sydney', 'kyoto', 'fjord', 'london'];
+// your nearest team city (your teams, if your town hasn't got its own)
+function homeCity(t) { if (isTeamCity(t)) return t; const [x, y] = DREAM_AT[t] || [0, 0]; return TEAM_CITIES.slice().sort((a, b) => Math.hypot(DREAM_AT[a][0] - x, DREAM_AT[a][1] - y) - Math.hypot(DREAM_AT[b][0] - x, DREAM_AT[b][1] - y))[0]; }
+// v0.59: moving the whole town needs everyone who lives in it to say yes. Each one answers after `wait` seconds;
+// the more they like you, the likelier a yes (yes: the chance at relation 0 and at 100).
+const TOWN_MOVE = { wait: [20, 90], yes: [0.75, 0.97], cost: 0 };
 // ---------- v0.40: states and counties ----------
 // Like the US: every town is in a county, and every county in a state (or that country's own kind of region: a
 // province, a prefecture, a département; `kind` says which). Each county has its own land round the town (terrain:
@@ -1076,7 +1136,8 @@ const STORES = {
   bowling:   { e: '🎳', zh: '保龄球馆', en: 'Bowling alley', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#33407a', roof: '#f2c230' },
   amuse:     { e: '🎡', zh: '游乐园', en: 'Amusement park', cats: [], civic: true, late: 2, w: 16, d: 11, wall: '#f4ead8', roof: '#e5484d' },   // v0.41: rides out in the open, after the interstate is built
   zoo:       { e: '🦁', zh: '动物园', en: 'Zoo', cats: [], civic: true, late: 2, w: 16, d: 12, wall: '#efe3c4', roof: '#3f8a4a' },   // v0.42: animals in the open, after the amusement park
-  stadium:   { e: '🏟️', zh: '体育场', en: 'Stadium', cats: [], civic: true, late: 2, w: 16, d: 13, wall: '#d8dde3', roof: '#2f5fa8' },   // v0.42: an open bowl with floodlights
+  stadium:   { e: '🏟️', zh: '体育场', en: 'Stadium', cats: [], civic: true, late: 2, w: 16, d: 13, wall: '#d8dde3', roof: '#2f5fa8' },
+  arena:     { e: '🏒', zh: '室内体育馆', en: 'Arena', cats: [], civic: true, late: 2, w: 12, d: 10, wall: '#c9d2dc', roof: '#e8edf2' },   // v0.59: hockey and basketball   // v0.42: an open bowl with floodlights
   aquatic:   { e: '🏊', zh: '游泳馆', en: 'Swimming centre', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#e6f3fa', roof: '#38a3e0' },
   museum:    { e: '🦖', zh: '博物馆', en: 'Museum', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#efe8da', roof: '#8a7a5a' },
   station:   { e: '🚉', zh: '火车站', en: 'Train station', cats: [], civic: true, late: true, w: 10, d: 6, wall: '#c98a5a', roof: '#3d4a66' },
@@ -1592,7 +1653,9 @@ function buildLayout(id, flip) {
   labels.push(['area_new', (blvd[0] + blvd[2]) / 2 + (vert(blvd) ? 0 : 0), vert(blvd) ? (blvd[1] + blvd[3]) / 2 : blvd[1] - 13]);   // v0.38
   // v0.41: the big places that came after the interstate (an amusement park…): along the boulevard in what's still free
   if (fwy) { roads.filter(r => r[4] === 'frontage' || r.o).forEach(r => busyRects.push(r.slice(0, 4))); busyRects.push(...roads.filter(r => !busyRects.some(q => q[0] === r[0] && q[1] === r[1] && q[2] === r[2] && q[3] === r[3])).map(r => r.slice(0, 4))); }
-  Object.entries(STORES).filter(([, s]) => s.w && s.late === 2).forEach(placeStore);
+  const L2 = ['stadium', 'arena', ...Object.keys(STORES).filter(k => STORES[k].w && STORES[k].late === 2 && k !== 'stadium' && k !== 'arena')];   // v0.59: the sports venues first (every team city needs both)
+  L2.forEach(k => placeStore([k, STORES[k]]));
+  L2.forEach(k => { if (!stores.some(st => st[0] === k)) placeStore([k, { ...STORES[k], late: 0 }]); });   // no room on the boulevard: anywhere along a road
   if (fwy) labels.push(['area_freeway', ...(fwy.axis === 'x' ? [fwy.over.s + 45, fwy.c - 3] : [fwy.c + 3, fwy.over.s + 45])]);   // v0.39
   const culs = tidyRoads(roads, world, [...busyRects.filter(q => !roads.some(r => r[0] === q[0] && r[1] === q[1] && r[2] === q[2] && r[3] === q[3])),
     ...stores.map(st => [st[1], st[2], st[1] + st[3], st[2] + st[4]]), ...parks.map(pk => [pk[1], pk[2], pk[1] + pk[3], pk[2] + pk[4]]),
@@ -1771,7 +1834,8 @@ const JOBS = {
   bowling:  { zh: '保龄球馆店员', en: 'Bowling alley crew', wage: 15, from: 14, to: 22 },
   amuse:    { zh: '游乐园操作员', en: 'Ride operator', wage: 16, from: 10, to: 18 },   // v0.41
   zoo:      { zh: '饲养员', en: 'Zookeeper', wage: 17, from: 8, to: 16 },   // v0.42
-  stadium:  { zh: '体育场工作人员', en: 'Stadium crew', wage: 16, from: 14, to: 22 },   // v0.42
+  stadium:  { zh: '体育场工作人员', en: 'Stadium crew', wage: 16, from: 14, to: 22 },
+  arena:    { zh: '体育馆工作人员', en: 'Arena crew', wage: 16, from: 15, to: 23 },   // v0.59   // v0.42
   aquatic:  { zh: '救生员', en: 'Lifeguard', wage: 18, from: 10, to: 18 },
   museum:   { zh: '博物馆讲解员', en: 'Museum guide', wage: 21, from: 9, to: 17 },
   station:  { zh: '列车员', en: 'Train conductor', wage: 30, from: 6, to: 14 },
@@ -2009,6 +2073,9 @@ const ZOO_FACTS = {
   ],
 };
 const ZOO_SHOP = ['plushlion', 'plushelephant', 'plushgiraffe', 'plushpenguin'];
+// v0.59 (Mason #30): the teams belong to the ten team cities (TEAM_CITIES): each city has one team in every league.
+// The outdoor games (football 13:00, soccer 16:00, baseball 18:00) follow one another at the city's stadium; the
+// indoor ones (hockey 17:00, basketball 20:00) at its arena, so all of a day's home games fit.
 // v0.54 (Mason #29): five leagues of 10 teams. Each team is a town's (`t`, its name in front) with a mascot (`e`, the
 // logo) and its colours (`c`: the shirt and the trim, for its logo and jersey). A season: every team plays each of the
 // other nine 4 times = 36 games, one round a day (`hour`: when that sport's games start, local time; `len`: how
@@ -2016,32 +2083,32 @@ const ZOO_SHOP = ['plushlion', 'plushelephant', 'plushgiraffe', 'plushpenguin'];
 const LEAGUES = {
   football: { e: '🏈', zh: '橄榄球', en: 'Football', hour: 13, len: 3, score: 'football', teams: [
     { t: 'wutong', e: '🐻', zh: '熊', en: 'Bears', c: ['#7a2e2e', '#f2c230'] }, { t: 'vermont', e: '🐎', zh: '野马', en: 'Mustangs', c: ['#e9a23b', '#1f3a6b'] },
-    { t: 'palmbay', e: '🦈', zh: '鲨鱼', en: 'Sharks', c: ['#1e8fa8', '#f4efe4'] }, { t: 'cactus', e: '🐍', zh: '响尾蛇', en: 'Rattlers', c: ['#c8653c', '#2d2d2d'] },
-    { t: 'banff', e: '🐺', zh: '雪狼', en: 'Wolves', c: ['#4a5a78', '#c9cfd6'] }, { t: 'sydney', e: '⚡', zh: '雷霆', en: 'Thunder', c: ['#5a2d82', '#f2c230'] },
+    { t: 'palmbay', e: '🦈', zh: '鲨鱼', en: 'Sharks', c: ['#1e8fa8', '#f4efe4'] }, { t: 'provence', e: '🐂', zh: '斗牛', en: 'Toros', c: ['#c8653c', '#2d2d2d'] },
+    { t: 'seoul', e: '🐺', zh: '雪狼', en: 'Wolves', c: ['#4a5a78', '#c9cfd6'] }, { t: 'sydney', e: '⚡', zh: '雷霆', en: 'Thunder', c: ['#5a2d82', '#f2c230'] },
     { t: 'london', e: '🏴‍☠️', zh: '海盗', en: 'Pirates', c: ['#2d2d2d', '#e5484d'] }, { t: 'capetown', e: '🦬', zh: '野牛', en: 'Bison', c: ['#6b4428', '#e8dcc4'] },
-    { t: 'rio', e: '🦅', zh: '海鹰', en: 'Seahawks', c: ['#1f3a6b', '#7fd36a'] }, { t: 'fjord', e: '🪓', zh: '伐木工', en: 'Lumberjacks', c: ['#2e6b3a', '#f4efe4'] }] },
-  soccer: { e: '⚽', zh: '足球', en: 'Soccer', hour: 15, len: 2, score: 'soccer', teams: [
+    { t: 'rio', e: '🦅', zh: '海鹰', en: 'Seahawks', c: ['#1f3a6b', '#7fd36a'] }, { t: 'kyoto', e: '⚔️', zh: '武士', en: 'Samurai', c: ['#2e6b3a', '#f4efe4'] }] },
+  soccer: { e: '⚽', zh: '足球', en: 'Soccer', hour: 16, len: 2, score: 'soccer', teams: [
     { t: 'wutong', e: '🦁', zh: '联', en: 'United', c: ['#c9433b', '#ffffff'] }, { t: 'london', e: '🦉', zh: '竞技', en: 'Athletic', c: ['#2f4a8a', '#ffffff'] },
-    { t: 'holland', e: '🌷', zh: '郁金香', en: 'Tulips', c: ['#f28c28', '#ffffff'] }, { t: 'provence', e: '🌻', zh: '向日葵', en: 'Sunflowers', c: ['#f2c230', '#2f4a8a'] },
-    { t: 'rio', e: '🐦', zh: '金丝雀', en: 'Canaries', c: ['#f2c230', '#2e9b5a'] }, { t: 'andes', e: '☕', zh: '咖啡人', en: 'Coffee Growers', c: ['#6b4428', '#f2c230'] },
+    { t: 'vermont', e: '🍁', zh: '红枫', en: 'Red Maples', c: ['#f28c28', '#ffffff'] }, { t: 'provence', e: '🌻', zh: '向日葵', en: 'Sunflowers', c: ['#f2c230', '#2f4a8a'] },
+    { t: 'rio', e: '🐦', zh: '金丝雀', en: 'Canaries', c: ['#f2c230', '#2e9b5a'] }, { t: 'palmbay', e: '🐊', zh: '鳄鱼', en: 'Gators', c: ['#6b4428', '#f2c230'] },
     { t: 'capetown', e: '⭐', zh: '星辰', en: 'Stars', c: ['#2d2d2d', '#f2c230'] }, { t: 'seoul', e: '🐯', zh: '猛虎', en: 'Tigers', c: ['#e5484d', '#1f3a6b'] },
     { t: 'kyoto', e: '🌸', zh: '樱花', en: 'Blossoms', c: ['#e98bb0', '#ffffff'] }, { t: 'sydney', e: '🐬', zh: '海豚', en: 'Dolphins', c: ['#38a3e0', '#ffffff'] }] },
   baseball: { e: '⚾', zh: '棒球', en: 'Baseball', hour: 18, len: 3, score: 'baseball', teams: [
     { t: 'wutong', e: '🧦', zh: '红袜', en: 'Red Socks', c: ['#c9433b', '#1f3a6b'] }, { t: 'vermont', e: '🐦', zh: '蓝鸟', en: 'Blue Jays', c: ['#2f6fb2', '#ffffff'] },
-    { t: 'palmbay', e: '⛵', zh: '海盗船', en: 'Buccaneers', c: ['#2d2d2d', '#f2c230'] }, { t: 'cactus', e: '☀️', zh: '太阳', en: 'Suns', c: ['#f28c28', '#5a2d82'] },
-    { t: 'banff', e: '🦫', zh: '河狸', en: 'Beavers', c: ['#8a5a36', '#f4efe4'] }, { t: 'kyoto', e: '🐯', zh: '老虎', en: 'Tigers', c: ['#f2c230', '#2d2d2d'] },
-    { t: 'seoul', e: '🦡', zh: '獾', en: 'Badgers', c: ['#5b6470', '#ffffff'] }, { t: 'hangzhou', e: '✨', zh: '星辰', en: 'Stars', c: ['#1f3a6b', '#f2c230'] },
-    { t: 'andes', e: '☄️', zh: '彗星', en: 'Comets', c: ['#5a2d82', '#f2c230'] }, { t: 'rio', e: '🦭', zh: '海狮', en: 'Sea Lions', c: ['#1e8fa8', '#c9cfd6'] }] },
-  hockey: { e: '🏒', zh: '冰球', en: 'Hockey', hour: 19, len: 2.5, score: 'hockey', teams: [
+    { t: 'palmbay', e: '⛵', zh: '海盗船', en: 'Buccaneers', c: ['#2d2d2d', '#f2c230'] }, { t: 'sydney', e: '☀️', zh: '太阳', en: 'Suns', c: ['#f28c28', '#5a2d82'] },
+    { t: 'london', e: '💂', zh: '卫兵', en: 'Guards', c: ['#8a5a36', '#f4efe4'] }, { t: 'kyoto', e: '🐯', zh: '老虎', en: 'Tigers', c: ['#f2c230', '#2d2d2d'] },
+    { t: 'seoul', e: '🦡', zh: '獾', en: 'Badgers', c: ['#5b6470', '#ffffff'] }, { t: 'capetown', e: '🐧', zh: '企鹅', en: 'Penguins', c: ['#1f3a6b', '#f2c230'] },
+    { t: 'provence', e: '☄️', zh: '彗星', en: 'Comets', c: ['#5a2d82', '#f2c230'] }, { t: 'rio', e: '🦭', zh: '海狮', en: 'Sea Lions', c: ['#1e8fa8', '#c9cfd6'] }] },
+  hockey: { e: '🏒', zh: '冰球', en: 'Hockey', hour: 17, len: 2.5, score: 'hockey', teams: [
     { t: 'wutong', e: '🍁', zh: '枫叶', en: 'Maple Leafs', c: ['#1f3a6b', '#ffffff'] }, { t: 'vermont', e: '🦌', zh: '驼鹿', en: 'Moose', c: ['#6b4428', '#f2c230'] },
-    { t: 'banff', e: '🐻‍❄️', zh: '北极熊', en: 'Polar Bears', c: ['#f4f6f8', '#2f6fb2'] }, { t: 'fjord', e: '🛡️', zh: '维京人', en: 'Vikings', c: ['#2e6b3a', '#f2c230'] },
-    { t: 'holland', e: '⛸️', zh: '冰刀', en: 'Skaters', c: ['#f28c28', '#2d2d2d'] }, { t: 'london', e: '🦅', zh: '鱼鹰', en: 'Ospreys', c: ['#2d2d2d', '#e5484d'] },
+    { t: 'palmbay', e: '🐆', zh: '美洲豹', en: 'Panthers', c: ['#f4f6f8', '#2f6fb2'] }, { t: 'rio', e: '🔥', zh: '烈焰', en: 'Flames', c: ['#2e6b3a', '#f2c230'] },
+    { t: 'sydney', e: '⛸️', zh: '冰刀', en: 'Skaters', c: ['#f28c28', '#2d2d2d'] }, { t: 'london', e: '🦅', zh: '鱼鹰', en: 'Ospreys', c: ['#2d2d2d', '#e5484d'] },
     { t: 'seoul', e: '🐆', zh: '雪豹', en: 'Snow Leopards', c: ['#c9cfd6', '#2d2d2d'] }, { t: 'kyoto', e: '❄️', zh: '暴风雪', en: 'Blizzard', c: ['#5a2d82', '#c9cfd6'] },
-    { t: 'hangzhou', e: '🦉', zh: '雪鸮', en: 'Snowy Owls', c: ['#e8dcc4', '#2d2d2d'] }, { t: 'provence', e: '🏔️', zh: '冰川', en: 'Glaciers', c: ['#38a3e0', '#ffffff'] }] },
+    { t: 'capetown', e: '🐋', zh: '鲸鱼', en: 'Whales', c: ['#e8dcc4', '#2d2d2d'] }, { t: 'provence', e: '🏔️', zh: '冰川', en: 'Glaciers', c: ['#38a3e0', '#ffffff'] }] },
   basketball: { e: '🏀', zh: '篮球', en: 'Basketball', hour: 20, len: 2.5, score: 'basketball', teams: [
     { t: 'wutong', e: '🚀', zh: '火箭', en: 'Rockets', c: ['#e5484d', '#c9cfd6'] }, { t: 'palmbay', e: '🌊', zh: '海浪', en: 'Waves', c: ['#38a3e0', '#ffffff'] },
-    { t: 'cactus', e: '🔥', zh: '凤凰', en: 'Phoenix', c: ['#f28c28', '#5a2d82'] }, { t: 'vermont', e: '🐂', zh: '公牛', en: 'Bulls', c: ['#c9433b', '#2d2d2d'] },
-    { t: 'sydney', e: '⛈️', zh: '雷鸣', en: 'Thunder', c: ['#2f6fb2', '#f28c28'] }, { t: 'hangzhou', e: '🐼', zh: '熊猫', en: 'Pandas', c: ['#2d2d2d', '#ffffff'] },
+    { t: 'london', e: '🦁', zh: '雄狮', en: 'Lions', c: ['#f28c28', '#5a2d82'] }, { t: 'vermont', e: '🐂', zh: '公牛', en: 'Bulls', c: ['#c9433b', '#2d2d2d'] },
+    { t: 'sydney', e: '⛈️', zh: '雷鸣', en: 'Storm', c: ['#2f6fb2', '#f28c28'] }, { t: 'kyoto', e: '🦌', zh: '神鹿', en: 'Deer', c: ['#2d2d2d', '#ffffff'] },
     { t: 'seoul', e: '🐉', zh: '青龙', en: 'Dragons', c: ['#2e9b5a', '#f2c230'] }, { t: 'provence', e: '👑', zh: '国王', en: 'Kings', c: ['#5a2d82', '#c9cfd6'] },
     { t: 'rio', e: '🦜', zh: '鹦鹉', en: 'Macaws', c: ['#2e9b5a', '#e5484d'] }, { t: 'capetown', e: '🦊', zh: '狐狸', en: 'Foxes', c: ['#f28c28', '#ffffff'] }] },
 };
@@ -2057,7 +2124,7 @@ const SEASON = { days: 36, rest: 3, epoch: new Date(2026, 10, 2).getTime(), star
 // chance. chips: the stakes; dayMax: the most you can stake in a day. In calm mode there's no betting.
 const BETS = { chips: [10, 50, 100, 500], dayMax: 2000, margin: 0.06, minOdds: 1.05, keep: 40 };
 const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas', 'tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist',
-  'hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium'];   // v0.37 / v0.38 / v0.41 / v0.42: + the new ones
+  'hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium', 'arena'];   // v0.37 / v0.38 / v0.41 / v0.42: + the new ones
 // The fire station's tips, one a day.
 const FIRE_TIPS = [
   { zh: '家里装一个烟雾报警器，每个月按一下试试。', en: 'Fit a smoke alarm at home and press its test button once a month.' },

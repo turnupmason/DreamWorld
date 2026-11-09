@@ -9,37 +9,40 @@ const AR_CACHE = {};
 const arTeamIn = (sp, town) => LEAGUES[sp].teams.findIndex(T => T.t === town);
 // a town's own team (for the batting cage and the like): its baseball team, or its first team in another league
 function townTeam(town) {
-  for (const sp of ['baseball', ...SPORT_KEYS]) { const i = arTeamIn(sp, town); if (i >= 0) return { sp, i, T: lgTeam(sp, i) }; }
+  const tc = homeCity(town);   // v0.59: a town without teams cheers for its nearest city
+  for (const sp of ['baseball', ...SPORT_KEYS]) { const i = arTeamIn(sp, tc); if (i >= 0) return { sp, i, T: lgTeam(sp, i) }; }
   return { sp: 'soccer', i: 0, T: lgTeam('soccer', 0) };
 }
-// Today's games at the stadium in `town`: the town's home games first, then one of the round's other games in each
-// sport (a different one each day); only as many as fit one after another (it's one field), so usually one in the
-// afternoon and one in the evening.
-function arenaDay(town) {
-  const si = seasonNow(); if (allOff()) return [];
-  const ti = Object.keys(COMMUNITIES).indexOf(town) + 1, all = [];
-  SPORT_KEYS.forEach((sp, k) => {
-    const games = todayGames(sp); if (!games.length) return;
-    const own = games.find(G => G.h === arTeamIn(sp, town));
-    const G = own || games[Math.floor(lgRand(si.s * 53 + si.day, ti, k + 31) * games.length)];
-    all.push({ ...G, kind: own ? 'home' : 'guest', pri: own ? 0 : 1 + lgRand(si.day, ti, k + 41) });
+// v0.59 (Mason #30): a team city's home games, at its own venues: the stadium has the outdoor sports, the arena
+// (hockey, basketball) the indoor ones; where a city has no arena yet, the stadium takes those too (only as many as
+// fit one after another). A town without pro teams has none (it's no one's home).
+const AR_INDOOR = ['hockey', 'basketball'];
+const curVenue = () => (typeof UI !== 'undefined' && UI.inVenue === 'arena' ? 'arena' : 'stadium');
+const townHasArena = town => (layoutOf(town).stores || []).some(st => st[0] === 'arena');
+function arenaDay(town, venue = 'stadium') {
+  if (allOff() || !isTeamCity(town)) return [];
+  const indoorHere = venue === 'arena' || !townHasArena(town), all = [];
+  SPORT_KEYS.forEach(sp => {
+    if (AR_INDOOR.includes(sp) ? !indoorHere : venue === 'arena') return;
+    const own = todayGames(sp).find(G => G.h === arTeamIn(sp, town));
+    if (own) all.push({ ...own, kind: 'home', venue });
   });
   const keep = [];
-  all.sort((a, b) => a.pri - b.pri).forEach(G => { if (!keep.some(K => G.start < K.end && K.start < G.end)) keep.push(G); });
-  return keep.sort((a, b) => a.start - b.start);
+  all.sort((a, b) => a.start - b.start).forEach(G => { if (!keep.some(K => G.start < K.end && K.start < G.end)) keep.push(G); });
+  return keep;
 }
 // The game at the stadium now: the one that's on; or the one that just finished (for 45 minutes); or the next one.
-function arenaNow(town, ms = now()) {
-  const sec = Math.floor(ms / 1000), c = AR_CACHE[town];
+function arenaNow(town, ms = now(), venue = curVenue()) {
+  const sec = Math.floor(ms / 1000), ck = town + '|' + venue, c = AR_CACHE[ck];
   if (c && c.sec === sec) return c.v;
-  const day = arenaDay(town);
+  const day = arenaDay(town, venue);
   let v;
   if (day.length) {
     const live = day.find(G => ms >= G.start && ms < G.end), done = day.filter(G => ms >= G.end).pop(), next = day.find(G => G.start > ms);
     v = live ? arenaState(live, ms, 'live') : done && (!next || ms - done.end < 0.75 * HOUR) ? arenaState(done, ms, 'done') : next ? arenaState(next, ms, 'soon') : arenaState(done, ms, 'done');
     v.day = day;
-  } else v = { off: true, day: [], si: SPORT_KEYS.map(k => seasonNow(ms, k)).sort((a, b) => a.left - b.left)[0], none: !allOff(ms) };   // v0.58: none = no game here today (it isn't the break)
-  AR_CACHE[town] = { sec, v };
+  } else v = { off: true, day: [], si: SPORT_KEYS.map(k => seasonNow(ms, k)).sort((a, b) => a.left - b.left)[0], none: !allOff(ms), noTeam: !isTeamCity(town) };   // v0.58: none = no game here today (it isn't the break); v0.59: noTeam = a town with no pro teams
+  AR_CACHE[ck] = { sec, v };
   return v;
 }
 // how a game stands at a moment: the score so far, the last score (for 40 seconds: the fans of that team go wild),

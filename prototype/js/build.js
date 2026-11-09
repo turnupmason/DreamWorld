@@ -2115,6 +2115,7 @@ function drawStore(st, ts) {
   } else if (k === 'amuse') b = drawAmusement(G, x, y, w, d, ts);   // v0.41: rides in the open
   else if (k === 'zoo') b = drawZoo(G, x, y, w, d, ts);   // v0.42: animals in the open
   else if (k === 'stadium') b = drawStadium(G, x, y, w, d, ts);   // v0.42: an open bowl
+  else if (k === 'arena') b = drawArenaHall(G, x, y, w, d, ts);   // v0.59: the indoor arena
   else if (CIVIC_WH[k]) b = drawCivic(k, G, x, y, w, d, wh, ts);   // v0.38: the new district's buildings
   else {
     const LS = localShop(), wallC = LS && !['dealer', 'mall', 'police', 'firestation', 'gas'].includes(k) ? localWall(LS, k) : S2.wall;   // v0.53: shops in the local style (the car showroom, the mall and the emergency services stay as they are)
@@ -2405,7 +2406,8 @@ function drawZoo(G, x, y, w, d, ts) {
 // over the far stands and flags on top
 function drawStadium(G, x, y, w, d, ts) {
   const z = cam.z, cx = x + w / 2, cy = y + d / 2, RX = w / 2 - 0.2, RY = d / 2 - 0.2, e = 0.5, H = 34, h0 = 8, N = 72;
-  const town = SCENE_TOWN, A = arenaNow(town), lit = NIGHT > 0.3, full = !A.off && A.state === 'live';   // v0.55: the league game (arena.js)
+  const town = SCENE_TOWN, A = arenaNow(town, now(), 'stadium'), lit = NIGHT > 0.3, full = !A.off && A.state === 'live';   // v0.55: the league game (arena.js)
+  const LK = STADIUM_LOOK[town] || { roof: 'open', wall: '#d8dde3', trim: null }, wallC = LK.wall;   // v0.59: each city's own stadium
   const own = townTeam(town).T, HT = !A.off ? lgTeam(A.sp, A.h) : own, AT = !A.off ? lgTeam(A.sp, A.a) : own, team = { col: HT.c[0] };
   const pt = (a, f) => { const c = Math.cos(a), s = Math.sin(a); return [cx + f * RX * Math.sign(c) * Math.pow(Math.abs(c), e), cy + f * RY * Math.sign(s) * Math.pow(Math.abs(s), e)]; };
   flatRect(x, y, w, d, '#cfd3d8');
@@ -2432,9 +2434,17 @@ function drawStadium(G, x, y, w, d, ts) {
     const m0 = pt(sg.a0, 1), m1 = pt(sg.a1, 1), nx = (m0[0] + m1[0]) / 2 - cx, ny = (m0[1] + m1[1]) / 2 - cy;
     if (nx / RX + ny / RY <= 0) return;
     const a = iso(...m0), b = iso(...m1), side = nx / RX > ny / RY;
-    poly([a, b, up(b, H * z), up(a, H * z)], side ? shade('#d8dde3', -0.12) : '#e4e8ec');
-    line(a.x, a.y - (H - 4) * z, b.x, b.y - (H - 4) * z, team.col, 3 * z);
-    if (sg.i % 2) { const c = lerp(a, b, 0.5); rrect(c.x - 2 * z, c.y - 16 * z, 4 * z, 13 * z, 2 * z, lit ? '#ffe39a' : '#8e99a6'); }
+    poly([a, b, up(b, H * z), up(a, H * z)], side ? shade(wallC, -0.12) : shade(wallC, 0.03));
+    line(a.x, a.y - (H - 4) * z, b.x, b.y - (H - 4) * z, LK.trim || team.col, 3 * z);
+    const c = lerp(a, b, 0.5), win = lit ? '#ffe39a' : LK.roof === 'brick' ? '#f4efe4' : '#8e99a6';
+    if (LK.roof === 'arches' || LK.roof === 'brick') {   // v0.59: a Roman arena's two rows of stone arches; an old ballpark's brick arches
+      const segW = Math.hypot(b.x - a.x, b.y - a.y);
+      [[3, 15], [18, 30]].forEach(([h0, h1], row) => { if (LK.roof === 'brick' && row) return; const ww = Math.max(1.2 * z, segW * 0.34), top = c.y - h1 * z; ctx.fillStyle = lit ? '#ffe39a' : row ? '#6b5a40' : '#4a3d2c'; ctx.beginPath(); ctx.moveTo(c.x - ww, c.y - h0 * z); ctx.lineTo(c.x - ww, top + ww); ctx.arc(c.x, top + ww, ww, Math.PI, 0); ctx.lineTo(c.x + ww, c.y - h0 * z); ctx.closePath(); ctx.fill(); });
+      if (LK.roof === 'brick' && z > 0.3) for (let r = 1; r < 6; r++) { const q0 = up(a, r * 5 * z), q1 = up(b, r * 5 * z); line(q0.x, q0.y, q1.x, q1.y, 'rgba(255,255,255,.18)', 0.5 * z); }
+    } else if (LK.roof === 'weave') {   // a woven skin: crossing diagonal ribbons over a warm glow
+      for (let k = 0; k < 3; k++) { const u0 = k / 3, u1 = (k + 1) / 3; line(lerp(a, b, u0).x, lerp(a, b, u0).y - 2 * z, lerp(a, b, u1).x, lerp(a, b, u1).y - (H - 6) * z, 'rgba(255,255,255,.75)', 1 * z); line(lerp(a, b, u0).x, lerp(a, b, u0).y - (H - 6) * z, lerp(a, b, u1).x, lerp(a, b, u1).y - 2 * z, 'rgba(255,255,255,.75)', 1 * z); }
+    } else if (sg.i % 2) rrect(c.x - 2 * z, c.y - 16 * z, 4 * z, 13 * z, 2 * z, win);
+    if (LK.roof === 'ring') { const hue = (ts / 30 + sg.i * 6) % 360; line(a.x, a.y - (H + 1) * z, b.x, b.y - (H + 1) * z, `hsl(${hue},85%,${lit ? 62 : 55}%)`, 2.6 * z); }   // a ring of light that changes colour
   });
   // the scoreboard over the far stands
   { const sb = up(iso(...pt(Math.PI * 1.25, 1.0)), H * z), W2 = 30 * z, H2 = 16 * z;
@@ -2442,14 +2452,84 @@ function drawStadium(G, x, y, w, d, ts) {
     rrect(sb.x - W2 / 2, sb.y - 12 * z - H2, W2, H2, 2 * z, '#1d1d22', '#5b6470', 0.8 * z);
     if (z > 0.3) { ctx.font = `900 ${Math.max(5, 6.5 * z)}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffd36b';
       ctx.fillText(!A.off && A.state !== 'soon' ? `${A.score[1]} : ${A.score[0]}` : '– : –', sb.x, sb.y - 12 * z - H2 / 2); } }
+  stadiumRoof(LK, pt, segs, cx, cy, RX, RY, H, z, ts, lit);   // v0.59: the city's own roof
   corners.slice(2).forEach(tower);
+  if (z > 0.3 && STADIUM_LOOK[town]) {   // its name over the gate
+    const g = up(iso(...pt(Math.PI * 0.25, 1.0)), (H * 0.62) * z), txt = nm(LK); ctx.font = `900 ${Math.max(7, 8.5 * z)}px ${UI_FONT}`; const tw = ctx.measureText(txt).width + 8 * z;
+    rrect(g.x - tw / 2, g.y - 7.5 * z, tw, 15 * z, 3 * z, LK.trim || team.col); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, g.x, g.y + 0.5 * z);
+  }
   [0.3, 0.5, 0.7].forEach((u, i) => { const p = up(iso(...pt(Math.PI * (0.15 + u), 1)), H * z), wv = Math.sin(ts / 500 + i) * 2 * z; line(p.x, p.y, p.x, p.y - 14 * z, '#c9cfd6', 0.8 * z); pg([[p.x, p.y - 14 * z], [p.x + 8 * z + wv, p.y - 12 * z], [p.x, p.y - 9 * z]], i % 2 ? team.col : '#ffffff'); });
+  return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
+}
+// v0.59 (Mason #30: "every city's stadium different, with the city's own character"): the roof on top of the bowl.
+// canopy / pagoda: a ring roof over the stands (white membrane; dark tiles with upturned eaves and gold tips, and a
+// red torii at the gate); arch: a great white arch over the long side; shells: white shells rising over the far
+// stands; weave: a white canopy over the woven wall; ring: a halo of light floating over it.
+function stadiumRoof(LK, pt, segs, cx, cy, RX, RY, H, z, ts, lit) {
+  const r = LK.roof;
+  if (r === 'canopy' || r === 'pagoda' || r === 'weave' || r === 'ring') {
+    const col = r === 'pagoda' ? '#3d4650' : r === 'ring' ? 'rgba(235,240,246,.55)' : 'rgba(250,251,252,.93)', edge = r === 'pagoda' ? 9 : 6;
+    segs.forEach(sg => {
+      const o0 = up(iso(...pt(sg.a0, 1.05)), (H + edge) * z), o1 = up(iso(...pt(sg.a1, 1.05)), (H + edge) * z), i0 = up(iso(...pt(sg.a0, 0.8)), (H + 3) * z), i1 = up(iso(...pt(sg.a1, 0.8)), (H + 3) * z);
+      poly([o0, o1, i1, i0], sg.k < 0 ? col : r === 'pagoda' ? '#4a5462' : col);
+      if (r === 'pagoda' && z > 0.3) line(o0.x, o0.y, o1.x, o1.y, '#2a3038', 1.4 * z);
+      if (r === 'ring' && z > 0.2) { const hue = (ts / 30 + sg.i * 6) % 360; line(o0.x, o0.y, o1.x, o1.y, `hsl(${hue},90%,62%)`, 2 * z); }
+    });
+    if (r === 'pagoda') {   // gold tips at the corners, a red torii at the gate
+      [0.25, 0.75, 1.25, 1.75].forEach(a => { const q = up(iso(...pt(Math.PI * a, 1.07)), (H + 15) * z); circle(q.x, q.y, 2.4 * z, '#e8b84a'); });
+      const g = iso(...pt(Math.PI * 0.25, 1.22)), pw = 9 * z;
+      [-1, 1].forEach(sd => line(g.x + sd * pw, g.y, g.x + sd * pw, g.y - 22 * z, '#c9433b', 2.4 * z));
+      line(g.x - pw - 4 * z, g.y - 22 * z, g.x + pw + 4 * z, g.y - 23 * z, '#2a2a2a', 2.6 * z); line(g.x - pw - 1 * z, g.y - 17 * z, g.x + pw + 1 * z, g.y - 17 * z, '#c9433b', 2 * z);
+    }
+  } else if (r === 'arch') {   // the arch springs from two corners and leans over the stands
+    const A0 = pt(Math.PI * 0.75, 1.1), A1 = pt(Math.PI * 1.75, 1.1), N = 28, pts = [];
+    for (let k = 0; k <= N; k++) { const u = k / N, h = Math.sin(u * Math.PI) * 340; pts.push(up(iso(A0[0] + (A1[0] - A0[0]) * u, A0[1] + (A1[1] - A0[1]) * u), h * z)); }
+    for (let k = 3; k < N - 2; k += 3) { const q = pts[k], m = iso(...pt(Math.PI * (0.75 + k / N), 0.95)); line(q.x, q.y, m.x, m.y - H * z, 'rgba(200,205,212,.6)', 0.5 * z); }   // its cables to the roof
+    for (let k = 0; k < N; k++) line(pts[k].x, pts[k].y, pts[k + 1].x, pts[k + 1].y, '#9aa3ad', 8 * z);
+    for (let k = 0; k < N; k++) line(pts[k].x, pts[k].y - 1 * z, pts[k + 1].x, pts[k + 1].y - 1 * z, '#ffffff', 5.5 * z);
+    if (z > 0.3) for (let k = 1; k < N; k += 2) circle(pts[k].x, pts[k].y, 0.9 * z, '#c9cfd6');
+  } else if (r === 'shells') {   // three white shells over the far side
+    [1.0, 1.22, 1.44].forEach((a, k) => {
+      const b0 = pt(Math.PI * (a - 0.1), 1.0), b1 = pt(Math.PI * (a + 0.1), 1.0), tip = pt(Math.PI * a, 0.9), hh = 120 - k * 14;   // standing up over the far stands
+      const P0 = up(iso(...b0), H * z), P1 = up(iso(...b1), H * z), T = up(iso(...tip), (H + hh) * z);
+      const q2 = (A2, C2, B2, u) => ({ x: (1 - u) * (1 - u) * A2.x + 2 * (1 - u) * u * C2.x + u * u * B2.x, y: (1 - u) * (1 - u) * A2.y + 2 * (1 - u) * u * C2.y + u * u * B2.y });
+      const C0 = { x: (P0.x + T.x) / 2 - 8 * z, y: (P0.y + T.y) / 2 }, C1 = { x: (P1.x + T.x) / 2 + 8 * z, y: (P1.y + T.y) / 2 }, shape = [];
+      for (let u = 0; u <= 1.001; u += 0.125) shape.push(q2(P0, C0, T, u));
+      for (let u = 1; u >= -0.001; u -= 0.125) shape.push(q2(P1, C1, T, u));
+      poly(shape, k === 1 ? '#ffffff' : '#f1efe8', 'rgba(150,155,160,.7)', 0.8 * z);
+      for (let q = 1; q < 4; q++) { const m = lerp(P0, P1, q / 4); line(m.x, m.y, T.x, T.y, 'rgba(150,155,160,.55)', 0.6 * z); }
+    });
+  }
+}
+// v0.59: the arena (hockey and basketball, indoors): an oval hall with a glass band, a big screen over the door and a
+// shallow dome in the city's colours; its name on the front.
+function drawArenaHall(G, x, y, w, d, ts) {
+  const z = cam.z, cx = x + w / 2, cy = y + d / 2, RX = w / 2 - 0.3, RY = d / 2 - 0.3, H = 30, N = 56, town = SCENE_TOWN, lit = NIGHT > 0.3;
+  const A = arenaNow(town, now(), 'arena'), LK = STADIUM_LOOK[town] || { trim: '#5a2d82', wall: '#c9d2dc' }, col = LK.trim || '#5a2d82';
+  const pt = (a, f, h = 0) => up(iso(cx + Math.cos(a) * RX * f, cy + Math.sin(a) * RY * f), h * z);
+  flatRect(x, y, w, d, '#cfd3d8');
+  const front = Array.from({ length: N }, (_, i) => ({ a0: i / N * Math.PI * 2, a1: (i + 1) / N * Math.PI * 2 })).filter(sg => Math.cos((sg.a0 + sg.a1) / 2) / RX + Math.sin((sg.a0 + sg.a1) / 2) / RY > 0);
+  poly(Array.from({ length: N }, (_, i) => pt(i / N * Math.PI * 2, 1, H)), shade(LK.wall || '#c9d2dc', 0.08));   // the roof rim
+  front.sort((p, q) => Math.cos(p.a0) + Math.sin(p.a0) - Math.cos(q.a0) - Math.sin(q.a0)).forEach(sg => {
+    const a = pt(sg.a0, 1), b = pt(sg.a1, 1), sideways = Math.cos((sg.a0 + sg.a1) / 2) > Math.sin((sg.a0 + sg.a1) / 2);
+    poly([a, b, up(b, H * z), up(a, H * z)], sideways ? shade(LK.wall || '#c9d2dc', -0.12) : (LK.wall || '#c9d2dc'));
+    poly([up(a, 9 * z), up(b, 9 * z), up(b, 19 * z), up(a, 19 * z)], lit ? '#ffe39a' : '#9fd0ea');   // the glass band
+    line(a.x, a.y - (H - 3) * z, b.x, b.y - (H - 3) * z, col, 3 * z);
+  });
+  for (let k = 0; k < 4; k++) { const f = 1 - k * 0.22; poly(Array.from({ length: N }, (_, i) => pt(i / N * Math.PI * 2, f, H + 3 + k * 4)), k % 2 ? '#eef1f4' : shade(col, 0.45 + k * 0.08)); }   // the dome
+  const sc = pt(Math.PI * 0.25, 1, H * 0.45), W2 = 26 * z, H2 = 12 * z;   // the screen over the door
+  rrect(sc.x - W2 / 2, sc.y - H2, W2, H2, 2 * z, '#1d1d22', col, 1 * z);
+  if (z > 0.3) { ctx.font = `900 ${Math.max(5, 6 * z)}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffd36b';
+    ctx.fillText(!A.off && A.state !== 'soon' ? `${LEAGUES[A.sp].e} ${A.score[1]} : ${A.score[0]}` : !A.off ? `${LEAGUES[A.sp].e} ${fmtHM(A.start)}` : '🏒 🏀', sc.x, sc.y - H2 / 2);
+    const nmTxt = isTeamCity(town) ? t('arena_name', { c: nm(COMMUNITIES[town]) }) : t('arena_town'); ctx.font = `900 ${Math.max(5, 5.5 * z)}px ${UI_FONT}`; const tw = ctx.measureText(nmTxt).width + 8 * z, g = pt(Math.PI * 0.25, 1, 24);
+    rrect(g.x - tw / 2, g.y - 5 * z, tw, 10 * z, 3 * z, col); ctx.fillStyle = '#fff'; ctx.fillText(nmTxt, g.x, g.y + 0.5 * z); }
+  if (lit && !A.off && A.state === 'live') glow(cx, cy, 80 * z, 0.4);
   return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
 }
 // v0.38: the new district's buildings: a hospital (floors of windows, a red cross, a helipad), a bowling alley (a
 // giant pin on the roof), a swimming centre (a glass front and a glass roof), a museum (columns and a pediment) and a
 // train station (brick, with a clock tower). G: storeGeo; returns the box like box() does.
-const CIVIC_WH = { hospital: 62, bowling: 30, aquatic: 26, museum: 34, station: 30, amuse: 150, zoo: 60, stadium: 74 };   // v0.42: + the zoo, the stadium
+const CIVIC_WH = { hospital: 62, bowling: 30, aquatic: 26, museum: 34, station: 30, amuse: 150, zoo: 60, stadium: 74, arena: 50 };   // v0.42: + the zoo, the stadium
 function drawCivic(k, G, x, y, w, d, wh, ts) {
   const S2 = STORES[k], z = cam.z, side = G.front === 'E' || G.front === 'W', showDoor = G.front === 'S' || G.front === 'E', lit = NIGHT > 0.3;
   const glass = lit ? '#ffe39a' : '#a9dcf5', zh = curLang() === 'zh';

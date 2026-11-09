@@ -3225,6 +3225,7 @@ const Scene = (() => {
     station:    { wall: '#efe2d2', roof: '#3d4a66', floor: ['#d9d4ca', '#cfc9bd'], till: '🎫', clerk: { shirt: '#3d4a66', top: 'jacket', inner: '#f4f4f0', hat: 'cap', hatCol: '#3d4a66' } },
     amuse:      { wall: '#f4ead8', roof: '#e5484d', floor: ['#a6d67f', '#9ccf76'], till: '🎟️', clerk: { shirt: '#e5484d', top: 'polo', hat: 'cap', hatCol: '#f2c230' } },   // v0.41
     zoo:        { wall: '#efe3c4', roof: '#3f8a4a', floor: ['#b9d98a', '#b2d483'], till: '🎟️', clerk: { shirt: '#4f7a3a', top: 'polo', hat: 'cap', hatCol: '#c9b08a' } },   // v0.42
+    arena:      { wall: '#c9d2dc', roof: '#e8edf2', floor: ['#cfd3d8', '#c8ccd1'], till: '🎟️', clerk: { shirt: '#5a2d82', top: 'polo', hat: 'cap', hatCol: '#5a2d82' } },   // v0.59
     stadium:    { wall: '#d8dde3', roof: '#2f5fa8', floor: ['#cfd3d8', '#c8ccd1'], till: '🎟️', clerk: { shirt: '#2f5fa8', top: 'polo', hat: 'cap', hatCol: '#2f5fa8' } },   // v0.42
     suite:      { wall: '#f4ead8', roof: '#b08d57', floor: ['#c9a27a', '#bf9670'], till: '🛎️', clerk: { shirt: '#8a2a34', top: 'jacket' } },
   };
@@ -3607,14 +3608,14 @@ const Scene = (() => {
       guest(2.2, 12.9, { view: 'back', turn: [-0.2, -1] }); who(8.8, 12.9, { view: 'back', turn: [0.1, -1], scale: 0.72, look: 5 }); guest(20.2, 12.8, { view: 'back', turn: [0.2, -1] });
       who(5.5, 12.6, { staff: true, face: -1, prop: '🪣', look: { shirt: '#4f7a3a', top: 'polo', hat: 'cap', hatCol: '#c9b08a', hair: 'short', hairCol: '#2b1d14', skin: '#d39a6c' } });
       P = { RW: 22, RD: 18, door: [11, 17.4], counter: { x: 13.0, y: 15.0, w: 2.8, d: 0.9 }, open: true };
-    } else if (k === 'stadium') {   // v0.42: tiers of seats on two sides of the field, the scoreboard in the corner; along the front the hot dog stand and the batting cage
+    } else if (k === 'stadium' || k === 'arena') {   // v0.42: (v0.59: the arena is laid out the same, indoors, without the batting cage) tiers of seats on two sides of the field, the scoreboard in the corner; along the front the hot dog stand and the batting cage
       dec('standsback', 3.2, 0.1, 20.7, 2.9, { flat: true });
       dec('pitch', 3.7, 3.5, 19.9, 10.2, { flat: true });
       spot('board', 0.1, 0.1, 2.9, 2.9, { draw: 'scoreboard', stand: [4.4, 15.2] });
       spot('seats', 0.1, 3.1, 2.9, 11.4, { draw: 'stands', stand: [3.3, 15.0], use: { at: [3.3, 15.0], pose: 'sit', ride: 'seats' } });
       spot('hotdog', 9.4, 15.0, 1.8, 1.0, { draw: 'hotdogstand', stand: [10.3, 16.6] });
       spot('bets', 0.9, 15.0, 2.4, 1.0, { draw: 'betbooth', stand: [2.1, 16.7] });   // v0.57: the betting window (the only place with odds)
-      spot('cage', 17.8, 14.7, 5.4, 2.4, { draw: 'battingcage', stand: [20.5, 17.4] });
+      if (k === 'stadium') spot('cage', 17.8, 14.7, 5.4, 2.4, { draw: 'battingcage', stand: [20.5, 17.4] });
       guest(8.2, 16.0, { face: 1 }); guest(12.6, 15.4, { view: 'back', turn: [0.3, -1] }); who(13.2, 15.7, { view: 'back', turn: [0.2, -1], scale: 0.72, look: 4 });
       guest(16.4, 16.6, { view: 'front', turn: [-0.3, 1] }); guest(23.2, 15.6, { face: -1 });
       who(11.4, 14.8, { staff: true, face: 1, prop: '🌭', look: { shirt: '#ffffff', top: 'tshirt', hat: 'cap', hatCol: '#e5484d', hair: 'curly', hairCol: '#2b1d14', skin: '#9a6440' } });

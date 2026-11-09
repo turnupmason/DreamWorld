@@ -993,3 +993,17 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 .ph-reply .ph-quick::-webkit-scrollbar { display: none; }
 .ph-reply .ph-btn { white-space: nowrap; }
 .ph-thread { min-height: 120px; max-height: min(300px, 24vh); }   /* v0.57: room for the lines to tap below */
+
+/* v0.59: DreamWorld */
+.wmap-scroll.dm { overflow: auto; max-height: 58vh; }
+.wpin.city .wpin-dot { width: 34px; height: 34px; font-size: 18px; }
+.wpin.town .wpin-dot { width: 24px; height: 24px; font-size: 12px; }
+.wpin.town .wpin-name { opacity: .85; font-size: 9.5px; }
+.dm-legend { font-size: 12px; color: var(--muted, #8b8274); margin: 0 2px 8px; }
+.dm-legend i { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; }
+.dm-legend .lg-road { background: #f2b33d; box-shadow: 0 0 0 1.5px #fff; } .dm-legend .lg-rail { background: repeating-linear-gradient(90deg, #6b5a48 0 3px, transparent 3px 6px); }
+.city-stadium { margin-top: 8px; font-size: 13px; line-height: 1.5; }
+.city-teams { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.city-team { display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,.05); border-radius: 999px; padding: 2px 8px 2px 2px; }
+.city-team small { font-weight: 700; }
+.town-move .row { margin-top: 4px; align-items: center; gap: 6px; }

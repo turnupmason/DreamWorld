@@ -1024,7 +1024,7 @@ const SHEETS = {
   // v0.30: something inside a building
   spot(arg) { const v0 = String(arg).split('|')[0]; if (arg === 'stadium|bets' || arg === 'stadium|board') return SHEETS.spotIn(arg); return wxGate(VENUE_HOME[v0] || v0, SHEETS.spotIn(arg)); },   // v0.50
   spotIn(arg) {
-    const [v, k] = arg.split('|'), key = v + '|' + k, gymK = v === 'gym';
+    const [v0, k] = arg.split('|'), v = v0 === 'arena' ? 'stadium' : v0, key = v + '|' + k, gymK = v === 'gym';   // v0.59: the arena's spots are the stadium's
     if (v === 'park') {   // v0.32: something in the park: you need to be in the park; watch, feed, sit, bounce, or an ice cream
       const kind = PARK_KIND[k], here = Scene.here() === 'park';
       const head2 = `<div class="place-head"><span class="big-emoji">${SPOT_E[key]}</span><div class="grow"><h2>${t('sp_park_' + k)}</h2><p class="muted">${t('sp_park_' + k + '_d')}</p></div></div>`;
@@ -2188,6 +2188,7 @@ const ACT = {
     result(buyParcel(), () => { closeSheet(); snack(t('snack_parcel', { w: homeW(S.me) })); UI.tab = 'home'; UI.inside = false; syncView(); Scene.recenter(); });
   },
   moveHere(arg) {
+    if (VIEW_TOWN !== myTown()) { Sound.play('oops'); return snack(t('land_own_town')); }   // v0.59: only in your own town
     const [st, p] = arg.split('|'), was = myTown(), r = relocate(st, +p);
     if (r.r === 'poor') return snack(t('snack_poor'));
     if (r.r !== 'ok') return snack(t('land_taken'));
@@ -2861,34 +2862,146 @@ function drawWorldMap(cv) {
   });
   g.fillStyle = dark ? '#f2ece3' : '#3b3125'; g.font = `800 10px ${UI_FONT}`; g.fillText('N', cxp, cyp - 26 + 5);
 }
+// ================= v0.59 (Mason #30): DreamWorld =================
+// One big map of our own instead of the real world: the land, the regions in each country's style, the interstates
+// between every place (the sea bridges too), the railway between the team cities, airports and ports. DM_S: drawn at
+// this scale (the map scrolls both ways).
+const DM_S = 0.74;
+const dmXY = id => DREAM_AT[id].map(v => v * DM_S);
+// a road between two places: a curve bowed `bend` to its side; its points (for drawing, and for driving in v0.60)
+function dreamRoadPts(a, b, bend, n = 24) {
+  const [ax, ay] = DREAM_AT[a], [bx, by] = DREAM_AT[b], L = Math.hypot(bx - ax, by - ay) || 1, mx = (ax + bx) / 2 - (by - ay) / L * bend, my = (ay + by) / 2 + (bx - ax) / L * bend, out = [];
+  for (let k = 0; k <= n; k++) { const u = k / n, v = 1 - u; out.push([v * v * ax + 2 * v * u * mx + u * u * bx, v * v * ay + 2 * v * u * my + u * u * by]); }
+  return out;
+}
+function dmShape(path, pts) {   // a soft closed coastline through the points' midpoints
+  const Q = pts.map(([x, y]) => [x * DM_S, y * DM_S]);
+  Q.forEach((p, i) => { const q = Q[(i + 1) % Q.length], m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; if (!i) path.moveTo(m[0], m[1]); else path.quadraticCurveTo(p[0], p[1], m[0], m[1]); });
+  const p0 = Q[0], q0 = Q[1]; path.quadraticCurveTo(p0[0], p0[1], (p0[0] + q0[0]) / 2, (p0[1] + q0[1]) / 2); path.closePath();
+  return path;
+}
+function drawDreamMap(cv) {
+  const dpr = Math.min(3, Math.max(2, window.devicePixelRatio || 1)), g = cv.getContext('2d'), dark = document.body.classList.contains('dark'), W = DREAM_MAP.w * DM_S, H = DREAM_MAP.h * DM_S, S0 = DM_S;
+  cv.width = W * dpr; cv.height = H * dpr; g.scale(dpr, dpr);
+  const sea = g.createLinearGradient(0, 0, 0, H); sea.addColorStop(0, dark ? '#1e3a56' : '#b9e2f6'); sea.addColorStop(1, dark ? '#142a40' : '#8ccbea');
+  g.fillStyle = sea; g.fillRect(0, 0, W, H);
+  g.strokeStyle = dark ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.55)'; g.lineWidth = 1.2;
+  for (let k = 0; k < 80; k++) { const x = hash(k, 3) * W, y = hash(k, 4) * H; g.beginPath(); g.arc(x, y, 4, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
+  const land = new Path2D(); DREAM_LAND.forEach(pts => dmShape(land, pts));
+  g.strokeStyle = dark ? 'rgba(90,150,190,.25)' : 'rgba(255,255,255,.6)'; g.lineWidth = 14; g.lineJoin = 'round'; g.stroke(land);
+  g.save(); g.translate(0, 5); g.fillStyle = dark ? 'rgba(0,0,0,.35)' : 'rgba(40,90,120,.2)'; g.fill(land); g.restore();
+  g.fillStyle = dark ? '#3c5a3a' : '#b9dc8c'; g.fill(land);
+  g.save(); g.clip(land);
+  DREAM_REGIONS.forEach(Rg => {   // each region a soft tint of its colour
+    const [x, y] = Rg.at.map(v => v * S0), rx = Rg.r[0] * S0, ry = Rg.r[1] * S0;
+    g.save(); g.translate(x, y); g.scale(1, ry / rx); const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx);
+    gr.addColorStop(0, Rg.c + (dark ? '40' : '38')); gr.addColorStop(1, Rg.c + '00'); g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx, 0, Math.PI * 2); g.fill(); g.restore();
+  });
+  const peaks = [[215, 120], [250, 140], [180, 130], [300, 600], [330, 660], [640, 60], [690, 75], [960, 240], [1080, 230]], deserts = [[262, 440, 60, 28], [680, 560, 50, 40], [1030, 690, 60, 34]], woods = [[400, 260, 50, 30], [560, 240, 50, 30], [900, 300, 60, 40], [420, 620, 60, 40]];
+  deserts.forEach(([x, y, rx, ry]) => { g.save(); g.translate(x * S0, y * S0); g.scale(1, ry / rx); const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx * S0); gr.addColorStop(0, dark ? 'rgba(170,140,80,.8)' : 'rgba(240,214,150,.95)'); gr.addColorStop(1, 'rgba(240,214,150,0)'); g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx * S0, 0, Math.PI * 2); g.fill(); g.restore(); });
+  woods.forEach(([x, y, rx, ry], fi) => { for (let k = 0; k < 26; k++) { const a = hash(k, fi * 5) * Math.PI * 2, r = Math.sqrt(hash(k, fi * 5 + 1)), tx = (x + Math.cos(a) * r * rx) * S0, ty = (y + Math.sin(a) * r * ry) * S0; g.fillStyle = k % 3 ? (dark ? '#2d5a33' : '#5fa356') : (dark ? '#25502b' : '#4f9448'); g.beginPath(); g.arc(tx, ty, 2.8, 0, Math.PI * 2); g.fill(); } });
+  peaks.forEach(([x, y]) => { const px = x * S0, py = y * S0; g.fillStyle = dark ? '#6a6f68' : '#9a9f8e'; g.beginPath(); g.moveTo(px - 8, py + 4); g.lineTo(px, py - 9); g.lineTo(px + 8, py + 4); g.closePath(); g.fill(); g.fillStyle = '#f7fafb'; g.beginPath(); g.moveTo(px - 3, py - 4); g.lineTo(px, py - 9); g.lineTo(px + 3, py - 4); g.closePath(); g.fill(); });
+  g.restore();
+  g.strokeStyle = dark ? '#5d8455' : '#f7f1d8'; g.lineWidth = 2.2; g.stroke(land);
+  // the railway (under the roads): a dark line with ties
+  DREAM_RAIL.forEach(([a, b, bend = 30]) => { const P = dreamRoadPts(a, b, bend).map(q => q.map(v => v * S0)); g.strokeStyle = dark ? '#a99a86' : '#6b5a48'; g.lineWidth = 1.6; g.setLineDash([]); g.beginPath(); P.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke();
+    g.lineWidth = 4; g.setLineDash([1, 5]); g.stroke(); g.setLineDash([]); });
+  // the interstates: a white casing, the yellow road; the sea bridges with piers; a shield with the number
+  DREAM_ROADS.forEach(([a, b, no, bend, kind]) => {
+    const P = dreamRoadPts(a, b, bend).map(q => q.map(v => v * S0)), path = () => { g.beginPath(); P.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); };
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    if (kind === 'bridge') { P.forEach((q, i) => { if (i % 2) { g.fillStyle = dark ? '#8a8f96' : '#a7adb5'; g.fillRect(q[0] - 1, q[1], 2, 5); } }); }
+    path(); g.strokeStyle = dark ? '#2b2b30' : '#ffffff'; g.lineWidth = 6; g.stroke();
+    path(); g.strokeStyle = kind === 'bridge' ? '#c9cfd6' : '#f2b33d'; g.lineWidth = 3.2; g.stroke();
+    const m = P[Math.floor(P.length / 2)]; g.fillStyle = '#2f5fa8'; g.strokeStyle = '#fff'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(m[0] - 7, m[1] - 7); g.lineTo(m[0] + 7, m[1] - 7); g.lineTo(m[0] + 7, m[1] + 1); g.quadraticCurveTo(m[0], m[1] + 8, m[0] - 7, m[1] + 1); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#fff'; g.font = `900 7px ${UI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(no), m[0], m[1] - 2);
+  });
+  // airports and ports beside their places
+  g.font = `14px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  DREAM_AIR.forEach(id => { const [x, y] = dmXY(id); g.fillText('✈️', x + 22, y - 2); });
+  DREAM_PORT.forEach(id => { const [x, y] = dmXY(id); g.fillText('⚓', x - 22, y + 4); });
+  // the regions' names
+  DREAM_REGIONS.forEach(Rg => { const x = Rg.at[0] * S0, y = (Rg.at[1] - Rg.r[1] * 0.7) * S0, txt = t('dmr_' + Rg.k);
+    g.font = `800 12px ${UI_FONT}`; g.lineWidth = 3; g.strokeStyle = dark ? 'rgba(0,0,0,.45)' : 'rgba(255,255,255,.85)'; g.strokeText(txt, x, y); g.fillStyle = dark ? '#e3dccd' : '#5d5448'; g.fillText(txt, x, y); });
+  g.font = `italic 700 13px ${UI_FONT}`; g.fillStyle = dark ? 'rgba(200,225,245,.45)' : 'rgba(40,110,160,.5)'; g.fillText(t('dm_sea'), W * 0.82, H * 0.08); g.fillText(t('dm_sea'), W * 0.1, H * 0.86);
+  const cxp = W - 36, cyp = H - 36;   // compass
+  g.fillStyle = dark ? 'rgba(38,34,30,.75)' : 'rgba(255,253,248,.85)'; g.beginPath(); g.arc(cxp, cyp, 22, 0, Math.PI * 2); g.fill();
+  [[0, -1, '#e5484d'], [0, 1, '#8b8274'], [1, 0, '#8b8274'], [-1, 0, '#8b8274']].forEach(([dx, dy, col]) => { g.fillStyle = col; g.beginPath(); g.moveTo(cxp + dx * 17, cyp + dy * 17); g.lineTo(cxp - dy * 4, cyp + dx * 4); g.lineTo(cxp + dy * 4, cyp - dx * 4); g.closePath(); g.fill(); });
+}
+// who lives in your town (they all have to say yes to a move): your friends whose homes are here
+const townMembers = () => S.friends.filter(f => townOf(f.id) === myTown());
+// this place's teams, today's home games and where (stadium / arena)
+function cityTeamsHtml(id) {
+  if (!isTeamCity(id)) return `<p class="muted small">🏘️ ${t('city_no_team')} · ${t('city_nearest', { c: nm(COMMUNITIES[homeCity(id)]) })}</p>`;
+  const L = STADIUM_LOOK[id], games = SPORT_KEYS.flatMap(sp => todayGames(sp).filter(G => G.h === arTeamIn(sp, id)));
+  return `<div class="city-stadium"><b>🏟️ ${nm(L)}</b> <span class="muted small">${nm(L.tag)}</span><br><b>🏒 ${t('arena_name', { c: nm(COMMUNITIES[id]) })}</b></div>
+    <div class="city-teams">${SPORT_KEYS.map(sp => { const i = arTeamIn(sp, id); return i < 0 ? '' : `<span class="city-team">${teamLogo(sp, i)}<small>${LEAGUES[sp].e} ${esc(LEAGUES[sp].teams[i][curLang() === 'zh' ? 'zh' : 'en'])}</small></span>`; }).join('')}</div>
+    <div class="muted small gap-top">${t('city_today')}</div>${games.length ? games.map(G => `<div class="small">${fmtHM(G.start)} ${LEAGUES[G.sp].e} ${esc(teamName(G.sp, G.a))} @ ${esc(teamName(G.sp, G.h))} · ${AR_INDOOR.includes(G.sp) ? '🏒 ' + t('venue_arena') : '🏟️ ' + t('venue_stadium')}${G.state === 'live' ? ' · 🔴' : G.state === 'done' ? ` · ${G.res.hs}–${G.res.as}` : ''}</div>`).join('') : `<div class="small muted">${t('city_no_games')}</div>`}`;
+}
+// the whole-town move: everyone's answer so far
+function townMoveHtml() {
+  const M = S.townMove;
+  if (!M) return '';
+  const row = id => { const v = M.votes[id], f = friendById(id); return `<div class="row small">${f ? avatar(f.look, 'sm') : ''}<span class="grow">${esc(f ? f.name : id)}</span><b>${!v || v.yes === undefined ? '⏳' : v.yes ? '✅' : '❌'}</b></div>`; };
+  const head = M.done === 'no' ? `❌ ${t('tm_failed', { names: Object.keys(M.votes).filter(id => M.votes[id].yes === false).map(id => (friendById(id) || {}).name || id).join('、') })}` : `🗳️ ${t('tm_asking', { c: nm(COMMUNITIES[M.to]) })}`;
+  return `<div class="card town-move"><b>${head}</b>${Object.keys(M.votes).map(row).join('')}${M.done ? `<button class="btn block gap-top" data-act="townMoveClear">${t('tm_ok')}</button>` : `<button class="btn ghost block gap-top" data-act="townMoveClear">${t('tm_cancel')}</button>`}</div>`;
+}
 function panelWorld() {
   const mine = myTown(), sel = COMMUNITIES[UI.wsel] ? UI.wsel : mine, cm = COMMUNITIES[sel], here = sel === mine;
-  const friendsIn = id => S.friends.filter(f => townOf(f.id) === id).length;
-  const reg = UI.wregion, inReg = id => !reg || COMMUNITIES[id].region === reg;
-  const chips = `<div class="sub-cats one-row">${Object.entries(REGIONS).map(([r, R]) => `<button class="sub ${reg === r ? 'on' : ''}" data-act="worldRegion" data-arg="${r}">${R.e} ${nm(R)}</button>`).join('')}</div>`;
-  const pins = Object.entries(COMMUNITIES).map(([id, c]) => {
-    const [x, y] = wmapXY(c.lon, c.lat);
-    return `<button class="wpin ${id === sel ? 'on' : ''} ${id === mine ? 'home' : ''}" style="left:${x}px;top:${y}px" data-act="worldPick" data-arg="${id}">
-      <span class="wpin-dot"><i>${id === mine ? '🏡' : THEME_E[c.theme]}</i></span>${id === sel || id === mine ? `<span class="wpin-name">${nm(c)}</span>` : ''}</button>`;
+  const pins = Object.keys(DREAM_AT).filter(id => COMMUNITIES[id]).map(id => {
+    const [x, y] = dmXY(id), city = isTeamCity(id), c = COMMUNITIES[id];
+    return `<button class="wpin ${id === sel ? 'on' : ''} ${id === mine ? 'home' : ''} ${city ? 'city' : 'town'}" style="left:${x}px;top:${y}px" data-act="worldPick" data-arg="${id}">
+      <span class="wpin-dot"><i>${id === mine ? '🏡' : city ? '🏟️' : THEME_E[c.theme]}</i></span><span class="wpin-name">${nm(c)}</span></button>`;
   }).join('');
-  const free = id => vacantRuns(id).filter(r => r.n >= CORE_PARCELS).length;
-  const nf = friendsIn(sel), parcel = round50(LAND.parcel * NEIGHBORHOODS.maple.price * cm.price);
+  const W = DREAM_MAP.w * DM_S, H = DREAM_MAP.h * DM_S, M = S.townMove;
   const card = `<div class="card world-card"><div class="row">${thumbImg('commune', sel, {}, 96, 84, 'thumb sm')}
-      <div class="grow"><div class="world-name">${cm.flag} ${nm(cm)} ${here ? `<span class="tag ok">${t('world_here')}</span>` : ''}</div>
-        <div class="muted">${nm(cm.place)} · ${THEME_E[cm.theme]} ${t('theme_' + cm.theme)} · ${isNightIn(sel) ? '🌙' : '☀️'} ${t('local_time', { t: localClock(sel) })}</div>
-        <div class="world-stats"><span>🏡 ${t('world_pop', { n: homesIn(sel) })}</span><span>🏷️ ${t('world_parcel', { n: fmtNum(parcel) })}</span><span>🌱 ${t('world_free', { n: free(sel) })}</span>${nf ? `<span>💛 ${t('world_friends', { n: nf })}</span>` : ''}</div></div></div>
-    ${countyCard(sel)}
+      <div class="grow"><div class="world-name">${cm.flag} ${nm(cm)} ${here ? `<span class="tag ok">${t('world_here')}</span>` : ''} ${isTeamCity(sel) ? `<span class="tag">${t('dm_city')}</span>` : `<span class="tag">${t('dm_town')}</span>`}</div>
+        <div class="muted">${t('dmr_' + cm.region)} · ${THEME_E[cm.theme]} ${t('theme_' + cm.theme)} · ${isNightIn(sel) ? '🌙' : '☀️'} ${t('local_time', { t: localClock(sel) })}</div>
+        <div class="world-stats">${DREAM_AIR.includes(sel) ? `<span>✈️ ${t('dm_airport')}</span>` : ''}${DREAM_PORT.includes(sel) ? `<span>⚓ ${t('dm_port')}</span>` : ''}${DREAM_RAIL.some(r => r.includes(sel)) ? `<span>🚆 ${t('dm_rail')}</span>` : ''}<span>🛣️ ${DREAM_ROADS.filter(r => r[0] === sel || r[1] === sel).map(r => (r[4] === 'bridge' ? '🌉' : 'I-') + r[2]).join(' ')}</span></div></div></div>
+    ${cityTeamsHtml(sel)}
     <div class="row gap-top">${here ? `<button class="btn primary grow" data-act="worldVisit" data-arg="${sel}">🏘️ ${t('world_my_town')}</button>`
-      : `<button class="btn grow" data-act="worldVisit" data-arg="${sel}">👀 ${t('world_visit')}</button><button class="btn primary grow" data-act="worldMove" data-arg="${sel}">🚚 ${t('world_move')}</button>`}</div></div>`;
-  const list = Object.entries(COMMUNITIES).filter(([id]) => inReg(id)).sort((a, b) => (b[0] === mine) - (a[0] === mine) || homesIn(b[0]) - homesIn(a[0])).map(([id, c]) =>
-    `<button class="list-item world-row ${id === sel ? 'on' : ''}" data-act="worldPick" data-arg="${id}"><span class="big-emoji">${c.flag}</span>
-      <div class="grow"><b>${nm(c)}</b> ${id === mine ? '🏡' : ''}<div class="muted">${nm(countyOf(id))} · ${nm(stateOf(id))} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)} · 🏡 ${homesIn(id)} · <span class="online-dot"></span>${onlineIn(id)}</div></div><span class="muted">×${c.price}</span></button>`).join('');
-  return `<div class="world-head"><h1 class="panel-title">🌍 ${t('world_title')}</h1><span class="muted"><span class="online-dot"></span>${t('online_world', { n: fmtNum(Object.keys(COMMUNITIES).reduce((a, id) => a + onlineIn(id), 0)) })}</span></div>
-    <p class="muted note">${t('world_sub')} · 🧺 ${t('tasted_n', { n: tastedCount(), m: Object.keys(SPECIALTIES).length })}</p>${chips}
-    <div class="wmap-scroll"><div class="wmap" style="width:${WMAP.w}px;height:${WMAP.h}px"><canvas id="worldCanvas" style="width:${WMAP.w}px;height:${WMAP.h}px"></canvas>${pins}</div></div>
-    ${card}
-    <div class="card"><h3>🗺️ ${t('world_all')}</h3>${list}</div>
-    <p class="muted center">${t('world_note')}</p>`;
+      : `<button class="btn grow" data-act="worldVisit" data-arg="${sel}">👀 ${t('world_visit')}</button><button class="btn primary grow" data-act="townMoveAsk" data-arg="${sel}" ${M && !M.done ? 'disabled' : ''}>🚚 ${t('tm_btn')}</button>`}</div>
+    ${here ? '' : `<p class="muted small">${t('tm_note', { n: townMembers().length })}</p>`}</div>`;
+  const list = (ids, title) => `<div class="card"><h3>${title}</h3>${ids.map(id => { const c = COMMUNITIES[id];
+    return `<button class="list-item world-row ${id === sel ? 'on' : ''}" data-act="worldPick" data-arg="${id}"><span class="big-emoji">${c.flag}</span><div class="grow"><b>${nm(c)}</b> ${id === mine ? '🏡' : ''}<div class="muted">${t('dmr_' + c.region)} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}${isTeamCity(id) ? ' · ' + SPORT_KEYS.map(sp => LEAGUES[sp].teams[arTeamIn(sp, id)].e).join('') : ''}</div></div></button>`; }).join('')}</div>`;
+  return `<div class="world-head"><h1 class="panel-title">🌍 ${t('dm_title')}</h1></div>
+    <p class="muted note">${t('dm_sub')}</p>
+    <div class="dm-legend">🏟️ ${t('dm_city')} · 🏘️ ${t('dm_town')} · <i class="lg-road"></i> ${t('dm_road')} · <i class="lg-rail"></i> ${t('dm_rail')} · ✈️ ${t('dm_airport')} · ⚓ ${t('dm_port')}</div>
+    <div class="wmap-scroll dm"><div class="wmap" style="width:${W}px;height:${H}px"><canvas id="worldCanvas" style="width:${W}px;height:${H}px"></canvas>${pins}</div></div>
+    ${townMoveHtml()}${card}${countyCard(sel)}
+    ${list(TEAM_CITIES.filter(id => COMMUNITIES[id]), '🏟️ ' + t('dm_cities'))}${list(Object.keys(COMMUNITIES).filter(id => !isTeamCity(id)), '🏘️ ' + t('dm_towns'))}
+    <p class="muted center">${t('dm_note')}</p>`;
+}
+// v0.59: the whole town moves (you and every friend who lives here) once everyone has said yes
+function townMoveTick() {
+  const M = S.townMove;
+  if (!M || M.done) return;
+  let changed = false;
+  Object.entries(M.votes).forEach(([id, v]) => { if (v.yes === undefined && now() >= v.at) { const rel = Math.max(0, Math.min(100, relOf(id))) / 100; v.yes = Math.random() < TOWN_MOVE.yes[0] + (TOWN_MOVE.yes[1] - TOWN_MOVE.yes[0]) * rel; changed = true; } });
+  if (!changed) return;
+  const vs = Object.values(M.votes);
+  if (vs.some(v => v.yes === false)) { M.done = 'no'; Sound.play('aww'); snack(`❌ ${t('tm_failed_snack')}`); }
+  else if (vs.every(v => v.yes)) { moveWholeTown(M.to); M.done = 'ok'; Sound.play('fanfare'); snack(`🚚 ${t('tm_moved', { c: nm(COMMUNITIES[M.to]) })}`); S.townMove = null; UI.visit = null; UI.wtown = null; Scene.moveHome(); syncView(); Scene.recenter(); }
+  save(); if (UI.tab === 'world') refresh();
+}
+function moveWholeTown(to) {   // everyone side by side on one street if there's room, else as near together as fits
+  const ids = ['me', ...townMembers().map(f => f.id)], lots = ids.map(id => lotOf(id)).filter(Boolean);
+  lots.forEach(l => { l.was = { st: l.st, p: l.p, n: l.n, town: l.town }; l.town = '__moving'; });
+  const want = l => Math.max(CORE_PARCELS, l.was.n), total = lots.reduce((n, l) => n + want(l), 0);
+  const one = computeRuns(to).filter(r => r.n >= total).sort((a, b) => a.n - b.n)[0];
+  let p = one ? one.p : 0;
+  lots.forEach(l => {
+    let r = one ? { st: one.st, p, n: want(l) } : null;
+    if (r) p += want(l);
+    else { const prev = lots.find(q => q !== l && q.town === to), runs = computeRuns(to).filter(q => q.n >= CORE_PARCELS); r = runs.sort((x, y) => (prev ? (y.st === prev.st) - (x.st === prev.st) : 0) || (y.n >= want(l)) - (x.n >= want(l)) || x.n - y.n)[0]; }
+    if (!r) { Object.assign(l, l.was); if (!l.was.town) delete l.town; delete l.was; return; }
+    Object.assign(l, { st: r.st, p: r.p, n: Math.min(r.n, want(l)) });
+    if (l.id === 'me' && l.n < l.was.n) S.me.coins += round50(LAND.parcel * (l.was.n - l.n));   // land you couldn't take with you: paid back
+    if (to === HOME_TOWN) delete l.town; else l.town = to;
+    delete l.was;
+  });
+  ids.forEach(id => { const h = homeOf(id); if (h) fixLayout(h); });
+  RUNS = {};
 }
 // Where a trip goes: a home's gate or a public place (its name for the card and the context bar).
 function goTarget(a) {
@@ -2974,7 +3087,7 @@ function placeBody(key) {
   }
   if (key === 'firestation' || key === 'gas') return `<p>${t('st_desc_' + key)}</p>`;
   if (key === 'office') return `<p>${t('pl_desc_office')}</p>` + jobSection('office');   // v0.37
-  if (['hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium'].includes(key)) return `<p>${t('st_desc_' + key)}</p>${key === 'stadium' ? gameCard(VIEW_TOWN) : ''}<p class="muted small">${t('pl_tap_inside')}</p>` + jobSection(key);   // v0.38 (v0.42: + the zoo, the stadium and today's game)
+  if (['hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium', 'arena'].includes(key)) return `<p>${t('st_desc_' + key)}</p>${key === 'stadium' || key === 'arena' ? venueLookCard(VIEW_TOWN, key) + gameCard(VIEW_TOWN, key) : ''}<p class="muted small">${t('pl_tap_inside')}</p>` + jobSection(key);   // v0.38 (v0.42: + the zoo, the stadium and today's game; v0.59: + the arena, each city's own stadium)
   if (key === 'hotel') return hotelDesk() + `<p class="muted small">${t('pl_tap_inside')}</p>`;
   if (['tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist', 'bank', 'restaurant', 'rooftop', 'suite'].includes(key)) return `<p class="muted small">${t('pl_tap_inside')}</p>`;
   if (key === 'police') {   // v0.18: the holding cell (when you're held) or how the police work
@@ -3046,9 +3159,9 @@ function onlineIn(id) {
 function afterWorld(wx) {
   const cv = $('#worldCanvas');
   if (!cv) return;
-  drawWorldMap(cv);
-  const sc = $('.wmap-scroll'), c = COMMUNITIES[UI.wsel] || COMMUNITIES[myTown()];
-  if (UI.wscroll) { const [x] = wmapXY(c.lon, c.lat); sc.scrollLeft = x - sc.clientWidth / 2; UI.wscroll = false; }
+  drawDreamMap(cv);   // v0.59
+  const sc = $('.wmap-scroll'), id = COMMUNITIES[UI.wsel] ? UI.wsel : myTown();
+  if (UI.wscroll) { const [x, y] = dmXY(id); sc.scrollLeft = x - sc.clientWidth / 2; sc.scrollTop = y - sc.clientHeight / 2; UI.wscroll = false; }
   else if (wx != null) sc.scrollLeft = wx;
 }
 Object.assign(ACT, {
@@ -3061,7 +3174,20 @@ Object.assign(ACT, {
     if (id === myTown()) return setTab('town');
     UI.tab = 'world'; UI.wtown = id; UI.visit = null; UI.visitInside = false; setLevel(0); syncView(); Scene.recenter();
   },
-  worldMove(id) { ACT.worldVisit(id); setTimeout(() => snack(t('world_pick_land')), 400); },
+  // v0.59 (Mason #30): you only live (and buy land) in your own town; the whole town moves when everyone agrees
+  townMoveAsk(id) {
+    if (S.townMove && !S.townMove.done) return;
+    const ms = townMembers(), votes = {};
+    if (computeRuns(id).reduce((n, r) => n + Math.floor(r.n / CORE_PARCELS), 0) < ms.length + 1) { Sound.play('oops'); return snack(t('tm_no_room')); }   // room for every home
+    ms.forEach(f => { votes[f.id] = { at: now() + (TOWN_MOVE.wait[0] + Math.random() * (TOWN_MOVE.wait[1] - TOWN_MOVE.wait[0])) * 1000 }; });
+    S.townMove = { to: id, at: now(), votes };
+    Sound.play('send'); snack(`🗳️ ${t('tm_sent', { n: ms.length })}`);
+    if (!ms.length) townMoveTick2(); save();
+  },
+  townMoveClear() { S.townMove = null; save(); },
+});
+function townMoveTick2() { const M = S.townMove; if (M && !Object.keys(M.votes).length) { moveWholeTown(M.to); snack(`🚚 ${t('tm_moved', { c: nm(COMMUNITIES[M.to]) })}`); S.townMove = null; Scene.moveHome(); syncView(); Scene.recenter(); } }
+Object.assign(ACT, {
 });
 
 // ================= v0.8 =================
@@ -3148,7 +3274,7 @@ function syncSportReminders() {
   if (S.sportRemind !== false) for (let d = 0; d < 3; d++) {   // v0.58: each league on its own calendar
     const day = lgDay0(now()) + d * DAY + 12 * HOUR, games = SPORT_KEYS.flatMap(k => { const si = seasonNow(day, k); return si.r === null ? [] : roundGames(k, si.r, si.s); });
     if (!games.length) continue;
-    const mine = games.filter(G => [G.h, G.a].some(i => lgTeam(G.sp, i).t === myTown())).map(G => `${LEAGUES[G.sp].e} ${teamName(G.sp, G.h)} – ${teamName(G.sp, G.a)}`);
+    const mine = games.filter(G => [G.h, G.a].some(i => lgTeam(G.sp, i).t === homeCity(myTown()))).map(G => `${LEAGUES[G.sp].e} ${teamName(G.sp, G.h)} – ${teamName(G.sp, G.a)}`);
     items.push({ id: 'day-' + new Date(day).toDateString(), at: Math.round(lgDay0(day) + 10 * HOUR - off), title: `🏟️ ${t('lg_push_title')}`, body: mine.length ? mine.slice(0, 3).join(' · ') : t('lg_push_body', { n: games.length }) });
   }
   (S.bets || []).forEach(b => items.push({ id: 'bet-' + b.id, at: Math.round(gameEnd(b.sp, b.s, b.r) - off), title: `🎟️ ${t('lg_push_bet')}`, body: teamName(b.sp, b.pick) }));
@@ -3403,7 +3529,7 @@ setInterval(() => {
   if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }
   if (S.floodNews) { snack(`🌊 ${t('w_flooded', { n: S.floodNews })}`); S.floodNews = 0; }
   if (!S.onboarding && S.bets && S.bets.length) { const done = settleBets(); if (done.length) { const w = done.filter(x => x.won); Sound.play(w.length ? 'fanfare' : 'aww'); snack(w.length ? `🎉 ${t('lg_won_snack', { n: w.reduce((n, x) => n + x.pay, 0) })}` : `😕 ${t('lg_lost_snack', { n: done.length })}`); save(); refresh(); } }   // v0.54
-  if (!S.onboarding && S.lgDay !== today() && new Date(now()).getHours() >= 9) { S.lgDay = today(); const nG = SPORT_KEYS.reduce((n, k) => n + todayGames(k).length, 0); if (nG) { const mine = SPORT_KEYS.filter(k => todayGames(k).some(G => [G.h, G.a].some(i => lgTeam(k, i).t === myTown()))); snack(`🏟️ ${t('lg_today_snack', { n: nG, mine: mine.map(k => LEAGUES[k].e).join('') })}`); } save(); syncSportReminders(); }   // v0.54: today's games
+  if (!S.onboarding && S.lgDay !== today() && new Date(now()).getHours() >= 9) { S.lgDay = today(); const nG = SPORT_KEYS.reduce((n, k) => n + todayGames(k).length, 0); if (nG) { const mine = SPORT_KEYS.filter(k => todayGames(k).some(G => [G.h, G.a].some(i => lgTeam(k, i).t === homeCity(myTown())))); snack(`🏟️ ${t('lg_today_snack', { n: nG, mine: mine.map(k => LEAGUES[k].e).join('') })}`); } save(); syncSportReminders(); }   // v0.54: today's games
   // trophies: celebrate each new one (once)
   if (!S.onboarding) {
     const tn = trophyNews();
@@ -3418,6 +3544,7 @@ setInterval(() => {
     if (Date.now() - petSyncAt > 10 * MIN) { syncPetReminders(); syncSportReminders(); }
   }
   Sound.ambience(NIGHT > 0.5, weatherNow().kind, new Date(now()).getHours());
+  if (S.townMove) townMoveTick();   // v0.59
   if (!S.onboarding) { Sound.setFarm([...new Set((S.me.animals || []).map(a => a.k))]); const un = unreadTexts() + unreadMail(); if (un > (UI.lastUnread || 0)) Sound.play('msg'); UI.lastUnread = un; }   // v0.56
   if (S.weatherReal && (!S.weather || !S.weather.real || now() - S.weather.at > 30 * MIN) && Date.now() - weatherTried > 5 * MIN) realWeather(false);
 }, 1000);
@@ -3449,7 +3576,7 @@ if (S && S.woodSwap) { const n = S.woodSwap; delete S.woodSwap; save(); setTimeo
 function outOfJail() { const p = Scene.placePoint('police'); if (p && UI.tab === 'town' && !UI.visit && VIEW_TOWN === myTown()) Scene.arriveAt(p, 'police'); }
 function jailSnack() { Sound.play('oops'); snack(`🚔 ${t('jail_busy', { m: fmtDur(Math.max(0, S.jail.end - now())) })}`); }
 ['goTo', 'travel', 'tripFast', 'enterStore', 'jobApply', 'jobStart', 'placeDo', 'visit', 'askHost', 'harvestAll', 'plant', 'plantAll', 'collectAnimal',
-  'sell', 'sellAll', 'worldVisit', 'worldMove', 'moveHere', 'goOut', 'goIn'].forEach(k => {
+  'sell', 'sellAll', 'worldVisit', 'townMoveAsk', 'moveHere', 'goOut', 'goIn'].forEach(k => {
   const f = ACT[k];
   if (f) ACT[k] = function (...a) { if (jailed()) return jailSnack(); return f.apply(this, a); };
 });
@@ -3544,7 +3671,7 @@ const CAT_E = { seeds: '🌱', sell: '💰', trees: '🌳', animals: '🐄', lan
 function placeCard(key) {
   const S2 = STORES[key], pic = S2 && S2.w ? `<div class="place-pic">${thumbImg('store', key, {}, 330, 150, 'place-img')}</div>` : '';
   let chips = [];
-  if (VENUE_PLACES.includes(key)) chips = Object.keys(STR.zh).filter(k => k.startsWith('sp_' + key + '_') && k.split('_').length === 3 && SPOT_E[key + '|' + k.split('_')[2]]).map(k => `${SPOT_E[key + '|' + k.split('_')[2]]} ${t(k)}`);
+  if (VENUE_PLACES.includes(key)) { const kk = key === 'arena' ? 'stadium' : key; chips = Object.keys(STR.zh).filter(k => k.startsWith('sp_' + kk + '_') && k.split('_').length === 3 && SPOT_E[kk + '|' + k.split('_')[2]] && !(key === 'arena' && k === 'sp_stadium_cage')).map(k => `${SPOT_E[kk + '|' + k.split('_')[2]]} ${t(k)}`); }
   else if (S2 && S2.cats) chips = S2.cats.map(c => `${CAT_E[c] || '•'} ${t('cat_' + c)}`);
   const staff = (VENUE_PLACES.includes(key) || (S2 && S2.w)) && VIEW_TOWN ? staffOf(VIEW_TOWN, key) : null;
   const gain = STR.zh['pg_' + key] ? `<div class="place-gain"><b>🎁 ${t('pg_title')}</b><p>${t('pg_' + key, { k: Math.round(PERKS.knowPay * 100), e: PERKS.knowEvery, m: Math.round(PERKS.knowMax * 100), w: Math.round(PERKS.swimWalk * 100), n: PERKS.er, know: S.know || 0, kp: Math.round(knowPay() * 100) })}</p></div>` : '';   // v0.45
@@ -3579,9 +3706,16 @@ function betWindow() {
     <div class="card gap-top"><b>🎟️ ${t('bw_mine')}</b>${open || `<p class="muted small">${t('lg_none')}</p>`}${log ? `<div class="muted small gap-top">${t('lg_settled')} · ${t('lg_bets_net')} ${T2.net >= 0 ? '+' : '−'}🪙${Math.abs(T2.net)}</div>${log}` : ''}</div>
     <p class="muted small">${t('lg_bet_note', { n: BETS.dayMax, left: Math.max(0, left), m: Math.round(BETS.margin * 100) })} ${t('lg_coins_only')}</p>`;
 }
-function gameCard(town) {
-  const A = arenaNow(town);
-  if (A.off) return `<div class="card"><b>🏟️ ${A.none ? t('ar_none') : t('ar_off', { n: A.si.left })}</b></div>`;   // v0.58: no game here today / the break
+// v0.59: the venue's name and what makes it this city's own; whose home it is (or the nearest city's, in a town)
+function venueLookCard(town, venue) {
+  const L = STADIUM_LOOK[town], hc = homeCity(town), teams = SPORT_KEYS.filter(sp => (venue === 'arena') === AR_INDOOR.includes(sp)).map(sp => ({ sp, i: arTeamIn(sp, hc) })).filter(x => x.i >= 0);
+  if (!isTeamCity(town)) return `<div class="card"><b>${t('city_no_team')}</b><p class="muted small">${t('city_nearest', { c: nm(COMMUNITIES[hc]) })}</p></div>`;
+  return `<div class="card venue-look"><b>${venue === 'arena' ? `🏒 ${t('arena_name', { c: nm(COMMUNITIES[town]) })}` : `🏟️ ${nm(L)}`}</b>${venue === 'stadium' ? `<p class="muted small">${nm(L.tag)}</p>` : ''}
+    <div class="muted small">${t('venue_home_of')}</div>${teams.map(x => `<div class="row small">${teamLogo(x.sp, x.i)} <span class="grow">${LEAGUES[x.sp].e} ${esc(teamName(x.sp, x.i))}</span><span class="muted">${LEAGUES[x.sp].hour}:00</span></div>`).join('')}</div>`;
+}
+function gameCard(town, venue) {
+  const A = arenaNow(town, now(), venue || curVenue());
+  if (A.off) return `<div class="card"><b>🏟️ ${A.noTeam ? t('city_no_team') : A.none ? t('ar_none') : t('ar_off', { n: A.si.left })}</b></div>`;   // v0.58: no game here today / the break (v0.59: a town with no pro teams)
   const L = LEAGUES[A.sp], tm = i => `${teamLogo(A.sp, i)} <span>${esc(teamName(A.sp, i))}</span>`, soon = A.state === 'soon';
   const st = A.state === 'live' ? `🔴 ${A.clock}` : A.state === 'done' ? A.clock : t('ar_starts', { h: fmtHM(A.start) });
   const list = A.day.map(G => `<div class="small ${G.sp === A.sp ? '' : 'muted'}">${fmtHM(G.start)} ${LEAGUES[G.sp].e} ${esc(teamName(G.sp, G.a))} @ ${esc(teamName(G.sp, G.h))} · ${t(G.kind === 'home' ? 'ar_home' : 'ar_guest')}</div>`).join('');
@@ -3649,7 +3783,7 @@ function sportsScreen(scr, a, b, arg) {
 function standingsHtml(sp, short) {
   const rows = standings(sp), L = league(sp);
   return `<div class="ph-sub">${t('lg_table')}</div><div class="lg-table"><div class="lg-tr head"><span>#</span><span class="grow">${t('lg_team')}</span><span>${t('lg_wl')}</span><span>${t('lg_pct')}</span><span>${t('lg_form')}</span></div>`
-    + rows.slice(0, short ? 5 : 10).map((x, k) => `<button class="lg-tr ${lgTeam(sp, x.i).t === myTown() ? 'mine' : ''}" data-act="phone" data-arg="team|${sp}|${x.i}"><span>${k + 1}</span><span class="grow">${teamLogo(sp, x.i)} ${esc(teamName(sp, x.i))}</span><span>${x.w}–${x.l}</span><span>${x.w + x.l ? (x.w / (x.w + x.l)).toFixed(3).replace(/^0/, '') : '.500'}</span><span>${x.streak || '–'}</span></button>`).join('') + `</div>`;
+    + rows.slice(0, short ? 5 : 10).map((x, k) => `<button class="lg-tr ${lgTeam(sp, x.i).t === homeCity(myTown()) ? 'mine' : ''}" data-act="phone" data-arg="team|${sp}|${x.i}"><span>${k + 1}</span><span class="grow">${teamLogo(sp, x.i)} ${esc(teamName(sp, x.i))}</span><span>${x.w}–${x.l}</span><span>${x.w + x.l ? (x.w / (x.w + x.l)).toFixed(3).replace(/^0/, '') : '.500'}</span><span>${x.streak || '–'}</span></button>`).join('') + `</div>`;
 }
 const fmtDay = ms => { const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()}`; };   // v0.26: letters live in the phone too
 function loanBtn(kind, k, wid) { const q = loanQuote(kind, k), ok = loanCheck(kind, k) === 'ok';
