@@ -16,7 +16,7 @@ function townTeam(town) {
 // sport (a different one each day); only as many as fit one after another (it's one field), so usually one in the
 // afternoon and one in the evening.
 function arenaDay(town) {
-  const si = seasonNow(); if (si.off) return [];
+  const si = seasonNow(); if (allOff()) return [];
   const ti = Object.keys(COMMUNITIES).indexOf(town) + 1, all = [];
   SPORT_KEYS.forEach((sp, k) => {
     const games = todayGames(sp); if (!games.length) return;
@@ -38,7 +38,7 @@ function arenaNow(town, ms = now()) {
     const live = day.find(G => ms >= G.start && ms < G.end), done = day.filter(G => ms >= G.end).pop(), next = day.find(G => G.start > ms);
     v = live ? arenaState(live, ms, 'live') : done && (!next || ms - done.end < 0.75 * HOUR) ? arenaState(done, ms, 'done') : next ? arenaState(next, ms, 'soon') : arenaState(done, ms, 'done');
     v.day = day;
-  } else v = { off: true, day: [], si: seasonNow(ms) };
+  } else v = { off: true, day: [], si: SPORT_KEYS.map(k => seasonNow(ms, k)).sort((a, b) => a.left - b.left)[0], none: !allOff(ms) };   // v0.58: none = no game here today (it isn't the break)
   AR_CACHE[town] = { sec, v };
   return v;
 }
@@ -890,6 +890,7 @@ function drawArenaBoard(q, W2, H2, A) {
   rrect(q.x - W2 / 2, q.y - H2, W2, H2, 3 * z, '#1d1d22', '#9aa3ad', 1.6 * z);
   if (z <= 0.3) return;
   const row = (s2, yy, col, size = 7, x = q.x, al = 'center') => { ctx.font = `800 ${Math.max(5, size * z)}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = al; ctx.textBaseline = 'middle'; ctx.fillStyle = col; ctx.fillText(s2, x, yy); };
+  if (A && A.off && A.none) { row(zh ? '今天无赛' : 'NO GAME TODAY', q.y - H2 / 2, '#ffd36b', 7); return; }   // v0.58
   if (!A || A.off) { row(zh ? '休赛期' : 'OFF SEASON', q.y - H2 / 2 - 6 * z, '#ffd36b', 7); if (A && A.si) row(zh ? `${A.si.left} 天后开赛` : `Back in ${A.si.left} days`, q.y - H2 / 2 + 7 * z, '#ffffff', 6); return; }
   const L = LEAGUES[A.sp], flash = A.last && now() - A.last.at < 12e3 && Math.floor(now() / 400) % 2 === 0;
   if (flash) { const w = { soccer: zh ? '进球！' : 'GOAL!', hockey: zh ? '进球！' : 'GOAL!', football: A.last.pts >= 6 ? (zh ? '达阵！' : 'TOUCHDOWN!') : zh ? '射门得分！' : 'FIELD GOAL!', baseball: zh ? '得分！' : 'RUN SCORES!', basketball: '' }[A.sp]; rrect(q.x - W2 / 2 + 2 * z, q.y - H2 + 2 * z, W2 - 4 * z, H2 - 4 * z, 2 * z, lgTeam(A.sp, A.last.side ? A.a : A.h).c[0]); row(w, q.y - H2 / 2, '#ffffff', 10); return; }

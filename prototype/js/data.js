@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.57.1';
+const VERSION = '0.58.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -243,6 +243,8 @@ const ROAD_KINDS = {
   lane:      { e: '🏘️', zh: '小巷',         en: 'Lane',          lanes: 1, mph: 15, kmh: 20,  spd: 0.7 },
   street:    { e: '🛣️', zh: '双向两车道街道', en: 'Two-lane street', lanes: 1, mph: 25, kmh: 40,  spd: 0.85 },
   avenue:    { e: '🛣️', zh: '双向两车道大道', en: 'Avenue',        lanes: 1, mph: 35, kmh: 60,  spd: 1 },
+  bend:      { e: '〰️', zh: '双向两车道弯路', en: 'Curving road', lanes: 1, mph: 30, kmh: 50, spd: 0.9 },   // v0.58
+  avenue4:   { e: '🛣️', zh: '双向四车道大道', en: 'Four-lane avenue', lanes: 2, mph: 40, kmh: 65, spd: 1.12 },   // v0.58
   boulevard: { e: '🌳', zh: '双向四车道大马路', en: 'Four-lane boulevard', lanes: 2, mph: 45, kmh: 70, spd: 1.2 },
   frontage:  { e: '↔️', zh: '高速辅路',      en: 'Frontage road',  lanes: 2, mph: 45, kmh: 70,  spd: 1.1 },
   freeway:   { e: '🚀', zh: '双向六车道高速', en: 'Six-lane interstate', lanes: 3, mph: 65, kmh: 100, spd: 2.2 },
@@ -251,6 +253,10 @@ const ROAD_KINDS = {
 // w: the whole roadway; lane: one lane; gap: grass between it and the frontage roads; front: a frontage road's width.
 // deck: how high the freeway's bridge over the cross road is (px at zoom 1); rise: how long its slopes are (tiles).
 // ramp: where the slip ramps leave / join it, in tiles from the cross road (out, in). bridge: the sea bridge's height.
+// v0.58 (Mason #30: "four lanes, slow traffic keeps right, fast traffic keeps left"): an avenue with room beside it
+// grows to AVENUE4.w tiles and gets two lanes each way (lane centres `lanes` from the middle, the inner one first).
+// Cars faster than `fast` (CAR_PACE) cruise in the inner (left) lane; the rest keep right and only pull out to pass.
+const AVENUE4 = { w: 4.5, sw: 0.45, lanes: [0.45, 1.35], fast: 1.05 };
 const FREEWAY = { w: 9, lane: 1.1, gap: 2.5, front: 3, deck: 40, rise: 14, ramp: [30, 14], bridge: 44, cars: [1.0, 1.6], exit: 0.18, leave: 0.16 };
 
 // ---------- crops ----------
@@ -1218,6 +1224,85 @@ const COMMUNITY_LAYOUT = { wutong: 'grid', vermont: 'grid|f', palmbay: 'coast', 
 Object.entries(COMMUNITY_LAYOUT).forEach(([k, v]) => { const [l, f] = v.split('|'); COMMUNITIES[k].layout = l; COMMUNITIES[k].flip = !!f; });
 // A ready-to-use layout (mirrored if asked): every x becomes MX - x. NPC lots become { id, st, p, n, house }.
 const MIRROR_X = WORLD.x0 + WORLD.x1;
+// v0.58: each avenue tries to grow (AVENUE4.w − its width) to one side, then the other; the strip it would take must be
+// clear of the solid things (lots, shops, the plaza, water, the park, fields), the lake and roads running the same way.
+// Roads crossing it are fine (they meet it). Grown avenues become 'avenue4'.
+function widenAvenues(roads, solid, lake, park) {
+  const vert = r => r[2] - r[0] < r[3] - r[1], hit = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const inLake = q => { for (let i = 0; i <= 8; i++) for (const t of [0, 0.5, 1]) { const x = q[0] + (q[2] - q[0]) * (vert(q) ? t : i / 8), y = q[1] + (q[3] - q[1]) * (vert(q) ? i / 8 : t);
+    if (((x - lake.x) / (lake.rx + 1.5)) ** 2 + ((y - lake.y) / (lake.ry + 1.5)) ** 2 < 1) return true; } return false; };
+  const P = () => [park.x, park.y, park.x + park.w, park.y + park.d];
+  roads.forEach(r => {
+    if (r[4] !== 'avenue') return;
+    const v = vert(r), g = AVENUE4.w - (v ? r[2] - r[0] : r[3] - r[1]), wasIn = park && hit(r, P()), crossed = solid.filter(s => hit(r, s));   // a river it already bridges doesn't count
+    if (g <= 0) return;
+    for (const side of [1, -1]) {
+      const strip = v ? (side > 0 ? [r[2], r[1], r[2] + g, r[3]] : [r[0] - g, r[1], r[0], r[3]]) : (side > 0 ? [r[0], r[3], r[2], r[3] + g] : [r[0], r[1] - g, r[2], r[1]]);
+      const pad = [strip[0] - 0.3, strip[1] - 0.3, strip[2] + 0.3, strip[3] + 0.3], inner = v ? [pad[0], strip[1] + 0.6, pad[2], strip[3] - 0.6] : [strip[0] + 0.6, pad[1], strip[2] - 0.6, pad[3]];
+      if (solid.some(s => !crossed.includes(s) && hit(inner, s)) || inLake(strip) || roads.some(o => o !== r && vert(o) === v && hit(pad, o))) continue;
+      if (v) { if (side > 0) r[2] += g; else r[0] -= g; } else if (side > 0) r[3] += g; else r[1] -= g;
+      r[4] = 'avenue4';
+      if (park && !wasIn && hit(pad, P())) {   // the park's edge moves back (it was beside the avenue, not across it)
+        const e = 0.4;
+        if (v) { if (side > 0) { const nx = r[2] + e; if (nx > park.x) { park.w -= nx - park.x; park.x = nx; } } else park.w = Math.min(park.w, r[0] - e - park.x); }
+        else if (side > 0) { const ny = r[3] + e; if (ny > park.y) { park.d -= ny - park.y; park.y = ny; } } else park.d = Math.min(park.d, r[1] - e - park.y);
+      }
+      return;
+    }
+  });
+}
+// v0.58 (Mason #30: "we need curved roads"): a few curved two-lane roads in each town, through open land (the woods of
+// the new district, beside the lake…). Each joins a road running one way to a road running the other, as a shortcut
+// across the corner between them: it leaves each road square-on and swings round in one smooth curve (a cubic
+// Bézier), `clear` tiles from anything built and away from crossings. The ones that save the most driving are kept.
+// w: the road (two lanes); step: how far apart the places it may start are; min / max: how long; apart: from each other.
+const BEND = { w: 2.3, clear: 1.6, step: 4, min: 20, max: 64, n: 3, apart: 9, sw: { street: 0.42, avenue: 0.5, avenue4: 0.45, boulevard: 0.4 } };
+function findBends(world, roads, occ, lakeAt) {
+  const X0 = Math.floor(world.x0), Y0 = Math.floor(world.y0), W = Math.ceil(world.x1) - X0 + 1, D = Math.ceil(world.y1) - Y0 + 1, grid = new Uint8Array(W * D);
+  const mark = (a, b, c, d) => { for (let y = Math.max(0, Math.floor(b - Y0)); y < Math.min(D, Math.ceil(d - Y0)); y++) for (let x = Math.max(0, Math.floor(a - X0)); x < Math.min(W, Math.ceil(c - X0)); x++) grid[y * W + x] = 1; };
+  const cl = BEND.clear;
+  occ.forEach(q => mark(q[0] - cl, q[1] - cl, q[2] + cl, q[3] + cl));
+  roads.forEach(r => mark(r[0] - cl, r[1] - cl, r[2] + cl, r[3] + cl));
+  const free = (x, y) => { const gx = Math.floor(x - X0), gy = Math.floor(y - Y0); return gx >= 3 && gy >= 3 && gx < W - 3 && gy < D - 3 && !grid[gy * W + gx] && !lakeAt(x, y); };
+  const isH = r => r[2] - r[0] >= r[3] - r[1];
+  // where a bend may leave a road: along both sides, not near a crossing or the road's ends
+  const ends = [];
+  roads.forEach((r, i) => {
+    if (!BEND.sw[r[4]] || r[5]) return;
+    const h = isH(r), a = h ? r[0] : r[1], b = h ? r[2] : r[3], m = h ? (r[1] + r[3]) / 2 : (r[0] + r[2]) / 2, hw = (h ? r[3] - r[1] : r[2] - r[0]) / 2, sw = BEND.sw[r[4]];
+    const cross = roads.filter((q, j) => j !== i && isH(q) !== h && (h ? q[1] <= r[3] + 0.6 && q[3] >= r[1] - 0.6 : q[0] <= r[2] + 0.6 && q[2] >= r[0] - 0.6)).map(q => (h ? [q[0], q[2]] : [q[1], q[3]]));
+    for (let u = a + 7; u <= b - 7; u += BEND.step) {
+      if (cross.some(([c0, c1]) => u > c0 - 7 && u < c1 + 7)) continue;
+      [-1, 1].forEach(sg => ends.push({ i, h, sg, p: h ? [u, m] : [m, u], e: h ? [u, m + sg * (hw - sw)] : [m + sg * (hw - sw), u], o: h ? [u, m + sg * hw] : [m + sg * hw, u], n: h ? [0, sg] : [sg, 0] }));
+    }
+  });
+  const cands = [];
+  ends.forEach(A => ends.forEach(B => {
+    if (!A.h || B.h || A.i === B.i) return;   // one along x, one along y
+    const dx = B.o[0] - A.o[0], dy = B.o[1] - A.o[1], L = Math.hypot(dx, dy);
+    if (L < BEND.min || L > BEND.max || dx * A.n[0] + dy * A.n[1] < 6 || -(dx * B.n[0] + dy * B.n[1]) < 6) return;
+    const k = L * 0.5, P0 = A.e, P3 = B.e, P1 = [P0[0] + A.n[0] * k, P0[1] + A.n[1] * k], P2 = [P3[0] + B.n[0] * k, P3[1] + B.n[1] * k];
+    const n = Math.ceil(L / 0.45), pts = [];
+    for (let s = 0; s <= n; s++) { const t = s / n, u = 1 - t; pts.push([u * u * u * P0[0] + 3 * u * u * t * P1[0] + 3 * u * t * t * P2[0] + t * t * t * P3[0], u * u * u * P0[1] + 3 * u * u * t * P1[1] + 3 * u * t * t * P2[1] + t * t * t * P3[1]]); }
+    let len = 0; for (let s = 1; s < pts.length; s++) len += Math.hypot(pts[s][0] - pts[s - 1][0], pts[s][1] - pts[s - 1][1]);
+    const skipA = Math.hypot(A.o[0] - A.e[0], A.o[1] - A.e[1]) + cl + 0.9, skipB = Math.hypot(B.o[0] - B.e[0], B.o[1] - B.e[1]) + cl + 0.9;
+    for (let s = 1; s < pts.length - 1; s++) {
+      const p = pts[s];
+      if (Math.hypot(p[0] - P0[0], p[1] - P0[1]) < skipA || Math.hypot(p[0] - P3[0], p[1] - P3[1]) < skipB) continue;
+      const q = pts[s + 1], tx = q[0] - p[0], ty = q[1] - p[1], tl = Math.hypot(tx, ty) || 1, nx = -ty / tl, ny = tx / tl, o = BEND.w / 2;
+      if (!free(p[0], p[1]) || !free(p[0] + nx * o, p[1] + ny * o) || !free(p[0] - nx * o, p[1] - ny * o)) return;
+    }
+    cands.push({ pts, a: A.p, b: B.p, ra: A.i, rb: B.i, saved: Math.abs(dx) + Math.abs(dy) - len, len });
+  }));
+  cands.sort((p, q) => q.saved - p.saved);
+  const out = [];
+  for (const C of cands) {
+    if (out.length >= BEND.n || C.saved < 4) break;
+    if (out.some(O => (O.ra === C.ra && O.rb === C.rb) || O.pts.some(p => C.pts.some(q => Math.abs(p[0] - q[0]) < BEND.apart && Math.abs(p[1] - q[1]) < BEND.apart)))) continue;   // each joins its own two roads
+    out.push({ pts: C.pts.map(p => [+p[0].toFixed(2), +p[1].toFixed(2)]), a: C.a, b: C.b, ra: C.ra, rb: C.rb, len: Math.round(C.len) });
+  }
+  return out;
+}
 function buildLayout(id, flip) {
   const B = LAYOUTS[id], fx = (x, w = 0) => (flip ? MIRROR_X - x - w : x);
   const streets = {};
@@ -1231,7 +1316,10 @@ function buildLayout(id, flip) {
   const rect = r => (flip ? [MIRROR_X - r[2], r[1], MIRROR_X - r[0], r[3], ...r.slice(4)] : r.slice());
   const box = (b, w = b.w || 0) => ({ ...b, x: fx(b.x, w) });
   const centre = box(B.centre), plaza = box(B.plaza, LOT_W), shops = B.shops.map(([k, x, y]) => [k, fx(x, 6), y]);
-  const roads = B.roads.map(rect), lake = { ...B.lake, x: fx(B.lake.x) };
+  const roads = B.roads.map(rect), lake = { ...B.lake, x: fx(B.lake.x) }, PK = box(B.park);
+  widenAvenues(roads, [...Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D]), [plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D],
+    ...shops.map(([, x, y, w = 6, d = 5.5]) => [x, y, x + w, y + d]), ...B.water.map(rect),
+    ...B.fields.map(f => { const q = box(f); return [q.x, q.y, q.x + q.w, q.y + q.d]; })], lake, PK);   // v0.58: four lanes where there's room (the park gives up its edge)
   // v0.38: every town is bigger: a new district past one edge (the south; the east, or west when mirrored, where the
   // sea is to the south). The avenues and streets that reached that edge carry on into it, and a four-lane boulevard
   // runs across it; the new buildings (STORES with `late`) stand along the boulevard, with room for many more.
@@ -1295,7 +1383,7 @@ function buildLayout(id, flip) {
   // v0.19: little lanes (cars can use them too) join every dead end to the next road along, like the cross streets of
   // an American neighbourhood, so the way next door is never a long loop round the block.
   const lotRects = Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D]);
-  const solid = [...lotRects, ...water, [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [box(B.park).x, B.park.y, box(B.park).x + B.park.w, B.park.y + B.park.d],
+  const solid = [...lotRects, ...water, [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [PK.x, PK.y, PK.x + PK.w, PK.y + PK.d],
     ...B.fields.map(f => { const q = box(f); return [q.x, q.y, q.x + q.w, q.y + q.d]; })];
   const hits = (q, list) => list.some(r => q[0] < r[2] - 0.05 && r[0] < q[2] - 0.05 && q[1] < r[3] - 0.05 && r[1] < q[3] - 0.05);
   const isH = r => r[2] - r[0] >= r[3] - r[1], lanes = [];
@@ -1328,7 +1416,7 @@ function buildLayout(id, flip) {
   // v0.17: the stores, each beside a road (facing it) as close to the town centre as there's room
   const lakeAt = (x, y) => ((x - lake.x) / (lake.rx + (lake.sea ? 6 : 2))) ** 2 + ((y - lake.y) / (lake.ry + (lake.sea ? 6 : 2))) ** 2 < 1;
   const busyRects = [...Object.values(streets).map(s => [s.x, s.y, s.x + s.n * PARCEL, s.y + LOT_D + 2]), ...roads.map(r => r.slice(0, 4)), ...water,
-    [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [box(B.park).x, B.park.y, box(B.park).x + B.park.w, B.park.y + B.park.d], ...B.fields.map(f => { const q = box(f); return [q.x, q.y, q.x + q.w, q.y + q.d]; }),
+    [centre.x, centre.y, centre.x + centre.w, centre.y + centre.d], [PK.x, PK.y, PK.x + PK.w, PK.y + PK.d], ...B.fields.map(f => { const q = box(f); return [q.x, q.y, q.x + q.w, q.y + q.d]; }),
     ...ramps.map(R => [Math.min(...R.map(p => p[0])) - 1, Math.min(...R.map(p => p[1])) - 1, Math.max(...R.map(p => p[0])) + 1, Math.max(...R.map(p => p[1])) + 1])];
   const stores = [], cx0 = centre.x + centre.w / 2, cy0 = centre.y + centre.d / 2;
   busyRects.push([-200, hy - 4, 400, hy + 4]);   // the expressway
@@ -1379,7 +1467,7 @@ function buildLayout(id, flip) {
     }
     if (best) { parks.push(best); busyRects.push([best[1], best[2], best[1] + best[3], best[2] + best[4]]); }
   };
-  { const Pk = box(B.park), F0 = B.fields.length ? box(B.fields[0]) : null;
+  { const Pk = PK, F0 = B.fields.length ? box(B.fields[0]) : null;
     nearLot('centre', centre.x + centre.w / 2, centre.y + centre.d, [centre.x, centre.y, centre.w, centre.d, [[plaza.x - 1, plaza.y - 1, plaza.x + LOT_W + 1, plaza.y + LOT_D + 2], ...shops.map(([, x, y, w = 6, d = 5.5]) => [x - 0.5, y - 0.5, x + w + 0.5, y + d + 2.5]), ...roads.map(r => [r[0] - 0.5, r[1] - 0.5, r[2] + 0.5, r[3] + 0.5]), ...(B.pocket ? [(q => [q.x - 0.5, q.y - 0.5, q.x + q.w + 0.5, q.y + q.d + 0.5])(box(B.pocket))] : [])]]);
     nearLot('park', Pk.x + Pk.w / 2, Pk.y + Pk.d / 2, [Pk.x, Pk.y, Pk.w, Pk.d, []]);
     if (F0) nearLot('fields', F0.x + Math.min(F0.w / 2, 10), F0.y, [F0.x, F0.y, F0.w, F0.d, []]);
@@ -1485,7 +1573,7 @@ function buildLayout(id, flip) {
     return { axis: S0 ? 'x' : 'y', c, town, half, tn, ends, over: { s: sx, half: (sB(cross) - sA(cross)) / 2 + 1.4, h: F.deck, rise: F.rise }, ramps,
       no: S0 ? [10, 20, 40, 64, 70, 76, 80, 90, 94][num] : [5, 15, 25, 35, 45, 55, 65, 75, 95][num], exit: 8 + (num * 7) % 40 };
   })();
-  const P = box(B.park), loop = [];
+  const P = PK, loop = [];
   // v0.32: the loop keeps to the park's edge, and only moves in on the one side where a car park is inside the park
   const mg = { l: 1.5, r: 1.5, t: 1.5, b: 1.5 };
   parks.filter(([k, x, y, w, d]) => k === 'park' && x >= P.x - 0.01 && x + w <= P.x + P.w + 0.01 && y >= P.y - 0.01 && y + d <= P.y + P.d + 0.01).forEach(([, x, y, w, d]) => {
@@ -1509,10 +1597,17 @@ function buildLayout(id, flip) {
   const culs = tidyRoads(roads, world, [...busyRects.filter(q => !roads.some(r => r[0] === q[0] && r[1] === q[1] && r[2] === q[2] && r[3] === q[3])),
     ...stores.map(st => [st[1], st[2], st[1] + st[3], st[2] + st[4]]), ...parks.map(pk => [pk[1], pk[2], pk[1] + pk[3], pk[2] + pk[4]]),
     [plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y, w = 6, d = 5.5]) => [x, y, x + w, y + d])], lakeAt);   // v0.47
+  // v0.58: curved roads through what's still open (not over homes, buildings, car parks, the freeway or its ramps)
+  const fwBand = fwy ? (fwy.axis === 'x' ? [[world.x0 - 9, fwy.c - 12, world.x1 + 9, fwy.c + 12]] : [[fwy.c - 12, world.y0 - 9, fwy.c + 12, world.y1 + 9]]) : [];
+  const bends = findBends(world, roads, [...busyRects.filter(q => !roads.some(r => r[0] === q[0] && r[1] === q[1] && r[2] === q[2] && r[3] === q[3])),
+    ...stores.map(st => [st[1] - 2.5, st[2] - 2.5, st[1] + st[3] + 2.5, st[2] + st[4] + 2.5]), ...parks.map(pk => [pk[1], pk[2], pk[1] + pk[3], pk[2] + pk[4]]),
+    [plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y, w = 6, d = 5.5]) => [x, y, x + w, y + d]),
+    ...culs.map(C => [C.x - C.r - 2, C.y - C.r - 2, C.x + C.r + 2, C.y + C.r + 2]), ...fwBand,
+    ...(highway ? highway.ramps.flatMap(R => R.map(p => [p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2])) : [])], lakeAt);
   return {
-    id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers, fwy, culs,
+    id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers, fwy, culs, bends,
     centre, plaza, shops, pocket: B.pocket ? box(B.pocket) : null,
-    park: box(B.park), lake, fields: B.fields.map(f => box(f)),
+    park: PK, lake, fields: B.fields.map(f => box(f)),
     places: [...B.places.map(([x, y]) => [fx(x), y]), vert(blvd) ? [(blvd[0] + blvd[2]) / 2, (blvd[1] + blvd[3]) / 2] : [(blvd[0] + blvd[2]) / 2, blvd[3] + 0.6]], labels,
   };
 }
@@ -1955,7 +2050,9 @@ const LEAGUES = {
 // beating a stronger team counts for more than beating a weaker one, about 2–3 % a game between even teams.
 // How good each team really is this season (hidden, `spread` around the start) decides the games, so the chances
 // shown catch up with it as the season goes on.
-const SEASON = { days: 36, rest: 3, epoch: new Date(2026, 10, 2).getTime(), start: 1500, k: 24, spread: 110 };
+// days: rounds in a season; rest: days off between seasons; every: days between rounds (v0.58, Mason #30: football
+// every 4 days, the rest every day; set per league below); home: the home team's edge in the win chance (v0.58: +3 %).
+const SEASON = { days: 36, rest: 3, epoch: new Date(2026, 10, 2).getTime(), start: 1500, k: 24, spread: 110, home: 0.03, every: { football: 4 } };
 // Coin bets (only game coins, never real money): one team to win a game; pays stake × odds. odds = (1 − margin) /
 // chance. chips: the stakes; dayMax: the most you can stake in a day. In calm mode there's no betting.
 const BETS = { chips: [10, 50, 100, 500], dayMax: 2000, margin: 0.06, minOdds: 1.05, keep: 40 };

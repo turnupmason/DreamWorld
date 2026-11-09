@@ -8,15 +8,21 @@ const LG_CACHE = {};
 const lgRand = (a, b, c = 0) => { const x = Math.sin(a * 12.9898 + b * 78.233 + c * 37.719) * 43758.5453; return x - Math.floor(x); };
 const lgDay0 = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const SPORT_KEYS = Object.keys(LEAGUES);
-// which season it is and which day of it (day ≥ SEASON.days: the break between seasons)
-function seasonNow(t = now()) {
-  const len = SEASON.days + SEASON.rest, d = Math.round((lgDay0(t) - SEASON.epoch) / DAY), s = Math.max(0, Math.floor(d / len)), day = d - s * len;
-  return { s, day, off: day >= SEASON.days, left: len - day };
+// v0.58: each league its own calendar: a round every `every` days (football every 4), so a season is days × every
+// days long, then the break. seasonNow(t, sp): which season, which day of it, the round played today (r, or null on a
+// day without games), the next round (next), whether it's the break (off) and how many days until the next season.
+const lgEvery = sp => (SEASON.every || {})[sp] || 1;
+const seasonLen = sp => SEASON.days * lgEvery(sp) + SEASON.rest;
+function seasonNow(t = now(), sp = 'baseball') {
+  const ev = lgEvery(sp), len = seasonLen(sp), d = Math.round((lgDay0(t) - SEASON.epoch) / DAY), s = Math.max(0, Math.floor(d / len)), day = d - s * len, off = day >= SEASON.days * ev;
+  return { s, day, off, left: len - day, r: !off && day % ev === 0 ? day / ev : null, next: off ? 0 : Math.ceil(day / ev), every: ev };
 }
+const allOff = (t = now()) => SPORT_KEYS.every(k => seasonNow(t, k).off);
 // local midnight of round r of season s; when its games start and end
-function roundDay(s, r) { const d = new Date(SEASON.epoch); d.setDate(d.getDate() + s * (SEASON.days + SEASON.rest) + r); return d.getTime(); }
-const gameStart = (sp, s, r) => roundDay(s, r) + LEAGUES[sp].hour * HOUR;
+function roundDay(s, r, sp = 'baseball') { const d = new Date(SEASON.epoch); d.setDate(d.getDate() + s * seasonLen(sp) + r * lgEvery(sp)); return d.getTime(); }
+const gameStart = (sp, s, r) => roundDay(s, r, sp) + LEAGUES[sp].hour * HOUR;
 const gameEnd = (sp, s, r) => gameStart(sp, s, r) + LEAGUES[sp].len * HOUR;
+const homeP = p => Math.max(0.02, Math.min(0.98, p + SEASON.home));   // v0.58: the home side's chance, with its edge
 // the 36 rounds: a round robin (everyone plays everyone once in 9 rounds) four times, home and away swapping;
 // the teams are shuffled each season so the order isn't always the same. rounds[r] = [[home, away] × 5]
 function lgRounds(sp, s) {
@@ -38,7 +44,7 @@ function lgRounds(sp, s) {
 }
 const eloP = (ra, rb) => 1 / (1 + Math.pow(10, (rb - ra) / 400));
 // one sport's season, played up to now: results, each team's record, Elo ratings
-function league(sp, s = seasonNow().s) {
+function league(sp, s = seasonNow(now(), sp).s) {
   const key = sp + '|' + s, k = SPORT_KEYS.indexOf(sp);
   let L = LG_CACHE[key];
   if (!L) {
@@ -53,13 +59,13 @@ function league(sp, s = seasonNow().s) {
 // how a game ends: decided by how good the two teams really are (not by the chances shown), so it can be worked out
 // before the game is over (the stadium uses it to show the score going up as the game goes on: v0.55)
 function gameResult(L, r, g) {
-  const k = SPORT_KEYS.indexOf(L.sp), [h, a] = L.rounds[r][g], pReal = eloP(L.strength[h] + 20, L.strength[a]);   // (a little home advantage in the real game)
+  const k = SPORT_KEYS.indexOf(L.sp), [h, a] = L.rounds[r][g], pReal = homeP(eloP(L.strength[h], L.strength[a]));   // (v0.58: the home edge, +3 %)
   const hw = lgRand(L.s * 101 + r, g, k + 3) < pReal, sc = lgScore(L.sp, L.s, r, g), [hs, as] = hw ? sc : [sc[1], sc[0]];
   return { h, a, hs, as, hw, note: sc[2] || '' };
 }
 function playRound(L, r) {
   L.res[r] = L.rounds[r].map(([h, a], g) => {
-    const pShown = eloP(L.elo[h], L.elo[a]), { hw, hs, as, note } = gameResult(L, r, g);
+    const pShown = homeP(eloP(L.elo[h], L.elo[a])), { hw, hs, as, note } = gameResult(L, r, g);
     const d = SEASON.k * ((hw ? 1 : 0) - pShown); L.elo[h] += d; L.elo[a] -= d;
     [[h, hw, hs, as], [a, !hw, as, hs]].forEach(([i, w, f, ag]) => { const R2 = L.rec[i]; if (w) R2.w++; else R2.l++; R2.pf += f; R2.pa += ag; R2.last.push(w ? 'W' : 'L'); });
     return { h, a, hs, as, hw, p: pShown, note };
@@ -81,14 +87,14 @@ function standings(sp) {
 }
 function streakOf(last) { if (!last.length) return ''; const c = last[last.length - 1]; let n = 0; for (let i = last.length - 1; i >= 0 && last[i] === c; i--) n++; return c + n; }
 // a round's games with where they stand: 'soon' (you can bet), 'live', 'done' (with the score)
-function roundGames(sp, r, s = seasonNow().s) {
+function roundGames(sp, r, s = seasonNow(now(), sp).s) {
   const L = league(sp, s), t = now(), st = gameStart(sp, s, r), en = gameEnd(sp, s, r);
   return (L.rounds[r] || []).map(([h, a], g) => {
-    const res = L.res[r] && L.res[r][g], p = res ? res.p : eloP(L.elo[h], L.elo[a]);
+    const res = L.res[r] && L.res[r][g], p = res ? res.p : homeP(eloP(L.elo[h], L.elo[a]));
     return { sp, s, r, g, h, a, p, start: st, end: en, state: res ? 'done' : t >= st ? 'live' : 'soon', res };
   });
 }
-const todayGames = sp => { const si = seasonNow(); return si.off ? [] : roundGames(sp, si.day, si.s); };
+const todayGames = sp => { const si = seasonNow(now(), sp); return si.r === null ? [] : roundGames(sp, si.r, si.s); };   // (v0.58: [] on a day between rounds)
 // the price of a bet on one side of a game (decimal odds)
 const betOdds = p => Math.max(BETS.minOdds, Math.round((1 - BETS.margin) / Math.max(0.02, p) * 100) / 100);
 const lgTeam = (sp, i) => LEAGUES[sp].teams[i];
@@ -97,19 +103,20 @@ function teamName(sp, i) { const T = lgTeam(sp, i), town = nm(COMMUNITIES[T.t]);
 function stakedToday() { const d = lgDay0(now()); return [...(S.bets || []), ...(S.betLog || [])].filter(b => lgDay0(b.t) === d).reduce((n, b) => n + b.stake, 0); }
 function placeBet(sp, g, pick, stake) {
   if (S.calm) return 'calm';
-  const si = seasonNow(); if (si.off) return 'off';
+  const si = seasonNow(now(), sp); if (si.r === null) return 'off';
   const G = todayGames(sp)[g]; if (!G || G.state !== 'soon') return 'closed';
-  if ((S.bets || []).some(b => b.sp === sp && b.s === si.s && b.r === si.day && b.g === g)) return 'already';
+  if ((S.bets || []).some(b => b.sp === sp && b.s === si.s && b.r === si.r && b.g === g)) return 'already';
   if (!(stake > 0) || S.me.coins < stake) return 'poor';
   if (stakedToday() + stake > BETS.dayMax) return 'cap';
   const p = pick === G.h ? G.p : 1 - G.p, odds = betOdds(p);
   S.me.coins -= stake;
-  (S.bets = S.bets || []).push({ id: uid(), sp, s: si.s, r: si.day, g, pick, stake, odds, t: now() });
+  (S.bets = S.bets || []).push({ id: uid(), sp, s: si.s, r: si.r, g, pick, stake, odds, t: now() });
   return 'ok';
 }
 // games that have finished: pay out the bets that won. Returns what was settled.
 function settleBets() {
   const out = [];
+  if (!S.lg58) { S.lg58 = 1; (S.bets || []).filter(b => b.sp === 'football').forEach(b => { S.me.coins += b.stake; }); S.bets = (S.bets || []).filter(b => b.sp !== 'football'); }   // v0.58: football's new calendar: open football bets are given back
   (S.bets || []).slice().forEach(b => {
     const L = league(b.sp, b.s);
     if (L.done <= b.r) return;

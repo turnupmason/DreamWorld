@@ -3144,10 +3144,12 @@ let petSyncAt = 0, petAnim = null;
 // v0.54: tell the phone when today's and the next days' games are, and when the games you bet on finish
 function syncSportReminders() {
   if (!S) return;
-  const off = now() - Date.now(), items = [], si = seasonNow();
-  if (S.sportRemind !== false && !si.off) for (let d = 0; d < 3 && si.day + d < SEASON.days; d++) {
-    const r = si.day + d, at = roundDay(si.s, r) + 10 * HOUR, mine = SPORT_KEYS.flatMap(k => roundGames(k, r).filter(G => [G.h, G.a].some(i => lgTeam(k, i).t === myTown())).map(G => `${LEAGUES[k].e} ${teamName(k, G.h)} – ${teamName(k, G.a)}`));
-    items.push({ id: 'day-' + si.s + '-' + r, at: Math.round(at - off), title: `🏟️ ${t('lg_push_title')}`, body: mine.length ? mine.slice(0, 3).join(' · ') : t('lg_push_body', { n: SPORT_KEYS.length * 5 }) });
+  const off = now() - Date.now(), items = [];
+  if (S.sportRemind !== false) for (let d = 0; d < 3; d++) {   // v0.58: each league on its own calendar
+    const day = lgDay0(now()) + d * DAY + 12 * HOUR, games = SPORT_KEYS.flatMap(k => { const si = seasonNow(day, k); return si.r === null ? [] : roundGames(k, si.r, si.s); });
+    if (!games.length) continue;
+    const mine = games.filter(G => [G.h, G.a].some(i => lgTeam(G.sp, i).t === myTown())).map(G => `${LEAGUES[G.sp].e} ${teamName(G.sp, G.h)} – ${teamName(G.sp, G.a)}`);
+    items.push({ id: 'day-' + new Date(day).toDateString(), at: Math.round(lgDay0(day) + 10 * HOUR - off), title: `🏟️ ${t('lg_push_title')}`, body: mine.length ? mine.slice(0, 3).join(' · ') : t('lg_push_body', { n: games.length }) });
   }
   (S.bets || []).forEach(b => items.push({ id: 'bet-' + b.id, at: Math.round(gameEnd(b.sp, b.s, b.r) - off), title: `🎟️ ${t('lg_push_bet')}`, body: teamName(b.sp, b.pick) }));
   postNative({ type: 'sportReminders', items: items.filter(x => x.at > Date.now()) });
@@ -3401,7 +3403,7 @@ setInterval(() => {
   if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }
   if (S.floodNews) { snack(`🌊 ${t('w_flooded', { n: S.floodNews })}`); S.floodNews = 0; }
   if (!S.onboarding && S.bets && S.bets.length) { const done = settleBets(); if (done.length) { const w = done.filter(x => x.won); Sound.play(w.length ? 'fanfare' : 'aww'); snack(w.length ? `🎉 ${t('lg_won_snack', { n: w.reduce((n, x) => n + x.pay, 0) })}` : `😕 ${t('lg_lost_snack', { n: done.length })}`); save(); refresh(); } }   // v0.54
-  if (!S.onboarding && S.lgDay !== today() && new Date(now()).getHours() >= 9) { S.lgDay = today(); const si = seasonNow(); if (!si.off) { const mine = SPORT_KEYS.filter(k => todayGames(k).some(G => [G.h, G.a].some(i => lgTeam(k, i).t === myTown()))); snack(`🏟️ ${t('lg_today_snack', { n: SPORT_KEYS.length * 5, mine: mine.map(k => LEAGUES[k].e).join('') })}`); } save(); syncSportReminders(); }   // v0.54: today's games
+  if (!S.onboarding && S.lgDay !== today() && new Date(now()).getHours() >= 9) { S.lgDay = today(); const nG = SPORT_KEYS.reduce((n, k) => n + todayGames(k).length, 0); if (nG) { const mine = SPORT_KEYS.filter(k => todayGames(k).some(G => [G.h, G.a].some(i => lgTeam(k, i).t === myTown()))); snack(`🏟️ ${t('lg_today_snack', { n: nG, mine: mine.map(k => LEAGUES[k].e).join('') })}`); } save(); syncSportReminders(); }   // v0.54: today's games
   // trophies: celebrate each new one (once)
   if (!S.onboarding) {
     const tn = trophyNews();
@@ -3555,9 +3557,9 @@ const derbyDist = m => (curLang() === 'zh' ? Math.round(m) : Math.round(m * 3.28
 // v0.57 (Mason #30): the betting window at the stadium: the only place with chances and odds. Today's games in all five
 // leagues (before kick-off), tap a team, pick a stake. Below: your tickets and how they went.
 function betWindow() {
-  const si = seasonNow(), left = BETS.dayMax - stakedToday(), P = UI.betPick;
+  const left = BETS.dayMax - stakedToday(), P = UI.betPick;
   if (S.calm) return `<p class="muted">${t('lg_calm')}</p>`;
-  if (si.off) return `<p class="muted">${t('ar_off', { n: si.left })}</p>`;
+  if (allOff()) return `<p class="muted">${t('ar_off', { n: seasonNow().left })}</p>`;
   const G = P && todayGames(P.sp)[P.g];
   if (G && G.state === 'soon') {   // one side of one game: the chance, the odds, the stakes
     const p = P.i === G.h ? G.p : 1 - G.p, odds = betOdds(p), o = P.i === G.h ? G.a : G.h;
@@ -3579,7 +3581,7 @@ function betWindow() {
 }
 function gameCard(town) {
   const A = arenaNow(town);
-  if (A.off) return `<div class="card"><b>🏟️ ${t('ar_off', { n: A.si.left })}</b></div>`;
+  if (A.off) return `<div class="card"><b>🏟️ ${A.none ? t('ar_none') : t('ar_off', { n: A.si.left })}</b></div>`;   // v0.58: no game here today / the break
   const L = LEAGUES[A.sp], tm = i => `${teamLogo(A.sp, i)} <span>${esc(teamName(A.sp, i))}</span>`, soon = A.state === 'soon';
   const st = A.state === 'live' ? `🔴 ${A.clock}` : A.state === 'done' ? A.clock : t('ar_starts', { h: fmtHM(A.start) });
   const list = A.day.map(G => `<div class="small ${G.sp === A.sp ? '' : 'muted'}">${fmtHM(G.start)} ${LEAGUES[G.sp].e} ${esc(teamName(G.sp, G.a))} @ ${esc(teamName(G.sp, G.h))} · ${t(G.kind === 'home' ? 'ar_home' : 'ar_guest')}</div>`).join('');
@@ -3611,11 +3613,11 @@ function teamLogo(sp, i, big) { const T = lgTeam(sp, i); return `<span class="tl
 // a little jersey in the team's colours (v0.55 dresses the fans in them)
 function jersey(sp, i, n = '', away = false) { const T = lgTeam(sp, i), body = away ? '#f4f6f8' : T.c[0], trim = away ? T.c[0] : T.c[1]; return `<svg class="jersey" viewBox="0 0 40 40"><path d="M13 4 L5 9 L2 18 L9 20 L10 37 L30 37 L31 20 L38 18 L35 9 L27 4 Q20 9 13 4 Z" fill="${body}" stroke="${trim}" stroke-width="2.4"/><path d="M13 4 Q20 9 27 4" fill="none" stroke="${trim}" stroke-width="3"/><text x="20" y="29" text-anchor="middle" font-size="11" font-weight="900" fill="${trim}">${n}</text></svg>`; }   // the home shirt; away: white with the team's colour
 function sportsScreen(scr, a, b, arg) {
-  const si = seasonNow(), head = (title, back = 'home') => `<div class="ph-head"><button class="ph-back" data-act="phone" data-arg="${back}">‹</button><b>${title}</b></div>`;
+  const si = seasonNow(now(), LEAGUES[a] ? a : 'football'), head = (title, back = 'home') => `<div class="ph-head"><button class="ph-back" data-act="phone" data-arg="${back}">‹</button><b>${title}</b></div>`;
   if (scr === 'team') {   // one team: its logo, jersey, record and all its games
     const sp = a, i = +b, T = lgTeam(sp, i), L = league(sp), R2 = L.rec[i], rows = [];
     L.rounds.forEach((pr, r) => pr.forEach(([h, aw], g) => { if (h !== i && aw !== i) return; const res = L.res[r] && L.res[r][g], o = h === i ? aw : h, home = h === i;
-      rows.push(`<div class="ph-row sm"><span class="muted">${r + 1}</span>${teamLogo(sp, o)}<div class="grow">${home ? '🏠 ' : '✈️ '}${esc(teamName(sp, o))}</div>${res ? `<b class="${(res.hw ? res.h : res.a) === i ? 'win' : 'loss'}">${home ? res.hs : res.as}–${home ? res.as : res.hs}</b>` : `<span class="ph-muted">${fmtDay(roundDay(si.s, r))}</span>`}</div>`); }));
+      rows.push(`<div class="ph-row sm"><span class="muted">${r + 1}</span>${teamLogo(sp, o)}<div class="grow">${home ? '🏠 ' : '✈️ '}${esc(teamName(sp, o))}</div>${res ? `<b class="${(res.hw ? res.h : res.a) === i ? 'win' : 'loss'}">${home ? res.hs : res.as}–${home ? res.as : res.hs}</b>` : `<span class="ph-muted">${fmtDay(roundDay(si.s, r, sp))}</span>`}</div>`); }));
     return head(`${LEAGUES[sp].e} ${esc(teamName(sp, i))}`, `sports|${sp}|table`) + `<div class="ph-team">${teamLogo(sp, i, true)}${jersey(sp, i, 10)}${jersey(sp, i, 7, true)}</div>
       <div class="ph-card"><div class="row between"><span>${t('lg_record')}</span><b>${R2.w}–${R2.l}</b></div><div class="row between"><span>${t('lg_pts')}</span><b>${R2.pf} : ${R2.pa}</b></div><div class="row between"><span>${t('lg_rating')}</span><b>${Math.round(L.elo[i])}</b></div></div>
       <div class="ph-sub">${t('lg_season_games')}</div>${rows.join('')}`;
@@ -3623,7 +3625,7 @@ function sportsScreen(scr, a, b, arg) {
   const sp = LEAGUES[a] ? a : 'football', tab = b || 'today', L = league(sp);
   const chips = SPORT_KEYS.map(k => `<button class="chip ${k === sp ? 'on' : ''}" data-act="phone" data-arg="sports|${k}|${tab}">${LEAGUES[k].e} ${nm(LEAGUES[k])}</button>`).join('');
   const tabs = ['today', 'table', 'sched'].map(k => `<button class="chip ${k === tab ? 'on' : ''}" data-act="phone" data-arg="sports|${sp}|${k}">${t('lg_tab_' + k)}</button>`).join('');   // v0.57: no odds or bets on the phone (only at the stadium)
-  const season = si.off ? t('lg_off', { s: si.s + 1, n: si.left }) : t('lg_round', { s: si.s + 1, r: si.day + 1, n: SEASON.days });
+  const season = si.off ? t('lg_off', { s: si.s + 1, n: si.left }) : t('lg_round', { s: si.s + 1, r: (si.r === null ? si.next : si.r) + 1, n: SEASON.days }) + (si.every > 1 ? ' · ' + t('lg_every', { n: si.every }) : '');
   let body = '';
   const game = G => {   // one game: both teams and the score (v0.57: no chances or odds here)
     const res = G.res, side = i => `<button class="lg-side ${res && (res.hw ? res.h : res.a) === i ? 'won' : ''}" data-act="phone" data-arg="team|${sp}|${i}">${teamLogo(sp, i)}<span>${esc(teamName(sp, i))}${i === G.h ? ' 🏠' : ''}</span><b>${res ? (i === G.h ? res.hs : res.as) : ''}</b></button>`;
@@ -3633,13 +3635,14 @@ function sportsScreen(scr, a, b, arg) {
   if (tab === 'today') {
     const gs = todayGames(sp);
     body = gs.length ? `<div class="ph-sub">${t('lg_today', { h: LEAGUES[sp].hour })}</div>${gs.map(game).join('')}<p class="ph-muted small">${t('lg_how')}</p>`
-      : `<div class="ph-card">${t('lg_off_note', { n: si.left })}</div>` + standingsHtml(sp, true);
+      : si.off ? `<div class="ph-card">${t('lg_off_note', { n: si.left })}</div>` + standingsHtml(sp, true)
+      : `<div class="ph-card">${t('lg_next_round', { r: si.next + 1, d: fmtDay(roundDay(si.s, si.next, sp)), h: LEAGUES[sp].hour })}</div>` + standingsHtml(sp, true);   // v0.58: a day between football rounds
   } else if (tab === 'table') body = standingsHtml(sp, false);
   else if (tab === 'sched') {
-    const from = si.off ? 0 : si.day, rs = [];
-    if (!si.off && si.day > 0) rs.push([si.day - 1, roundGames(sp, si.day - 1)]);
-    for (let r = from + (si.off ? 0 : 1); r < Math.min(SEASON.days, from + (si.off ? 3 : 4)); r++) rs.push([r, roundGames(sp, r, si.off ? si.s + 1 : si.s)]);
-    body = rs.map(([r, gs]) => `<div class="ph-sub">${t('lg_round_n', { r: r + 1 })} · ${fmtDay(gs[0] ? gs[0].start : roundDay(si.s, r))} ${LEAGUES[sp].hour}:00</div>` + gs.map(G => `<div class="ph-row sm">${teamLogo(sp, G.h)}<span class="grow">${esc(teamName(sp, G.h))}</span><b>${G.res ? `${G.res.hs}–${G.res.as}` : 'vs'}</b><span class="grow right">${esc(teamName(sp, G.a))}</span>${teamLogo(sp, G.a)}</div>`).join('')).join('');
+    const cur = si.r === null ? si.next : si.r, from = si.off ? 0 : cur, rs = [];
+    if (!si.off && cur > 0) rs.push([cur - 1, roundGames(sp, cur - 1)]);
+    for (let r = from + (si.off || si.r === null ? 0 : 1); r < Math.min(SEASON.days, from + (si.off ? 3 : 4)); r++) rs.push([r, roundGames(sp, r, si.off ? si.s + 1 : si.s)]);
+    body = rs.map(([r, gs]) => `<div class="ph-sub">${t('lg_round_n', { r: r + 1 })} · ${fmtDay(gs[0] ? gs[0].start : roundDay(si.s, r, sp))} ${LEAGUES[sp].hour}:00</div>` + gs.map(G => `<div class="ph-row sm">${teamLogo(sp, G.h)}<span class="grow">${esc(teamName(sp, G.h))}</span><b>${G.res ? `${G.res.hs}–${G.res.as}` : 'vs'}</b><span class="grow right">${esc(teamName(sp, G.a))}</span>${teamLogo(sp, G.a)}</div>`).join('')).join('');
   }
   return head(`🏟️ ${t('ph_sports')}`) + `<div class="ph-muted center small">${season}</div><div class="chips-row lg-chips">${chips}</div><div class="chips-row lg-tabs">${tabs}</div>${body}`;
 }
