@@ -148,6 +148,11 @@ function snack(text) {
   snackTimer = setTimeout(() => { el.hidden = true; }, 2400);
 }
 
+// v0.56: sounds. Which buildings have their own tune (the rest: the shop music); the sound when you finish
+// something in a building; the volumes (0 … 1) from the settings
+const SOUND_PLACE = { cafe: 1, bakery: 1, salon: 1, florist: 1, hotel: 1, tower: 1, rooftop: 1, suite: 1, library: 1, museum: 1, bookstore: 1, clinic: 1, hospital: 1, school: 1, apartments: 1, furniture: 1, gym: 1, bowling: 1, aquatic: 1, amuse: 1, zoo: 1, stadium: 1, station: 1, plaza: 1, market: 1, mall: 1, realty: 1, nursery: 1, ranch: 1, petshop: 1 };
+const ACT_SOUND = { dinner: 'munch', hotdog: 'munch', candy: 'munch', drink: 'sip', tea: 'sip', book: 'paper', swim: 'splash', dive: 'splash', bath: 'splash', sauna: 'done', bed: 'yawn', match: 'cheer', trains: 'done', coaster: 'cheer', wheel: 'done', bumper: 'bounce', arcade: 'levelup', giraffefeed: 'nibble', petting: 'baa' };
+const volOf = k => { const v = (S && S.vol || {})[k]; return v == null ? 0.8 : v; };
 // ---------- view ----------
 // The scene is on screen for Home, Town, and in World once you've picked a community (UI.wtown); World without
 // one is the map (a panel). The Town tab is always your own community (friends and family); World is everyone.
@@ -159,7 +164,9 @@ function syncView() {
   Scene.setVisible(sceneTab() && !Games.isOpen());   // v0.33: not under a ball game
   // each place has its own tune
   const inside = (UI.tab === 'home' && UI.inside) || (UI.visit && UI.visitInside);
-  Sound.setScene(UI.tab === 'shop' || UI.inStore || UI.inVenue ? 'shop' : inside ? 'inside' : UI.tab === 'world' && !UI.wtown ? 'world' : (UI.tab === 'town' || UI.tab === 'world') ? (UI.visit ? 'home' : 'town') : 'home');
+  const pk = UI.tab === 'town' ? UI.inVenue || UI.inStore || null : null;   // v0.56: each building has its own tune and sounds
+  Sound.setScene(UI.tab === 'shop' || UI.inStore || UI.inVenue ? 'shop' : inside ? 'inside' : UI.tab === 'world' && !UI.wtown ? 'world' : (UI.tab === 'town' || UI.tab === 'world') ? (UI.visit ? 'home' : 'town') : 'home', pk && (SOUND_PLACE[pk] ? pk : VENUE_HOME[pk] || pk));
+  try { const c = countyOf(VIEW_TOWN); Sound.setFolk(c && c.folk); } catch (e) { /* no county */ }
 }
 function setTab(tab) {
   if (Scene.getEdit()) Scene.stopEdit();
@@ -640,8 +647,8 @@ function panelReal() {
       <div class="row between"><span>${t('language')}</span><span>
         <button class="chip ${S.lang === 'zh' ? 'on' : ''}" data-act="lang" data-arg="zh">中文</button>
         <button class="chip ${S.lang === 'en' ? 'on' : ''}" data-act="lang" data-arg="en">English</button></span></div>
-      <label class="row between toggle-row"><span>🎵 ${t('set_music')}</span><input type="checkbox" class="switch" data-act="toggleMusic" ${S.music !== false ? 'checked' : ''}></label>
-      <label class="row between toggle-row"><span>🔊 ${t('set_sfx')}</span><input type="checkbox" class="switch" data-act="toggleSfx" ${S.sfx !== false ? 'checked' : ''}></label>
+      ${[['music', '🎵', 'toggleMusic', S.music !== false], ['sfx', '🔊', 'toggleSfx', S.sfx !== false], ['amb', '🌧️', 'toggleAmb', S.amb !== false]].map(([k, e, act, on]) => `<div class="vol-row"><label class="row between toggle-row"><span>${e} ${t('set_' + k)}${k === 'amb' ? `<small>${t('set_amb_note')}</small>` : ''}</span><input type="checkbox" class="switch" data-act="${act}" ${on ? 'checked' : ''}></label>`
+        + `<input type="range" class="vol-slider" id="vol_${k}" min="0" max="100" step="5" value="${Math.round(volOf(k) * 100)}" aria-label="${t('set_' + k)}"></div>`).join('')}
       <div class="row between"><span>🌗 ${t('set_theme')}</span><span>${['auto', 'light', 'dark'].map(m => `<button class="chip ${S.theme === m ? 'on' : ''}" data-act="setTheme" data-arg="${m}">${t('theme_' + m)}</button>`).join('')}</span></div>
       <label class="row between toggle-row"><span>🐾 ${t('pet_remind')}<small>${t('pet_remind_note')}</small></span><input type="checkbox" class="switch" data-act="togglePetRemind" ${S.petRemind !== false ? 'checked' : ''}></label></div>
     <div class="card privacy-card"><h3>👤 ${t('account')}</h3>
@@ -1403,9 +1410,9 @@ function harvestField(i) {
   snack(t('snack_harvest', { n: r.n, e: CROPS[r.crop].e }));
 }
 function collectFrom(id) {
-  const r = collectAnimal(id);
+  const an = (S.me.animals || []).find(x => x.id === id), r = collectAnimal(id);
   if (!r) return;
-  Sound.play('collect');
+  Sound.play('collect'); if (an) setTimeout(() => Sound.animal(an.k), 250);   // v0.56: and the animal says something
   if (r.type === 'baby') { Scene.floatAnimal('me', id, '🍼'); snack(t(r.placed ? 'snack_baby' : 'snack_baby_barn', { name: nm(ANIMALS[r.k].baby) })); }
   else { Scene.floatAnimal('me', id, `+${r.n} ${GOODS[r.k].e}`); snack(t('snack_prod', { n: r.n, e: GOODS[r.k].e })); }
 }
@@ -1517,7 +1524,7 @@ const ACT = {
   betPlace(arg) {   // v0.54
     const [sp, g, pick, stake] = arg.split('|'), r = placeBet(sp, +g, +pick, +stake);
     if (r !== 'ok') { Sound.play('oops'); return snack(t('lg_no_' + r, { n: BETS.dayMax })); }
-    Sound.play('coins'); snack(`🎟️ ${t('lg_placed', { n: stake, name: teamName(sp, +pick) })}`); save(); syncSportReminders();
+    Sound.play('chip'); snack(`🎟️ ${t('lg_placed', { n: stake, name: teamName(sp, +pick) })}`); save(); syncSportReminders();
     UI.sheet = { type: 'phone', arg: `sports|${sp}|today` }; renderSheet();
   },
   phoneText(a) { const [id, i] = a.split('|'); textPerson(id, +i); seeTexts(id); Sound.play('tick'); save(); renderSheet(); },
@@ -1525,7 +1532,7 @@ const ACT = {
   phoneSend(id) {
     const el = $('#phText'), text = String(el ? el.value : UI.phDraft || '').trim().slice(0, 120), w = whoIs(id);
     if (!text || !w) return;
-    UI.phDraft = ''; if (el) el.value = '';
+    UI.phDraft = ''; if (el) el.value = ''; Sound.play('send');
     S.texts = S.texts || {}; const th = S.texts[id] = S.texts[id] || [];
     const R2 = talkReply(id, text), wait = (TALK.reply[0] + Math.random() * (TALK.reply[1] - TALK.reply[0])) * 1000;
     th.push({ me: 1, text, t: now() }, { text: R2.text, t: now() + wait });
@@ -1840,7 +1847,7 @@ const ACT = {
   enterVenue(k) {
     if (!VENUE_PLACES.includes(k) || VIEW_TOWN !== myTown()) return;
     if (Scene.here() !== k) return openSheet('place', k);
-    closeSheet(); UI.inVenue = BUILDING_FLOORS[k] ? BUILDING_FLOORS[k][0] : k; UI.visit = null; UI.tab = 'town'; syncView(); Sound.play('chime');   // v0.37: a tower: its ground floor
+    closeSheet(); UI.inVenue = BUILDING_FLOORS[k] ? BUILDING_FLOORS[k][0] : k; UI.visit = null; UI.tab = 'town'; syncView(); Sound.play('doorbell');   // v0.37: a tower: its ground floor
     if (!S.venueTip) { S.venueTip = 1; setTimeout(() => snack(`👀 ${t('venue_tip')}`), 400); }
     if (k === 'school' && S.study) setTimeout(() => Scene.venueUse('desk', Math.max(5, Math.round((S.study.end - now()) / 1000)), null), 300);   // in class: at your desk
     refresh();
@@ -1850,7 +1857,7 @@ const ACT = {
   venueFloor(k) {
     const home = VENUE_HOME[k] || k; if (!UI.inVenue || (VENUE_HOME[UI.inVenue] || UI.inVenue) !== home) return;
     if (k === 'suite' && !roomUntil()) { Sound.play('oops'); return snack(`🔑 ${t('lift_need_room')}`); }   // v0.38
-    closeSheet(); Scene.shopGoTo('lift', () => { UI.inVenue = k; UI.spotRes = null; syncView(); Sound.play('chime'); snack(`🛗 ${nm(PLACE_INFO[k])}`); refresh(); });   // into the lift, and out on the other floor
+    closeSheet(); Scene.shopGoTo('lift', () => { UI.inVenue = k; UI.spotRes = null; syncView(); Sound.play('lift'); snack(`🛗 ${nm(PLACE_INFO[k])}`); refresh(); });   // into the lift, and out on the other floor
   },
   haircut(arg) {
     const [hair, col] = arg.split('|');
@@ -1900,7 +1907,7 @@ const ACT = {
   openSpecials() { openSheet('specials', VIEW_TOWN); refresh(); },
   groceriesBuy() { if (buyGroceries() === 'ok') { Sound.play('collect'); snack(`🛒 ${t('sp_groceries_ok')}`); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },
   venueDo(arg) {
-    const [v, k, act] = arg.split('|'), fin = (e, msg) => { Sound.play('chime'); snack(`${e} ${msg}`); save(); refresh(); };
+    const [v, k, act] = arg.split('|'), fin = (e, msg) => { Sound.play(ACT_SOUND[act] || (act.startsWith('zv_') ? 'done' : 'done')); snack(`${e} ${msg}`); save(); refresh(); };
     // v0.50: walk over, then the bar (with what it is on it), then it's done
     const useK = (sec, cb, look, e) => Scene.venueUse(k, sec, cb, look, e || VDO_E[act] || (act.startsWith('zv_') ? (ZOO_ANIMALS[act.slice(3)] || {}).e : null) || SPOT_E[v + '|' + k] || '⏳');
     if (OUTDOOR.venues.includes(VENUE_HOME[v] || v) && outdoorPaused(VENUE_HOME[v] || v)) return wxSnack();   // v0.50: the funfair, the zoo, the stadium, the roof
@@ -2191,6 +2198,7 @@ const ACT = {
   weatherInfo: () => openSheet('weather'),
   toggleMusic() { S.music = S.music === false; Sound.setMusic(S.music !== false); },
   toggleSfx() { S.sfx = S.sfx === false; Sound.setSfx(S.sfx !== false); },
+  toggleAmb() { S.amb = S.amb === false; Sound.setAmb(S.amb !== false); },   // v0.56: rain, birds, crowds…
   weatherReal() { S.weatherReal = !S.weatherReal; if (S.weatherReal) realWeather(true); else snack(t('w_sim_src')); },
   simWeather(k) { S.weather = k === 'auto' ? null : { kind: k === 'heavy' ? 'rain' : k, heavy: k === 'heavy', temp: simWeather().temp, forced: true };   // v0.50: + heavy rain
     snack(wxName()); },
@@ -3359,6 +3367,7 @@ document.addEventListener('input', e => {
   if (e.target.id === 'petName' && UI.petEdit !== undefined) UI.petEdit = e.target.value;
   if (e.target.id === 'draftText' && UI.draft) UI.draft.text = e.target.value;
   if (e.target.id === 'phText') UI.phDraft = e.target.value;   // v0.51
+  if (e.target.id && e.target.id.startsWith('vol_')) { const k = e.target.id.slice(4); S.vol = { ...(S.vol || {}), [k]: +e.target.value / 100 }; Sound.setVol(k, S.vol[k]); if (k === 'sfx') Sound.play('tick'); save(); }   // v0.56
 });
 document.addEventListener('keydown', e => { if (e.target.id === 'phText' && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); ACT.phoneSend(e.target.dataset.id); refresh(); } });   // v0.51: Enter sends
 
@@ -3368,7 +3377,7 @@ Scene.onWorldOut(() => { if (UI.tab === 'town') { ACT.world(); refresh(); } }); 
 // Sound can only start after the first touch (browser and iPhone rule).
 document.addEventListener('pointerdown', () => {
   Sound.start();
-  if (S) { Sound.setMusic(S.music !== false); Sound.setSfx(S.sfx !== false); }
+  if (S) { Sound.setMusic(S.music !== false); Sound.setSfx(S.sfx !== false); Sound.setAmb(S.amb !== false); ['music', 'sfx', 'amb'].forEach(k => Sound.setVol(k, volOf(k))); }
 }, { once: false, passive: true });
 setInterval(() => {
   if (!S) return;
@@ -3392,7 +3401,7 @@ setInterval(() => {
   if (S.work && now() >= S.work.end) { const r = finishShift(); if (r) { Sound.play('coins'); snack(`💼 ${t(r.promoted ? 'job_promoted' : 'job_done', { n: r.pay, rank: nm(JOB_RANKS[jobRank()]) })}`); refresh(); } }
   if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }
   if (S.floodNews) { snack(`🌊 ${t('w_flooded', { n: S.floodNews })}`); S.floodNews = 0; }
-  if (!S.onboarding && S.bets && S.bets.length) { const done = settleBets(); if (done.length) { const w = done.filter(x => x.won); Sound.play(w.length ? 'coins' : 'oops'); snack(w.length ? `🎉 ${t('lg_won_snack', { n: w.reduce((n, x) => n + x.pay, 0) })}` : `😕 ${t('lg_lost_snack', { n: done.length })}`); save(); refresh(); } }   // v0.54
+  if (!S.onboarding && S.bets && S.bets.length) { const done = settleBets(); if (done.length) { const w = done.filter(x => x.won); Sound.play(w.length ? 'fanfare' : 'aww'); snack(w.length ? `🎉 ${t('lg_won_snack', { n: w.reduce((n, x) => n + x.pay, 0) })}` : `😕 ${t('lg_lost_snack', { n: done.length })}`); save(); refresh(); } }   // v0.54
   if (!S.onboarding && S.lgDay !== today() && new Date(now()).getHours() >= 9) { S.lgDay = today(); const si = seasonNow(); if (!si.off) { const mine = SPORT_KEYS.filter(k => todayGames(k).some(G => [G.h, G.a].some(i => lgTeam(k, i).t === myTown()))); snack(`🏟️ ${t('lg_today_snack', { n: SPORT_KEYS.length * 5, mine: mine.map(k => LEAGUES[k].e).join('') })}`); } save(); syncSportReminders(); }   // v0.54: today's games
   // trophies: celebrate each new one (once)
   if (!S.onboarding) {
@@ -3407,7 +3416,8 @@ setInterval(() => {
     if (news.length) { save(); refresh(); }
     if (Date.now() - petSyncAt > 10 * MIN) { syncPetReminders(); syncSportReminders(); }
   }
-  Sound.ambience(NIGHT > 0.5, weatherNow().kind);
+  Sound.ambience(NIGHT > 0.5, weatherNow().kind, new Date(now()).getHours());
+  if (!S.onboarding) { Sound.setFarm([...new Set((S.me.animals || []).map(a => a.k))]); const un = unreadTexts() + unreadMail(); if (un > (UI.lastUnread || 0)) Sound.play('msg'); UI.lastUnread = un; }   // v0.56
   if (S.weatherReal && (!S.weather || !S.weather.real || now() - S.weather.at > 30 * MIN) && Date.now() - weatherTried > 5 * MIN) realWeather(false);
 }, 1000);
 // Friends stay active in the background, but rarely (no spam).

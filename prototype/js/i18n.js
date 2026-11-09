@@ -432,12 +432,12 @@ Object.assign(STR.en, {
 
 // ---------- v0.7 ----------
 Object.assign(STR.zh, {
-  set_music: '背景音乐', set_sfx: '音效',
+  set_music: '背景音乐', set_sfx: '音效', set_amb: '环境声', set_amb_note: '雨声、鸟叫、虫鸣、店里的人声、球场观众',
   snack_dog_fine: '被{name}家的狗抓到了！赔了 TA 🪙{n}，今天不能再去 TA 家偷了 🐕', snack_chased: '{name}家的狗今天记住你了，明天再来吧',
   feed_caught_fine: '{name} 想来偷{e}，被你家的狗抓到了，赔了你 🪙{n} 🐕',
 });
 Object.assign(STR.en, {
-  set_music: 'Music', set_sfx: 'Sound effects',
+  set_music: 'Music', set_sfx: 'Sound effects', set_amb: 'Ambience', set_amb_note: 'Rain, birds, crickets, people in shops, the stadium crowd',
   snack_dog_fine: 'Caught by {name}’s dog! You paid them 🪙{n} and can’t sneak in again today 🐕', snack_chased: '{name}’s dog remembers you today. Come back tomorrow',
   feed_caught_fine: '{name} tried to sneak {e}, got caught by your dog and paid you 🪙{n} 🐕',
 });

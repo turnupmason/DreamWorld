@@ -977,3 +977,6 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 .bet-chips .ph-btn { display: flex; flex-direction: column; align-items: center; min-width: 64px; }
 .bet-chips small { font-size: 10px; opacity: .85; }
 .lg-side span.tlogo { flex: none; }   /* v0.54: the logo stays round */
+/* v0.56: the volume sliders under each sound switch */
+.vol-row { display: flex; flex-direction: column; gap: 2px; }
+.vol-row .vol-slider { width: 100%; margin: 0 0 8px; accent-color: #ef7d3c; height: 22px; }

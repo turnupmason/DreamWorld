@@ -757,8 +757,10 @@ function drawPitch(x, y, w, d, ts, A, big) {
   const U = big ? AR_SC * z : 0.16 * z;
   arField(F, A, big, lit, z);
   const items = arStructures(F, A, big, z, U);
+  if (big && typeof Sound !== 'undefined') Sound.crowd(live ? 0.25 : A && !A.off && A.state === 'soon' ? 0.1 : 0.04);
   if (live) {
     const S2 = arSim(A, ts / 1000, F, big), now2 = ts;
+    if (big) arSounds(A, S2, ts / 1000);
     S2.players.forEach(P => {
       if (P.ball2) { const w2 = F.at(P.a, P.c); items.push({ k: w2[0] + w2[1], draw: () => { const p = iso(w2[0], w2[1]); ellipse(p.x, p.y, 1.2 * z, 0.5 * z, 'rgba(0,0,0,.25)'); circle(p.x, p.y - P.h * U, Math.max(0.8, 1.6 * U), '#ffffff'); } }); return; }
       items.push({ k: P.w[0] + P.w[1], draw: () => arDrawPlayer(P, A, F, z, U, now2, big) });
@@ -767,6 +769,40 @@ function drawPitch(x, y, w, d, ts, A, big) {
     if (B) { const w2 = F.at(B.a, B.c); items.push({ k: w2[0] + w2[1] + 0.01, draw: () => arDrawBall(sp, iso(w2[0], w2[1]), B.h || 0, U, z, B) }); }
   }
   items.sort((a, b) => a.k - b.k).forEach(it => it.draw());
+}
+// v0.56: the stadium's sounds while you watch: the crowd follows the game (louder at a chance, a roar at a score),
+// and the game itself: the bat, the glove, a kick, the puck, the dribble, the net or the rim, the whistle, the horn
+let AR_SND = { key: '' };
+function arSounds(A, S2, t) {
+  if (typeof Sound === 'undefined') return;
+  Sound.crowd(Math.max(0.25, S2.hype ? S2.hype.v * 0.85 : 0, A.last ? 1 : 0));
+  const key = `${A.sp}|${A.s}|${A.r}|${A.g}`, P = AR_SND;
+  if (P.key !== key) { AR_SND = { key, t, last: A.last ? A.last.at : 0 }; return; }
+  const t0 = P.t; P.t = t;
+  if (t - t0 > 1 || t <= t0) return;   // (a jump in time: nothing)
+  const cross = (period, at) => { const a = ((t0 % period) + period) % period, b = ((t % period) + period) % period; return b < a ? at > a || at <= b : at > a && at <= b; };
+  const seed = A.r * 7 + A.g + A.s * 3, play = n => Sound.play(n);
+  if (A.last && A.last.at !== P.last) { P.last = A.last.at; play('roar'); setTimeout(() => play({ hockey: 'horn', football: 'horn', baseball: 'charge', soccer: 'whistle', basketball: 'squeak' }[A.sp]), 300); }
+  if (A.sp === 'baseball') {
+    const k = Math.floor(t / 6), hit = lgRand(k, seed + 11, 1) < 0.34, swing = hit || lgRand(k, seed + 11, 2) < 0.45;
+    if (cross(6, 0.335 * 6)) { if (hit) play('batcrack'); else { if (swing) play('swish'); play('glove'); } }
+    if (!hit && cross(6, 0.62 * 6)) play('glove');
+    if (hit && (cross(6, 0.6 * 6) || cross(6, 0.8 * 6))) play('glove');
+  } else if (A.sp === 'soccer' || A.sp === 'hockey') {
+    const D = FLOW[A.sp].D;
+    if (cross(D, 0)) play(A.sp === 'hockey' ? 'puck' : 'kick');
+    if (A.sp === 'hockey' && Math.random() < 0.01) play('squeak');
+  } else if (A.sp === 'basketball') {
+    const n = Math.floor(t / BK.D), W1 = bkTouch(n + 1, seed);
+    if (S2.holder != null && cross(Math.PI * 0.17, 0)) play('bounce');
+    if (W1.shot && cross(BK.D, 0.85 * BK.D)) play(W1.made ? 'swish' : 'clang');
+    if (Math.random() < 0.012) play('squeak');
+  } else if (A.sp === 'football') {
+    const n = Math.floor(t / 12), FP = fbPlay(n, seed), endT = FP.pass ? (FP.caught ? 4.4 : 3.4) : 2.4;
+    if (cross(12, 3.6)) play('glove');
+    if (FP.pass && cross(12, 3.6 + 3.0)) play(FP.caught ? 'glove' : 'bounce');
+    if (cross(12, 3.6 + endT + 0.3)) play('whistle');
+  }
 }
 function arDrawBall(sp, p, h, U, z, B) {
   ellipse(p.x, p.y, Math.max(1, 2.6 * U), Math.max(0.5, 1.1 * U), 'rgba(0,0,0,.25)');
