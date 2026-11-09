@@ -1491,6 +1491,21 @@ function buyTicket(mode, from, to, dep, free) {
   return 'ok';
 }
 
+// ---------- v0.70: tickets for games ----------
+// (Mason #33: "buy tickets to watch every game, in the stands"): for any game not over yet, in any league and any
+// city, from the phone's sports app; { id, sp, s, r, g, h, a, start, end, town (the home team's city), venue }.
+const gameVenue = sp => (AR_INDOOR.includes(sp) ? 'arena' : 'stadium');
+const myGameTix = () => { S.gameTix = (S.gameTix || []).filter(tk => now() < tk.end + HOUR); return S.gameTix; };
+const gameTixFor = G => myGameTix().find(tk => tk.sp === G.sp && tk.s === G.s && tk.r === G.r && tk.g === G.g);
+function buyGameTix(G) {
+  if (gameTixFor(G)) return 'own';
+  if (G.state === 'done' || now() > G.end) return 'over';
+  if (S.me.coins < VENUE.match.price) return 'poor';
+  S.me.coins -= VENUE.match.price;
+  myGameTix().push({ id: uid(), sp: G.sp, s: G.s, r: G.r, g: G.g, h: G.h, a: G.a, start: G.start, end: G.end, town: lgTeam(G.sp, G.h).t, venue: gameVenue(G.sp) });
+  return 'ok';
+}
+
 // ---------- assets & ranking ----------
 const costValue = c => (c.coins || 0) + (c.wood || 0) * 5; // wood only comes from real life, so it counts extra
 function assetBreakdown(h) {

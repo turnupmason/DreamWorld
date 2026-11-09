@@ -196,7 +196,7 @@ function renderHUD() {
     </div>
     ${needBars()}
     <div class="res row">${perks}${live}
-      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : commuteSoon() ? `<button class="pill work" data-act="commuteGo">💼 ${t('job_commute')}</button>` : ''}${(tk => (tk ? `<button class="pill work" data-act="goTicket" data-arg="${tk.id}">${WAY_EMO[tk.mode]} ${localClock(tk.from, tk.dep)} ${t('tk_go_' + tk.mode)}</button>` : ''))(ticketSoon())}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${S.study ? `<button class="pill work" data-act="placeGo" data-arg="school">📚 ${fmtDur(Math.max(0, S.study.end - now()))}</button>` : ''}${isFed() ? `<button class="pill fed" data-act="mallAct" data-arg="food">😋 ${fmtDur(S.fed.until - now())}</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
+      ${S.work ? `<button class="pill work" data-act="placeGo" data-arg="${S.work.place}">💼 ${fmtDur(Math.max(0, S.work.end - now()))}</button>` : commuteSoon() ? `<button class="pill work" data-act="commuteGo">💼 ${t('job_commute')}</button>` : ''}${(tk => (tk ? `<button class="pill work" data-act="goTicket" data-arg="${tk.id}">${WAY_EMO[tk.mode]} ${localClock(tk.from, tk.dep)} ${t('tk_go_' + tk.mode)}</button>` : ''))(ticketSoon())}${(tk => (tk ? `<button class="pill work" data-act="goGame" data-arg="${tk.id}">${LEAGUES[tk.sp].e} ${fmtHM(tk.start)} ${t('gt_go')}</button>` : ''))(myGameTix().filter(x => x.start - now() < 2 * HOUR && now() < x.end).sort((a, b) => a.start - b.start)[0])}${S.sick ? `<button class="pill sick" data-act="placeGo" data-arg="clinic">🤒</button>` : ''}${S.study ? `<button class="pill work" data-act="placeGo" data-arg="school">📚 ${fmtDur(Math.max(0, S.study.end - now()))}</button>` : ''}${isFed() ? `<button class="pill fed" data-act="mallAct" data-arg="food">😋 ${fmtDur(S.fed.until - now())}</button>` : ''}${jailed() ? `<button class="pill jail" data-act="placeGo" data-arg="police">🚔 ${fmtDur(Math.max(0, S.jail.end - now()))}</button>` : ''}
       ${S.pending.length ? `<button class="pill pending" data-act="collect">📦 ${t('to_collect')} ${S.pending.length}</button>` : ''}
     </div>`;
 }
@@ -1108,7 +1108,9 @@ const SHEETS = {
     else if (key === 'zoo|petting') body = once('petting', 'petting', `🐐 ${t('sp_petting_btn', { n: VENUE.petting.fun })}`);
     else if (key === 'zoo|shop') body = `<p class="muted small">${t('sp_zooplush_note')}</p><div class="act-grid">${ZOO_SHOP.map(pk => `<button class="act-tile" data-act="zooPlushBuy" data-arg="${pk}" ${S.me.coins >= VENUE.zooplush.price ? '' : 'disabled'}><span>${{ plushlion: '🦁', plushelephant: '🐘', plushgiraffe: '🦒', plushpenguin: '🐧' }[pk]}</span><b>${nm(FURN[pk])}</b><i>🪙${VENUE.zooplush.price}${S.me.store['room:' + pk] ? ' · ' + t('sp_zooplush_have', { n: S.me.store['room:' + pk] }) : ''}</i></button>`).join('')}</div>`;
     else if (key === 'zoo|kiosk') body = snackBtn('zoo');
-    else if (key === 'stadium|seats') { const g = arenaNow(VIEW_TOWN); body = gameCard(VIEW_TOWN) + (!g.off && g.state === 'live' ? go('match', `🎟️ ${t('sp_match_btn', { n: VENUE.match.price, f: VENUE.match.fun })}`, S.me.coins >= VENUE.match.price) : once('tour', 'tour', `👀 ${t('sp_tour_btn', { n: VENUE.tour.fun })}`)); }
+    else if (key === 'stadium|seats') { const vn = UI.inVenue === 'arena' ? 'arena' : 'stadium', g = arenaNow(VIEW_TOWN, now(), vn), tk = !g.off && gameTixFor(g);   // v0.70: your ticket gets you in
+      body = gameCard(VIEW_TOWN, vn) + (!g.off && g.state === 'live' ? (tk ? go('match', `🎟️ ${t('gt_use')}`, true) : go('match', `🎟️ ${t('sp_match_btn', { n: VENUE.match.price, f: VENUE.match.fun })}`, S.me.coins >= VENUE.match.price))
+        : !g.off && g.state === 'soon' && tk ? `<p class="muted">🎟️ ${t('gt_wait', { t: fmtHM(g.start) })}</p>` : once('tour', 'tour', `👀 ${t('sp_tour_btn', { n: VENUE.tour.fun })}`)); }
     else if (key === 'stadium|board') body = gameCard(VIEW_TOWN) + `<p class="muted small">${t('sp_board_games')}</p>`;
     else if (key === 'stadium|bets') body = betWindow();   // v0.57 (Mason #30): odds and bets only here
     else if (key === 'stadium|hotdog') body = go('hotdog', `🌭 ${t('sp_hotdog_btn', { n: VENUE.hotdog.price, h: VENUE.hotdog.hunger })}`, S.me.coins >= VENUE.hotdog.price);
@@ -1987,7 +1989,15 @@ const ACT = {
     if (act === 'rest') return useK(S.sick && S.sick.med ? SICK.restSec : 6, () => { if (S.sick && S.sick.med && restInBed(SICK.restSec)) { Sound.play('levelup'); snack(`🎉 ${t('sp_cured')}`); save(); refresh(); } else fin('😌', t('sp_rested')); });
     // v0.37: the new places. Paid things: you pay, sit down, enjoy it. Free ones: once a day (the pool twice).
     const PAID = { dinner: '🍝', drink: '🍹', tea: '🫖', book: '📖', arcade: '🕹️', wheel: '🎡', coaster: '🎢', carousel: '🎠', bumper: '🚗', candy: '🍭', giraffefeed: '🦒', hotdog: '🌭', match: '🏟️' };   // v0.41: + the rides; v0.42: + the zoo, the stadium
-    if (act === 'match' && arenaNow(VIEW_TOWN).state !== 'live') { Sound.play('oops'); return snack(t('sp_match_over')); }   // v0.42: it finished while you were deciding
+    if (act === 'match') {   // v0.70: in your seat till the game's over (or you get up): the ticket you bought, or one here
+      const A = arenaNow(VIEW_TOWN, now(), UI.inVenue === 'arena' ? 'arena' : 'stadium');
+      if (A.off || A.state !== 'live') { Sound.play('oops'); return snack(t('sp_match_over')); }
+      const tk = gameTixFor(A);
+      if (tk) { S.gameTix = myGameTix().filter(x => x !== tk); addNeed('fun', VENUE.match.fun); }
+      else if (venueBuy('match') !== 'ok') { Sound.play('oops'); return snack(t('snack_poor')); }
+      save(); Sound.play('cheer'); snack(`🏟️ ${t('gt_seated')}`);
+      return useK(Math.max(30, Math.round((A.end - now()) / 1000)), () => fin('🏟️', t('sp_match_done')));
+    }
     if (PAID[act]) { if (S.me.coins < VENUE[act].price) { Sound.play('oops'); return snack(t('snack_poor')); } return useK(VENUE[act].sec, () => { if (venueBuy(act) === 'ok') fin(PAID[act], t('sp_' + act + '_done')); }); }
     if (act === 'date' || act === 'lounge') {   // someone you know joins you
       if (act === 'date' && S.me.coins < VENUE.date.price) { Sound.play('oops'); return snack(t('snack_poor')); }
@@ -3653,6 +3663,36 @@ Object.assign(ACT, {
   },
 });
 
+// ================= v0.70 (Mason #33): tickets for every game, watching from the stands =================
+function gameTixBtn(G, small) {
+  if (G.state === 'done' || now() > G.end) return '';
+  const tk = gameTixFor(G);
+  return `<div class="row ${small ? 'tight' : 'gap-top'}"><span class="grow ph-muted small">${LEAGUES[G.sp].e} ${fmtDay(G.start)} ${fmtHM(G.start)} · ${gameVenue(G.sp) === 'arena' ? t('venue_arena') : t('venue_stadium')} · ${esc(nm(COMMUNITIES[lgTeam(G.sp, G.h).t]))}</span>
+    ${tk ? `<button class="btn small" data-act="goGame" data-arg="${tk.id}">🎟️ ${t('gt_have')}</button>` : `<button class="btn small primary" data-act="buyGameTix" data-arg="${G.sp}|${G.s}|${G.r}|${G.g}" ${S.me.coins >= VENUE.match.price ? '' : 'disabled'}>🎟️ 🪙${VENUE.match.price}</button>`}</div>`;
+}
+function myGameTixHtml() {
+  const L = myGameTix().slice().sort((a, b) => a.start - b.start);
+  if (!L.length) return '';
+  return `<div class="ph-card"><b>🎟️ ${t('gt_mine')}</b>${L.map(tk => `<div class="row gap-top"><span class="grow small">${LEAGUES[tk.sp].e} ${esc(teamName(tk.sp, tk.a))} @ ${esc(teamName(tk.sp, tk.h))}<br><span class="ph-muted">${fmtDay(tk.start)} ${fmtHM(tk.start)} · ${esc(nm(COMMUNITIES[tk.town]))} ${tk.venue === 'arena' ? t('venue_arena') : t('venue_stadium')}</span></span><button class="btn small" data-act="goGame" data-arg="${tk.id}">${t('gt_go')}</button></div>`).join('')}</div>`;
+}
+Object.assign(ACT, {
+  buyGameTix(arg) {
+    const [sp, s, r, g] = String(arg).split('|'), G = roundGames(sp, +r, +s)[+g];
+    if (!G) return;
+    const res = buyGameTix(G);
+    if (res === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (res !== 'ok') return;
+    Sound.play('coins'); save(); snack(`🎟️ ${t('gt_bought', { t: `${fmtDay(G.start)} ${fmtHM(G.start)}`, c: nm(COMMUNITIES[lgTeam(sp, G.h).t]) })}`); renderSheet(); refresh();
+  },
+  // to the game: in that city already: to the stadium / the arena; somewhere else: that city on the World page (how to get there)
+  goGame(id) {
+    const tk = myGameTix().find(x => x.id === id); if (!tk) return;
+    closeSheet();
+    if (whereNow() === tk.town) { if (tk.town === myTown()) UI.tab = 'town'; else { UI.tab = 'world'; UI.wtown = tk.town; } syncView(); return openSheet('go', { place: tk.venue }); }
+    UI.wsel = tk.town; UI.wtown = null; setTab('world'); refresh(); snack(`🎟️ ${t('gt_far', { c: nm(COMMUNITIES[tk.town]) })}`);
+  },
+});
+
 // ================= v0.8 =================
 // ---------- light / dark ----------
 const darkMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -4234,7 +4274,7 @@ function sportsScreen(scr, a, b, arg) {
   const game = G => {   // one game: both teams and the score (v0.57: no chances or odds here)
     const res = G.res, side = i => `<button class="lg-side ${res && (res.hw ? res.h : res.a) === i ? 'won' : ''}" data-act="phone" data-arg="team|${sp}|${i}">${teamLogo(sp, i)}<span>${esc(teamName(sp, i))}${i === G.h ? ' 🏠' : ''}</span><b>${res ? (i === G.h ? res.hs : res.as) : ''}</b></button>`;
     const st = res ? `${t('lg_final')}${res.note ? ' · ' + t('lg_' + res.note) : ''}` : G.state === 'live' ? `🔴 ${t('lg_live')}` : `🕐 ${fmtClock(G.start)}`;
-    return `<div class="lg-game"><div class="lg-st">${st} · 🏟️ ${esc(nm(COMMUNITIES[lgTeam(sp, G.h).t]))}</div>${side(G.a)}${side(G.h)}</div>`;
+    return `<div class="lg-game"><div class="lg-st">${st} · 🏟️ ${esc(nm(COMMUNITIES[lgTeam(sp, G.h).t]))}</div>${side(G.a)}${side(G.h)}${gameTixBtn(G)}</div>`;   // (v0.70: + a ticket)
   };
   if (tab === 'today') {
     const gs = todayGames(sp);
@@ -4246,9 +4286,9 @@ function sportsScreen(scr, a, b, arg) {
     const cur = si.r === null ? si.next : si.r, from = si.off ? 0 : cur, rs = [];
     if (!si.off && cur > 0) rs.push([cur - 1, roundGames(sp, cur - 1)]);
     for (let r = from + (si.off || si.r === null ? 0 : 1); r < Math.min(SEASON.days, from + (si.off ? 3 : 4)); r++) rs.push([r, roundGames(sp, r, si.off ? si.s + 1 : si.s)]);
-    body = rs.map(([r, gs]) => `<div class="ph-sub">${t('lg_round_n', { r: r + 1 })} · ${fmtDay(gs[0] ? gs[0].start : roundDay(si.s, r, sp))} ${LEAGUES[sp].hour}:00</div>` + gs.map(G => `<div class="ph-row sm">${teamLogo(sp, G.h)}<span class="grow">${esc(teamName(sp, G.h))}</span><b>${G.res ? `${G.res.hs}–${G.res.as}` : 'vs'}</b><span class="grow right">${esc(teamName(sp, G.a))}</span>${teamLogo(sp, G.a)}</div>`).join('')).join('');
+    body = rs.map(([r, gs]) => `<div class="ph-sub">${t('lg_round_n', { r: r + 1 })} · ${fmtDay(gs[0] ? gs[0].start : roundDay(si.s, r, sp))} ${LEAGUES[sp].hour}:00</div>` + gs.map(G => `<div class="ph-row sm">${teamLogo(sp, G.h)}<span class="grow">${esc(teamName(sp, G.h))}</span><b>${G.res ? `${G.res.hs}–${G.res.as}` : 'vs'}</b><span class="grow right">${esc(teamName(sp, G.a))}</span>${teamLogo(sp, G.a)}</div>${G.res ? '' : gameTixBtn(G, true)}`).join('')).join('');   // (v0.70: tickets for later rounds too)
   }
-  return head(`🏟️ ${t('ph_sports')}`) + `<div class="ph-muted center small">${season}</div><div class="chips-row lg-chips">${chips}</div><div class="chips-row lg-tabs">${tabs}</div>${body}`;
+  return head(`🏟️ ${t('ph_sports')}`) + `<div class="ph-muted center small">${season}</div>${myGameTixHtml()}<div class="chips-row lg-chips">${chips}</div><div class="chips-row lg-tabs">${tabs}</div>${body}`;
 }
 function standingsHtml(sp, short) {
   const rows = standings(sp), L = league(sp);

@@ -855,7 +855,14 @@ function drawArenaStand(x, y, W, D, back, ts, A, meRow, meLook) {
     for (let k2 = 0; k2 < n; k2++) {
       const u = (k2 + 0.5) / n, sx = back ? bx + u * bw : bx + bw * 0.5, sy = back ? by + bd * 0.5 : by + u * bd, p = up(iso(sx, sy), h * z), side = sideOf(u), T = side ? Aw : H;
       rrect(p.x - 2.5 * z, p.y - 3.5 * z, 5 * z, 3.5 * z, 1 * z, T ? (Math.floor(u * 8) % 2 ? T.c[0] : shade(T.c[0], -0.2)) : (Math.floor(u * 6) % 2 ? '#2f5fa8' : '#8e99a6'));
-      if (r === meRow && k2 === Math.floor(n * 0.62)) { drawPerson(p.x, p.y, z, { look: meLook, face: 1, view: 'front', energy: 'great', ts, seed: 3, pose: 'sit', seatH: 0, wave: !!(hype || cele) || Math.floor(t * 1.5) % 3 === 0 }); continue; }
+      if (r === meRow && k2 === Math.floor(n * 0.62)) {   // v0.70 (Mason #33: "real moves, no clipping"): you, in your own seat, the crowd's size: sitting and watching,
+        // clapping or waving with everyone now and then, up on your feet with your arms up when the team you back scores
+        const mySide = A && !A.off && lgTeam(A.sp, A.a).t === homeCity(myTown()) ? 1 : 0, mine2 = cele && cele.side === mySide, hyped = hype && hype.side === mySide && hype.v > 0.35, inWave = Math.exp(-Math.pow((u - wv) * 7, 2)) > 0.5;
+        const pose = mine2 ? 'jacks' : hyped || inWave ? 'stand' : 'sit', sc2 = pose === 'sit' ? 0.4 : 0.34;
+        drawPerson(p.x, p.y - (pose === 'jacks' ? Math.abs(Math.sin(t * 6)) * 3 * z : 0), z * sc2, { look: meLook, face: 1, view: 'front', energy: 'great', ts, seed: 3, pose, seatH: 0, phase: t * 8, wave: hyped || inWave || (!mine2 && Math.sin(t * 2.3) > 0.85) });
+        if (z > 0.5) { const tp = p.y - 30 * z; ctx.font = `800 ${Math.max(8, 7 * z)}px ${UI_FONT}`; const tw = ctx.measureText(S.me.name || '🙂').width + 6; rrect(p.x - tw / 2, tp - 6, tw, 12, 6, 'rgba(255,253,248,.92)'); ctx.fillStyle = '#3b3125'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(S.me.name || '🙂', p.x, tp); }
+        continue;
+      }
       if (hash(k2 * 3 + (back ? 1 : 0), r + 7) > fill) continue;
       const i2 = k2 * 7 + r * 13 + (back ? 5 : 0), rnd = m => hash(i2, m);
       let lift = 0, armsUp = false, clap = false;
