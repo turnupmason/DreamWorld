@@ -783,7 +783,9 @@ const SHEETS = {
     } else grid = Object.entries(SOCIALS).filter(([, A]) => A.cat === cat).flatMap(([k, A]) => k !== 'interest' ? [[k, A]] : [...new Set([...myInterests(), ...K.int])].map(tp => [k, A, tp])).map(([k, A, tp]) => { const lock = socialLocked(id, k);
       if (tp) return `<button class="act-tile" data-act="social" data-arg="${id}|interest|${tp}" ${busy || !near ? 'disabled' : ''}><span>${INTERESTS[tp].e}</span><b>${t('soc_talk_about', { topic: nm(INTERESTS[tp]) })}</b>${K.int.includes(tp) ? `<i>💛 ${t('soc_they_like_short')}</i>` : ''}</button>`;
       return `<button class="act-tile" data-act="social" data-arg="${id}|${k}" ${busy || lock || !near ? 'disabled' : ''}><span>${lock ? '🔒' : A.e}</span><b>${nm(A)}</b>${lock ? `<i>${t('soc_lock', { level: nm(relLevel(A.min)) })}</i>` : ''}</button>`; }).join('');
-    const last = UI.socLast && UI.socLast.id === id ? `<div class="soc-last ${UI.socLast.ok ? 'ok' : 'bad'}">${UI.socLast.html}</div>` : '';
+    // v0.51: what you just said to each other, then how it went
+    const log = UI.socLast && UI.socLast.id === id && UI.socLast.lines ? `<div class="talk-log">${UI.socLast.lines.map(l => `<div class="tl ${l.me ? 'me' : 'them'}"><span>${esc(l.text)}</span></div>`).join('')}</div>` : '';
+    const last = UI.socLast && UI.socLast.id === id ? `${log}<div class="soc-last ${UI.socLast.ok ? 'ok' : 'bad'}">${UI.socLast.html}</div>` : '';
     const hm = !w.wp && homeOf(id), canVisit = hm && townOf(id) === myTown() && !UI.visit;
     return `<div class="profile">${avatar(w.look, 'xl')}<div class="grow"><div class="profile-name">${esc(w.name)} <span>${MOOD_E[md]}</span></div>
         <div class="muted small">${roleOf(id)}</div>
@@ -1282,7 +1284,11 @@ function renderSheet() {
   if (!UI.sheet) return;
   const ta = $('#draftText'), focused = ta && document.activeElement === ta;
   if (focused) return;   // don't wipe what you're typing
+  const pt = $('#phText'), ptOn = pt && document.activeElement === pt, sel = ptOn ? pt.selectionStart : 0;   // v0.51: typing a text
+  if (pt) UI.phDraft = pt.value;
   $('#sheet').innerHTML = `<div class="grab"></div>${SHEETS[UI.sheet.type](UI.sheet.arg)}`;
+  const th = $('#sheet .ph-thread'); if (th) th.scrollTop = th.scrollHeight;
+  const pt2 = $('#phText'); if (pt2 && ptOn) { pt2.focus(); try { pt2.setSelectionRange(sel, sel); } catch (e) { /* not a text field */ } }
 }
 
 // ---------- console (prototype-only controls) ----------
@@ -1504,6 +1510,47 @@ const ACT = {
   phone(arg) { if (arg === 'mail') return openSheet('mail', 'phone'); if (arg === 'map') { closeSheet(); return ACT.findMe(); } if (typeof arg === 'string' && arg.startsWith('texts|')) seeTexts(arg.split('|')[1]); openSheet('phone', arg || 'home'); },
   phoneCall(id) { const r = callPerson(id); if (r === 'ok') { Sound.play('chime'); save(); } openSheet('phone', 'call|' + id + '|' + r); },
   phoneText(a) { const [id, i] = a.split('|'); textPerson(id, +i); seeTexts(id); Sound.play('tick'); save(); renderSheet(); },
+  // v0.51 (Mason #29): in your own words; they work out what you meant (talk.js) and answer a moment later
+  phoneSend(id) {
+    const el = $('#phText'), text = String(el ? el.value : UI.phDraft || '').trim().slice(0, 120), w = whoIs(id);
+    if (!text || !w) return;
+    UI.phDraft = ''; if (el) el.value = '';
+    S.texts = S.texts || {}; const th = S.texts[id] = S.texts[id] || [];
+    const R2 = talkReply(id, text), wait = (TALK.reply[0] + Math.random() * (TALK.reply[1] - TALK.reply[0])) * 1000;
+    th.push({ me: 1, text, t: now() }, { text: R2.text, t: now() + wait });
+    while (th.length > 40) th.shift();
+    if (onceToday('text_' + id)) addNeed('social', NEED_GAIN.text);
+    if (R2.intent === 'compliment' && onceToday('txtnice_' + id)) { S.rel = S.rel || {}; S.rel[id] = Math.min(100, relOf(id) + 1); }
+    seeTexts(id); Sound.play('tick'); save(); renderSheet();
+    setTimeout(() => {
+      if (UI.sheet && UI.sheet.type === 'phone' && String(UI.sheet.arg) === 'texts|' + id) { seeTexts(id); renderSheet(); }
+      Sound.play('pop');
+      if (R2.meet) snack(`🌳 ${t('meet_ok', { name: w.name })}`);
+      if (R2.play) snack(`🙌 ${t('inv_agreed', { name: w.name, game: nm(GAME_NAMES[R2.play]) })}`);
+      save(); refresh();
+    }, wait + 60);
+  },
+  // v0.51: ask a friend (a real player) to come and play; townsfolk just play
+  gameInvite(arg) {
+    const [k, id] = arg.split('|'), w = whoIs(id), key = k + '|' + id;
+    if (!w) return;
+    UI.invPending = UI.invPending || {};
+    if (UI.invPending[key]) return;
+    if (outdoorPaused(VENUE_GAMES[k] ? (VENUE_GAMES[k].place === 'lake' ? 'lake' : k) : 'park')) return wxSnack();
+    const game = nm(GAME_NAMES[k] || { zh: k, en: k }), place = nm(placeInfo(PLAY_PLACE[k] || 'park') || PLACE_INFO.park);
+    S.texts = S.texts || {}; const th = S.texts[id] = S.texts[id] || [];
+    th.push({ me: 1, text: t('inv_text', { game, place }), t: now() });
+    UI.invPending[key] = true; Sound.play('tick'); snack(`📨 ${t('inv_sent', { name: w.name })}`); save(); renderSheet();
+    const on = isOnline(id), will = sportWillPlay(id), wait = (TALK.inviteReply[0] + Math.random() * (TALK.inviteReply[1] - TALK.inviteReply[0])) * 1000;
+    setTimeout(() => {
+      UI.invPending[key] = false;
+      if (!on) { th.push({ text: t('inv_later'), t: now() + TALK.offlineReply * MIN }); snack(`💤 ${t('inv_offline', { name: w.name })}`); }
+      else if (will !== 'ok') { th.push({ text: t('inv_no'), t: now() }); Sound.play('oops'); snack(`😕 ${t('inv_no_snack', { name: w.name })}`); }
+      else { th.push({ text: t('inv_yes', { place }), t: now() }); S.invites = S.invites || {}; S.invites[id] = { k, until: now() + TALK.inviteKeep * HOUR }; Sound.play('chime'); snack(`🏃 ${t('inv_coming', { name: w.name, game })}`); }
+      save(); if (UI.sheet && (UI.sheet.type === 'spot' || UI.sheet.type === 'place')) renderSheet(); refresh();
+    }, wait);
+  },
+  invitePeople() { openSheet('invite'); },
   phoneMeet(id) { const r = meetInPark(id), who = whoIs(id); if (r === 'ok') { Sound.play('chime'); snack(`🌳 ${t('meet_ok', { name: who ? who.name : '' })}`); save(); } else snack(t('meet_done')); renderSheet(); },
   bankIn(v) { const r = deposit(v); if (r === 'ok') { Sound.play('coins'); save(); } else snack(t('snack_poor')); renderSheet(); },
   bankOut(v) { const r = withdraw(v); if (r === 'ok') { Sound.play('coins'); save(); } else snack(t('bank_empty')); renderSheet(); },
@@ -1538,6 +1585,7 @@ const ACT = {
       setTimeout(() => { if (UI.socWalk === id) { UI.socWalk = null; if (UI.sheet && UI.sheet.type === 'social') renderSheet(); } }, 20000);   // never stuck
       return refresh();
     }
+    const first = !Object.keys(socialToday(id)).length;   // v0.51: the first time today you say hello first
     const r = doSocial(id, act, g);
     if (r.r === 'locked') return snack(`🔒 ${t('soc_lock', { level: nm(relLevel(A.min)) })}`);
     if (r.r === 'nogift') return snack(t('soc_gift_none'));
@@ -1545,8 +1593,9 @@ const ACT = {
     const fun = ['joke', 'face', 'tickle', 'tease'].includes(act), warm = ['hug', 'deep', 'gift'].includes(act);
     const react = r.ok ? (r.liked || r.shared ? '🤩' : fun ? '😂' : warm ? '🥰' : '😄') : r.disliked ? '😣' : '😒';
     const say = act === 'interest' ? INTERESTS[r.topic].e : act === 'gift' ? barnInfo(g).e : A.e;
-    Scene.socialAnim(id, say, react, !!A.wave);
-    UI.socBusy = Date.now() + SOCIAL.sec * 1000; Sound.play('pop'); save(); renderSheet();
+    // v0.51 (Mason #29): the two of you talk, line by line, over your heads (the sheet steps aside so you can see it)
+    const lines = [...(first && act !== 'greet' ? talkGreet(id) : []), ...convoScript(id, act, g, r)], secs = Scene.talk(id, lines, !!A.wave);
+    UI.socBusy = Date.now() + secs * 1000; Sound.play('pop'); save(); closeSheet(); refresh();
     setTimeout(() => {
       UI.socBusy = 0;
       const name = esc(w.name), d = r.d ? ` <b>${r.d > 0 ? '+' : ''}${r.d}</b>` : '';
@@ -1555,12 +1604,12 @@ const ACT = {
       else if (act === 'gift') msg = t('soc_gift_ok', { name, item: barnInfo(g).name });
       else if (act === 'plans' && r.ok) msg = t('soc_plans_ok', { name });
       else msg = r.ok ? t(r.liked ? 'soc_love' : 'soc_ok', { name }) : t(r.bored ? 'soc_bored' : 'soc_bad', { name });
-      UI.socLast = { id, ok: r.ok, html: `${react} ${msg}${d}` };
+      UI.socLast = { id, ok: r.ok, html: `${react} ${msg}${d}`, lines };
       Sound.play(r.ok ? 'chime' : 'oops');
       if (r.up) setTimeout(() => { Sound.play('levelup'); snack(`🎉 ${t('soc_levelup', { name: w.name, level: nm(r.up) })}`); }, 300);
-      if (UI.sheet && UI.sheet.type === 'social') renderSheet();
+      if (!UI.sheet) openSheet('social', id); else if (UI.sheet.type === 'social') renderSheet();
       refresh();
-    }, SOCIAL.sec * 1000);
+    }, secs * 1000 + 200);
   },
   cook() {   // v0.50: walk to the kitchen and cook (the bar), then eat
     const c = cookCheck();
@@ -3287,7 +3336,9 @@ document.addEventListener('input', e => {
   if (e.target.id === 'loginCode' && UI.login) UI.login.code = e.target.value.replace(/\D/g, '').slice(0, 6);
   if (e.target.id === 'petName' && UI.petEdit !== undefined) UI.petEdit = e.target.value;
   if (e.target.id === 'draftText' && UI.draft) UI.draft.text = e.target.value;
+  if (e.target.id === 'phText') UI.phDraft = e.target.value;   // v0.51
 });
+document.addEventListener('keydown', e => { if (e.target.id === 'phText' && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); ACT.phoneSend(e.target.dataset.id); refresh(); } });   // v0.51: Enter sends
 
 Scene.init($('#town'), onSceneHit);
 if (S && !S.onboarding) try { Scene.resumeTrip(); } catch (e) { console.error(e); S.trip = null; }   // v0.19: a trip cut short by closing the app
@@ -3397,6 +3448,15 @@ const SPOT_E = { 'museum|donate': '💝', 'museum|mystatue': '🗿', 'museum2|sp
 // v0.31: you can do things with someone when you've walked over to them, are round at their home, or work with them
 // v0.33: a ball game on a park court: who you can play with (one of the people on the court, or anyone you know),
 // how good they are, what the first game today gives; then the game itself, and what it gave at the end
+// v0.51: the button for someone in a sport / game list: townsfolk and the court play now; a friend (a real player) gets
+// an invite first (they answer; if they're online and up for it they come); one who's said yes can start
+const invReady = (id, k) => { const I = (S.invites || {})[id]; return !!I && I.k === k && I.until > now(); };
+function playBtn(k, id, act) {
+  if (id === 'court' || !isFriend(id) || invReady(id, k)) return `${invReady(id, k) ? `<span class="tag ok">✅ ${t('inv_ready')}</span>` : ''}<button class="btn small primary" data-act="${act}" data-arg="${k}|${id}">${t('mg_play_btn')}</button>`;
+  const wait = UI.invPending && UI.invPending[k + '|' + id];
+  return `<button class="btn small" data-act="gameInvite" data-arg="${k}|${id}" ${wait ? 'disabled' : ''}>${wait ? '⏳ ' + t('inv_wait') : '📨 ' + t('inv_btn')}</button>`;
+}
+const inviteFoot = () => `<p class="muted small center">${t('inv_note')}</p><button class="btn small block" data-act="invitePeople">🔗 ${t('inv_new')}</button>`;
 function sportBlock(k) {
   const first = sportFirstLeft(k), R = sportRec(k);
   const stars = id => { const s = sportSkill(id); return '⭐'.repeat(s < 0.45 ? 2 : s < 0.6 ? 3 : s < 0.75 ? 4 : 5); };
@@ -3404,8 +3464,8 @@ function sportBlock(k) {
     .concat(contacts().map(c => { const w = whoIs(c.id); return w && { id: c.id, name: w.name, look: w.look, tag: relTag(c.id) }; }).filter(Boolean));
   return `<div class="sec-title">${BALL_GAMES[k].e} ${t('mg_play_' + k)}</div>
     <p class="muted small">${first ? t('mg_reward_first', { f: BALL.fun, s: BALL.social, r: BALL.rel }) : t('mg_reward_again', { f: BALL.againFun })}</p>
-    <div class="card sport-list">${rows.map(r => `<div class="list-item">${avatar(r.look)}<div class="grow"><b>${esc(r.name)}</b><div class="muted small">${r.tag} · ${t('mg_skill')} <span class="stars">${stars(r.id)}</span></div></div><button class="btn small primary" data-act="sportGo" data-arg="${k}|${r.id}">${t('mg_play_btn')}</button></div>`).join('')}</div>
-    ${R.p ? `<p class="muted small center">${sportRecText(k)}</p>` : ''}`;
+    <div class="card sport-list">${rows.map(r => `<div class="list-item">${avatar(r.look)}<div class="grow"><b>${esc(r.name)}</b><div class="muted small">${r.tag} · ${t('mg_skill')} <span class="stars">${stars(r.id)}</span></div></div>${playBtn(k, r.id, 'sportGo')}</div>`).join('')}</div>
+    ${R.p ? `<p class="muted small center">${sportRecText(k)}</p>` : ''}${inviteFoot()}`;
 }
 function sportRecText(k) { const R = sportRec(k); return t('mg_rec', { p: R.p, w: R.w }) + (k === 'basketball' && R.best ? ' · ' + t('mg_rec_best', { b: R.best }) : k === 'bowling' && R.best ? ' · ' + t('mg_rec_bowl', { b: R.best }) : k === 'race' && R.best ? ' · ' + t('mg_rec_race', { b: R.best.toFixed(1) }) : R.best && ['golf', 'karaoke', 'fishing', 'claw'].includes(k) ? ' · ' + t('mg_rec_' + k, { b: k === 'fishing' ? R.best.toFixed(1) : R.best }) : k === 'derby' && R.best ? ' · ' + t('mg_rec_derby', { b: R.best, f: derbyDist(R.far || 0) }) : ''); }   // v0.41 (v0.42: + the derby)
 // v0.38: bowling and the swimming race, in the new district: the same list of who to play with, a price for the lane
@@ -3417,8 +3477,8 @@ function gameBlock(k) {
     .concat(contacts().map(c => { const w = whoIs(c.id); return w && { id: c.id, name: w.name, look: w.look, tag: relTag(c.id) }; }).filter(Boolean));
   return `<div class="sec-title">${G.e} ${t('mg_play_' + k, { n: G.pitches || '' })}</div>
     <p class="muted small">${G.price ? t(STR.zh['mg_price_' + k] ? 'mg_price_' + k : 'mg_price', { n: G.price }) + ' · ' : ''}${first ? t('mg_reward_first', { f: BALL.fun, s: BALL.social, r: BALL.rel }) : t('mg_reward_again', { f: BALL.againFun })}</p>
-    <div class="card sport-list">${rows.map(r => `<div class="list-item">${avatar(r.look)}<div class="grow"><b>${esc(r.name)}</b><div class="muted small">${r.tag} · ${t('mg_skill')} <span class="stars">${stars(r.id)}</span></div></div><button class="btn small primary" data-act="gameGo" data-arg="${k}|${r.id}" ${can ? '' : 'disabled'}>${t('mg_play_btn')}</button></div>`).join('')}</div>
-    ${R.p ? `<p class="muted small center">${sportRecText(k)}</p>` : ''}`;
+    <div class="card sport-list">${rows.map(r => `<div class="list-item">${avatar(r.look)}<div class="grow"><b>${esc(r.name)}</b><div class="muted small">${r.tag} · ${t('mg_skill')} <span class="stars">${stars(r.id)}</span></div></div>${can ? playBtn(k, r.id, 'gameGo') : `<button class="btn small primary" disabled>${t('mg_play_btn')}</button>`}</div>`).join('')}</div>
+    ${R.p ? `<p class="muted small center">${sportRecText(k)}</p>` : ''}${inviteFoot()}`;
 }
 function hotelDesk() {
   const u = roomUntil();
@@ -3501,6 +3561,8 @@ function spark(s, w, h, col) { const lo = Math.min(...s), hi = Math.max(...s), d
   const pts = s.map((v, i) => `${(i / (s.length - 1) * w).toFixed(1)},${(h - 2 - (v - lo) / d * (h - 4)).toFixed(1)}`).join(' ');
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`; }
 function pct(v) { return `<span class="${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`; }
+// v0.51: what a message says (one you typed, a quick one, its answer, or one they sent you)
+function textOf(m) { return m.text !== undefined ? m.text : m.me ? nm(TEXTS[m.i]) : m.inbox !== undefined ? nm((m.boss ? BOSS_INBOX : INBOX)[m.inbox]) : nm(TEXTS[m.i].re[m.r]); }
 function phoneScreen(arg) {
   const [scr, a, b] = String(arg).split('|');
   const head = (title, back = 'home') => `<div class="ph-head"><button class="ph-back" data-act="phone" data-arg="${back}">‹</button><b>${title}</b></div>`;
@@ -3529,16 +3591,18 @@ function phoneScreen(arg) {
   } else if (scr === 'texts' && a) {
     const w = whoIs(a); if (!w) return phoneScreen('texts');
     const th = ((S.texts || {})[a] || []).filter(m => m.t <= now()), typing = ((S.texts || {})[a] || []).some(m => m.t > now());
-    const msg = m => m.me ? nm(TEXTS[m.i]) : m.inbox !== undefined ? nm((m.boss ? BOSS_INBOX : INBOX)[m.inbox]) : nm(TEXTS[m.i].re[m.r]);
+    const msg = textOf;
     // v0.43: what they said (white, with their face and name) and what you said (blue) up top; the replies you can pick
     // in their own box at the bottom, so it's clear which is which
     const them = txt => `<div class="msg them">${avatar(w.look, 'sm')}<div><small>${esc(w.name)}</small><div class="bubble them">${txt}</div></div></div>`;
-    body = head(esc(w.name), 'texts') + `<div class="ph-thread">${th.map(m => (m.me ? `<div class="msg me"><div class="bubble me">${esc(msg(m))}</div></div>` : them(esc(msg(m))))).join('') || `<p class="ph-muted center">${t('ph_say_hi')}</p>`}${typing ? them('<span class="typing">• • •</span>') : ''}</div>
-      <div class="ph-reply"><div class="ph-reply-t">✏️ ${t('ph_pick_reply', { name: esc(w.name) })}</div><div class="ph-quick">${TEXTS.map((x, i) => `<button class="ph-btn" data-act="phoneText" data-arg="${a}|${i}">${esc(nm(x))}</button>`).join('')}</div></div>`;
+    const kind = isFriend(a) ? `👤 ${t('ph_real')}` : `🤖 ${t('ph_bot')}`;   // v0.51: a player, or a townie who answers by itself
+    body = head(esc(w.name), 'texts') + `<div class="ph-kind">${kind}</div><div class="ph-thread">${th.map(m => (m.me ? `<div class="msg me"><div class="bubble me">${esc(msg(m))}</div></div>` : them(esc(msg(m))))).join('') || `<p class="ph-muted center">${t('ph_say_hi')}</p>`}${typing ? them('<span class="typing">• • •</span>') : ''}</div>
+      <div class="ph-reply"><div class="ph-type"><input id="phText" data-id="${a}" maxlength="120" autocomplete="off" placeholder="${t('ph_type', { name: esc(w.name) })}" value="${esc(UI.phDraft || '')}"><button class="ph-send" data-act="phoneSend" data-arg="${a}">${t('ph_send')}</button></div>
+        <div class="ph-reply-t">⚡ ${t('ph_quick')}</div><div class="ph-quick">${TEXTS.map((x, i) => `<button class="ph-btn" data-act="phoneText" data-arg="${a}|${i}">${esc(nm(x))}</button>`).join('')}</div></div>`;
   } else if (scr === 'texts') {
     const ids = Object.keys(S.texts || {}).filter(id => whoIs(id) && S.texts[id].length).sort((x, y) => S.texts[y][S.texts[y].length - 1].t - S.texts[x][S.texts[x].length - 1].t);
     body = head(`💬 ${t('ph_texts')}`) + (ids.map(id => { const w = whoIs(id), th = S.texts[id].filter(m => m.t <= now()), last = th[th.length - 1], n = th.filter(m => !m.me && m.t > ((S.textSeen || {})[id] || 0)).length;
-      const txt = last ? (last.me ? nm(TEXTS[last.i]) : last.inbox !== undefined ? nm((last.boss ? BOSS_INBOX : INBOX)[last.inbox]) : nm(TEXTS[last.i].re[last.r])) : '…';
+      const txt = last ? textOf(last) : '…';
       return `<button class="ph-row" data-act="phone" data-arg="texts|${id}">${avatar(w.look)}<div class="grow"><b>${esc(w.name)}</b><div class="ph-muted">${esc(txt)}</div></div>${n ? `<em class="ph-badge">${n}</em>` : ''}</button>`; }).join('') || `<p class="ph-muted">${t('ph_no_texts')}</p>`)
       + `<button class="ph-btn block" data-act="phone" data-arg="contacts">✏️ ${t('ph_new_text')}</button>`;
   } else if (scr === 'bank') {

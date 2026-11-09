@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.50.0';
+const VERSION = '0.51.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -1611,6 +1611,10 @@ const SICK = { base: 0.03, overwork: 0.08, overworkDays: 5, lowSleep: 0.06, lowS
 // Things to do in the park (each once a day; the ice-cream cart is the food court's ice cream): watch a game on a
 // court or the pitch and cheer, feed the ducks, sit on a bench, bounce on the trampoline. sec: how long it takes.
 const PARK = { watch: { fun: 6, sec: 8 }, ducks: { fun: 8, sec: 8 }, bench: { fun: 4, sec: 10 }, play: { fun: 6, sec: 8 }, icecream: { sec: 5 } };
+// v0.51 (Mason #29): a conversation you can see. Each line stays up base + perChar × its length (min–max seconds), a
+// short gap between lines. Texts: they answer after `reply` seconds; an invite to play: `inviteReply` seconds, and it
+// holds for `inviteKeep` hours; someone offline sees it and answers `offlineReply` minutes later.
+const TALK = { base: 1.0, perChar: { zh: 0.08, en: 0.035 }, min: 1.5, max: 3.6, gap: 0.2, reply: [1.5, 3.5], inviteReply: [3, 7], inviteKeep: 2, offlineReply: 30 };
 // v0.50 (Mason #29): things take time. You walk over first; then a bar over your head fills, and only when it's full is
 // it done (you've eaten, you've looked, you've bought it). Seconds. Things with their own time keep it (the gym, a ride,
 // an exhibit, the park: VENUE / PARK .sec). Walk off before the bar is full and nothing happens (and you pay nothing).

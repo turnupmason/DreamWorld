@@ -2537,6 +2537,7 @@ const Scene = (() => {
   // (😄 when it went well, 😒 when it didn't). Before v0.31 (and after walking up to someone) it just alternates.
   function chatBubble(x, y, z, mine, ts) {
     if (!CHAT) return;
+    if (CHAT.lines) return talkBubble(x, y, z, mine);   // v0.51: what you're saying to each other
     const el = performance.now() - (CHAT.t0 || 0);
     let e;
     if (!CHAT.e) e = mine ? (Math.floor(ts / 700) % 2 ? '💬' : '😊') : (Math.floor(ts / 700) % 2 ? '😄' : '💬');
@@ -2553,6 +2554,51 @@ const Scene = (() => {
     ctx.restore();
   }
   const chatWave = id => chatting(id) && !!CHAT.e && !!CHAT.wave;
+  // v0.51 (Mason #29: "see the two of them talking, not a list"): a conversation, line by line, each in a speech bubble
+  // over whoever's saying it; the other one shows "…" just before their turn. Returns how long it takes (seconds).
+  function makeTalk(id, lines, wave) {
+    const L = curLang() === 'en' ? 'en' : 'zh';
+    let t0 = 0;
+    const ls = lines.map(l => { const d = clamp(TALK.base + [...l.text].length * TALK.perChar[L], TALK.min, TALK.max), o = { ...l, a: t0, b: t0 + d }; t0 += d + TALK.gap; return o; });
+    CHAT = { id, t0: performance.now(), until: performance.now() + t0 * 1000 + 300, lines: ls, e: '💬', react: null, wave };
+    return t0;
+  }
+  function talkBubble(x, y, z, mine) {
+    y -= 12 * Math.max(0.6, z);   // over the name tag
+    const el = (performance.now() - CHAT.t0) / 1000, cur = CHAT.lines.find(l => el >= l.a && el < l.b), nowT = performance.now();
+    if (mine) CHAT.meAt = nowT;
+    else if (cur && cur.me && !(nowT - (CHAT.meAt || 0) < 250)) return speech(x - 46 * z, y + 4 * z, cur.text, true, Math.min(1, (el - cur.a) / 0.18));   // you're not on screen (visiting them): your words beside them
+    if (cur && cur.me === mine) {
+      if (!cur.said) { cur.said = true; if (!mine) Sound.play('pop'); }
+      return speech(x, y, cur.text, mine, Math.min(1, (el - cur.a) / 0.18));
+    }
+    const next = CHAT.lines.find(l => l.a > el);
+    if (next && next.me === mine && next.a - el < 0.6 && (!cur || cur.me !== mine)) speech(x, y, '…', mine, 1);   // about to say something
+  }
+  // a speech bubble with a tail down to (x, y); wraps to a few lines; drawn last, over everything
+  function speech(x, y, text, mine, pop) {
+    BARS.push(() => {
+      const s = clamp(cam.z, 0.8, 1.15), fs = 12.5 * s, maxW = Math.min(168 * s, W * 0.62);
+      ctx.save(); ctx.font = `700 ${fs}px ${UI_FONT},${EMOJI_FONT}`;
+      const rows = wrapLine(text, maxW), lh = fs * 1.32, w = Math.max(...rows.map(r => ctx.measureText(r).width)) + 18 * s, h = rows.length * lh + 11 * s;
+      const bx = clamp(x - w / 2 + (mine ? -w * 0.22 : w * 0.22), 6, W - 6 - w), by = Math.max(6, y - h - 9 * s), tx = clamp(x, bx + 12 * s, bx + w - 12 * s);
+      ctx.translate(x, y); ctx.scale(pop, pop); ctx.translate(-x, -y);
+      ctx.beginPath(); ctx.roundRect(bx, by, w, h, 11 * s); ctx.moveTo(tx - 6 * s, by + h - 1); ctx.lineTo(x, Math.max(by + h + 4, y)); ctx.lineTo(tx + 6 * s, by + h - 1); ctx.closePath();
+      ctx.fillStyle = mine ? '#e4f1ff' : '#ffffff'; ctx.shadowColor = 'rgba(0,0,0,.2)'; ctx.shadowBlur = 5 * s; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = mine ? 'rgba(10,132,255,.45)' : 'rgba(60,45,35,.25)'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = '#2b2620'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      rows.forEach((r, i) => ctx.fillText(r, bx + 9 * s, by + 6 * s + i * lh));
+      ctx.restore();
+    });
+  }
+  // split a line to fit maxW (by character for Chinese, by word otherwise); at most 4 rows
+  function wrapLine(text, maxW) {
+    const toks = /[\u3000-\u9fff\uff00-\uffef]/.test(text) ? [...text] : String(text).split(/(\s+)/), out = [];
+    let cur = '';
+    toks.forEach(tk => { const nx = cur + tk; if (ctx.measureText(nx).width > maxW && cur.trim()) { out.push(cur.trim()); cur = tk.trimStart(); } else cur = nx; });
+    if (cur.trim()) out.push(cur.trim());
+    return out.slice(0, 4);
+  }
   // who's in the park right now (worked out from the time, so it's the same whether you're looking or not)
   function parkList() {
     if (VIEW_TOWN !== myTown() || !TL.park) return [];
@@ -6097,6 +6143,7 @@ const Scene = (() => {
     courtLook(k) { return k === 'tennis' ? TENNIS_P[1] : k === 'basketball' ? BALLERS[0] : TEAMS[4]; },
     // v0.31: play a social moment with someone: your bubble (e), then theirs (react), for SOCIAL.sec seconds
     socialAnim(id, e, react, wave) { CHAT = { id, t0: performance.now(), until: performance.now() + SOCIAL.sec * 1000 + 600, e, react, wave }; },
+    talk(id, lines, wave) { return makeTalk(id, lines, wave); },   // v0.51: lines back and forth over your heads; how long (s)
     // v0.30: inside a building: sit at / lie on / work out on something for a while, then done(); what you're doing now
     venueUse(id, secs, done, mate, e) { if (mode === 'shop') venueUseNow(id, secs, done, mate, e); else if (done) done(); },
     // v0.50 (Mason #29): go over to it (a ware's id or key, 'till', or null: here), then `secs` with a bar showing `e`, then done

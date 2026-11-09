@@ -1305,3 +1305,22 @@ Object.assign(STR.en, {
   wx_paused_note: 'In heavy rain, a thunderstorm or snow, things in the park, by the lake, in the wheat fields, at the funfair, the zoo, the stadium and on the roof wait; indoors carries on. Come back when it clears.',
   cook_doing: 'Off to the kitchen to cook',
 });
+// v0.51: conversations, texting in your own words, inviting friends to play
+Object.assign(STR.zh, {
+  ph_real: '真人好友 · 正式版是 TA 本人回复（原型里先自动回复）', ph_bot: '镇民 · 会认出你说的意思，自动回复',
+  ph_type: '给{name}发消息…', ph_send: '发送', ph_quick: '快捷回复',
+  inv_btn: '邀请', inv_wait: '等回复', inv_ready: '约好了', inv_new: '邀请还没玩的朋友',
+  inv_note: '真人好友要先接受邀请，在线的会马上回复并赶过来；不在线的会收到推送，上线后再回你。（联网对战等 Mason 决定，原型里由电脑替 TA 打）',
+  inv_text: '我在{place}，来一起玩{game}吗？', inv_sent: '邀请已发给{name}', inv_yes: '好呀！马上到{place} 🏃', inv_no: '今天不太想玩，改天吧',
+  inv_later: '刚看到你的邀请！下次一起玩 🙏', inv_offline: '{name}现在不在线，邀请已经发到 TA 的手机，上线后会看到', inv_no_snack: '{name}今天不太想玩',
+  inv_coming: '{name}答应了，来一起玩{game}！', inv_agreed: '{name}答应一起玩{game}了，去那里找 TA 吧',
+});
+Object.assign(STR.en, {
+  ph_real: 'A real friend · in the full game they answer themselves (the prototype answers for them)', ph_bot: 'Townie · understands what you say and answers by itself',
+  ph_type: 'Message {name}…', ph_send: 'Send', ph_quick: 'Quick replies',
+  inv_btn: 'Invite', inv_wait: 'Waiting', inv_ready: 'Agreed', inv_new: 'Invite friends who don’t play yet',
+  inv_note: 'Real friends have to accept first: online ones answer right away and come over; offline ones get a notification and answer later. (Playing together online waits on Mason’s decision; in the prototype the computer plays for them.)',
+  inv_text: 'I’m at the {place}, want to play {game}?', inv_sent: 'Invite sent to {name}', inv_yes: 'Yes! On my way to the {place} 🏃', inv_no: 'Don’t feel like playing today, another time',
+  inv_later: 'Just saw your invite! Next time 🙏', inv_offline: '{name} isn’t online; the invite is on their phone for when they are', inv_no_snack: '{name} doesn’t feel like playing today',
+  inv_coming: '{name} said yes, let’s play {game}!', inv_agreed: '{name} agreed to play {game}, find them there',
+});
