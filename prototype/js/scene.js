@@ -62,6 +62,19 @@ const Scene = (() => {
   function lotCenter(id) { const [ox, oy] = origin(id); return [ox + 5.5, oy + 9]; }
   // Looking at your own community: around your home. Another community: around its town centre.
   function townCenter() { if (VIEW_TOWN !== townOf('me')) { const C = layoutOf(VIEW_TOWN).centre; return [C.x + C.w / 2, C.y + C.d + 2]; } const [ox, oy] = origin('me'); return [ox + 24, oy + 22]; }
+  // v0.64 (Mason #32: "the town view always starts at my home; zoom in to where I am"): where you are in the town
+  // being shown (on the way, at work, held by the police, out somewhere, at home), or null if you aren't in it
+  function meInView() {
+    if (!S) return null;
+    TL = layoutOf(VIEW_TOWN);
+    if (trip && !trip.arrived && trip.town === VIEW_TOWN) return [trip.x, trip.y];
+    if (S.work && VIEW_TOWN === (S.work.town || myTown())) { const p = placePt(S.work.place); if (p) return p; }
+    if (jailed() && VIEW_TOWN === myTown()) { const p = placePt('police'); if (p) return p; }
+    if (outHere()) return S.out.pt;
+    if (VIEW_TOWN === myTown() && !(S.trav && S.trav.town !== myTown()) && !(S.out && S.out.town !== myTown())) { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; }
+    return null;
+  }
+  const ME_ZOOM = 0.85;
   function flyTo(wx, wy, z, instant) {
     if (instant || !worldReady) { cam.z = z; centerOn(wx, wy); fly = null; worldReady = true; return; }
     fly = { wx, wy, z };
@@ -73,7 +86,7 @@ const Scene = (() => {
       // the room fills the screen from side to side (its far corners just off the edges), sitting a bit low
       cam.z = clamp(W * 1.12 / ((rw + rd) * 32), 0.5, 2.2);
       centerOn(rw / 2, rd / 2, 0.6);
-    } else if (mode === 'town') { const [cx, cy] = townCenter(); flyTo(cx, cy, townZoom(), instant); }
+    } else if (mode === 'town') { const p = meInView(); if (p) flyTo(p[0], p[1], ME_ZOOM, instant); else { const [cx, cy] = townCenter(); flyTo(cx, cy, townZoom(), instant); } }   // (v0.64: where you are, close up)
     else if (mode === 'home') { const [ox, oy] = origin(owner), h = homeOf(owner); cam.z = clamp(W / 460, minHomeZoom(), 2.4); centerOn(ox + 5, oy + 6.5, 0.5); cam.x -= Math.min(40, W * 0.08); fly = null; return; }   // house, fields and gate, a little left of the buttons
     else { const [cx, cy] = lotCenter(owner); flyTo(cx, cy, homeZoom(), instant); }
   }
@@ -741,8 +754,8 @@ const Scene = (() => {
       e.pose = live ? doLive(e, live, h, dt, ts) : null;
       if (!live) { if (e.y >= LOT_D && !e.path.length) e.path = planPath(e, lotNav(h), 3.5, 12.5, 2) || []; wander(e, dt, speedOf(h), en => randomWalk(en, lotNav(h))); }
       objs.push({ d: ox + oy + e.x + e.y, f: () => {
-        const p = iso(ox + e.x, oy + e.y);
-        drawPerson(p.x, p.y, z, { look: h.look, face: e.face, back: e.back && !e.wave, view: e.wave > performance.now() ? null : e.view, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() || chatWave(h.id) });
+        const p = iso(ox + e.x, oy + e.y), talk = !e.moving && chatSeat(h.id, [ox + e.x, oy + e.y]);
+        drawPerson(p.x, p.y, z, facing(talk && [ox + e.x, oy + e.y], talk && CHAT_POS.me, { look: h.look, face: e.face, back: e.back && !e.wave, view: e.wave > performance.now() ? null : e.view, turn: e.turn, moving: e.moving, phase: e.phase, energy: friendEnergy(h), ts, seed: ox * 0.1, pose: e.pose || undefined, wave: e.wave > performance.now() || chatWave(h.id) }));
         if (chatting(h.id)) chatBubble(p.x + 12 * z, p.y - 56 * z, z, false, ts);   // v0.31
         if (live && f) liveBadge(p, h.live, false);
         else if (focus && z > 0.55) nameTag(p, homeName(h), isOnline(h.id));
@@ -765,8 +778,9 @@ const Scene = (() => {
     return 'stand';
   }
   function drawMe(ox, oy, ts, focus) {
-    const z = cam.z, p = iso(ox + me.x, oy + me.y), pose = mePose();
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, turn: me.turn, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() || (chatting() && !!CHAT.e && !!CHAT.wave) }); needBubble(p, z, ts);
+    const z = cam.z, p = iso(ox + me.x, oy + me.y), pose = mePose(), talk = chatting() && !me.moving && !me.act;
+    if (talk) CHAT_POS.me = [ox + me.x, oy + me.y];
+    drawPerson(p.x, p.y, z, facing(talk && CHAT_POS.me, talk && CHAT_POS.them, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, turn: me.turn, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() || (chatting() && !!CHAT.e && !!CHAT.wave) })); needBubble(p, z, ts);
     if (chatting() && CHAT.e) chatBubble(p.x - 12 * z, p.y - 56 * z, z, true, ts);   // v0.31
     actBar(me, p, z, ts);   // v0.50
     if (S.live) liveBadge(p, S.live, true);
@@ -2578,7 +2592,7 @@ const Scene = (() => {
         ctx.save(); ctx.globalAlpha = w.alpha;
         const look = (w.h || w.who).look;
         if (riding) { const v = DIRV[w.cdir || '+x'], F2 = faceAlong(v[0], v[1]); drawPerson(p.x, p.y, z, { look, face: F2.face, back: F2.back, tilt: F2.back ? -0.5 : 0.5, energy: 'good', ts, seed: w.x, pose: 'bike', phase: w.phase, bikeCol: w.bikeCol }); }   // v0.25: on a bike (v0.49: facing the way it goes, from behind going away)
-        else drawPerson(p.x, p.y, z, { look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: chatWave(w.id) || (!w.moving && !chatting(w.id) && Math.sin(ts / 900 + w.x) > 0.7) });
+        else { const talk = !w.moving && chatSeat(w.id, [w.x, w.y]); drawPerson(p.x, p.y, z, facing(talk && [w.x, w.y], talk && CHAT_POS.me, { look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: chatWave(w.id) || (!w.moving && !chatting(w.id) && Math.sin(ts / 900 + w.x) > 0.7) })); }
         ctx.restore();
         if (chatting(w.id)) chatBubble(p.x + 12 * z, p.y - 58 * z, z, false, ts);   // v0.25: talking with you
         if (w.who) { if (z > 0.3) label(nm(w.who.name), p.x, p.y - 50 * z, 'rgba(255,255,255,.85)', '#5a4a3a', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z), 2); }   // v0.40: a townsperson
@@ -2592,6 +2606,15 @@ const Scene = (() => {
   // v0.25: people in the park: on the benches and on the lawn, chatting; your boss or a coworker now and then
   let PARK_PEOPLE = [], CHAT = null;   // who's in the park now; who you're talking to (and until when)
   const chatting = id => CHAT && CHAT.until > performance.now() && (id === undefined || CHAT.id === id);
+  // v0.64 (Mason #32: "two people chatting must face each other"): where you and the one you're talking with stand
+  // (world points in the view being drawn, from the last frame), and how each turns to look at the other
+  const CHAT_POS = { me: null, them: null };
+  function facing(from, to, base) {
+    if (!from || !to || Math.hypot(to[0] - from[0], to[1] - from[1]) < 0.05) return base;
+    const a = {}; faceTo(a, to[0] - from[0], to[1] - from[1]);
+    return { ...base, face: a.face === undefined ? base.face : a.face, back: false, view: a.view === undefined ? base.view : a.view, turn: a.turn === undefined ? base.turn : a.turn };
+  }
+  const chatSeat = (id, pt) => { if (chatting(id)) CHAT_POS.them = pt; return chatting(id); };
   // v0.31: a speech bubble over someone you're talking with: you say your bit (the thing you're doing), then they react
   // (😄 when it went well, 😒 when it didn't). Before v0.31 (and after walking up to someone) it just alternates.
   function chatBubble(x, y, z, mine, ts) {
@@ -2675,7 +2698,8 @@ const Scene = (() => {
     const list = PARK_PEOPLE = parkList();
     list.forEach(pp => objs.push({ d: pp.x + pp.y + 0.3, f: () => {
       const z = cam.z, q = iso(pp.x, pp.y);
-      drawPerson(q.x, q.y, z, { look: pp.look, face: pp.i % 2 ? -1 : 1, view: 'front', turn: [pp.i % 2 ? -0.6 : 0.6, 1], energy: 'good', ts, seed: pp.i, pose: 'stand', wave: chatWave(pp.id) || (!chatting(pp.id) && Math.sin(ts / 1100 + pp.i) > 0.85) });
+      const talk = chatSeat(pp.id, [pp.x, pp.y]);
+      drawPerson(q.x, q.y, z, facing(talk && [pp.x, pp.y], talk && CHAT_POS.me, { look: pp.look, face: pp.i % 2 ? -1 : 1, view: 'front', turn: [pp.i % 2 ? -0.6 : 0.6, 1], energy: 'good', ts, seed: pp.i, pose: 'stand', wave: chatWave(pp.id) || (!chatting(pp.id) && Math.sin(ts / 1100 + pp.i) > 0.85) }));
       if (z > 0.35) { if (pp.work) label(pp.boss ? `💼 ${t('boss')}` : `💼 ${t('coworker')}`, q.x, q.y - 50 * z - 12, '#fff1d6', '#9a5b12', `800 ${Math.max(9, 10 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(14, 17 * z), 2); else if (Math.sin(ts / 1500 + pp.i) > 0.6) emoji('💬', q.x + 9 * z, q.y - 44 * z, 10 * z); }
       if (chatting(pp.id)) chatBubble(q.x + 12 * z, q.y - 56 * z, z, false, ts);
       hits.push({ kind: 'person', id: pp.id, work: !!pp.work, pri: 2, x0: q.x - 12 * z, x1: q.x + 12 * z, y0: q.y - 46 * z, y1: q.y + 4 });
@@ -3057,6 +3081,7 @@ const Scene = (() => {
   // few legs: walk to your car if it isn't with you, drive along the roads to the car park of where you're going and
   // park in a bay, then walk to the door. Nobody jumps from place to place.
   let trip = null, TRIP_CAR = null;
+  let LATE = null;   // v0.64: you looked away while on the way: what happens when you get there waits till you look back
   const outHere = () => !!(S && S.out && S.out.town === VIEW_TOWN);
   // Where you're standing in this town right now.
   function mePos() {
@@ -3157,7 +3182,7 @@ const Scene = (() => {
   }
   function startTrip(to, how, car, done, dest, place) {
     if (trip && !trip.arrived) stopTripHere();   // v0.29: from where you are now (not back to where you set off)
-    TOWN_USE = null;
+    TOWN_USE = null; LATE = null;   // (v0.64: a new trip: forget the old one's arrival)
     const fromHome = atHomeNow();
     const legs = planTrip(to, how, dest, place), L0 = legs[0], [x, y] = L0.from;
     trip = { town: VIEW_TOWN, legs, li: 0, how: L0.how, inCar: !!L0.car, car, x, y, path: L0.path.slice(), done, dest, place, face: 1, phase: 0, moving: true, dir: '+y', arrived: false, t: now(), fromHome };
@@ -3195,9 +3220,10 @@ const Scene = (() => {
     }
   }
   function stepTrip(dt) {
+    if (LATE && (!trip || trip.arrived) && mode === 'town' && VIEW_TOWN === LATE.town) { const f = LATE.f; LATE = null; if (now() < f.until) setTimeout(f.f, 200); }
     if (TOWN_USE && (performance.now() > TOWN_USE.until || mode !== 'town')) { const f = mode === 'town' ? TOWN_USE.done : null; TOWN_USE = null; if (f) setTimeout(f, 60); }   // v0.32
     if (!trip) return;
-    if (trip.town !== VIEW_TOWN || mode !== 'town') { finishTripNow(true); return; }
+    if (trip.town !== VIEW_TOWN || mode !== 'town') { const f = trip.done, tw = trip.town; finishTripNow(true); if (f) LATE = { town: tw, f: { f, until: now() + 2 * MIN } }; return; }
     if (trip.arrived) return;
     if (trip.inCar && trip.path.length && !trip.h && mustStop(trip) && (trip.waited = (trip.waited || 0) + dt) < 12) return;   // v0.22: red light (v0.47: for the way you turn)
     if (trip.inCar && trip.path.length && !mustStop(trip)) trip.waited = 0;
@@ -3244,8 +3270,9 @@ const Scene = (() => {
   }
   // You, standing where you are out in town.
   function drawMeOut(x, y, ts) {
-    const z = cam.z, p = iso(x, y);
-    drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand', wave: chatting() && (CHAT.e ? !!CHAT.wave : Math.floor(ts / 900) % 2 === 0) });
+    const z = cam.z, p = iso(x, y), talk = chatting();
+    if (talk) CHAT_POS.me = [x, y];
+    drawPerson(p.x, p.y, z, facing(talk && [x, y], talk && CHAT_POS.them, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: energyLevel(), ts, seed: 3, pose: 'stand', wave: talk && (CHAT.e ? !!CHAT.wave : Math.floor(ts / 900) % 2 === 0) }));
     if (chatting()) chatBubble(p.x - 12 * z, p.y - 56 * z, z, true, ts);
     carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
@@ -3780,7 +3807,8 @@ const Scene = (() => {
   function roomPerson(d, ts, i) {
     const z = cam.z * (d.scale || 1), p = iso(d.x, d.y), id = d.cast ? castId('dec' + i + ':' + d.x, d.walk || (d.pose && d.pose !== 'stand') || !!d.lift) : null;   // v0.43: sitting, on a machine, up on something: on foot
     const L = id ? castLook(id, FOLK(i)) : typeof d.look === 'object' ? { skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', ...d.look } : FOLK(d.look || i);
-    drawPerson(p.x, p.y - (d.lift || 0) * z, z, { look: L, face: d.face || 1, back: !!d.back, view: d.view || null, turn: d.turn, energy: 'good', ts, seed: i + 11, pose: d.pose || 'stand', moving: !!d.moving, phase: ts / (d.pose === 'bike' ? 120 : d.pose === 'walk' ? 110 : 80) + i, noBike: true, seatH: d.seatH, sit: d.sit, dir: d.dir, matCol: '#ec6aa8' });
+    const talk = id && (!d.pose || d.pose === 'stand') && !d.moving && chatting(id);   // v0.64: a standing one you're talking with turns to you
+    drawPerson(p.x, p.y - (d.lift || 0) * z, z, facing(talk && [d.x, d.y], talk && CHAT_POS.me, { look: L, face: d.face || 1, back: !!d.back, view: d.view || null, turn: d.turn, energy: 'good', ts, seed: i + 11, pose: d.pose || 'stand', moving: !!d.moving, phase: ts / (d.pose === 'bike' ? 120 : d.pose === 'walk' ? 110 : 80) + i, noBike: true, seatH: d.seatH, sit: d.sit, dir: d.dir, matCol: '#ec6aa8' }));
     if (d.prop && z > 0.35) emoji(d.prop, p.x + 10 * z, p.y - 22 * z, 9 * z);
     if (id) folkSeen(id, d.x, d.y, p, z, ts);
     else if (d.staff) hits.push({ kind: 'clerk', x0: p.x - 14 * z, x1: p.x + 14 * z, y0: p.y - 48 * z, y1: p.y + 4 });
@@ -4477,7 +4505,9 @@ const Scene = (() => {
       return;
     }
     const p2 = iso(meS.x, meS.y);
-    drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand', wave: chatting() && !!CHAT.e && !!CHAT.wave && !!FOLK_AT[CHAT.id] }); needBubble(p2, z, ts);
+    const talkIn = chatting() && !meS.moving && FOLK_AT[CHAT.id];
+    drawPerson(p2.x, p2.y, z, facing(talkIn && [meS.x, meS.y], talkIn && FOLK_AT[CHAT.id], { look: S.me.look, face: meS.face, back: meS.back && meS.moving, view: meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.moving ? 'walk' : 'stand', wave: chatting() && !!CHAT.e && !!CHAT.wave && !!FOLK_AT[CHAT.id] })); needBubble(p2, z, ts);
+    if (talkIn) CHAT_POS.me = [meS.x, meS.y];
     carryBox(p2, z);
     if (chatting() && CHAT.e && FOLK_AT[CHAT.id]) chatBubble(p2.x - 12 * z, p2.y - 56 * z, z, true, ts);   // v0.34: talking with someone in here
   }
@@ -4806,7 +4836,7 @@ const Scene = (() => {
       else if (n.path.length) { const ahead = P.npcs.some((o, k) => k !== i && Math.hypot(o.x - n.x, o.y - n.y) < 0.55 && (o.path.length ? 1 : 0) <= 1 && ((n.path[0][0] - n.x) * (o.x - n.x) + (n.path[0][1] - n.y) * (o.y - n.y)) > 0); let go = (ahead ? 0.2 : 1) * (1.9 + (i % 3) * 0.3) * dt; while (go > 0 && n.path.length) { const [tx, ty] = n.path[0], dx = tx - n.x, dy = ty - n.y, d = Math.hypot(dx, dy); if (d > 0.01) faceTo(n, dx, dy); if (d <= go) { n.x = tx; n.y = ty; n.path.shift(); go -= d; } else { n.x += dx / d * go; n.y += dy / d * go; go = 0; } } n.phase += dt * 10; n.moving = true; if (!n.path.length) { n.wait = 3 + Math.random() * 5; n.view = 'back'; n.turn = [0, -1]; } }
       else n.wait = 1;
       const held = FOLK_HOLD[n.id] > performance.now();
-      objs.push({ d: n.x + n.y + 0.3, f: () => { const p2 = iso(n.x, n.y); drawPerson(p2.x, p2.y, cam.z, { look: n.look, face: n.face, back: n.back && n.moving, view: n.moving ? n.view : held ? 'front' : 'back', turn: n.moving ? n.turn : held ? [0.3, 1] : [-0.3, -1], moving: n.moving, phase: n.phase, energy: 'good', ts, seed: i + 7, pose: n.moving ? 'walk' : 'stand', wave: chatWave(n.id) }); folkSeen(n.id, n.x, n.y, p2, cam.z, ts); } });
+      objs.push({ d: n.x + n.y + 0.3, f: () => { const p2 = iso(n.x, n.y); const talk = !n.moving && chatting(n.id); drawPerson(p2.x, p2.y, cam.z, facing(talk && [n.x, n.y], talk && CHAT_POS.me, { look: n.look, face: n.face, back: n.back && n.moving, view: n.moving ? n.view : held ? 'front' : 'back', turn: n.moving ? n.turn : held ? [0.3, 1] : [-0.3, -1], moving: n.moving, phase: n.phase, energy: 'good', ts, seed: i + 7, pose: n.moving ? 'walk' : 'stand', wave: chatWave(n.id) })); folkSeen(n.id, n.x, n.y, p2, cam.z, ts); } });
     });
   }
   // A picture (made by thumb) drawn on the canvas, once it has loaded.
@@ -5678,7 +5708,7 @@ const Scene = (() => {
     if (!PING || age > 4) return;
     let pt = null;
     if (mode === 'shop') pt = [meS.x, meS.y];
-    else if (mode === 'town' && VIEW_TOWN === myTown()) pt = trip && !trip.arrived ? [trip.x, trip.y] : (S.work || S.jail || outHere()) ? mePos() : (() => { const [ox, oy] = origin('me'); return [ox + me.x, oy + me.y]; })();
+    else if (mode === 'town') pt = meInView();   // (v0.64: in any town you're in: another city too)
     else if (mode === 'home' && owner === me.lot) { const [ox, oy] = origin(me.lot); pt = [ox + me.x, oy + me.y]; }
     if (!pt) return;
     const p = iso(pt[0], pt[1]), z = cam.z, k = (age * 1.4) % 1, a = Math.min(1, (4 - age) * 1.5);
@@ -6318,6 +6348,7 @@ const Scene = (() => {
     transit() { if (!S) return { bus: 0, metro: 0 }; TL = layoutOf(VIEW_TOWN); return { bus: busStops().length, metro: metroStops().length }; },   // v0.61
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
+    showMe() { if (mode !== 'town') return false; const p = meInView(); if (!p) return false; flyTo(p[0], p[1], Math.max(ME_ZOOM, cam.z), true); follow = false; return true; },   // v0.64
     _fly(x, y, z) { flyTo(x, y, z, true); },   // (testing: jump the camera)
     // (testing, v0.47) walking to every door from a few far points: how many legs go through a building
     _walkCheck() { const doors = [...TL.shops.map(([k]) => placePt(k)), ...(TL.stores || []).map(st => storeGeo(st).door)].filter(Boolean), from = [[5, 5], [TL.world.x1 - 5, 5], [5, TL.world.y1 - 5], [TL.world.x1 - 5, TL.world.y1 - 5]], bad = [];
@@ -6352,7 +6383,7 @@ const Scene = (() => {
       const wasInterior = mode === 'interior';
       if ((m === 'home') !== (mode === 'home') && m !== 'interior' && !wasInterior) viewFade = performance.now();   // a soft flash between the town and a home
       mode = m; owner = o; edit = null;
-      if (m !== 'town' && trip) finishTripNow(true);   // v0.19: leaving the town view, you still get there
+      if (m !== 'town' && trip) { const f = !trip.arrived && trip.done, tw = trip.town; finishTripNow(true); if (f) LATE = { town: tw, f: { f, until: now() + 2 * MIN } }; }   // v0.19: leaving the town view, you still get there (v0.64: and what happens there waits till you look back)
       cv.style.background = '';
       if (m === 'shop') { const P = shopPlan(o), at = (P.from && P.from[SHOP_FROM]) || P.door; meS.x = at[0]; meS.y = at[1] + 0.3; meS.path = []; meS.then = null; meS.moving = false; meS.face = 1; meS.sit = false; meS.use = null; meS.eat = null; SHOP_FROM = o;
         if (o === 'cinema' && FILM) { meS.x = P.door[0]; meS.y = P.door[1]; setTimeout(() => shopWalk(P.aisle, () => { meS.path = [P.seat]; meS.moving = true; meS.then = () => { meS.sit = true; meS.face = 1; if (FILM && !FILM.t0) FILM.t0 = performance.now(); }; }), 300); } }

@@ -1036,3 +1036,6 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 .pstamp.sea.got { --c: #38a3e0; }
 .pass-aws { display: flex; gap: 6px; flex-wrap: wrap; } .pass-aw { padding: 4px 10px; border-radius: 999px; background: var(--chip, #efe7da); font-weight: 800; font-size: 12px; opacity: .55; } .pass-aw.got { opacity: 1; background: #f2c230; color: #3b3125; }
 .souv-here { background: var(--chip, #efe7da); border-radius: 14px; padding: 8px 10px; }
+
+.feed-pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0 4px; }   /* v0.64 */
+.game-card .gm-one { border-top: 1px solid var(--line, #e6dccb); margin-top: 8px; padding-top: 6px; } .game-card .gm-one.live { border-top-color: #e5484d; }   /* v0.64: one sport's game */

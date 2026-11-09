@@ -176,6 +176,7 @@ function setTab(tab) {
   if (tab === 'world' && UI.tab === 'world') { UI.wtown = null; UI.visit = null; }   // tapping World again: back to the map
   UI.tab = tab;
   tutDone('tab:' + tab);
+  if (tab === 'town') { syncView(); if (!Scene.showMe() && S.trav && COMMUNITIES[S.trav.town] && S.trav.town !== myTown()) snack(`📍 ${t('trav_tap_find', { c: nm(COMMUNITIES[S.trav.town]) })}`); }   // v0.64: the town tab: close up on you (or: you're away)
   if (tab === 'feed') S.feed.forEach(i => { i.read = true; });
   if (tab === 'real') postNative({ type: 'refresh' });
   syncView();
@@ -205,15 +206,26 @@ function renderTabbar() {
     `<button class="tab ${UI.tab === id ? 'on' : ''}" data-act="tab" data-arg="${id}">
       <span class="ic">${ic}</span>${t('tab_' + id)}${id === 'feed' && n ? `<span class="badge">${n}</span>` : ''}</button>`).join('');
 }
+// v0.64 (Mason #32: "tap one and the bar jumps back to the first"): a sideways row of chips keeps where it was
+// scrolled to when the page is drawn again, and the chip you picked stays in sight
+function keepRows(el, draw) {
+  const sel = '.chips-row, .shop-cats, .sub-chips', before = [...el.querySelectorAll(sel)].map(r => r.scrollLeft);
+  draw();
+  [...el.querySelectorAll(sel)].forEach((r, i) => { if (before[i] !== undefined) r.scrollLeft = before[i];
+    const on = r.querySelector('.on'); if (!on || r.scrollWidth <= r.clientWidth) return; const x = on.getBoundingClientRect().left - r.getBoundingClientRect().left + r.scrollLeft;
+    if (x < r.scrollLeft || x + on.offsetWidth > r.scrollLeft + r.clientWidth) r.scrollLeft = x - (r.clientWidth - on.offsetWidth) / 2; });
+}
 function renderPanel() {
   const el = $('#panel'), onScene = sceneTab();
   el.hidden = onScene;
   document.querySelectorAll('[data-i18n]').forEach(n => { n.textContent = t(n.dataset.i18n); });
   const top = el.scrollTop, ws = $('.wmap-scroll'), wx = ws ? ws.scrollLeft : null;
-  if (UI.tab === 'shop') el.innerHTML = panelShop();
-  else if (UI.tab === 'real') el.innerHTML = panelReal();
-  else if (UI.tab === 'feed') el.innerHTML = panelFeed();
-  else if (UI.tab === 'world') { el.innerHTML = panelWorld(); afterWorld(wx); }
+  keepRows(el, () => {
+    if (UI.tab === 'shop') el.innerHTML = panelShop();
+    else if (UI.tab === 'real') el.innerHTML = panelReal();
+    else if (UI.tab === 'feed') el.innerHTML = panelFeed();
+    else if (UI.tab === 'world') { el.innerHTML = panelWorld(); afterWorld(wx); }
+  });
   el.scrollTop = top;
 }
 
@@ -684,9 +696,12 @@ function panelFeed() {
       : it.kind === 'letter' ? `<button class="btn small" data-act="mailOpen" data-arg="box">💌 ${t('read')}</button>` : '';
     return `<div class="feed-item" style="--nk:${noteKind(it.kind).c}">${noteFace(it)}<div class="grow"><div class="nt-text">${feedText(it)}</div><div class="nt-time">${ago(it.t)}</div></div>${btn}</div>`;
   };
-  const list = [...feed].reverse(), fresh = list.filter(it => it.t >= day0.getTime()), old = list.filter(it => it.t < day0.getTime());
+  // v0.64: FEED_PAGE.per a page, newest first
+  const all = [...feed].reverse(), pages = Math.max(1, Math.ceil(all.length / FEED_PAGE.per)), pg = Math.min(pages - 1, Math.max(0, UI.feedPage || 0)), list = all.slice(pg * FEED_PAGE.per, (pg + 1) * FEED_PAGE.per);
+  const fresh = list.filter(it => it.t >= day0.getTime()), old = list.filter(it => it.t < day0.getTime());
   const group = (title, L) => (L.length ? `<div class="feed-group">${title}</div>${L.map(row).join('')}` : '');
-  return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<div class="row between note"><p class="muted">${t('feed_note')}</p>${calm}</div><div class="feed-list">${group(t('feed_today'), fresh)}${group(t('feed_earlier'), old)}</div>`;
+  const pager = pages > 1 ? `<div class="feed-pager"><button class="btn small" data-act="feedPage" data-arg="${pg - 1}" ${pg ? '' : 'disabled'}>‹ ${t('feed_prev')}</button><span class="muted">${t('feed_page', { n: pg + 1, m: pages })}</span><button class="btn small" data-act="feedPage" data-arg="${pg + 1}" ${pg < pages - 1 ? '' : 'disabled'}>${t('feed_next')} ›</button></div>` : '';
+  return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<div class="row between note"><p class="muted">${t('feed_note')} ${t('feed_keep', { n: FEED_PAGE.keepDays })}</p>${calm}</div><div class="feed-list">${group(t('feed_today'), fresh)}${group(t('feed_earlier'), old)}</div>${pager}`;
 }
 
 // v0.20: the next step of a farm area or the garage, for the estate agent's plans
@@ -1022,7 +1037,7 @@ const SHEETS = {
     return head + inBtn + (inside ? staffChat(UI.inVenue) : '') + wxGate(key, placeBody(key));   // v0.50: bad weather outdoors
   },
   // v0.30: something inside a building
-  spot(arg) { const v0 = String(arg).split('|')[0]; if (arg === 'stadium|bets' || arg === 'stadium|board') return SHEETS.spotIn(arg); return wxGate(VENUE_HOME[v0] || v0, SHEETS.spotIn(arg)); },   // v0.50
+  spot(arg) { const v0 = String(arg).split('|')[0]; if (arg === 'stadium|bets' || arg === 'stadium|board' || arg === 'stadium|hotdog' || UI.inVenue === 'arena') return SHEETS.spotIn(arg);   /* (v0.64: the hot dogs are under the stands; the arena is indoors) */ return wxGate(VENUE_HOME[v0] || v0, SHEETS.spotIn(arg)); },   // v0.50
   spotIn(arg) {
     const [v0, k] = arg.split('|'), v = v0 === 'arena' ? 'stadium' : v0, key = v + '|' + k, gymK = v === 'gym';   // v0.59: the arena's spots are the stadium's
     if (v === 'park') {   // v0.32: something in the park: you need to be in the park; watch, feed, sit, bounce, or an ice cream
@@ -1298,7 +1313,7 @@ function renderSheet() {
   if (!UI.sheet) return;
   const ta = $('#draftText'), focused = ta && document.activeElement === ta;
   if (focused) return;   // don't wipe what you're typing
-  $('#sheet').innerHTML = `<div class="grab"></div>${SHEETS[UI.sheet.type](UI.sheet.arg)}`;
+  keepRows($('#sheet'), () => { $('#sheet').innerHTML = `<div class="grab"></div>${SHEETS[UI.sheet.type](UI.sheet.arg)}`; });
   const th = $('#sheet .ph-thread'); if (th) th.scrollTop = th.scrollHeight;
 }
 
@@ -1658,10 +1673,12 @@ const ACT = {
     if (UI.inStore || UI.inVenue) { Scene.pingMe(); return; }
     if (Scene.tripNow() && UI.tab === 'town' && !UI.visit && Scene.followTrip()) { Scene.pingMe(); return; }   // v0.29: on the way: the view follows you again
     if (S.out && S.out.place && STORES[S.out.place] && STORES[S.out.place].cats.length && S.out.town === myTown() && UI.lastStore === S.out.place) { ACT.enterStore(S.out.place); Scene.pingMe(); return; }
-    const out = S.work || S.jail || (S.out && S.out.town === myTown());
+    const away = S.trav && COMMUNITIES[S.trav.town] && S.trav.town !== myTown() ? S.trav.town : null;   // v0.64 (Mason #32): you're in another city: show that city, close up on you
     if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
+    if (away) { UI.tab = 'world'; UI.wtown = away; syncView(); Scene.showMe(); Scene.pingMe(); refresh(); return; }
+    const out = S.work || S.jail || (S.out && S.out.town === myTown());
     UI.wtown = null;
-    if (out) { UI.tab = 'town'; syncView(); const p = Scene.mePoint(); if (p) Scene.lookAt(p[0], p[1]); }
+    if (out) { UI.tab = 'town'; syncView(); Scene.showMe(); }
     else { UI.tab = 'home'; UI.inside = false; syncView(); Scene.focusMe(1.2, 0.45); }
     Scene.pingMe(); refresh();
   },
@@ -1852,7 +1869,7 @@ const ACT = {
   // v0.30: walk into a building (you must be there), walk out again
   enterVenue(k) {
     if (!VENUE_PLACES.includes(k) || (VIEW_TOWN !== myTown() && !(S.trav && S.trav.town === VIEW_TOWN))) return;   // v0.60: or the city you drove to
-    if (Scene.here() !== k) return openSheet('place', k);
+    if (Scene.here() !== k && !(S.out && S.out.place === k && S.out.town === VIEW_TOWN && !S.trip)) return openSheet('place', k);   // (v0.64: you've just got there)
     closeSheet(); UI.inVenue = BUILDING_FLOORS[k] ? BUILDING_FLOORS[k][0] : k; UI.visit = null; UI.tab = S.trav && S.trav.town === VIEW_TOWN && VIEW_TOWN !== myTown() ? 'world' : 'town'; syncView(); Sound.play('doorbell');   // (v0.60: in another city you stay there)   // v0.37: a tower: its ground floor
     if (!S.venueTip) { S.venueTip = 1; setTimeout(() => snack(`👀 ${t('venue_tip')}`), 400); }
     if (k === 'school' && S.study) setTimeout(() => Scene.venueUse('desk', Math.max(5, Math.round((S.study.end - now()) / 1000)), null), 300);   // in class: at your desk
@@ -1937,7 +1954,7 @@ const ACT = {
     const [v, k, act] = arg.split('|'), fin = (e, msg) => { Sound.play(ACT_SOUND[act] || (act.startsWith('zv_') ? 'done' : 'done')); snack(`${e} ${msg}`); save(); refresh(); };
     // v0.50: walk over, then the bar (with what it is on it), then it's done
     const useK = (sec, cb, look, e) => Scene.venueUse(k, sec, cb, look, e || VDO_E[act] || (act.startsWith('zv_') ? (ZOO_ANIMALS[act.slice(3)] || {}).e : null) || SPOT_E[v + '|' + k] || '⏳');
-    if (OUTDOOR.venues.includes(VENUE_HOME[v] || v) && outdoorPaused(VENUE_HOME[v] || v)) return wxSnack();   // v0.50: the funfair, the zoo, the stadium, the roof
+    if (OUTDOOR.venues.includes(VENUE_HOME[v] || v) && outdoorPaused(VENUE_HOME[v] || v) && UI.inVenue !== 'arena' && act !== 'hotdog') return wxSnack();   // v0.50: the funfair, the zoo, the stadium, the roof (v0.64: not the indoor arena, not the hot dogs under the stands)
     if (act === 'bake') { ACT.placeDo('bakery|bake|'); return; }
     if (act === 'check') {   // the clinic's health check: your own numbers, only for you (v0.50: on the scale for a moment first)
       if (!UI.spotRes || UI.spotRes.key !== v + '|' + k) { const sh = UI.sheet; closeSheet(); return useK(DO_SECS.check, () => { UI.spotRes = { key: v + '|' + k, html: '' }; ACT.venueDo(arg); if (!UI.sheet && sh) openSheet(sh.type, sh.arg); refresh(); }, null, '🩺'); }
@@ -2633,6 +2650,7 @@ function start() {
   applyTheme();
   checkDay();
   simFriends();
+  pruneFeed();   // v0.64
   setTab('home');
   // v0.63.1: you're away in another city (drove, took the train, flew or sailed there): open there, standing where you were
   // (after the whole script has loaded: the world view needs things defined further down)
@@ -3355,6 +3373,7 @@ Object.assign(ACT, {
     if (!ms.length) townMoveTick2(); save();
   },
   townMoveClear() { S.townMove = null; save(); },
+  feedPage(n) { UI.feedPage = Math.max(0, +n || 0); refresh(); const p = $('#panel'); if (p) p.scrollTop = 0; },   // v0.64
   flyGo(arg) { travelGo('air', arg); },   // v0.63
   sailGo(arg) { travelGo('sea', arg); },
   passport() { openSheet('passport'); },
@@ -3898,18 +3917,25 @@ function betWindow() {
 function venueLookCard(town, venue) {
   const L = STADIUM_LOOK[town], hc = homeCity(town), teams = SPORT_KEYS.filter(sp => (venue === 'arena') === AR_INDOOR.includes(sp)).map(sp => ({ sp, i: arTeamIn(sp, hc) })).filter(x => x.i >= 0);
   if (!isTeamCity(town)) return `<div class="card"><b>${t('city_no_team')}</b><p class="muted small">${t('city_nearest', { c: nm(COMMUNITIES[hc]) })}</p></div>`;
-  return `<div class="card venue-look"><b>${venue === 'arena' ? `🏒 ${t('arena_name', { c: nm(COMMUNITIES[town]) })}` : `🏟️ ${nm(L)}`}</b>${venue === 'stadium' ? `<p class="muted small">${nm(L.tag)}</p>` : ''}
-    <div class="muted small">${t('venue_home_of')}</div>${teams.map(x => `<div class="row small">${teamLogo(x.sp, x.i)} <span class="grow">${LEAGUES[x.sp].e} ${esc(teamName(x.sp, x.i))}</span><span class="muted">${LEAGUES[x.sp].hour}:00</span></div>`).join('')}</div>`;
+  return `<div class="card venue-look"><b>${venue === 'arena' ? `🏒 ${t('arena_name', { c: nm(COMMUNITIES[town]) })}` : `🏟️ ${nm(L)}`}</b>${venue === 'stadium' ? `<p class="muted small">${nm(L.tag)}</p>` : ''}</div>`;   // (v0.64: the teams are in each sport's own part of the game card)
 }
+// v0.64 (Mason #32: "why are the two schedules different? split them by sport"): one part for each sport played
+// here: its home team and its games today (the score when it's on or over); no game today says so
 function gameCard(town, venue) {
-  const A = arenaNow(town, now(), venue || curVenue());
-  if (A.off) return `<div class="card"><b>🏟️ ${A.noTeam ? t('city_no_team') : A.none ? t('ar_none') : t('ar_off', { n: A.si.left })}</b></div>`;   // v0.58: no game here today / the break (v0.59: a town with no pro teams)
-  const L = LEAGUES[A.sp], tm = i => `${teamLogo(A.sp, i)} <span>${esc(teamName(A.sp, i))}</span>`, soon = A.state === 'soon';
-  const st = A.state === 'live' ? `🔴 ${A.clock}` : A.state === 'done' ? A.clock : t('ar_starts', { h: fmtHM(A.start) });
-  const list = A.day.map(G => `<div class="small ${G.sp === A.sp ? '' : 'muted'}">${fmtHM(G.start)} ${LEAGUES[G.sp].e} ${esc(teamName(G.sp, G.a))} @ ${esc(teamName(G.sp, G.h))} · ${t(G.kind === 'home' ? 'ar_home' : 'ar_guest')}</div>`).join('');
-  return `<div class="card game-card"><div class="muted small">${L.e} ${nm(L)} · ${st}</div>
-    <div class="gm-row"><span class="lg-side">${tm(A.a)}</span><b>${soon ? '' : A.score[1]}</b></div><div class="gm-row"><span class="lg-side">${tm(A.h)}</span><b>${soon ? '' : A.score[0]}</b></div>
-    <div class="muted small gap-top">${t('ar_today')}</div>${list}</div>`;
+  venue = venue || curVenue();
+  const A = arenaNow(town, now(), venue), ms = now();
+  if (A.off && (A.noTeam || !A.none)) return `<div class="card"><b>🏟️ ${A.noTeam ? t('city_no_team') : t('ar_off', { n: A.si.left })}</b></div>`;   // a town with no pro teams / the break
+  const secs = SPORT_KEYS.filter(sp => (venue === 'arena') === AR_INDOOR.includes(sp)).map(sp => {
+    const L = LEAGUES[sp], home = arTeamIn(sp, town), games = (A.day || []).filter(G => G.sp === sp);
+    if (home < 0 && !games.length) return '';
+    const tm = i => `${teamLogo(sp, i)} <span>${esc(teamName(sp, i))}</span>`;
+    const rows = games.map(G => { const st = ms >= G.end ? 'done' : ms >= G.start ? 'live' : 'soon', V = arenaState(G, ms, st);
+      return `<div class="gm-one ${st}"><div class="muted small">${st === 'live' ? `🔴 ${V.clock}` : st === 'done' ? V.clock : t('ar_starts', { h: fmtHM(G.start) })} · ${t(G.kind === 'home' ? 'ar_home' : 'ar_guest')}</div>
+        <div class="gm-row"><span class="lg-side">${tm(G.a)}</span><b>${st === 'soon' ? '' : V.score[1]}</b></div><div class="gm-row"><span class="lg-side">${tm(G.h)}</span><b>${st === 'soon' ? '' : V.score[0]}</b></div></div>`; }).join('');
+    return `<div class="card game-card"><b>${L.e} ${nm(L)}</b>${home >= 0 ? `<div class="muted small">${t('venue_home_of')} ${teamLogo(sp, home)} ${esc(teamName(sp, home))}</div>` : ''}
+      ${rows || `<div class="muted small gap-top">${t('ar_none_sp', { s: nm(L) })}</div>`}</div>`;
+  }).join('');
+  return secs || `<div class="card"><b>🏟️ ${t('ar_none')}</b></div>`;
 }
 function snackBtn(key) { return `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${{ cafe: '☕', station: '☕', bowling: '🌭', zoo: '🍿' }[key] || '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`; }
 function workmates(key) {

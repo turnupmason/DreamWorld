@@ -1561,9 +1561,11 @@ function simFriendStep(h) {
 function addFeed(item) {
   Object.assign(item, { id: uid(), t: now(), claimed: false, read: false });
   S.feed.push(item);
-  if (S.feed.length > 60) S.feed.shift();
+  pruneFeed();
   return item;
 }
+// v0.64: clear news older than FEED_PAGE.keepDays (an unopened gift waits for you)
+function pruneFeed() { const cut = now() - FEED_PAGE.keepDays * DAY; S.feed = S.feed.filter(it => it.t >= cut || (it.gift && !it.claimed)); if (S.feed.length > 60) S.feed = S.feed.slice(-60); }
 function likeFriend(id) {
   if (S.today.liked[id]) return false;
   S.today.liked[id] = true;
