@@ -54,8 +54,19 @@ function storyRows(b, from, n, o = {}) {
 
 // Draws a home's house at lot origin (ox, oy). Returns the screen box for tapping.
 // Built storeys (h.extra) make the walls taller; the roof sits on top of the last one.
+// v0.48: a home in a town abroad is drawn in a local style (LOCAL_HOMES): the house's own size and storeys, the local
+// walls, roof and trimmings. Not your own home, not a tent.
+const strSeed = s => { let n = 7; for (let i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) % 100003; return n; };
+function localHome(h) {
+  if (!h || !h.id || h === S.me || h.id === 'me' || !HOUSES[h.house] || HOUSES[h.house].id === 'tent' || typeof townOf !== 'function') return null;
+  const c = countyOf(townOf(h.id)), list = c && LOCAL_HOMES[c.folk];
+  if (!list) return null;
+  const n = strSeed(String(h.id)), L = list[n % list.length], pick = (a, k) => (a ? a[Math.floor(hash(n, k) * a.length)] : undefined);
+  return { ...L, wallCol: pick(L.walls, 1), roofCol: pick(L.roofs, 2), shutCol: pick(L.shutCols, 3) };
+}
+function houseToDraw(h) { const H = HOUSES[h.house], L = localHome(h); return L ? { ...H, spec: L } : H; }
 function drawHouse(h, ox, oy, ts) {
-  const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, x = ox + fx, y = oy + fy, z = cam.z;
+  const H = houseToDraw(h), [fx, fy, w, d] = H.fp, x = ox + fx, y = oy + fy, z = cam.z;
   const c = iso(x + w / 2, y + d / 2);
   ellipse(c.x, c.y + 6 * z, (w + d) * 17 * z, (w + d) * 8.5 * z, 'rgba(0,0,0,.08)');
   const du = (DOOR_X - fx) / w, wall = h.wall, roof = h.roof, id = H.id;
@@ -1036,10 +1047,10 @@ function drawTower(k, x, y, w, d, ts) {
 }
 // A house seen from far away: walls and a roof in its colours, as many storeys tall as it has. Returns its top.
 function drawHouseFar(h, ox, oy) {
-  const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, x = ox + fx, y = oy + fy, z = cam.z;
+  const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, x = ox + fx, y = oy + fy, z = cam.z, L = localHome(h);   // v0.48: in its local colours
   const wh = H.id === 'tent' ? 0 : 12 + floorsOf(h) * 22 + (H.id === 'castle' ? 18 : 0);
-  if (wh) box(x, y, w, d, wh, H.id === 'castle' ? '#bfb8ac' : h.wall, 0, { edge: null });
-  hipRoof(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, H.id === 'tent' ? 40 : 22, H.id === 'chinese' ? '#7a8796' : h.roof);
+  if (wh) box(x, y, w, d, wh, L ? L.wallCol : H.id === 'castle' ? '#bfb8ac' : h.wall, 0, { edge: null });
+  hipRoof(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, H.id === 'tent' ? 40 : 22, L ? L.roofCol : H.id === 'chinese' ? '#7a8796' : h.roof);
   return iso(x + w / 2, y + d / 2).y - (wh + 28) * z;
 }
 
@@ -2644,6 +2655,99 @@ function drawPosterStand(film, x, y) {
   rrect(c.x - 6 * z, c.y - 21 * z, 12 * z, 2 * z, 0.6 * z, 'rgba(255,255,255,.75)');
 }
 
+// ---------- local styles (v0.48) ----------
+// paper lattice: a window or a sliding door of a hanok or a Japanese home
+function latticeWin(f, u, uw, h0, h1) {
+  const lit = NIGHT > 0.3, z = cam.z;
+  wallRect(f, 0, u - uw, u + uw, h0, h1, '#5a3a26');
+  wallRect(f, 0, u - uw * 0.82, u + uw * 0.82, h0 + 1, h1 - 1, lit ? '#ffe7b0' : '#f6efdc');
+  if (z > 0.5) { for (let k = 1; k < 3; k++) wallLine(f, 0, u - uw * 0.82 + uw * 1.64 * k / 3, h0 + 1, u - uw * 0.82 + uw * 1.64 * k / 3, h1 - 1, '#8a6a4a', 0.6); for (let hh = h0 + 4; hh < h1 - 2; hh += 3.5) wallLine(f, 0, u - uw * 0.82, hh, u + uw * 0.82, hh, '#8a6a4a', 0.6); }
+}
+// an East Asian tiled roof: hipped, with eaves that curve up towards the corners, rows of tiles and a heavy ridge
+// whose ends turn up. 'kr' (a hanok: a strong curve, pale ridge ends), 'jp' (gentle), 'cn' (curving, swallow-tail ends)
+function asianRoof(x, y, w, d, base, rh, col, style = 'kr') {
+  const z = cam.z, curl = { kr: 10, jp: 4, cn: 9 }[style] || 6, P = (px, py, hh) => up(iso(px, py), (base + hh) * z);
+  const lift = u => curl * Math.pow(Math.abs(2 * u - 1), 3);
+  const edge = (ax, ay, bx, by, n = 12) => Array.from({ length: n + 1 }, (_, i) => { const u = i / n; return P(ax + (bx - ax) * u, ay + (by - ay) * u, lift(u)); });
+  const hr = Math.min(w, d) * 0.36, rx0 = x + hr, rx1 = x + w - hr, ry = y + d / 2, R1 = P(rx0, ry, rh), R2 = P(Math.max(rx0, rx1), ry, rh);   // (always a bit of ridge, even on a square house)
+  poly([...edge(x, y, x + w, y), R2, R1], shade(col, -0.32));
+  poly([...edge(x, y, x, y + d), R1], shade(col, -0.14));
+  const fr = edge(x, y + d, x + w, y + d);
+  poly([...fr, R2, R1], col, 'rgba(0,0,0,.15)', 0.6 * z);
+  if (z > 0.4) for (let u = 0.04; u < 0.97; u += 0.035) {   // the rows of tiles, down the front slope
+    const e = P(x + u * w, y + d, lift(u)), rp = P(clamp(x + u * w, rx0, Math.max(rx0, rx1)), ry, rh), q = lerp(e, rp, 0.97);
+    line(e.x, e.y, q.x, q.y, shade(col, -0.16), 0.7 * z);
+  }
+  poly([...edge(x + w, y + d, x + w, y), R2], shade(col, -0.2), 'rgba(0,0,0,.15)', 0.6 * z);
+  for (let i = 0; i < fr.length - 1; i++) line(fr[i].x, fr[i].y + 0.8 * z, fr[i + 1].x, fr[i + 1].y + 0.8 * z, shade(col, 0.25), 1.6 * z);   // the eave's edge
+  // the ridge, its ends turned up
+  const rc = style === 'kr' ? '#e8e4dc' : shade(col, -0.4);
+  line(R1.x, R1.y, R2.x, R2.y, shade(col, -0.38), 3.4 * z);
+  [R1, R2].forEach((R, i) => { const sx = i ? 1 : -1; line(R.x, R.y, R.x + sx * 3.5 * z, R.y - (style === 'jp' ? 2 : 5) * z, rc, 2.6 * z); if (style === 'cn') line(R.x + sx * 3.5 * z, R.y - 5 * z, R.x + sx * 1.5 * z, R.y - 8 * z, rc, 1.6 * z); });
+}
+// a Huizhou gable wall: stepped "horse-head" walls rising above the roof, each step capped with black tiles (at x)
+function huiWall(x, y, d, base, rh, col) {
+  const z = cam.z, P = (t, hh) => up(iso(x, y + t * d), (base + hh) * z), st = [[0, 0.18, rh * 0.42 + 4], [0.18, 0.36, rh * 0.74 + 5], [0.36, 0.64, rh + 8], [0.64, 0.82, rh * 0.74 + 5], [0.82, 1, rh * 0.42 + 4]];
+  const pts = [P(0, -2)]; st.forEach(([a, b, hh]) => { pts.push(P(a, hh), P(b, hh)); }); pts.push(P(1, -2));
+  poly(pts, col, 'rgba(0,0,0,.12)', 0.6 * z);
+  st.forEach(([a, b, hh]) => { const p = P(a - 0.02, hh), q = P(b + 0.02, hh); line(p.x, p.y - 1 * z, q.x, q.y - 1 * z, '#3b3f45', 3 * z); });
+}
+// a Dutch stepped gable on the front (the face along y = yf, from x over w)
+function stepGable(x, yf, w, base, rh, col, z) {
+  const P = (u, hh) => up(iso(x + u * w, yf), (base + hh) * z), st = [[0, 0.16, rh * 0.3], [0.16, 0.3, rh * 0.58], [0.3, 0.4, rh * 0.84], [0.4, 0.6, rh + 9], [0.6, 0.7, rh * 0.84], [0.7, 0.84, rh * 0.58], [0.84, 1, rh * 0.3]];
+  const pts = [P(0, -1)]; st.forEach(([a, b, hh]) => { pts.push(P(a, hh), P(b, hh)); }); pts.push(P(1, -1));
+  poly(pts, col, 'rgba(0,0,0,.15)', 0.6 * z);
+  st.forEach(([a, b, hh]) => { const p = P(a, hh), q = P(b, hh); line(p.x, p.y, q.x, q.y, '#fffaf0', 1.4 * z); });
+  if (z > 0.4) { const f = [iso(x, yf), iso(x + w, yf)]; wallRect(f, base, 0.42, 0.58, rh * 0.38, rh * 0.72, NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5', '#fffaf0', 1.2); const hb = P(0.5, rh + 2); line(hb.x, hb.y, hb.x + 4 * z, hb.y + 2 * z, '#3b2a22', 1.4 * z); }
+}
+// grass growing on a Norwegian roof: a fringe of tufts along the eave, a few flowers
+function turfRoof(g, z) {
+  if (z < 0.3) return;
+  for (let k = 0; k <= 14; k++) { const p = lerp(g.Du, g.Cu, k / 14); poly([{ x: p.x - 3 * z, y: p.y + 1 * z }, { x: p.x - 1 * z, y: p.y - 4 * z }, { x: p.x + 1 * z, y: p.y }, { x: p.x + 2.5 * z, y: p.y - 3.5 * z }, { x: p.x + 3.5 * z, y: p.y + 1 * z }], '#5f8a3e'); }
+  for (let k = 0; k < 7; k++) { const a = lerp(lerp(g.Du, g.Cu, hash(k, 3)), lerp(g.R1, g.R2, hash(k, 3)), 0.15 + hash(k, 5) * 0.7); circle(a.x, a.y, 1.1 * z, ['#f2c230', '#ffffff', '#e98bb0'][k % 3]); }
+}
+// thatch: a thick soft edge and a capped ridge
+function thatchRoof(g, col, z) {
+  for (let k = 0; k < 10; k++) { const a = lerp(g.Du, g.Cu, k / 10), b = lerp(g.Du, g.Cu, (k + 1) / 10); line(a.x, a.y + 1.5 * z, b.x, b.y + 1.5 * z, shade(col, -0.25), 3.4 * z); }
+  line(g.R1.x, g.R1.y, g.R2.x, g.R2.y, shade(col, -0.3), 4.2 * z);
+}
+// a Cape Dutch gable: a white curving gable over the door, rising above the thatch, with a round window
+function capeGable(b, du, base, rh, col, z) {
+  const f = b.left, P = (u, hh) => wallPt(f, base, u, hh), pts = [];
+  [[-0.13, -1], [-0.13, rh * 0.35], [-0.09, rh * 0.5], [-0.1, rh * 0.72], [-0.05, rh * 0.86], [-0.04, rh + 4], [0, rh + 9], [0.04, rh + 4], [0.05, rh * 0.86], [0.1, rh * 0.72], [0.09, rh * 0.5], [0.13, rh * 0.35], [0.13, -1]].forEach(([u, hh]) => pts.push(P(du + u, hh)));
+  poly(pts, '#fbfaf5', 'rgba(0,0,0,.18)', 0.8 * z);
+  const o = P(du, rh * 0.62); ellipse(o.x, o.y, 2.6 * z, 2.6 * z, NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5', '#2f5d50', 0.8 * z);
+}
+// a corrugated iron roof: ribs down the front slope of a hip roof
+function tinRoof(x, y, w, d, base, rh, col, z) {
+  if (z < 0.4) return;
+  const hr = Math.min(w, d) / 2, rx0 = x + hr, rx1 = x + w - hr;
+  for (let u = 0.03; u < 0.98; u += 0.03) { const e = up(iso(x + u * w, y + d), base * z), r = up(iso(clamp(x + u * w, rx0, Math.max(rx0, rx1)), y + d / 2), (base + rh) * z), q = lerp(e, r, 0.97); line(e.x, e.y, q.x, q.y, shade(col, 0.18), 0.6 * z); }
+}
+// a wooden balcony across the front of the first floor
+function localBalcony(b, x, y, w, d, hh) {
+  const z = cam.z, x0 = x + w * 0.22, x1 = x + w * 0.78;
+  box(x0, y + d, x1 - x0, 0.55, 2, '#6b4428', hh, { shadow: false });
+  if (z > 0.35) { for (let u = x0 + 0.1; u <= x1; u += 0.32) { const a = up(iso(u, y + d + 0.5), (hh + 2) * z), q = up(iso(u, y + d + 0.5), (hh + 9) * z); line(a.x, a.y, q.x, q.y, '#5a3a22', 0.9 * z); }
+    const r0 = up(iso(x0, y + d + 0.5), (hh + 9) * z), r1 = up(iso(x1, y + d + 0.5), (hh + 9) * z); line(r0.x, r0.y, r1.x, r1.y, '#5a3a22', 1.6 * z);
+    [0.3, 0.55, 0.8].forEach((u, i) => { const p = up(iso(x0 + (x1 - x0) * u, y + d + 0.45), (hh + 10.5) * z); circle(p.x, p.y, 2 * z, ['#e5484d', '#f2c230', '#e98bb0'][i]); circle(p.x + 1.5 * z, p.y - 0.5 * z, 1.4 * z, '#4f9a4a'); }); }
+}
+// a little local thing by the door
+function localDeco(k, b, x, y, w, d, du, lift, ts) {
+  const z = cam.z, fx = x + du * w, gy = y + d + 0.45, at = (px, py, hh = 0) => up(iso(px, py), hh * z);
+  if (k === 'onggi') [[x + 0.35, 0], [x + 0.75, 0.15], [x + 0.55, 0.45]].forEach(([px, oy]) => { const p = at(px, gy + oy); ellipse(p.x, p.y - 4 * z, 4.2 * z, 5 * z, '#5a3020'); ellipse(p.x, p.y - 8.6 * z, 3 * z, 1.2 * z, '#3b2014'); ellipse(p.x - 1.2 * z, p.y - 5.5 * z, 1.2 * z, 2 * z, 'rgba(255,255,255,.25)'); });
+  else if (k === 'lantern') { const px = x + w + 0.35, p = at(px, gy); rrect(p.x - 3 * z, p.y - 3 * z, 6 * z, 3 * z, 0.6 * z, '#a9a49a'); rrect(p.x - 1.2 * z, p.y - 11 * z, 2.4 * z, 8 * z, 0.4 * z, '#b5b0a5'); rrect(p.x - 3 * z, p.y - 16 * z, 6 * z, 5 * z, 0.8 * z, '#c2bdb2'); rrect(p.x - 1.4 * z, p.y - 15 * z, 2.8 * z, 3 * z, 0.4 * z, NIGHT > 0.3 ? '#ffd27a' : '#6b665d'); poly([{ x: p.x - 5 * z, y: p.y - 16 * z }, { x: p.x, y: p.y - 21 * z }, { x: p.x + 5 * z, y: p.y - 16 * z }], '#8f8a80'); if (NIGHT > 0.3) glow(p.x, p.y - 14 * z, 10 * z, 0.6); }
+  else if (k === 'redlantern') { [-0.1, 0.1].forEach(du2 => { const p = wallPt(b.left, 0, du + du2, lift + 24), sw = Math.sin(ts / 700 + du2 * 9) * 0.6 * z; line(p.x, p.y, p.x + sw, p.y + 3 * z, '#3b2014', 0.6 * z); ellipse(p.x + sw, p.y + 6.5 * z, 3.2 * z, 3.8 * z, '#d6383e'); line(p.x + sw - 3 * z, p.y + 6.5 * z, p.x + sw + 3 * z, p.y + 6.5 * z, '#a8232a', 0.5 * z); line(p.x + sw, p.y + 10 * z, p.x + sw, p.y + 13 * z, '#f2c230', 0.8 * z); if (NIGHT > 0.3) glow(p.x, p.y + 6 * z, 12 * z, 0.7); }); [-0.075, 0.075].forEach(du2 => wallRect(b.left, 0, du + du2 - 0.012, du + du2 + 0.012, lift + 2, lift + 19, '#c9302c')); }
+  else if (k === 'tulips' || k === 'roses' || k === 'lavender') {
+    const cols = k === 'tulips' ? ['#e5484d', '#f2c230', '#ef7d9c', '#f28c28'] : k === 'roses' ? ['#d6383e', '#f3a7b8', '#ffffff'] : ['#9b7fd0', '#b39ae0', '#8a6cc4'];
+    [fx - 0.8, fx + 0.8].forEach((px, j) => { const p = at(px, gy); ellipse(p.x, p.y - 2 * z, 5 * z, 2.6 * z, k === 'lavender' ? '#c9a27a' : '#4f8a45'); for (let i = 0; i < 6; i++) { const q = { x: p.x - 3.5 * z + i * 1.4 * z, y: p.y - 4 * z - (i % 2) * 1.6 * z }; if (k === 'lavender') line(q.x, q.y + 2 * z, q.x, q.y - 2 * z, cols[i % 3], 1.4 * z); else circle(q.x, q.y, 1.3 * z, cols[(i + j) % cols.length]); } });
+  }
+  else if (k === 'woodpile') { const p = at(x + w + 0.4, y + d * 0.6); for (let r = 0; r < 3; r++) for (let i = 0; i < 4 - r; i++) { const cx = p.x - 5 * z + i * 3.2 * z + r * 1.6 * z, cy = p.y - 2 * z - r * 2.6 * z; circle(cx, cy, 1.5 * z, '#c99a6b', '#8a5a36', 0.5 * z); } }
+  else if (k === 'barrel') { const p = at(fx + 1.1, gy); ellipse(p.x, p.y - 4 * z, 3.4 * z, 4.6 * z, '#8a5a36'); line(p.x - 3.4 * z, p.y - 6 * z, p.x + 3.4 * z, p.y - 6 * z, '#3b2014', 0.7 * z); line(p.x - 3.4 * z, p.y - 2 * z, p.x + 3.4 * z, p.y - 2 * z, '#3b2014', 0.7 * z); ellipse(p.x, p.y - 8.4 * z, 2.6 * z, 1 * z, '#a8724a'); }
+  else if (k === 'tank') { const c = at(x + w + 0.5, y + 0.8), r = 7 * z, hh = 14 * z; ctx.beginPath(); ctx.ellipse(c.x, c.y, r, r / 2, 0, 0, Math.PI); ctx.lineTo(c.x - r, c.y - hh); ctx.ellipse(c.x, c.y - hh, r, r / 2, 0, Math.PI, 0, true); ctx.closePath(); ctx.fillStyle = '#b7c2c7'; ctx.fill(); for (let k2 = 1; k2 < 5; k2++) line(c.x - r, c.y - hh * k2 / 5, c.x + r, c.y - hh * k2 / 5, 'rgba(255,255,255,.4)', 0.6 * z); ellipse(c.x, c.y - hh, r, r / 2, '#cfd8dc'); }
+  else if (k === 'pots') [fx - 0.7, fx + 0.7].forEach((px, j) => { const p = at(px, gy); rrect(p.x - 2.4 * z, p.y - 4 * z, 4.8 * z, 4 * z, 0.8 * z, '#c8653c'); circle(p.x, p.y - 6 * z, 2.6 * z, '#4f9a4a'); circle(p.x + 1 * z, p.y - 7 * z, 1.2 * z, ['#e5484d', '#f2c230'][j]); });
+  else if (k === 'palm') { const p = at(x + w + 0.3, gy - 0.2); line(p.x, p.y, p.x + 2 * z, p.y - 22 * z, '#8a6a4a', 2 * z); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, tx = p.x + 2 * z + Math.cos(a) * 9 * z, ty = p.y - 22 * z + Math.sin(a) * 3 * z + 2 * z; line(p.x + 2 * z, p.y - 22 * z, tx, ty, '#3f9a4a', 2.2 * z); } }
+}
 // ---------- recipe houses (v0.21) ----------
 // Walls of one material (siding, shingle, brick, stucco, stone, wood boards, half-timber or glass), a roof (gable,
 // steep gable, gable facing the street, hip, flat or an A-frame), and trimmings: porches, chimney, dormers, shutters,
@@ -2659,6 +2763,17 @@ function wallMaterial(b, wh, mat, col, lift) {
   });
   if (mat === 'wood') { for (let u = 0.04; u < 1; u += 0.045) L(b.left, u, 0, u, wh, shade(col, -0.2), 0.6); for (let u = 0.05; u < 1; u += 0.07) L(b.right, u, 0, u, wh, shade(col, -0.17), 0.6); }
   if (mat === 'stone') for (let hh = 4, r = 0; hh < wh; hh += 4, r++) [b.left, b.right].forEach((f, i) => { L(f, 0, hh, 1, hh, 'rgba(60,50,40,.25)', 0.6); for (let u = ((r * 7 + i * 3) % 5) * 0.03; u < 1; u += 0.11 + ((r + i) % 3) * 0.02) L(f, u, hh - 4, u, hh, 'rgba(60,50,40,.22)', 0.5); });
+  if (mat === 'hanok') [b.left, b.right].forEach(f => {   // v0.48: posts and a beam of dark wood round white plaster
+    const dk = '#5a3a26';
+    for (let u = 0; u <= 1.001; u += 1 / 3) L(f, u, 0, u, wh, dk, 2.2);
+    L(f, 0, wh - 3, 1, wh - 3, dk, 2.4); L(f, 0, 3, 1, 3, dk, 1.6);
+  });
+  if (mat === 'jp') [b.left, b.right].forEach(f => {   // v0.48: dark boards up to the sill, plaster above, dark posts
+    const dk = '#3b2a22', hb = Math.min(wh * 0.42, 14);
+    for (let u = 0; u < 1; u += 0.04) wallRect(f, 0, u, u + 0.036, lift, lift + hb, u % 0.08 < 0.04 ? dk : '#46332a');
+    for (let u = 0; u <= 1.001; u += 0.25) L(f, u, 0, u, wh, dk, 1.8);
+    L(f, 0, wh - 2, 1, wh - 2, dk, 2);
+  });
   if (mat === 'half') [b.left, b.right].forEach(f => {   // dark timber frame on pale plaster
     const dk = '#4a3324', fl = Math.max(1, Math.round(wh / 28));
     for (let k = 0; k <= fl; k++) L(f, 0, Math.min(wh - 1, k * 28 + 1), 1, Math.min(wh - 1, k * 28 + 1), dk, 1.6);
@@ -2711,7 +2826,7 @@ function drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H) {
   else wallRect(b.left, 0, 0, 1, lift, lift + 3, shade(col, -0.35));
   wallMaterial(b, wh, S2.mat, col, lift);
   // windows on every floor; the door at the bottom
-  const tall = S2.windows === 'tall', wide = S2.windows === 'wide', sh = S2.shutters ? shade(rc, -0.05) : null;
+  const tall = S2.windows === 'tall', wide = S2.windows === 'wide', sh = S2.shutters ? S2.shutCol || shade(rc, -0.05) : null;
   for (let fl = 0; fl < f0 + n; fl++) {
     const h0 = fl * 28 + (S2.base ? 10 : 8), h1 = h0 + (tall ? 18 : wide ? 11 : 14);
     if (S2.mat === 'glass') {
@@ -2722,18 +2837,30 @@ function drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H) {
       continue;
     }
     const us = fl === 0 ? (wide ? [0.2, 0.8] : [0.17, 0.83]) : (wide ? [0.2, 0.5, 0.8] : [0.17, 0.5, 0.83]);
+    if (S2.mat === 'hanok' || S2.mat === 'jp') { us.forEach(u => latticeWin(b.left, u, 0.08, h0 + lift, h1 + lift)); [0.3, 0.7].forEach(u => latticeWin(b.right, u, 0.1, h0 + lift, h1 + lift)); continue; }   // v0.48
     us.forEach(u => specWin(b.left, u, wide ? 0.1 : 0.06, h0, h1, { shutters: sh, box: !!(S2.porch === 'small' && fl === 0) }, lift));
     [0.3, 0.7].forEach(u => specWin(b.right, u, wide ? 0.12 : 0.08, h0, h1, { shutters: sh }, lift));
     if (S2.arches && z > 0.4) us.forEach(u => { const p = wallPt(b.left, 0, u, h1 + lift + 1.5); ellipse(p.x, p.y, 5 * z, 2.4 * z, '#c8653c'); });
   }
   if (S2.mat === 'glass') { const dp = wallPt(b.left, 0, du, 0); rrect(dp.x - 5 * z, dp.y - 19 * z, 10 * z, 19 * z, 1 * z, 'rgba(255,255,255,.35)', '#ffffff', 1.2 * z); }
-  else specDoor(b.left, du, 0.06, 20, S2.mat === 'brick' ? '#2f4a3a' : shade(rc, -0.25), lift);
+  else if (S2.mat === 'hanok' || S2.mat === 'jp') { wallRect(b.left, 0, du - 0.09, du + 0.09, lift, lift + 21, '#5a3a26'); latticeWin(b.left, du - 0.043, 0.04, lift + 1, lift + 20); latticeWin(b.left, du + 0.043, 0.04, lift + 1, lift + 20); }   // v0.48
+  else specDoor(b.left, du, 0.06, 20, S2.door || (S2.mat === 'brick' ? '#2f4a3a' : shade(rc, -0.25)), lift);
+  if (S2.balcony && f0 + n >= 2) localBalcony(b, x, y, w, d, 28 + lift);   // v0.48
+  if (S2.pent && f0 + n >= 2) { const a0 = wallPt(b.left, 0, -0.02, lift + 31), a1 = wallPt(b.left, 0, 1.02, lift + 31), q0 = up(iso(x - 0.1, y + d + 0.55), (lift + 26) * z), q1 = up(iso(x + w + 0.1, y + d + 0.55), (lift + 26) * z); poly([a0, a1, q1, q0], rc, 'rgba(0,0,0,.15)', 0.6 * z); }
   if (S2.porch) specPorch(S2.porch, x, y, w, d, dx, rc, trim);
   // the roof
   const RH = S2.low ? 18 : SPEC_ROOF_H[S2.roof] || 30;
   const chim = S2.chimney ? () => chimney(x + w - 0.9, y + 0.5, wh + lift, RH + 12, S2.mat === 'brick' ? shade(col, -0.1) : '#9a948a') : null;
-  if (S2.roof === 'gable' || S2.roof === 'steep') {
+  if (S2.roof === 'asian') {   // v0.48: an East Asian tiled roof with curving eaves
+    asianRoof(x - 0.4, y - 0.4, w + 0.8, d + 0.8, wh + lift, RH, rc, S2.asian);
+    top = up(c, (wh + lift + RH + 8) * z).y;
+  } else if (S2.roof === 'gable' || S2.roof === 'steep') {
+    if (S2.hui) huiWall(x - 0.18, y - 0.18, d + 0.36, wh + lift, RH, col);   // v0.48: the far gable wall stands up behind the roof
     const g = gableX(x - 0.18, y - 0.18, w + 0.36, d + 0.36, wh + lift, RH, rc, col, chim);
+    if (S2.turf) turfRoof(g, z);
+    if (S2.thatch) thatchRoof(g, rc, z);
+    if (S2.hui) huiWall(x + w + 0.18, y - 0.18, d + 0.36, wh + lift, RH, col);
+    if (S2.capeGable) capeGable(b, du, wh + lift, RH, col, z);
     if (S2.dormers) for (let k = 0; k < S2.dormers; k++) {   // little windows standing out of the roof
       const u = (k + 1) / (S2.dormers + 1), dxk = x + u * w - 0.45, base = wh + lift + RH * 0.28;
       const bd = box(dxk, y + d - 0.85, 0.9, 0.6, 11, col, base, { shadow: false });
@@ -2744,10 +2871,12 @@ function drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H) {
   } else if (S2.roof === 'gableY') {
     if (chim) chim();
     const g = gableY(x - 0.2, y - 0.2, w + 0.4, d + 0.4, wh + lift, RH, rc, col);
+    if (S2.stepGable) stepGable(x - 0.2, y + d + 0.2, w + 0.4, wh + lift, RH, col, z);   // v0.48
     if (S2.glassFront) { const A0 = lerp(g.Du, g.Cu, 0.2), A1 = lerp(g.Du, g.Cu, 0.8), ap = lerp(mid(g.Du, g.Cu), g.R2, 0.75); poly([A0, A1, ap], NIGHT > 0.3 ? '#ffe39a' : '#bfe6f7', '#5b3a22', 1.6 * z); line(mid(A0, A1).x, mid(A0, A1).y, ap.x, ap.y, '#5b3a22', 1.2 * z); }
     top = g.R1.y - 10 * z;
   } else if (S2.roof === 'hip') {
     hipRoof(x - 0.25, y - 0.25, w + 0.5, d + 0.5, wh + lift, RH, rc);
+    if (S2.tin) tinRoof(x - 0.25, y - 0.25, w + 0.5, d + 0.5, wh + lift, RH, rc, z);   // v0.48
     if (chim) chim();
     top = up(c, (wh + lift + RH + 6) * z).y;
   } else {   // flat: a parapet (and a cornice on a brownstone)
@@ -2768,5 +2897,6 @@ function drawSpecHouse(h, x, y, w, d, du, wall, roof, ts, n, H) {
     line(apex.x, apex.y, apex.x, apex.y - 7 * z, '#6b5a3a', 1 * z);
     top = Math.min(top, apex.y - 10 * z);
   }
+  if (S2.deco && z > 0.3) localDeco(S2.deco, b, x, y, w, d, du, lift, ts);   // v0.48
   return top;
 }

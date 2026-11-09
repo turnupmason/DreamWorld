@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.47.0';
+const VERSION = '0.48.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -329,7 +329,29 @@ const HOUSES = [
 ];
 // How tall a recipe house is on the outside (px at zoom 1), for pictures and its name tag.
 const specWallH = H => 4 + H.floors[0] * 28 + (H.spec.stilts ? 12 : 0) + (H.spec.stoop ? 8 : 0);
-const SPEC_ROOF_H = { gable: 30, steep: 46, gableY: 32, hip: 26, flat: 8, aframe: 80 };
+const SPEC_ROOF_H = { gable: 30, steep: 46, gableY: 32, hip: 26, flat: 8, aframe: 80, asian: 34 };
+// v0.48: homes look like the country they're in (Mason #28: "in Korea, Korean houses; in Japan, Japanese houses; in
+// China, Chinese houses… every place its own"). Other people's homes in a town outside the US are drawn in a local
+// style (picked by the home; walls / roofs / shutters from the lists), keeping the house's size and storeys. Your own
+// home stays the one you chose, and the house types for sale are unchanged. deco: a little local thing by the door.
+const LOCAL_HOMES = {
+  kr: [{ id: 'hanok', zh: '韩屋', en: 'Hanok', mat: 'hanok', roof: 'asian', asian: 'kr', base: 'stone', walls: ['#f3efe6', '#efe8da'], roofs: ['#474c54', '#545a63'], deco: 'onggi' }],
+  jp: [{ id: 'machiya', zh: '町屋', en: 'Machiya', mat: 'jp', roof: 'asian', asian: 'jp', pent: true, walls: ['#f1ece2', '#ece4d4'], roofs: ['#3f4752', '#47474d'], deco: 'lantern' },
+    { id: 'minka', zh: '民家', en: 'Minka', mat: 'jp', roof: 'asian', asian: 'jp', base: 'stone', walls: ['#efe6d6'], roofs: ['#3b3f45', '#4a4f57'], deco: 'lantern' }],
+  cn: [{ id: 'hui', zh: '徽派民居', en: 'Huizhou house', mat: 'stucco', roof: 'gable', hui: true, walls: ['#f4f2ec', '#f1eee6'], roofs: ['#474c54'], door: '#a8332c', deco: 'redlantern' },
+    { id: 'siheyuan', zh: '四合院', en: 'Courtyard house', mat: 'brick', roof: 'asian', asian: 'cn', walls: ['#8f9399', '#9a9ea3'], roofs: ['#4f555c'], door: '#a8332c', deco: 'redlantern' }],
+  nl: [{ id: 'canal', zh: '运河屋', en: 'Canal house', mat: 'brick', roof: 'gableY', stepGable: true, windows: 'tall', walls: ['#8a3b2a', '#6e3a2c', '#9a5a3a', '#4a3b35', '#b06a3a'], roofs: ['#4a4f57'], deco: 'tulips' }],
+  no: [{ id: 'nordic', zh: '草顶木屋', en: 'Turf-roof house', mat: 'wood', roof: 'gable', turf: true, walls: ['#9c2f2a', '#c9a227', '#f4f1ea', '#2f4f6f', '#8a2a24'], roofs: ['#6f9a4a'], deco: 'woodpile' }],
+  fr: [{ id: 'mas', zh: '普罗旺斯石屋', en: 'Provençal mas', mat: 'stone', roof: 'hip', low: true, shutters: true, walls: ['#e4d7bd', '#ead9b8', '#dccbb0'], roofs: ['#c8653c', '#b85a35'], shutCols: ['#6f9fc8', '#7fae8a', '#a9b8c9', '#b07fb8'], deco: 'lavender' }],
+  uk: [{ id: 'cottage_uk', zh: '英式砖屋', en: 'English cottage', mat: 'brick', roof: 'steep', chimney: true, walls: ['#a94b37', '#b5634a', '#9c4a36'], roofs: ['#4f555c', '#5b5048'], deco: 'roses' },
+    { id: 'tudor_uk', zh: '都铎小屋', en: 'Tudor cottage', mat: 'half', roof: 'steep', base: 'stone', chimney: true, walls: ['#f1eadb'], roofs: ['#5b5048', '#4f555c'], deco: 'roses' }],
+  za: [{ id: 'capedutch', zh: '开普荷兰式', en: 'Cape Dutch', mat: 'stucco', roof: 'gable', thatch: true, capeGable: true, shutters: true, walls: ['#fbfaf5', '#f7f4ea'], roofs: ['#b8925a', '#a8824e'], shutCols: ['#2f5d50', '#3a4a5c'], deco: 'barrel' }],
+  au: [{ id: 'queenslander', zh: '昆士兰高脚屋', en: 'Queenslander', mat: 'siding', roof: 'hip', tin: true, stilts: true, porch: 'wrap', walls: ['#f6f3ea', '#e9f1ec', '#f4ead8'], roofs: ['#9fb3a8', '#a9b4bb', '#b9473e'], deco: 'tank' }],
+  co: [{ id: 'colonial_co', zh: '彩色殖民风', en: 'Colourful colonial', mat: 'stucco', roof: 'hip', balcony: true, walls: ['#f2c94c', '#4fa3d1', '#e98bb0', '#7cc68a', '#f2994a', '#ffffff'], roofs: ['#c8653c', '#b85a35'], door: '#2f5d50', deco: 'pots' }],
+  br: [{ id: 'casa_br', zh: '彩色小楼', en: 'Colourful house', mat: 'stucco', roof: 'flat', walls: ['#f2c94c', '#4fa3d1', '#e98bb0', '#7cc68a', '#f2994a', '#a46ef0'], roofs: ['#ffffff'], deco: 'palm' },
+    { id: 'casa_br2', zh: '瓦顶小楼', en: 'Tiled house', mat: 'stucco', roof: 'hip', balcony: true, walls: ['#fbfaf5', '#f2c94c', '#4fa3d1', '#e98bb0'], roofs: ['#c8653c'], deco: 'palm' }],
+  ca: [{ id: 'lodge_ca', zh: '山间木屋', en: 'Mountain cabin', mat: 'wood', roof: 'gableY', base: 'stone', chimney: true, walls: ['#9a6236', '#7a4a2a', '#a8683a'], roofs: ['#4f555c', '#6b4428', '#8a2f2a'], deco: 'woodpile' }],
+};
 const specHouseH = H => (H.spec.roof === 'aframe' ? 86 : specWallH(H) + (H.spec.low ? 18 : SPEC_ROOF_H[H.spec.roof] || 30) + (H.spec.turret ? 30 : 0) + 8);
 // Building another storey: price per floor tile of the room, growing ×1.5 with every storey. A late-game money sink.
 const FLOOR_BUILD = { coinsPerTile: 40, woodPerTile: 0.8, grow: 1.5 };

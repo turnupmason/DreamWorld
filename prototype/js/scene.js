@@ -561,9 +561,9 @@ const Scene = (() => {
   // they keep every detail but cost almost nothing to draw. Night window glows are kept with the picture.
   const HOUSE_SPR = new Map();
   function drawHouseCached(h, ox, oy) {
-    const H = HOUSES[h.house], [fx, fy, w, d] = H.fp, ex = floorsOf(h) - H.floors[0];
+    const H = houseToDraw(h), [fx, fy, w, d] = H.fp, ex = floorsOf(h) - H.floors[0], LH = H.spec && H.spec.walls ? H.spec : null;   // v0.48: a local style
     const zb = Math.round(Math.log(cam.z) / Math.log(1.15)), zq = Math.pow(1.15, zb), nb = NIGHT > 0.65 ? 2 : NIGHT > 0.25 ? 1 : 0;
-    const key = `${h.house}|${h.wall}|${h.roof}|${ex}|${zb}|${nb}`;
+    const key = `${h.house}|${h.wall}|${h.roof}|${ex}|${zb}|${nb}${LH ? `|${LH.id}|${LH.wallCol}|${LH.roofCol}|${LH.shutCol}` : ''}`;
     let s = HOUSE_SPR.get(key);
     if (!s) {
       const dpr = Math.min(2, window.devicePixelRatio || 1), topPx = (HOUSE_H[H.id] || (H.spec ? specHouseH(H) : 120)) + ex * 40 + 50;
@@ -904,6 +904,75 @@ const Scene = (() => {
       } : () => drawWildTree(s.x, s.y, s.w, ts) });
     }
   }
+  // v0.48: hills and mountains in 3D (Mason #28: "the golden hills should be solid; now it's all flat, rings on rings"):
+  // a mesh of little quads over the footprint, each one lit by how its slope faces the light (from above and a little
+  // from +x, like the houses), coloured by its height, and drawn far to near. at(u, v) → world [x, y] for u, v in -1..1;
+  // hgt(u, v) → height in px (≤ 0: flat ground); colAt(f, u, v) → its colour at height f (0..1 of H).
+  const TLIGHT = (() => { const L = [0.38, 0.12, 0.92], n = Math.hypot(...L); return L.map(v => v / n); })();
+  // (polar: rings ρ 0..1 from the top out to the foot, sectors θ round it, so the foot is a smooth curve, no steps)
+  function terrainMesh(at, hgt, H, colAt, NR, NS) {
+    const z = cam.z, M = NS, P = [];
+    for (let k = 0; k <= NR; k++) for (let q = 0; q < NS; q++) { const r = k / NR, th = q / NS * Math.PI * 2, [x, y] = at(r, th); P.push({ x, y, h: k === NR ? 0 : Math.max(0, hgt(r, th)), r, th }); }
+    const V = (k, q) => P[clamp(k, 0, NR) * M + ((q % NS) + NS) % NS];
+    // smooth light: each corner lit by the slope round it (so the hill reads as one soft surface, not facets)
+    const lamAt = (k, q) => {
+      const a = V(k + 1, q), b = V(k - 1, q), d = V(k, q + 1), e = V(k, q - 1);
+      const eu = [a.x - b.x, a.y - b.y], ev = [d.x - e.x, d.y - e.y], hu = (a.h - b.h) / 32, hv = (d.h - e.h) / 32;
+      const det = eu[0] * ev[1] - eu[1] * ev[0];
+      if (Math.abs(det) < 1e-6) return TLIGHT[2];
+      const gx = (hu * ev[1] - hv * eu[1]) / det, gy = (eu[0] * hv - ev[0] * hu) / det;
+      return (-gx * TLIGHT[0] - gy * TLIGHT[1] + TLIGHT[2]) / Math.hypot(gx, gy, 1);
+    };
+    const lam = new Float32Array((NR + 1) * M); for (let k = 0; k <= NR; k++) for (let q = 0; q < NS; q++) lam[k * M + q] = lamAt(k, q);
+    const quads = [];
+    for (let k = 0; k < NR; k++) for (let q = 0; q < NS; q++) {
+      const A = V(k, q), B = V(k, q + 1), C = V(k + 1, q + 1), D = V(k + 1, q);
+      const L = (lam[k * M + q] + lam[k * M + (q + 1) % NS] + lam[(k + 1) * M + (q + 1) % NS] + lam[(k + 1) * M + q]) / 4;
+      quads.push({ A, B, C, D, L, k: (A.x + B.x + C.x + D.x + A.y + B.y + C.y + D.y) / 4 });
+    }
+    quads.sort((p, q) => p.k - q.k);
+    quads.forEach(({ A, B, C, D, L }) => {
+      const f = (A.h + B.h + C.h + D.h) / 4 / H, base = colAt(Math.min(1, f), (A.r + C.r) / 2, (A.th + C.th) / 2), col = shade(base, clamp((L - 0.9) * 1.5, -0.32, 0.16) * clamp(f / 0.25, 0, 1));
+      poly([A, B, C, D].map(p => up(iso(p.x, p.y), p.h * z)), col, col, 0.8 * z);
+    });
+  }
+  // the shapes (ρ 0..1 from the top out, θ round it): a rounded hill, a pointed peak with ridges, a tall granite dome,
+  // a flat-topped mesa or table mountain
+  function terrainHgt(kind, H, seed) {
+    return (r, th) => {
+      if (kind === 'peak') return H * Math.pow(1 - r, 1.15) * (1 + 0.09 * Math.sin(5 * th + seed) * Math.min(1, r * 3));
+      if (kind === 'sugar') return H * Math.pow(1 - r * r, 0.62);
+      if (kind === 'mesa') return H * 0.78 * clamp((1 - r) / 0.34, 0, 1);
+      if (kind === 'table') return H * 0.62 * clamp((1 - r) / 0.26, 0, 1);
+      return H * Math.pow(1 - r * r, 1.4) * (1 + 0.05 * Math.sin(r * 7 + seed) * Math.sin(th * 3 - seed));   // dome
+    };
+  }
+  // a footprint a little uneven all round (by seed)
+  const wobble = (th, seed) => 1 + 0.1 * Math.sin(3 * th + seed) + 0.05 * Math.sin(7 * th + seed * 2.3);
+  // v0.48: a still thing (a mountain, a hill) drawn once per zoom step into a picture and reused, like the houses far
+  // away. (wx, wy): its anchor in the world; ext: how far it reaches round the anchor, in screen px at zoom 1
+  // ([left, top, right, bottom]); draw(): draws it at the real camera (cam is swapped for one at the anchor).
+  const STILL = new Map();
+  function drawStill(key, wx, wy, ext, draw) {
+    const zb = Math.round(Math.log(cam.z) / Math.log(1.12)), zq = Math.pow(1.12, zb), k2 = key + '|' + zb + '|' + PAL.woods;
+    let s2 = STILL.get(k2);
+    if (!s2) {
+      const dpr = Math.min(2, window.devicePixelRatio || 1), W2 = (ext[0] + ext[2]) * zq, H2 = (ext[1] + ext[3]) * zq;
+      if (W2 * H2 * dpr * dpr > 9e6) { draw(); return; }   // too big a picture: just draw it
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(W2 * dpr)); c.height = Math.max(1, Math.ceil(H2 * dpr));
+      const saved = [ctx, cam, GLOWS];
+      ctx = c.getContext('2d'); ctx.scale(dpr, dpr); GLOWS = [];
+      const a0 = { x: (wx - wy) * TW / 2 * zq, y: (wx + wy) * TH / 2 * zq };
+      cam = { x: ext[0] * zq - a0.x, y: ext[1] * zq - a0.y, z: zq };
+      try { draw(); } catch (e) { console.error(e); }
+      [ctx, cam, GLOWS] = saved;
+      s2 = { c, W2, H2, ex: ext[0] * zq, ey: ext[1] * zq };
+      STILL.set(k2, s2);
+      if (STILL.size > 80) STILL.delete(STILL.keys().next().value);
+    }
+    const o = iso(wx, wy), k = cam.z / zq;
+    ctx.drawImage(s2.c, o.x - s2.ex * k, o.y - s2.ey * k, s2.W2 * k, s2.H2 * k);
+  }
   // Mountains behind the woods (north and west) so the edge of the world looks like a valley, not a blank.
   let PEAKS = null;
   function peaks() {
@@ -922,33 +991,24 @@ const Scene = (() => {
     peaks().forEach(m => {
       if (m.x < vr.x0 - 20 || m.x > vr.x1 + 20 || m.y < vr.y0 - 20 || m.y > vr.y1 + 20) return;
       if (((m.x - K.x) / (K.rx + m.r + 4)) ** 2 + ((m.y - K.y) / (K.ry + m.r + 4)) ** 2 < 1) return;   // no mountains in the sea
-      objs.push({ d: m.x + m.y - 30, f: () => drawPeak(T, m) });
+      const R = m.r * 1.35 * 1.12, Hp = m.h * (T.tall || 1);
+      objs.push({ d: m.x + m.y - 30, f: () => drawStill('peak|' + TL.id + '|' + m.x.toFixed(1) + ',' + m.y.toFixed(1) + '|' + countyOf(SCENE_TOWN).terrain, m.x, m.y, [R * 64, Hp + R * 32 + 20, R * 64, R * 32 + 10], () => drawPeak(T, m)) });   // v0.48: drawn once per zoom step
     });
   }
-  function drawPeak(T, m) {
-    const z = cam.z, c = iso(m.x, m.y), hw = m.r * 34 * z, H = m.h * z * (T.tall || 1), [lit, dark] = T.cols, L = { x: c.x - hw, y: c.y }, Rt = { x: c.x + hw, y: c.y };
-    ellipse(c.x, c.y, hw * 1.05, hw * 0.28, 'rgba(60,90,50,.3)');
-    if (T.peak === 'peak') {
-      const top = { x: c.x + hw * 0.08, y: c.y - H }, mid = { x: c.x + hw * 0.08, y: c.y + hw * 0.12 };
-      poly([L, top, mid], lit); poly([mid, top, Rt], dark);
-      if (T.snow) { const sn = T.snow, a = lerp(top, L, sn), b = lerp(top, Rt, sn);
-        poly([a, top, b, { x: (top.x + b.x) / 2, y: b.y - H * 0.04 }, { x: top.x, y: a.y + H * 0.05 }, { x: (top.x + a.x) / 2, y: a.y - H * 0.05 }], T.snowCol || '#f4f6f8'); }
-      return;
-    }
-    if (T.peak === 'mesa' || T.peak === 'table') {   // a flat top; red rock in bands, or a wide grey-green table
-      const tw = T.peak === 'table' ? 0.78 : 0.55, hh = H * (T.peak === 'table' ? 0.6 : 0.75), tl = { x: c.x - hw * tw, y: c.y - hh }, tr = { x: c.x + hw * tw, y: c.y - hh }, tm = { x: c.x + hw * 0.1, y: c.y - hh + hw * 0.05 };
-      poly([L, tl, tm, { x: c.x + hw * 0.1, y: c.y + hw * 0.1 }], lit); poly([{ x: c.x + hw * 0.1, y: c.y + hw * 0.1 }, tm, tr, Rt], dark);
-      poly([tl, { x: tl.x + hw * 0.08, y: tl.y - hw * 0.04 }, { x: tr.x - hw * 0.08, y: tr.y - hw * 0.05 }, tr, tm], shade(lit, 0.12));
-      if (T.peak === 'mesa') for (let k = 1; k <= 3; k++) { const f = k / 4, a = lerp(L, tl, f), b = lerp(Rt, tr, f); line(a.x, a.y, c.x + hw * 0.1, a.y + hw * 0.05, shade(lit, 0.18), 2 * z); line(c.x + hw * 0.1, a.y + hw * 0.05, b.x, b.y, shade(dark, 0.12), 2 * z); }
-      else if (Math.floor(m.x + m.y) % 3 === 0) { ellipse(c.x - hw * 0.2, tl.y - 4 * z, hw * 0.45, 9 * z, 'rgba(255,255,255,.85)'); ellipse(c.x + hw * 0.25, tl.y - 6 * z, hw * 0.35, 8 * z, 'rgba(255,255,255,.8)'); }   // the "tablecloth" cloud
-      return;
-    }
-    // rounded: hills (dome) or tall granite domes (sugar)
-    const w2 = T.peak === 'sugar' ? hw * 0.5 : hw * 0.82, hh = T.peak === 'sugar' ? H * 1.05 : H, n = 18, pts = [], right = [];
-    for (let i = 0; i <= n; i++) { const a = i / n * Math.PI, px = c.x - Math.cos(a) * w2, py = c.y - Math.pow(Math.sin(a), T.peak === 'sugar' ? 0.55 : 0.75) * hh; pts.push({ x: px, y: py }); if (i >= n / 2) right.push({ x: px, y: py }); }
-    poly(pts, lit); poly([{ x: c.x, y: c.y - hh }, ...right, { x: c.x + w2 * 0.1, y: c.y + w2 * 0.1 }], dark);
-    if (T.terraces && z > 0.06) for (let k = 1; k <= 4; k++) { const f = k / 5, yy = c.y - hh * f, ww = w2 * Math.sqrt(1 - f * f) * 0.95; ctx.save(); ctx.globalAlpha = 0.35; ellipse(c.x, yy, ww, ww * 0.1, null, '#d8f0b0', 1.4 * z); ctx.restore(); }
-    else if (T.peak === 'dome' && hh > 60 * z && z > 0.06) for (let k = 0; k < 6; k++) { const a = (k + 0.5) / 6 * Math.PI, rr = 0.75, q = { x: c.x - Math.cos(a) * w2 * rr * 0.8, y: c.y - Math.sin(a) * hh * rr * 0.85 }; circle(q.x, q.y, 7 * z, shade(dark, -0.12)); }
+  function drawPeak(T, m) {   // v0.48: solid, in the county's own shape and colours
+    const z = cam.z, c = iso(m.x, m.y), H = m.h * (T.tall || 1), rx = m.r * 1.05, ry = m.r * 0.95, kind = T.peak === 'dome' ? 'dome' : T.peak;
+    ellipse(c.x, c.y + 4 * z, rx * 36 * z, rx * 16 * z, 'rgba(50,70,40,.18)');
+    const [lit, dark] = T.cols, snow = T.snow ? 1 - T.snow * 1.05 : 2, seed = m.x * 0.37 + m.y * 0.11;
+    const NR = clamp(Math.round(rx * 32 * z / 10), 9, 18), NS = clamp(Math.round(rx * 32 * z / 5), 32, 56), sz = kind === 'sugar' ? 0.8 : 1;
+    terrainMesh((r, th) => { const k = r * wobble(th, seed) * sz; return [m.x + Math.cos(th) * k * rx, m.y + Math.sin(th) * k * ry]; }, terrainHgt(kind, H, seed), H, (f, r, th) => {
+      if (f > snow + 0.04 * Math.sin(th * 9 + seed)) return T.snowCol || '#f4f6f8';
+      let col = mixCol(dark, lit, 0.45 + 0.55 * f);
+      if (f < 0.22) { const q = f / 0.22; col = mixCol(PAL.woods, col, q * q * (3 - 2 * q)); }   // the foot fades into the woods
+      if (kind === 'mesa') col = Math.floor(f * 7) % 2 ? shade(col, 0.1) : shade(col, -0.05);
+      if (T.terraces && f > 0.08) col = Math.floor(f * 11) % 2 ? shade(col, 0.12) : col;
+      return col;
+    }, NR, NS);
+    if (kind === 'table' && Math.floor(m.x + m.y) % 3 === 0) { const tp = up(c, H * 0.62 * z); ellipse(tp.x - rx * 6 * z, tp.y - 4 * z, rx * 14 * z, 8 * z, 'rgba(255,255,255,.85)'); ellipse(tp.x + rx * 8 * z, tp.y - 6 * z, rx * 11 * z, 7 * z, 'rgba(255,255,255,.8)'); }   // the "tablecloth" cloud
   }
   // Rivers and canals (water rectangles of the town plan): banks, water and a slow current along the long side.
   function river(vr) {
@@ -1185,19 +1245,15 @@ const Scene = (() => {
     const cols = TH ? Array.from({ length: 9 }, (_, i) => mixCol(TH[0], TH[1], i / 8)) : desert ? ['#a8582f', '#b8663a', '#c47546', '#cf8553', '#d99462', '#e2a472', '#e8b283', '#eec094', '#f2cca4']
       : snow ? ['#5f7d6a', '#6f8e78', '#86a28c', '#a9bfae', '#cddbd2', '#e4ece8', '#f1f6f4', '#f7fafa', '#ffffff']
       : ['#3f7a42', '#4a8a4a', '#559852', '#62a65b', '#6fb263', '#7cbd6c', '#89c675', '#95cd7e', '#a1d387'];
-    for (let k = 0; k < K; k++) {
-      const f = 1 - 0.78 * Math.pow(k / K, 1.35), hh = Hl.H * Math.pow(k / K, 0.85), pts = [];
-      for (let i = 0; i < n; i++) {
-        const a = i / n * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a), e = 2 / 2.6;
-        const ds = Math.sign(c) * Math.pow(Math.abs(c), e) * Hl.rs * f, dt = Math.sign(s2) * Math.pow(Math.abs(s2), e) * Hl.rt * f;
-        pts.push(fwIso(F, Hl.sc + ds + Math.sin(a * 3 + k) * 0.4 * f, dt + Math.cos(a * 4 + k) * 0.5 * f, hh));
-      }
-      poly(pts, cols[k], k === 0 ? 'rgba(0,0,0,.12)' : null, 1 * z);
-    }
+    // v0.48: one solid hill (it was K flat rings stacked up): a mesh over its footprint, a rounded squarish dome
+    const sup = (c2, e = 2.6) => Math.sign(c2) * Math.pow(Math.abs(c2), 2 / e);   // a rounded square, like the old one
+    const hHgt = (r, th) => Hl.H * Math.pow(1 - r * r, 1.5) * (1 + 0.05 * Math.sin(r * 6 + Hl.sc) * Math.sin(th * 4));   // a gentle foot, a round top
+    const [hx, hy] = fwAt(F, Hl.sc, 0), HR = (Hl.rs + Hl.rt) * 1.1;
+    drawStill('hill|' + TL.id + '|' + Hl.sc + '|' + countyOf(SCENE_TOWN).terrain, hx, hy, [HR * 32 + 10, Hl.H + HR * 16 + 20, HR * 32 + 10, HR * 16 + 10], () => terrainMesh((r, th) => fwAt(F, Hl.sc + r * sup(Math.cos(th)) * Hl.rs, r * sup(Math.sin(th)) * Hl.rt), hHgt, Hl.H, f => { const g = 0.45 + 0.55 * f, k0 = Math.min(K - 1, Math.floor(g * (K - 1))), c0 = mixCol(cols[k0], cols[Math.min(K - 1, k0 + 1)], g * (K - 1) % 1), q = clamp(f / 0.3, 0, 1); return q < 1 ? mixCol(PAL.woods, c0, q * q * (3 - 2 * q)) : c0; }, clamp(Math.round(Math.max(Hl.rs, Hl.rt) * 32 * cam.z / 14), 8, 22), clamp(Math.round(Math.max(Hl.rs, Hl.rt) * 32 * cam.z / 6), 20, 64)));
     if (z > 0.12) for (let i = 0; i < 14; i++) {   // trees (or rocks in the desert) on its slopes
       const a = hash(i, Hl.sc) * Math.PI * 2, r = 0.2 + hash(i + 3, Hl.sc) * 0.62, ds = Math.cos(a) * Hl.rs * r, dt = Math.sin(a) * Hl.rt * r;
       if (Hl.e.side < 0 && ds > Hl.rs * 0.35 && Math.abs(dt) < F.half + 3) continue;   // not in front of the portal
-      const kk = Math.max(0, 1 - r), p = fwIso(F, Hl.sc + ds, dt, Hl.H * Math.pow(kk, 0.6) * 0.92), sz = 0.8 + hash(i + 7, Hl.sc) * 0.5;
+      const hu = ds / Hl.rs, hv = dt / Hl.rt, hr = Math.pow(Math.pow(Math.abs(hu), 2.6) + Math.pow(Math.abs(hv), 2.6), 1 / 2.6), p = fwIso(F, Hl.sc + ds, dt, hr >= 1 ? 0 : Hl.H * Math.pow(1 - hr * hr, 1.5)), sz = 0.8 + hash(i + 7, Hl.sc) * 0.5;
       if (desert) { ellipse(p.x, p.y - 4 * z, 12 * z * sz, 6 * z * sz, '#9a4f2a'); ellipse(p.x - 2 * z, p.y - 6 * z, 7 * z * sz, 3 * z * sz, '#c4744a'); }
       else if (snow || PAL.tree === 'pine') { poly([{ x: p.x - 8 * z * sz, y: p.y }, { x: p.x, y: p.y - 28 * z * sz }, { x: p.x + 8 * z * sz, y: p.y }], '#2f6b4f'); if (snow) poly([{ x: p.x - 4 * z * sz, y: p.y - 14 * z * sz }, { x: p.x, y: p.y - 28 * z * sz }, { x: p.x + 4 * z * sz, y: p.y - 14 * z * sz }], '#f8fbfc'); }
       else { const L = PAL.leaf; circle(p.x, p.y - 12 * z * sz, 12 * z * sz, L[0]); circle(p.x + 5 * z * sz, p.y - 9 * z * sz, 8 * z * sz, L[1]); circle(p.x - 3 * z * sz, p.y - 17 * z * sz, 6 * z * sz, L[2]); }
