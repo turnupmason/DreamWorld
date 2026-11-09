@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.52.0';
+const VERSION = '0.53.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -395,6 +395,26 @@ const SPEC_ROOF_H = { gable: 30, steep: 46, gableY: 32, hip: 26, flat: 8, aframe
 // China, Chinese houses… every place its own"). Other people's homes in a town outside the US are drawn in a local
 // style (picked by the home; walls / roofs / shutters from the lists), keeping the house's size and storeys. Your own
 // home stays the one you chose, and the house types for sale are unchanged. deco: a little local thing by the door.
+// v0.53 (Mason #29: "the town's shops, the town hall and all the facilities in each country's style too"): shop
+// fronts outside the US. wall / walls: the walls (walls: one per shop); mat: wall material; roof: asian (asian: kr / jp /
+// cn), step (a Dutch stepped gable), tile (a hipped clay-tile roof), slate, gable (turf: grass on it), thatch, tin;
+// sign: how the shop shows its name (vertical board, noren curtain, red plaque, hanging sign, striped awning, painted
+// fascia, wooden board, a veranda over the pavement, a balcony with flowers); deco: by the door; hall: the town hall.
+// The US towns keep the American main-street look they had.
+const LOCAL_SHOPS = {
+  kr: { zh: '韩式', en: 'Korean', wall: '#f3efe6', mat: 'hanok', roof: 'asian', asian: 'kr', roofCol: '#4a5058', sign: 'vertical', signCol: '#2f5d50', deco: 'onggi', hall: { wall: '#f3efe6', pillar: '#8a2f2a', roof: '#4a5058' } },
+  jp: { zh: '日式', en: 'Japanese', wall: '#efe6d6', mat: 'jp', roof: 'asian', asian: 'jp', roofCol: '#3f4752', sign: 'noren', signCol: '#2f4a6b', deco: 'lantern', hall: { wall: '#efe6d6', pillar: '#5a3a26', roof: '#3f4752' } },
+  cn: { zh: '中式', en: 'Chinese', wall: '#f2efe8', roof: 'asian', asian: 'cn', roofCol: '#3b3f45', sign: 'plaque', signCol: '#a32a2a', deco: 'redlantern', hall: { wall: '#f2efe8', pillar: '#a32a2a', roof: '#3b3f45' } },
+  nl: { zh: '荷兰式', en: 'Dutch', wall: '#7a3f2e', mat: 'brick', roof: 'step', roofCol: '#4a4f57', sign: 'hanging', signCol: '#2f6b4a', deco: 'tulips', hall: { wall: '#8a4a36', roof: '#4a4f57' } },
+  no: { zh: '挪威式', en: 'Norwegian', walls: ['#b5402f', '#e0b13a', '#f4efe4', '#4f7a9a'], mat: 'wood', roof: 'gable', turf: true, roofCol: '#6b7a44', sign: 'board', deco: 'woodpile', hall: { wall: '#b5402f', roof: '#3b3f45' } },
+  fr: { zh: '法式', en: 'French', wall: '#efe4cf', mat: 'stone', roof: 'tile', roofCol: '#c8653c', sign: 'awning', awn: ['#2f4a8a', '#ffffff'], deco: 'lavender', hall: { wall: '#f1e6d0', roof: '#5b6470' } },
+  uk: { zh: '英式', en: 'British', wall: '#9a5a42', mat: 'brick', roof: 'slate', roofCol: '#4a5058', sign: 'fascia', signCol: '#1f3a2c', deco: 'roses', hall: { wall: '#a9654c', roof: '#4a5058' } },
+  za: { zh: '开普式', en: 'Cape Dutch', wall: '#fbfaf5', roof: 'thatch', roofCol: '#b89a5e', cape: true, sign: 'board', deco: 'pots', hall: { wall: '#fbfaf5', roof: '#b89a5e' } },
+  au: { zh: '澳式', en: 'Australian', wall: '#f1e6cf', roof: 'tin', roofCol: '#9aa3ad', sign: 'veranda', deco: 'palm', hall: { wall: '#f1e6cf', roof: '#9aa3ad' } },
+  co: { zh: '哥伦比亚式', en: 'Colombian', walls: ['#f2c230', '#5bb4d6', '#e98bb0', '#8fd18a', '#f28c28'], roof: 'tile', roofCol: '#b8573a', sign: 'balcony', deco: 'pots', hall: { wall: '#fbfaf5', roof: '#b8573a' } },
+  br: { zh: '巴西式', en: 'Brazilian', walls: ['#f28c28', '#3ec1a5', '#f2c230', '#e5484d', '#5bb4d6'], roof: 'tile', roofCol: '#c8653c', sign: 'awning', awn: ['#2e9b5a', '#f2c230'], deco: 'palm', hall: { wall: '#f4efe4', roof: '#c8653c' } },
+  ca: { zh: '加拿大式', en: 'Canadian', wall: '#9a6236', mat: 'wood', roof: 'gable', roofCol: '#3b3f45', sign: 'board', deco: 'woodpile', hall: { wall: '#8a5a36', roof: '#3b3f45' } },
+};
 const LOCAL_HOMES = {
   kr: [{ id: 'hanok', zh: '韩屋', en: 'Hanok', mat: 'hanok', roof: 'asian', asian: 'kr', base: 'stone', walls: ['#f3efe6', '#efe8da'], roofs: ['#474c54', '#545a63'], deco: 'onggi' }],
   jp: [{ id: 'machiya', zh: '町屋', en: 'Machiya', mat: 'jp', roof: 'asian', asian: 'jp', pent: true, walls: ['#f1ece2', '#ece4d4'], roofs: ['#3f4752', '#47474d'], deco: 'lantern' },

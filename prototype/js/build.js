@@ -955,6 +955,38 @@ function drawYardAt(it, x, y, ts) {
 }
 
 // ---------- town centre shops ----------
+// ---------- v0.53: shop fronts in the local style (LOCAL_SHOPS in data.js) ----------
+function localShop() { if (typeof countyOf !== 'function') return null; const c = countyOf(SCENE_TOWN); return (c && LOCAL_SHOPS[c.folk]) || null; }
+const localWall = (L, k) => (L.walls ? L.walls[strSeed(String(k)) % L.walls.length] : L.wall);
+// the local roof on a box w × d whose walls are wh high (side: its front faces east / west); how much higher it goes
+function localShopRoof(L, x, y, w, d, wh, side, wall) {
+  const z = cam.z, rc = L.roofCol, G = side ? gableY : gableX;
+  if (L.roof === 'asian') { asianRoof(x - 0.25, y - 0.25, w + 0.5, d + 0.5, wh, Math.min(17, 9 + Math.min(w, d) * 1.5), rc, L.asian); return 24; }   // (a low roof, so the front shows)
+  if (L.roof === 'step' && !side) { hipRoof(x - 0.1, y - 0.1, w + 0.2, d + 0.2, wh, 12, rc); const n = Math.max(1, Math.round(w / 2.6)); for (let i = 0; i < n; i++) stepGable(x + i * w / n, y + d, w / n, wh, 34, shade(wall, i % 2 ? 0.06 : -0.06), z); return 44; }   // a row of stepped gables, like canal houses
+  if (L.roof === 'tile' || L.roof === 'tin') { hipRoof(x - 0.2, y - 0.2, w + 0.4, d + 0.4, wh, 15, rc); if (L.roof === 'tin') tinRoof(x - 0.2, y - 0.2, w + 0.4, d + 0.4, wh, 15, rc, z); return 16; }
+  if (L.roof === 'slate') { G(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, 20, rc, wall, () => chimney(x + w - 0.8, y + 0.4, wh, 30, '#8a5a42')); return 24; }
+  if (L.roof === 'thatch') { const g = G(x - 0.25, y - 0.25, w + 0.5, d + 0.5, wh, 22, rc, wall); thatchRoof(g, rc, z); return 24; }
+  const g = G(x - 0.15, y - 0.15, w + 0.3, d + 0.3, wh, 20, rc, wall); if (L.turf && !side) turfRoof(g, z); return 22;
+}
+// the local touches on the front F (the wall facing the street): the wall's material, the sign, a thing by the door
+function localShopFront(L, b, F, x, y, w, d, wh, du, side, ts, e, wall) {
+  const z = cam.z, gold = '#e9c46a';
+  if (L.mat) wallMaterial(b, wh, L.mat, wall, 0);
+  const em = (u, hh, s = 7) => { if (z > 0.35) { const p = wallPt(F, 0, u, hh); emoji(e, p.x, p.y + s * 0.5 * z, s * z); } };
+  if (L.sign === 'vertical') { const p = wallPt(F, 0, 0.95, wh - 4); rrect(p.x - 3.4 * z, p.y, 6.8 * z, 19 * z, 1 * z, L.signCol, gold, 0.8 * z); if (z > 0.35) emoji(e, p.x, p.y + 12 * z, 6 * z); }
+  else if (L.sign === 'noren') { wallRect(F, 0, du - 0.1, du + 0.1, 13, 20, L.signCol); [-0.035, 0.035].forEach(o => wallLine(F, 0, du + o, 13, du + o, 20, '#f4efe4', 0.7)); const p = wallPt(F, 0, du, 17); circle(p.x, p.y, 1.8 * z, '#f4efe4'); }
+  else if (L.sign === 'plaque') { wallRect(F, 0, 0.3, 0.7, wh - 11, wh - 3, L.signCol, gold, 1.2); em(0.5, wh - 7); [[0, 0.035], [0.965, 1]].forEach(([a, c]) => wallRect(F, 0, a, c, 0, wh, '#a32a2a')); }
+  else if (L.sign === 'hanging') { const p = wallPt(F, 0, 0.97, 25); line(p.x, p.y, p.x + 7 * z, p.y + 1 * z, '#2d2d2d', 1 * z); rrect(p.x + 1.5 * z, p.y + 1.5 * z, 8 * z, 7 * z, 1 * z, L.signCol, gold, 0.6 * z); if (z > 0.35) emoji(e, p.x + 5.5 * z, p.y + 8 * z, 5 * z); }
+  else if (L.sign === 'awning') { for (let i = 0; i < 10; i++) wallRect(F, 0, i / 10, (i + 1) / 10, 22, 28, L.awn[i % 2]); }
+  else if (L.sign === 'fascia') { wallRect(F, 0, 0.02, 0.98, 22, 28, L.signCol, gold, 1); em(0.25, 25, 5); }
+  else if (L.sign === 'board') { wallRect(F, 0, 0.3, 0.7, wh - 10, wh - 3, '#6b4428', '#f3e3c3', 1); em(0.5, wh - 6.5, 6); }
+  else if (L.sign === 'veranda' && !side) {   // posts and a tin roof over the pavement
+    [x + 0.2, x + w / 2, x + w - 0.3].forEach(px => box(px, y + d + 0.85, 0.12, 0.12, 22, '#f4efe4', 0, { shadow: false }));
+    box(x - 0.1, y + d, w + 0.2, 1.1, 1.6, L.roofCol, 22, { shadow: false });
+  }
+  else if (L.sign === 'balcony' && !side) { localBalcony(b, x, y, w, d, 22); }
+  if (L.deco && !side) localDeco(L.deco, b, x, y, w, d, du, 0, ts);
+}
 const SHOP_LOOK = {
   bakery:  { e: '🥐', wall: '#f6e2c4', awn: '#e5675f', zh: '面包店', en: 'Bakery' },
   cafe:    { e: '☕', wall: '#eadcc8', awn: '#4f8a5a', zh: '咖啡馆', en: 'Café' },
@@ -971,21 +1003,23 @@ const SHOP_LOOK = {
 // A little shop facing +y: shop window, door, striped awning, a sign on the roof. Returns its tap box.
 function drawShop(k, x, y, ts, w = 6, d = 5.5) {
   if (TOWER_STOREYS[k]) return drawTower(k, x, y, w, d, ts);   // v0.37
-  const L = SHOP_LOOK[k], z = cam.z, wh = 34;
+  const L = SHOP_LOOK[k], z = cam.z, wh = 34, LS = localShop(), wallC = LS ? localWall(LS, k) : L.wall;   // v0.53: in the local style
   const c = iso(x + w / 2, y + d / 2);
   ellipse(c.x, c.y + 6 * z, 100 * z, 50 * z, 'rgba(0,0,0,.07)');
-  const b = box(x, y, w, d, wh, L.wall);
+  const b = box(x, y, w, d, wh, wallC);
   wallRect(b.left, 0, 0, 1, 0, 3, shade(L.wall, -0.3)); wallRect(b.right, 0, 0, 1, 0, 3, shade(L.wall, -0.25));
   wallRect(b.left, 0, 0.08, 0.62, 5, 21, NIGHT > 0.3 ? '#ffe39a' : '#a9dcf5', '#fffaf0', 1.4);
   wallLine(b.left, 0, 0.35, 5, 0.35, 21, '#fffaf0', 1);
   if (NIGHT > 0.3) { const p = wallPt(b.left, 0, 0.35, 13); glow(p.x, p.y, 50 * z, 0.9); }
   doorFace(b.left, 0.8, 0.07, 19, shade(L.awn, -0.25));
-  for (let i = 0; i < 10; i++) wallRect(b.left, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : L.awn);
+  if (LS) localShopFront(LS, b, b.left, x, y, w, d, wh, 0.8, false, ts, L.e, wallC);
+  else for (let i = 0; i < 10; i++) wallRect(b.left, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : L.awn);
   [0.3, 0.7].forEach(u => winFace(b.right, u, 0.09, 10, 24));
-  box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(L.wall, -0.12), wh);
+  const rh2 = LS ? localShopRoof(LS, x, y, w, d, wh, false, wallC) : (box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(L.wall, -0.12), wh), 0);
+  if (LS && LS.cape) capeGable(b, 0.5, wh, 24, '#fbfaf5', z);
   if (L.pole) { const q = wallPt(b.left, 0, 0.97, 8), st = (ts / 300) % 6; rrect(q.x - 2 * z, q.y - 16 * z, 4 * z, 16 * z, 2 * z, '#ffffff', '#9aa3ad', 0.6 * z); for (let k2 = 0; k2 < 4; k2++) { const yy = q.y - 16 * z + ((k2 * 4 + st) % 16) * z; line(q.x - 2 * z, yy, q.x + 2 * z, yy + 2 * z, k2 % 2 ? '#e5484d' : '#2f6fb2', 1.2 * z); } }   // v0.37: the barber's pole turns
   if (L.flowers) for (let k2 = 0; k2 < 4; k2++) { const q = iso(x + 0.6 + k2 * 0.7, y + d + 0.35); ellipse(q.x, q.y - 2 * z, 4 * z, 2 * z, '#8a5a36'); emoji(['🌷', '🌻', '🌹', '💐'][k2], q.x, q.y - 3 * z, 8 * z); }   // buckets of flowers outside
-  const s = up(iso(x + w / 2, y + d / 2), (wh + 5) * z);
+  const s = up(iso(x + w / 2, y + d / 2), (wh + 5 + rh2) * z);
   if (z > 0.12) pill(`${L.e} ${nm(L)}`, s.x, s.y, '#fffdf8', '#3b3125', `800 ${Math.max(9, 12 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 22 * z));
   return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 24 * z, y1: iso(x + w, y + d).y };
 }
@@ -1059,7 +1093,8 @@ function plazaGround(ox, oy) {
   for (let j = 0; j < LOT_D; j++) for (let i = 0; i < LOT_W; i++) tile(ox + i, oy + j, (i + j) % 2 ? '#e7dfd0' : '#ded5c4', 'rgba(255,255,255,.35)');
 }
 function drawTownHall(x, y, lv, ts) {
-  const z = cam.z, wall = '#f6efe2', roof = '#7a8aa6';
+  const LS = localShop(), HL = LS && LS.hall;   // v0.53: the local town hall: a hall under a tiled roof with red or dark pillars in East Asia, the local walls and roof elsewhere
+  const z = cam.z, wall = HL ? HL.wall : '#f6efe2', roof = HL ? HL.roof : '#7a8aa6';
   const w = lv >= 4 ? 6 : lv >= 2 ? 5 : 4, d = lv >= 4 ? 4 : 3, h = lv >= 4 ? 56 : lv >= 2 ? 44 : 30;
   const hx = x + (7 - w / 2) - 0.5, hy = y + 1;
   const b = box(hx, hy, w, d, h, wall);
@@ -1068,7 +1103,10 @@ function drawTownHall(x, y, lv, ts) {
   for (let i = 1; i < n; i++) { const u = i / n; if (Math.abs(u - 0.5) < 0.08) continue; winFace(b.left, u, 0.04, 10, 24); if (h > 40) winFace(b.left, u, 0.04, 32, h - 8); }
   doorFace(b.left, 0.5, 0.07, 22, '#5a3a22');
   [0.3, 0.7].forEach(u => winFace(b.right, u, 0.08, 10, 24));
-  hipRoof(hx - 0.15, hy - 0.15, w + 0.3, d + 0.3, h, 26, roof);
+  if (LS && LS.mat) wallMaterial(b, h, LS.mat, wall, 0);
+  if (LS && LS.roof === 'asian') asianRoof(hx - 0.5, hy - 0.5, w + 1, d + 1, h, 30, roof, LS.asian);
+  else hipRoof(hx - 0.15, hy - 0.15, w + 0.3, d + 0.3, h, 26, roof);
+  if (LS && LS.sign === 'plaque') wallRect(b.left, 0, 0.36, 0.64, h - 9, h - 2, '#a32a2a', '#e9c46a', 1.2);
   let top = iso(hx, hy).y - (h + 26) * z;
   if (lv >= 4) {
     const tx = hx + w / 2 - 0.5, ty = hy + d / 2 - 0.5;
@@ -1082,8 +1120,8 @@ function drawTownHall(x, y, lv, ts) {
     top = apex.y;
   }
   // columns
-  [-0.6, -0.2, 0.2, 0.6].forEach(dx => box(hx + w / 2 + dx - 0.05, hy + d + 0.1, 0.1, 0.1, Math.min(h, 34), '#fffaf0'));
-  box(hx + w / 2 - 0.8, hy + d - 0.05, 1.6, 0.4, 3, '#fffaf0', Math.min(h, 34));
+  [-0.6, -0.2, 0.2, 0.6].forEach(dx => box(hx + w / 2 + dx - 0.05, hy + d + 0.1, 0.1, 0.1, Math.min(h, 34), (HL && HL.pillar) || '#fffaf0'));
+  if (!(LS && LS.roof === 'asian')) box(hx + w / 2 - 0.8, hy + d - 0.05, 1.6, 0.4, 3, '#fffaf0', Math.min(h, 34));
   // flag
   const fp = up(iso(hx + w + 0.6, hy + d + 0.6), 0);
   line(fp.x, fp.y, fp.x, fp.y - 60 * z, '#666', 1.4 * z);
@@ -2079,9 +2117,10 @@ function drawStore(st, ts) {
   else if (k === 'stadium') b = drawStadium(G, x, y, w, d, ts);   // v0.42: an open bowl
   else if (CIVIC_WH[k]) b = drawCivic(k, G, x, y, w, d, wh, ts);   // v0.38: the new district's buildings
   else {
-    b = box(x, y, w, d, wh, S2.wall);
-    wallRect(b.left, 0, 0, 1, 0, 3, shade(S2.wall, -0.3)); wallRect(b.right, 0, 0, 1, 0, 3, shade(S2.wall, -0.25));
-    const F = side ? b.right : b.left, Sd = side ? b.left : b.right;
+    const LS = localShop(), wallC = LS && !['dealer', 'mall', 'police', 'firestation', 'gas'].includes(k) ? localWall(LS, k) : S2.wall;   // v0.53: shops in the local style (the car showroom, the mall and the emergency services stay as they are)
+    b = box(x, y, w, d, wh, wallC);
+    wallRect(b.left, 0, 0, 1, 0, 3, shade(wallC, -0.3)); wallRect(b.right, 0, 0, 1, 0, 3, shade(wallC, -0.25));
+    const F = side ? b.right : b.left, Sd = side ? b.left : b.right, loc = LS && wallC !== S2.wall ? LS : LS && wallC === S2.wall && !['dealer', 'mall', 'police', 'firestation', 'gas'].includes(k) ? LS : null;
     if (k === 'dealer' || k === 'mall') {   // big shop windows across the front
       wallRect(F, 0, 0.05, 0.95, 4, wh * 0.6, glassCol, '#e8edf2', 1.6);
       for (let i = 1; i < 6; i++) wallLine(F, 0, 0.05 + i * 0.15, 4, 0.05 + i * 0.15, wh * 0.6, '#e8edf2', 1);
@@ -2090,10 +2129,12 @@ function drawStore(st, ts) {
     } else {
       wallRect(F, 0, 0.08, 0.6, 5, 21, glassCol, '#fffaf0', 1.4);
       if (showDoor) doorFace(F, 0.8, 0.07, 19, shade(S2.roof, -0.2));
-      if (showDoor) for (let i = 0; i < 10; i++) wallRect(F, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : S2.roof);   // the awning over the door
+      if (loc) localShopFront(loc, b, F, x, y, w, d, wh, 0.8, side || !showDoor, ts, S2.e, wallC);
+      else if (showDoor) for (let i = 0; i < 10; i++) wallRect(F, 0, i / 10, (i + 1) / 10, 23, 28, i % 2 ? '#fffaf0' : S2.roof);   // the awning over the door
     }
     [0.3, 0.7].forEach(u => winFace(Sd, u, 0.08, 10, Math.min(24, wh - 6)));
-    box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(S2.wall, -0.12), wh);
+    if (loc && k !== 'school') { G.rh2 = localShopRoof(loc, x, y, w, d, wh, side, wallC); if (loc.cape && !side) capeGable(b, 0.5, wh, 24, '#fbfaf5', z); }
+    else box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, shade(wallC, -0.12), wh);
     if (k === 'furniture') { const p = wallPt(F, 0, 0.32, 6); rrect(p.x - 7 * z, p.y - 4 * z, 14 * z, 6 * z, 2 * z, '#e5734f'); }
     if (k === 'school') {   // v0.22: a red-brick school with a clock and a flag
       wallMaterial(b, wh, 'brick', S2.wall, 0);
@@ -2114,7 +2155,7 @@ function drawStore(st, ts) {
     }
   }
   if (NIGHT > 0.3) { const p = iso(x + w / 2, y + d); glow(p.x, p.y - 10 * z, 60 * z, 0.9); }
-  const s = up(iso(x + w / 2, y + d / 2), (wh + (k === 'ranch' || k === 'nursery' ? 18 : k === 'station' ? 36 : k === 'museum' ? 16 : k === 'bowling' ? 84 : 6)) * z);
+  const s = up(iso(x + w / 2, y + d / 2), (wh + (G.rh2 || 0) + (k === 'ranch' || k === 'nursery' ? 18 : k === 'station' ? 36 : k === 'museum' ? 16 : k === 'bowling' ? 84 : 6)) * z);
   if (z > 0.1) label(`${S2.e} ${nm(S2)}`, s.x, s.y - 6 * z, '#fffdf8', '#3b3125', `800 ${Math.max(10, 13 * z)}px ${CUTE_FONT},${EMOJI_FONT}`, Math.max(16, 23 * z), 2);   // v0.43: drawn last, never covered or overlapping
   return { x0: iso(x, y + d).x, x1: iso(x + w, y).x, y0: s.y - 30 * z, y1: iso(x + w, y + d).y };
 }
@@ -2513,19 +2554,23 @@ function drawCivic(k, G, x, y, w, d, wh, ts) {
     for (let i = 0; i < 6; i++) { const u = 0.08 + i * 0.168; wallRect(F, 0, u - 0.025, u + 0.025, 1, wh - 8, '#fbf7ee', 'rgba(0,0,0,.1)', 0.6); wallRect(F, 0, u - 0.034, u + 0.034, wh - 9, wh - 7, '#fffaf0'); wallRect(F, 0, u - 0.034, u + 0.034, 0, 1.6, '#fffaf0'); wallLine(F, 0, u + 0.012, 1.6, u + 0.012, wh - 9, 'rgba(0,0,0,.08)', 0.8); }
     [0.25, 0.75].forEach((u, i) => { wallRect(F, 0, u - 0.035, u + 0.035, wh - 23, wh - 11, i ? '#2f6fb2' : '#c9433b'); if (z > 0.35) { const p = wallPt(F, 0, u, wh - 17); emoji(i ? '🪐' : '🦖', p.x, p.y, 5 * z); } });
     [0.3, 0.7].forEach(u => winFace(Sd, u, 0.06, 8, 22, { frame: '#efe8da' }));
-    const roof = side ? gableX : gableY; roof(x, y, w, d, wh, 12, '#9a8a6a', shade(S2.wall, 0.04));   // the pediment faces the street
+    const LS = localShop();
+    if (LS && LS.roof === 'asian') { asianRoof(x - 0.5, y - 0.5, w + 1, d + 1, wh, 26, LS.roofCol, LS.asian); G.rh2 = 18; }   // v0.53: a hall under a tiled roof
+    else { const roof = side ? gableX : gableY; roof(x, y, w, d, wh, 12, LS ? LS.roofCol : '#9a8a6a', shade(S2.wall, 0.04)); }   // the pediment faces the street
     sign(F, 0.5, wh - 3.5, zh ? '博 物 馆' : 'MUSEUM', 4.5, '#6b5a3a');
   } else {   // the station
     wallMaterial(b, wh, 'brick', S2.wall, 0);
     [0.12, 0.3, 0.7, 0.88].forEach(u => { winFace(F, u, 0.05, 6, 20, { frame: '#f4efe4' }); const p = wallPt(F, 0, u, 20); ellipse(p.x, p.y, 4 * z, 2 * z, '#f4efe4'); });
     if (showDoor) { wallRect(F, 0, 0.43, 0.57, 0, 17, glass, '#f4efe4', 1.2); wallLine(F, 0, 0.5, 0, 0.5, 17, '#f4efe4', 1); }
     [0.25, 0.5, 0.75].forEach(u => winFace(Sd, u, 0.06, 8, 20, { frame: '#f4efe4' }));
-    box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, S2.roof, wh, { shadow: false });
+    const LS = localShop();
+    if (LS) G.rh2 = localShopRoof(LS, x, y, w, d, wh, side, S2.wall);   // v0.53: the local roof
+    else box(x - 0.1, y - 0.1, w + 0.2, d + 0.2, 3, S2.roof, wh, { shadow: false });
     // the clock tower in the middle of the front
     const tx = x + w / 2 - 0.9, ty = y + d / 2 - 0.9, tb = box(tx, ty, 1.8, 1.8, 30, shade(S2.wall, 0.04), wh + 3, { shadow: false });
     const cf = side ? tb.right : tb.left, cp = wallPt(cf, wh + 3, 0.5, 20); circle(cp.x, cp.y, 5.5 * z, '#fffaf0', '#3b3125', 1 * z);
     const tm = new Date(); line(cp.x, cp.y, cp.x + Math.sin(tm.getHours() / 6 * Math.PI) * 2.8 * z, cp.y - Math.cos(tm.getHours() / 6 * Math.PI) * 2.8 * z, '#3b3125', 1 * z); line(cp.x, cp.y, cp.x + Math.sin(tm.getMinutes() / 30 * Math.PI) * 4 * z, cp.y - Math.cos(tm.getMinutes() / 30 * Math.PI) * 4 * z, '#3b3125', 0.7 * z);
-    pyramid(tx - 0.15, ty - 0.15, 2.1, 2.1, wh + 33, 12, S2.roof);
+    pyramid(tx - 0.15, ty - 0.15, 2.1, 2.1, wh + 33, 12, LS ? LS.roofCol : S2.roof);
     sign(F, 0.5, 24.5, zh ? '🚉 火车站' : '🚉 STATION', 4.6, '#fffaf0');
   }
   if (NIGHT > 0.3 && k !== 'aquatic') { const p = wallPt(F, 0, 0.5, 14); glow(p.x, p.y, 40 * z, 0.8); }
