@@ -387,6 +387,12 @@ const Scene = (() => {
     else { a.cur = null; if (j.done) j.done(); }
   }
   function cancel(a) { a.jobs = []; a.cur = null; a.act = null; a.path = []; a.seat = 0; a.useId = null; }
+  // v0.50: the bar over you while a job takes time (not sitting / lying down, which goes on until you get up)
+  function actBar(a, p, z, ts) {
+    const A = a.act;
+    if (!A || !A.job || !(A.job.dur > 300) || !isFinite(A.job.dur)) return;
+    doBar(p.x, p.y - 60 * z, 1 - (A.until - ts) / A.job.dur, A.job.e || { crouch: '🌱', pick: '🍎', fish: '🎣', mail: '📬' }[A.pose] || '⏳', z);
+  }
   // v0.44: a little thought bubble over your head when you're hungry, lonely or bored (D244)
   function needBubble(p, z, ts) {
     if (z < 0.3 || !S) return;
@@ -762,6 +768,7 @@ const Scene = (() => {
     const z = cam.z, p = iso(ox + me.x, oy + me.y), pose = mePose();
     drawPerson(p.x, p.y, z, { look: S.me.look, face: me.face, back: me.back && (me.moving || !!me.livePose), view: me.act ? null : me.view, turn: me.turn, moving: me.moving, phase: me.phase, energy: energyLevel(), ts, seed: 3, pose, wave: me.wave > performance.now() || (chatting() && !!CHAT.e && !!CHAT.wave) }); needBubble(p, z, ts);
     if (chatting() && CHAT.e) chatBubble(p.x - 12 * z, p.y - 56 * z, z, true, ts);   // v0.31
+    actBar(me, p, z, ts);   // v0.50
     if (S.live) liveBadge(p, S.live, true);
     if (focus) hits.push({ kind: 'avatar', owner: 'me', x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 44 * z, y1: p.y + 4 * z });
     if (mode === 'home' && !S.live && (me.jobs.length || me.cur)) {   // little marker on where you're heading
@@ -1811,6 +1818,14 @@ const Scene = (() => {
       done: () => { TOWN_USE = { k, ...S0.use, at: S0.use.at || to, secs, until: performance.now() + secs * 1000, done }; } };
     return true;
   }
+  // v0.50: do something right where you are in town (fish off the jetty, help with the wheat, bake, read): a pose, the bar
+  function townDoNow(secs, e, done, pose, prop) {
+    if (mode !== 'town' || !outHere()) { if (done) done(); return false; }
+    stopTripHere(); TOWN_USE = null;
+    const at = mePos();
+    TOWN_USE = { k: 'do', pose: pose || 'stand', view: pose === 'fish' ? 'back' : null, turn: [0.3, 1], at, secs, until: performance.now() + secs * 1000, done, e, prop: prop || null };
+    return true;
+  }
   // you, doing it: the pose, what you're holding, a bar for how long is left
   function drawTownUse(ts) {
     const U = TOWN_USE, z = cam.z, p = iso(U.at[0], U.at[1]), cheer = U.cheer && Math.sin(ts / 260) > 0.3;
@@ -1818,7 +1833,7 @@ const Scene = (() => {
     if (U.prop) emoji(U.prop, p.x + 11 * z, p.y - (U.pose === 'crouch' ? 10 : 20) * z - (U.lift || 0) * z, 10 * z);
     if (U.cheer && cheer) emoji('📣', p.x - 12 * z, p.y - 46 * z, 11 * z);
     if (U.k === 'pond') for (let k = 0; k < 4; k++) { const u = ((ts / 700 + k / 4) % 1), q2 = iso(U.at[0] + 0.3 + u * 0.4 - k * 0.2, U.at[1] - 0.4 - u * 0.9); circle(q2.x, q2.y - (1 - u) * 10 * z, 1.1 * z, '#e9c46a'); }
-    if (z > 0.35) { const w = 34 * z, by = p.y - (56 + (U.lift || 0)) * z, left = Math.max(0, (U.until - performance.now()) / 1000); rrect(p.x - w / 2, by, w, 5 * z, 2.5 * z, 'rgba(0,0,0,.25)'); rrect(p.x - w / 2, by, w * (1 - left / U.secs), 5 * z, 2.5 * z, '#6cbf73'); }
+    doBar(p.x, p.y - (52 + (U.lift || 0)) * z - 12 - 7.5 * clamp(z, 0.7, 1.25), 1 - Math.max(0, U.until - performance.now()) / 1000 / U.secs, U.e || U.prop || '⏳', z);   // v0.50: just over your name
     nameTag(p, S.me.name || '🙂', true);
   }
   const onCarPark = (x, y) => (TL.parks || []).some(([, qx, qy, qw, qd]) => x > qx - 0.8 && x < qx + qw + 0.8 && y > qy - 0.8 && y < qy + qd + 0.8);
@@ -3157,7 +3172,7 @@ const Scene = (() => {
       P = { RW: 14, RD: 11, door: [3, 10.3], counter: { x: 1.4, y: 3.2, w: 3.2, d: 0.9 } };
     } else if (k === 'library') {
       dec('bookwall', 0.4, 0.2, 13.2, 0.7); dec('ladder', 10.9, 0.9, 0.6, 0.2);
-      dec('bookwall', 8.4, 3.0, 4.8, 0.8, { low: true }); dec('bookwall', 8.4, 5.6, 4.8, 0.8, { low: true });
+      dec('bookwall', 9.2, 3.0, 4.0, 0.8, { low: true }); dec('bookwall', 9.2, 5.6, 4.0, 0.8, { low: true });   // v0.50: a way past the desks
       guest(10.0, 4.45, back); guest(11.8, 7.05, back);
       spot('featured', 5.0, 2.4, 1.2, 0.9, { draw: 'bookstand', stand: [5.6, 4.0] });
       dec('longtable', 1.0, 3.4, 2.4, 1.2, { readers: [0, 1] });
@@ -4276,11 +4291,12 @@ const Scene = (() => {
   // You inside: walking, or sitting / lying / working out at something (meS.use).
   function drawMeShop(z, ts) {
     const U = meS.use;
-    if (U && U.ride && !meS.moving) return;   // v0.41: on a ride: the ride draws you
+    const bar = (q, lift = 0) => { if (U.until) doBar(q.x, q.y - (60 + lift) * z, 1 - Math.max(0, U.until - performance.now()) / 1000 / (U.secs || 1), U.e || U.prop || U.food || '⏳', z); };
+    if (U && U.ride && !meS.moving) { bar(iso(U.stand[0], U.stand[1]), 30); return; }   // v0.41: on a ride: the ride draws you
     if (U && !meS.moving) {
       if (S.me.look.mob === 'wheel' && ['sit', 'lie', 'bike', 'row'].includes(U.pose) && U.stand) {   // v0.43: a wheelchair stays on the floor, beside it
         const q = iso(U.stand[0], U.stand[1]); drawPerson(q.x, q.y, z, { look: S.me.look, face: U.face || 1, energy: energyLevel(), ts, seed: 3, pose: 'stand' });
-        const left2 = Math.max(0, (U.until - performance.now()) / 1000); if (U.until && z > 0.35) { const w = 34 * z, by = q.y - 54 * z; rrect(q.x - w / 2, by, w, 5 * z, 2.5 * z, 'rgba(0,0,0,.25)'); rrect(q.x - w / 2, by, w * (1 - left2 / (U.secs || 1)), 5 * z, 2.5 * z, '#6cbf73'); }
+        bar(q);
         return;
       }
       const p = iso(U.at[0], U.at[1]);
@@ -4289,8 +4305,7 @@ const Scene = (() => {
       if (U.food) { const q = up(iso(U.at[0] + 0.42, U.at[1]), 14 * z); emoji(U.food, q.x + 4 * z, q.y, 9 * z); }   // on the table in front of you
       if (U.prop) emoji(U.prop, p.x + 10 * z, p.y - (U.pose === 'lie' ? 14 : 20) * z - (U.lift || 0) * z, 10 * z);
       if (chatting() && CHAT.e) chatBubble(p.x - 12 * z, p.y - 56 * z, z, true, ts);
-      const left = Math.max(0, (U.until - performance.now()) / 1000), tot = U.secs || 1;
-      if (U.until && z > 0.35) { const w = 34 * z, by = p.y - (54 + (U.lift || 0)) * z; rrect(p.x - w / 2, by, w, 5 * z, 2.5 * z, 'rgba(0,0,0,.25)'); rrect(p.x - w / 2, by, w * (1 - left / tot), 5 * z, 2.5 * z, '#6cbf73'); }
+      bar(p, (U.lift || 0) + (U.pose === 'lie' ? -14 : 0));
       return;
     }
     const p2 = iso(meS.x, meS.y);
@@ -4299,12 +4314,26 @@ const Scene = (() => {
     if (chatting() && CHAT.e && FOLK_AT[CHAT.id]) chatBubble(p2.x - 12 * z, p2.y - 56 * z, z, true, ts);   // v0.34: talking with someone in here
   }
   // Sit at / work out on / lie on a thing for `secs` seconds (walking there first), then `done`.
-  function venueUseNow(id, secs, done, mate) {
-    const P = shopPlan(owner), w = P.wares.find(x => x.id === id || x.k === id);
-    if (!w || !w.use) { if (done) done(); return; }
-    shopWalk(w.stand || [w.x + w.w / 2, w.y + w.d + 0.55], () => {
-      meS.use = { ...w.use, k: w.k, stand: w.stand || [w.x + w.w / 2, w.y + w.d + 0.55], secs, until: performance.now() + secs * 1000, done, mate: w.use.mate ? mate || FOLK(3) : null };
-    });
+  // v0.50: any store or building; a thing with no pose of its own (a shelf, a counter, an exhibit, 'till'): you stand at
+  // it, facing it; no id: right where you are. `e` goes on the bar. Walk off before it's full and done() never comes.
+  function venueUseNow(id, secs, done, mate, e, ex) {
+    const P = shopPlan(owner), w = id && id !== 'till' ? P.wares.find(x => x.id === id || x.k === id) || P.wares.find(x => x.kind === id) : null;
+    const stand = id === 'till' && P.till ? P.till : w ? (w.stand || [w.x + w.w / 2, w.y + w.d + 0.55]) : [meS.x, meS.y];
+    const use = (w && w.use) || { pose: 'stand', view: 'back', turn: [0, -1] };
+    const start = () => {
+      const far = Math.hypot(meS.x - stand[0], meS.y - stand[1]) > 0.9, u = far ? { pose: 'stand', view: 'back', turn: [0, -1] } : use, here = [meS.x, meS.y];
+      meS.use = { ...u, ...(ex || {}), at: far ? here : u.at || stand, k: w ? w.k : id, stand: far ? here : stand, secs, until: performance.now() + secs * 1000, done, e, mate: !far && u.mate ? mate || FOLK(3) : null };
+    };
+    if (!meS.moving && Math.hypot(meS.x - stand[0], meS.y - stand[1]) < 0.6) { meS.use = null; meS.eat = null; start(); }
+    else if (!shopWalk(stand, start)) { const here = [meS.x, meS.y]; meS.use = { pose: 'stand', view: 'back', turn: [0, -1], ...(ex || {}), at: here, k: w ? w.k : id, stand: here, secs, until: performance.now() + secs * 1000, done, e }; }   // no way over: right here
+  }
+  // v0.50: sit down and eat (a table in the food court or the cafe; none: standing where you are), with the bar
+  function shopEatNow(e, secs, done) {
+    const P = shopPlan(owner), tw = P.wares.find(w => w.use && w.use.food && !w.use.mate);
+    if (tw) return venueUseNow(tw.id, secs, done, null, e, { food: e });
+    const tb = (P.decor || []).filter(d => d.kind === 'table' && d.i % 3 === 1)[0] || (P.decor || []).find(d => d.kind === 'table');
+    if (!tb) return venueUseNow(null, secs, done, null, e, { prop: e });
+    if (!shopWalk([tb.x + tb.w / 2 + 0.75, tb.y + tb.d / 2 + 0.05], () => { meS.sit = true; meS.face = -1; meS.eat = { e, secs, until: performance.now() + secs * 1000, done }; })) venueUseNow(null, secs, done, null, e, { prop: e });
   }
   function shopPlan(k) {
     if (MALL_FLOORS.includes(k)) return mallPlan(k);
@@ -4315,7 +4344,7 @@ const Scene = (() => {
     const area = wares.reduce((t, w) => t + (w.w + 0.8) * (w.d + 1.5), 0), RW = clamp(Math.round(Math.sqrt(area) * 1.1) + 2, SHOP_W[k] || 13, 26), placed = [];   // v0.22: about square
     let x = 1, y = 1.3, rowD = 0;
     wares.forEach(w => {
-      if (x + w.w > RW - 0.8) { x = 1; y += rowD + 1.5; rowD = 0; }
+      if (x + w.w > RW - 2.2) { x = 1; y += rowD + 1.5; rowD = 0; }   // v0.50: a walkway down the right (a full row was a wall)
       placed.push({ ...w, x, y });
       x += w.w + 0.8; rowD = Math.max(rowD, w.d);
     });
@@ -4323,8 +4352,9 @@ const Scene = (() => {
     if (k === 'market') {   // v0.37: a real supermarket below the seeds: fresh food (buy groceries), aisles, the dairy fridge, more tills, trolleys, shoppers
       const y0 = y + rowD + 1.6, dc = (kind, dx, dy, dw, dd, ex = {}) => decor.push({ kind, x: dx, y: dy, w: dw, d: dd, ...ex });
       placed.push({ id: 'spot:groceries', kind: 'spot', k: 'groceries', draw: 'produce', x: 1, y: y0, w: 3.2, d: 1.4, price: 0, stand: [2.6, y0 + 2.0] });
-      placed.push({ id: 'spot:local', kind: 'spot', k: 'local', draw: 'localstand', x: 13.8, y: y0, w: 3.2, d: 1.4, price: 0, stand: [15.4, y0 + 2.0] });   // v0.40: the county's specialties
-      dc('grocery', 5.0, y0, 3.6, 0.8); dc('grocery', 5.0, y0 + 2.4, 3.6, 0.8); if (RW >= 15) { dc('grocery', 9.4, y0, 3.6, 0.8); dc('grocery', 9.4, y0 + 2.4, 3.6, 0.8); }
+      // v0.50: gaps between them (they used to make a wall right across the store: you couldn't walk to the seeds)
+      placed.push({ id: 'spot:local', kind: 'spot', k: 'local', draw: 'localstand', x: 14.2, y: y0, w: 3.0, d: 1.4, price: 0, stand: [15.7, y0 + 2.0] });   // v0.40: the county's specialties
+      dc('grocery', 5.2, y0, 3.2, 0.8); dc('grocery', 5.2, y0 + 2.4, 3.2, 0.8); if (RW >= 15) { dc('grocery', 9.7, y0, 3.2, 0.8); dc('grocery', 9.7, y0 + 2.4, 3.2, 0.8); }
       dc('dairy', 0.3, y0 + 2.4, 0.7, 2.6);
       dc('person', 6.2, y0 + 1.5, 0.5, 0.5, { cast: true, view: 'back', turn: [0.2, -1] }); dc('cart', 6.7, y0 + 1.3, 0.6, 0.4);
       dc('person', 2.0, y0 + 2.3, 0.5, 0.5, { cast: true, face: -1, view: 'front', turn: [-0.3, 1] }); dc('cart', 2.4, y0 + 2.6, 0.6, 0.4);
@@ -4364,6 +4394,7 @@ const Scene = (() => {
   // machines, hoops, a racing game) and the cinema's ticket booth and doors. The cinema: rows of seats rising to the
   // back, and the film on the big screen.
   const MALL_FLOORS = ['mall', 'mall2', 'cinema'];
+  const FILM_SECS = 11.5;   // the cinema's short film
   const STALL_COL = { burger: '#e5484d', noodles: '#f59e0b', pizza: '#34b27b', sushi: '#38a3e0', boba: '#a46ef0', icecream: '#ec6aa8' };
   let FILM = null, FILM_CV = null, SHOP_FROM = null, CLAW_T = 0;
   function mallPlan(k) {
@@ -4373,7 +4404,7 @@ const Scene = (() => {
     let P;
     if (k === 'mall') {
       const RW = 18, RD = 16;
-      Object.entries(CLOTHES).filter(([kk, c]) => c.price && kk !== 'nohat').forEach(([kk, c], i) => add('clothes', kk, 1.1 + (i % 5) * 1.2, 1.3 + Math.floor(i / 5) * 1.9, 0.8, 0.8, { act: 'buyClothes', arg: kk, price: c.price }));
+      Object.entries(CLOTHES).filter(([kk, c]) => c.price && kk !== 'nohat').forEach(([kk, c], i) => add('clothes', kk, 1.0 + (i % 5) * 1.1, 1.2 + Math.floor(i / 5) * 2.1, 0.8, 0.8, { act: 'buyClothes', arg: kk, price: c.price }));
       EXCLUSIVES.filter(([kind, kk]) => exclOK(exclDef(kind, kk).excl)).slice(0, 12).forEach(([kind, kk], i) => { const d = exclDef(kind, kk); add('excl', kind + '|' + kk, 11.3 + (i % 4) * 1.5, 1.3 + Math.floor(i / 4) * 1.8, 1, 1, { act: 'buyExcl', arg: kind + '|' + kk, price: kind === 'car' ? d.cost.coins : d.price }); });
       add('act', 'trophies', 16.3, 6.0, 1, 0.8);
       dec('glass', 0.1, 7.3, 3.6, 0.15); dec('glass', 5.4, 7.3, 1.9, 0.15); dec('glass', 7.3, 0.1, 0.15, 7.35);
@@ -4513,20 +4544,35 @@ const Scene = (() => {
   // Walk to a point in the store (along the aisles), then do `then`.
   function shopWalk(to, then) {
     meS.use = null;
+    if (meS.eat) { meS.eat = null; meS.sit = false; }   // v0.50: got up before you'd finished: not eaten
     const P = shopPlan(owner), { g, gw, gd, GS } = P.nav, cell = (x, y) => [clamp(Math.floor(x / GS), 0, gw - 1), clamp(Math.floor(y / GS), 0, gd - 1)];
     const free = (i, j) => i >= 0 && j >= 0 && i < gw && j < gd && g[j * gw + i];
     let [ti, tj] = cell(to[0], to[1]), dest = [to[0], to[1]];
     if (!free(ti, tj)) {   // the nearest free cell to where you tapped
       let best = null, bd = 1e9;
       for (let j = 0; j < gd; j++) for (let i = 0; i < gw; i++) if (free(i, j)) { const d = Math.hypot(i - ti, j - tj); if (d < bd) { bd = d; best = [i, j]; } }
-      if (!best) return; [ti, tj] = best; dest = [(ti + 0.5) * GS, (tj + 0.5) * GS];
+      if (!best) return false; [ti, tj] = best; dest = [(ti + 0.5) * GS, (tj + 0.5) * GS];
     }
-    const out = shopPath(P, [meS.x, meS.y], dest);   // v0.45: the shortest way, in straight lines
-    if (!out) return;
+    let out = shopPath(P, [meS.x, meS.y], dest);   // v0.45: the shortest way, in straight lines
+    if (!out) {   // v0.50: shut off (behind a counter, past a row of shelves): as close as you can get to it
+      let [si, sj] = cell(meS.x, meS.y);
+      if (!free(si, sj)) { let b0 = null, d0 = 1e9; for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) if (free(si + di, sj + dj) && Math.hypot(di, dj) < d0) { d0 = Math.hypot(di, dj); b0 = [si + di, sj + dj]; } if (!b0) return false; [si, sj] = b0; }
+      const seen = new Uint8Array(gw * gd), q = [sj * gw + si]; seen[q[0]] = 1;
+      let best = -1, bd = 1e9;
+      for (let qi = 0; qi < q.length; qi++) {
+        const c = q[qi], i = c % gw, j = (c - i) / gw, d = Math.hypot(i - ti, j - tj);
+        if (d < bd) { bd = d; best = c; }
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([di, dj]) => { const ni = i + di, nj = j + dj; if (free(ni, nj) && !seen[nj * gw + ni]) { seen[nj * gw + ni] = 1; q.push(nj * gw + ni); } });
+      }
+      if (best >= 0) out = shopPath(P, [meS.x, meS.y], [(best % gw + 0.5) * GS, (Math.floor(best / gw) + 0.5) * GS]);
+    }
+    if (!out) return false;
     meS.path = out; meS.then = then || null; meS.moving = true;
+    return true;
   }
   function stepShop(dt) {
     if (meS.use && meS.use.until && performance.now() > meS.use.until) { const f = meS.use.done; meS.use = null; if (f) setTimeout(f, 60); }   // v0.30
+    if (meS.eat && meS.eat.secs && performance.now() > meS.eat.until) { const f = meS.eat.done; meS.eat = null; meS.sit = false; if (f) setTimeout(f, 60); }   // v0.50: eaten
     if (!meS.path.length) { if (meS.moving) { meS.moving = false; const f = meS.then; meS.then = null; if (f) setTimeout(f, 120); } return; }
     let go = 3.4 * dt * walkMult();   // v0.44
     while (go > 0 && meS.path.length) {
@@ -4766,8 +4812,9 @@ const Scene = (() => {
       objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#f4f1ea', 0, { top: '#c9a26b' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji('💳', p2.x, p2.y, 9 * z); } });
     }
     if (!P.dark) shoppers(P, objs, dt, ts);
-    if (!(P.dark && meS.sit)) objs.push({ d: meS.x + meS.y + 0.3, f: () => { const p2 = iso(meS.x, meS.y); drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.sit || (meS.back && meS.moving), view: meS.sit ? null : meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.sit ? 'sit' : meS.moving ? 'walk' : 'stand', seatH: meS.sit ? 9 : undefined, sit: meS.sit ? 'eat' : undefined }); carryBox(p2, z);
-      if (meS.eat && meS.eat.until > performance.now()) { const q = up(iso(meS.x - 0.35, meS.y - 0.05), 14 * z); emoji(meS.eat.e, q.x, q.y, 10 * z); }   // v0.34: on the stool, feet on the floor, your food on the table
+    if (meS.use && !meS.moving) objs.push({ d: meS.use.at[0] + meS.use.at[1] + 0.5, f: () => drawMeShop(z, ts) });   // v0.50
+    else if (!(P.dark && meS.sit)) objs.push({ d: meS.x + meS.y + 0.3, f: () => { const p2 = iso(meS.x, meS.y); drawPerson(p2.x, p2.y, z, { look: S.me.look, face: meS.face, back: meS.sit || (meS.back && meS.moving), view: meS.sit ? null : meS.view, turn: meS.turn, moving: meS.moving, phase: meS.phase, energy: energyLevel(), ts, seed: 3, pose: meS.sit ? 'sit' : meS.moving ? 'walk' : 'stand', seatH: meS.sit ? 9 : undefined, sit: meS.sit ? 'eat' : undefined }); carryBox(p2, z);
+      if (meS.eat && meS.eat.until > performance.now()) { const q = up(iso(meS.x - 0.35, meS.y - 0.05), 14 * z); emoji(meS.eat.e, q.x, q.y, 10 * z); doBar(p2.x, p2.y - 58 * z, 1 - (meS.eat.until - performance.now()) / 1000 / meS.eat.secs, meS.eat.e, z); }   // v0.34: on the stool, feet on the floor, your food on the table (v0.50: the bar)
       if (chatting() && CHAT.e && FOLK_AT[CHAT.id]) chatBubble(p2.x - 12 * z, p2.y - 56 * z, z, true, ts); } });
     objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
     if (!P.noDoor) {
@@ -4776,7 +4823,8 @@ const Scene = (() => {
       const dp = iso(P.door[0], RD - 0.45); hits.push({ kind: 'shopDoor', x0: dp.x - 30 * z, x1: dp.x + 30 * z, y0: dp.y - 14 * z, y1: dp.y + 14 * z });
       label(`🚪 ${t('store_leave')}`, dp.x, dp.y + 14 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z), 4);
     } else if (!P.dark) { const F1 = [iso(0, RD), iso(RW, RD)]; poly([F1[0], F1[1], up(F1[1], 16 * z), up(F1[0], 16 * z)], 'rgba(200,230,250,.22)', 'rgba(255,255,255,.8)', 1.2); line(up(F1[0], 16 * z).x, up(F1[0], 16 * z).y, up(F1[1], 16 * z).x, up(F1[1], 16 * z).y, '#c9c3b6', 2.4 * z); }   // a glass railing
-    if (FILM && FILM.t0 && owner === 'cinema' && performance.now() - FILM.t0 > 11500 && !FILM.ended) { FILM.ended = true; onHit({ kind: 'filmEnd', k: FILM.k }); }
+    if (FILM && FILM.t0 && owner === 'cinema' && performance.now() - FILM.t0 > FILM_SECS * 1000 && !FILM.ended) { FILM.ended = true; onHit({ kind: 'filmEnd', k: FILM.k }); }
+    if (FILM && FILM.t0 && owner === 'cinema' && !FILM.ended && meS.sit && P.seat) { const q = iso(P.seat[0], P.seat[1]); doBar(q.x, q.y - 66 * z, (performance.now() - FILM.t0) / 1000 / FILM_SECS, '🎬', z); }   // v0.50
   }
   function drawMallWare(w, ts) {
     const z = cam.z, { x, y } = w, c = iso(x + w.w / 2, y + w.d / 2), f0 = iso(x + w.w / 2, y + w.d);
@@ -5209,6 +5257,7 @@ const Scene = (() => {
       const fromBehind = (onIt && (useK === 'sit' || useK === 'bike') && r4 >= 2) || (useIt && (useK === 'lift' || useK === 'box') && r4 === 1 && !meIn.moving);
       drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: (meIn.back && meIn.moving) || fromBehind, view: tread ? 'back' : meIn.view, turn: tread ? (r4 ? [-1, 0.1] : [0.1, -1]) : meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) }); needBubble({ x: p.x, y: p.y - (yOff + lift) * z }, z, ts);
       if (pose === 'lie' && useIt) drawBedQuilt(useIt);   // (v0.46: a bed turned round: your head stays in sight over its headboard)
+      actBar(meIn, { x: p.x, y: p.y - (yOff + lift) * z }, z, ts);   // v0.50: cooking
       if (pose === 'sit' && useIt && sitH) drawSeatFront(useIt, useIt.x, useIt.y);   // v0.19: the near arm stays in front of you
       ctx.restore();
       if (S.live) liveBadge(p, S.live, true);
@@ -5430,16 +5479,32 @@ const Scene = (() => {
     ctx.clearRect(0, 0, W, H);
     hits = [];
     labelsBegin();   // v0.43: every label is drawn last, laid out so none overlap
+    BARS = [];
     try {
       if (mode === 'interior') renderInterior(ts, dt);
       else if (mode === 'shop') renderShop(ts, dt);
       else renderWorld(ts, dt);
     } catch (e) { console.error(e); }
     try { labelsFlush(); } catch (e) { console.error(e); LABEL_Q = null; }
+    try { BARS.forEach(f => f()); } catch (e) { console.error(e); }
+    BARS = [];
     drawFloats(ts);
     drawPing(ts);
   }
   let PING = 0;
+  // v0.50 (Mason #29): how far along what you're doing is: a white pill over your head, what it is, a green bar
+  let BARS = [];
+  function doBar(cx, cy, frac, e, z) {
+    BARS.push(() => {
+      const s2 = clamp(z, 0.7, 1.25), w = 50 * s2, h = 15 * s2, x0 = cx - w / 2, y0 = cy - h / 2, f = clamp(frac, 0, 1);
+      rrect(x0 - 1, y0 + 1, w + 2, h + 1, h / 2 + 1, 'rgba(0,0,0,.18)');
+      rrect(x0, y0, w, h, h / 2, '#fffdf8', 'rgba(59,49,37,.25)', 1);
+      const bx = x0 + (e ? h + 1 * s2 : 4 * s2), bw = x0 + w - 4 * s2 - bx, bh = 5.5 * s2, by = cy - bh / 2;
+      rrect(bx, by, bw, bh, bh / 2, '#e6dfd2');
+      if (f > 0) rrect(bx, by, Math.max(bh, bw * f), bh, bh / 2, f >= 1 ? '#34b27b' : '#6cbf73');
+      if (e) emoji(e, x0 + h / 2 + 1 * s2, cy + 5.5 * s2, 10.5 * s2);
+    });
+  }
   function drawPing(ts) {
     const age = (performance.now() - PING) / 1000;
     if (!PING || age > 4) return;
@@ -5633,7 +5698,7 @@ const Scene = (() => {
     else if ((me.cur && me.cur.key === key) || me.jobs.some(j => j.key === key)) return true;
     const animalEnt = tg.kind === 'animal' && ents.get(me.lot + ':' + tg.id);
     me.jobs.push({
-      key, spot, pose: o.pose, dur: o.dur || 0, sneak: o.sneak, reach: o.reach || 2.2, valid: o.valid,
+      key, spot, pose: o.pose, dur: o.dur || 0, sneak: o.sneak, reach: o.reach || 2.2, valid: o.valid, e: o.e,
       start: o.start, fail: o.fail,
       done: () => { if (animalEnt) animalEnt.hold = 0; if (o.done) o.done(); },
     });
@@ -6033,7 +6098,20 @@ const Scene = (() => {
     // v0.31: play a social moment with someone: your bubble (e), then theirs (react), for SOCIAL.sec seconds
     socialAnim(id, e, react, wave) { CHAT = { id, t0: performance.now(), until: performance.now() + SOCIAL.sec * 1000 + 600, e, react, wave }; },
     // v0.30: inside a building: sit at / lie on / work out on something for a while, then done(); what you're doing now
-    venueUse(id, secs, done, mate) { if (mode === 'shop' && VENUE_LOOK[owner]) venueUseNow(id, secs, done, mate); else if (done) done(); },
+    venueUse(id, secs, done, mate, e) { if (mode === 'shop') venueUseNow(id, secs, done, mate, e); else if (done) done(); },
+    // v0.50 (Mason #29): go over to it (a ware's id or key, 'till', or null: here), then `secs` with a bar showing `e`, then done
+    shopDo(id, secs, e, done) { if (mode === 'shop' && secs > 0) venueUseNow(id, secs, done, null, e); else if (mode === 'shop') this.shopGoTo(id, done); else if (done) done(); },
+    // out in town, right where you are (the lake, the fields, a place's door)
+    townDo(secs, e, done, pose, prop) { return townDoNow(secs, e, done, pose, prop); },
+    // at home: to the kitchen (or the stove), cook for `ms`, then done
+    cookAt(ms, done) {
+      if (mode !== 'interior' || owner !== 'me') { if (done) done(); return false; }
+      const it = viewRoom(homeOf('me')).items.find(x => x.k === 'kitchen' || x.k === 'stove');
+      cancel(meIn);
+      const sp = it ? useSpot(it) : [meIn.x, meIn.y, meIn.face || 1];
+      meIn.jobs.push({ key: 'cook', spot: () => sp, pose: 'stand', dur: ms, reach: 1.3, e: '🍳', done, fail: done });
+      return true;
+    },
     venueBusy() { return mode === 'shop' && meS.use && meS.use.until ? Math.max(0, Math.ceil((meS.use.until - performance.now()) / 1000)) : 0; },
     // v0.29: on the way somewhere: the view goes with you again (after you dragged it away); stop where you are
     followTrip() { if (!trip || trip.arrived || mode !== 'town') return false; trip.camFree = false; return true; },
@@ -6103,7 +6181,7 @@ const Scene = (() => {
       mode = m; owner = o; edit = null;
       if (m !== 'town' && trip) finishTripNow(true);   // v0.19: leaving the town view, you still get there
       cv.style.background = '';
-      if (m === 'shop') { const P = shopPlan(o), at = (P.from && P.from[SHOP_FROM]) || P.door; meS.x = at[0]; meS.y = at[1] + 0.3; meS.path = []; meS.then = null; meS.moving = false; meS.face = 1; meS.sit = false; meS.use = null; SHOP_FROM = o;
+      if (m === 'shop') { const P = shopPlan(o), at = (P.from && P.from[SHOP_FROM]) || P.door; meS.x = at[0]; meS.y = at[1] + 0.3; meS.path = []; meS.then = null; meS.moving = false; meS.face = 1; meS.sit = false; meS.use = null; meS.eat = null; SHOP_FROM = o;
         if (o === 'cinema' && FILM) { meS.x = P.door[0]; meS.y = P.door[1]; setTimeout(() => shopWalk(P.aisle, () => { meS.path = [P.seat]; meS.moving = true; meS.then = () => { meS.sit = true; meS.face = 1; if (FILM && !FILM.t0) FILM.t0 = performance.now(); }; }), 300); } }
       else if (m !== 'town' && m !== 'interior') moveToLot(o);
       useCam();
@@ -6115,24 +6193,26 @@ const Scene = (() => {
     setFilm(k) { FILM = k ? { k, t0: null } : null; },
     film: () => FILM,
     clawGo() { CLAW_T = performance.now(); },
-    shopEat(e) {   // sit down at a free table and eat
-      if (mode !== 'shop') return;
-      const P = shopPlan(owner), tb = P.decor.filter(d => d.kind === 'table' && d.i % 3 === 1)[0] || P.decor.find(d => d.kind === 'table');
-      if (!tb) return;
-      shopWalk([tb.x + tb.w / 2 + 0.75, tb.y + tb.d / 2 + 0.05], () => { meS.sit = true; meS.face = -1; meS.eat = { e, until: performance.now() + 8000 }; setTimeout(() => { meS.sit = false; }, 8000); });
+    // v0.50 (tests): which things in a store / building you can't walk up to from the door; its walkable cells
+    _reach(k) { const P = shopPlan(k), from = [P.door[0], P.door[1] + 0.3], bad = []; P.wares.forEach(w => { const to = w.stand || [w.x + w.w / 2, w.y + w.d + 0.55]; const { g, gw, gd, GS } = P.nav; let [ti, tj] = [Math.floor(to[0] / GS), Math.floor(to[1] / GS)]; let dest = to; if (!(ti >= 0 && tj >= 0 && ti < gw && tj < gd && g[tj * gw + ti])) { let best = null, bd = 1e9; for (let j = 0; j < gd; j++) for (let i = 0; i < gw; i++) if (g[j * gw + i]) { const d = Math.hypot(i - ti, j - tj); if (d < bd) { bd = d; best = [i, j]; } } if (best) dest = [(best[0] + 0.5) * GS, (best[1] + 0.5) * GS]; } if (!shopPath(P, from, dest)) bad.push(w.id); }); return { n: P.wares.length, bad }; },
+    _grid(k) { const P = shopPlan(k), { g, gw, gd } = P.nav, rows = []; for (let j = 0; j < gd; j++) { let r = ''; for (let i = 0; i < gw; i++) r += g[j * gw + i] ? '.' : '#'; rows.push(r); } P.wares.forEach(w => { const st = w.stand || [w.x + w.w / 2, w.y + w.d + 0.55], i = Math.floor(st[0] / 0.5), j = Math.floor(st[1] / 0.5); if (rows[j]) rows[j] = rows[j].slice(0, i) + 'S' + rows[j].slice(i + 1); }); const dr = [Math.floor(P.door[0] / 0.5), Math.floor((P.door[1] + 0.3) / 0.5)]; if (rows[dr[1]]) rows[dr[1]] = rows[dr[1]].slice(0, dr[0]) + 'D' + rows[dr[1]].slice(dr[0] + 1); return rows; },
+    shopEat(e, secs, done) {   // sit down at a free table and eat (v0.50: with the bar; done once you've eaten)
+      if (mode !== 'shop') { if (done) done(); return; }
+      shopEatNow(e, secs || 8, done);
     },
+    shopBusy() { return mode === 'shop' && ((meS.use && meS.use.until) || (meS.eat && meS.eat.secs)) ? Math.max(0, Math.ceil((((meS.use && meS.use.until) || meS.eat.until) - performance.now()) / 1000)) : 0; },
     shopWare: id => { const P = mode === 'shop' && shopPlan(owner); return P ? P.wares.find(w => w.id === id) : null; },
     shopGoWare(id, then) { if (mode !== 'shop') return; const P = shopPlan(owner), w = P.wares.find(x => x.id === id); if (w) shopWalk([w.x + w.w / 2, w.y + w.d + 0.55], then); },
     shopGoTill(then) { if (mode === 'shop') shopWalk(shopPlan(owner).till, then); },
     // v0.34: go over to something in a store or building (by id or key, or 'till') once you've decided to use it
     shopGoTo(k, then) {
       if (mode !== 'shop') { if (then) then(); return; }
-      const P = shopPlan(owner); if (k === 'till') return shopWalk(P.till, then);
-      const w = P.wares.find(x => x.id === k || x.k === k);
+      const P = shopPlan(owner); if (k === 'till') return P.till ? shopWalk(P.till, then) : then && then();
+      const w = P.wares.find(x => x.id === k || x.k === k) || P.wares.find(x => x.kind === k);   // v0.50: or by its kind (the cinema's ticket booth)
       if (!w) { if (then) then(); return; }
       const to = w.stand || [w.x + w.w / 2, w.y + w.d + 0.55];
       if (!meS.moving && !meS.use && Math.hypot(meS.x - to[0], meS.y - to[1]) < 0.6) { if (then) then(); return; }
-      shopWalk(to, then);
+      if (!shopWalk(to, then) && then) then();   // v0.50: no way over: do it anyway
     },
     // v0.34: someone in this building or store: are they here, and walk up to them (they wait for you)
     folkHere(id) { return mode === 'shop' && !!FOLK_AT[id]; },
@@ -6173,7 +6253,7 @@ const Scene = (() => {
     },
     floatHouse(text) { const [fx, fy, w, d] = HOUSES[S.me.house].fp; floatLocal('me', fx + w / 2, fy + d / 2, text); },
     thumb,
-    debug: () => ({ traffic: CARS_OUT.list.map(c => [Math.round(c.x), Math.round(c.y), c.path.length, c.police ? 'police' : '']), walkers: WALK.list.map(w => [Math.round(w.x), Math.round(w.y), w.bike ? 'bike' : 'walk', w.path.length]), meS: { x: meS.x, y: meS.y, path: meS.path.length }, cam: { ...cam }, W, H, mode, owner, edit, ents: ents.size, me: { x: me.x, y: me.y, lot: me.lot, jobs: me.jobs.length, cur: !!me.cur, act: me.act && me.act.pose, pose: mePose() }, meIn: { x: meIn.x, y: meIn.y, pose: meIn.act && meIn.act.pose }, trip: trip && { kind: trip.kind, x: trip.x, y: trip.y, path: trip.path.map(q => [+q[0].toFixed(2), +q[1].toFixed(2)]), arrived: trip.arrived }, folk: { ...FOLK_AT } }),
+    debug: () => ({ traffic: CARS_OUT.list.map(c => [Math.round(c.x), Math.round(c.y), c.path.length, c.police ? 'police' : '']), walkers: WALK.list.map(w => [Math.round(w.x), Math.round(w.y), w.bike ? 'bike' : 'walk', w.path.length]), meS: { x: meS.x, y: meS.y, path: meS.path.length }, cam: { ...cam }, W, H, mode, owner, edit, ents: ents.size, me: { x: me.x, y: me.y, lot: me.lot, jobs: me.jobs.length, cur: !!me.cur, act: me.act && me.act.pose, actIn: !!me.act, path: me.path.length, pose: mePose() }, meIn: { x: meIn.x, y: meIn.y, pose: meIn.act && meIn.act.pose }, trip: trip && { kind: trip.kind, x: trip.x, y: trip.y, path: trip.path.map(q => [+q[0].toFixed(2), +q[1].toFixed(2)]), arrived: trip.arrived }, folk: { ...FOLK_AT } }),
     _parkRoute: (a, b) => parkRoute(a, b), _parkPlan: () => parkPlan(),   // v0.34: for testing
     look(z, wx, wy) { useCam(); cam.z = z; centerOn(wx, wy); fly = null; follow = false; },
     bench(n = 20) { const t0 = performance.now(); for (let i = 0; i < n; i++) render(t0 + i * 16); return +((performance.now() - t0) / n).toFixed(2); },

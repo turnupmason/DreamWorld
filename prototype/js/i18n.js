@@ -1292,3 +1292,16 @@ Object.assign(STR.en, {
   garage_door: 'Keep the space in front of the garage doors clear: not a wall, the fence, the house or anything else',
   fwy_onramp: 'ON-RAMP',
 });
+// v0.50: things take time; bad weather stops what's outdoors
+Object.assign(STR.zh, {
+  w_heavy: '大雨',
+  wx_paused: '{w}：室外活动暂停',
+  wx_paused_note: '下大雨、雷雨或下雪时，公园、湖边、麦田、游乐园、动物园、体育场和屋顶的活动先停一停；室内照常。天气好了再来。',
+  cook_doing: '去厨房做饭',
+});
+Object.assign(STR.en, {
+  w_heavy: 'Heavy rain',
+  wx_paused: '{w}: outdoor activities are paused',
+  wx_paused_note: 'In heavy rain, a thunderstorm or snow, things in the park, by the lake, in the wheat fields, at the funfair, the zoo, the stadium and on the roof wait; indoors carries on. Come back when it clears.',
+  cook_doing: 'Off to the kitchen to cook',
+});

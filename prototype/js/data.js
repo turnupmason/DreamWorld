@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.49.0';
+const VERSION = '0.50.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -1611,6 +1611,36 @@ const SICK = { base: 0.03, overwork: 0.08, overworkDays: 5, lowSleep: 0.06, lowS
 // Things to do in the park (each once a day; the ice-cream cart is the food court's ice cream): watch a game on a
 // court or the pitch and cheer, feed the ducks, sit on a bench, bounce on the trampoline. sec: how long it takes.
 const PARK = { watch: { fun: 6, sec: 8 }, ducks: { fun: 8, sec: 8 }, bench: { fun: 4, sec: 10 }, play: { fun: 6, sec: 8 }, icecream: { sec: 5 } };
+// v0.50 (Mason #29): things take time. You walk over first; then a bar over your head fills, and only when it's full is
+// it done (you've eaten, you've looked, you've bought it). Seconds. Things with their own time keep it (the gym, a ride,
+// an exhibit, the park: VENUE / PARK .sec). Walk off before the bar is full and nothing happens (and you pay nothing).
+const DO_SECS = {
+  pick: 1.2,       // take something off the shelf into your basket
+  buy: 2,          // buy something at a counter (flowers, a souvenir, medicine, a plush, a hotel room)
+  groceries: 3,    // fill a bag at the fresh food
+  pay: 2.5,        // pay at the till (or the bail)
+  sign: 3,         // sign for a loan, a job, a class
+  ticket: 1.5,     // buy a cinema ticket
+  order: 1.5,      // order at a counter or a food stall; then you sit down and eat
+  meal: 9,         // eat a meal (the food court)
+  snack: 6,        // eat a snack (a pastry, a coffee, a hot dog)
+  special: 7,      // eat a county specialty there and then
+  take: 2,         // have a specialty wrapped to take away
+  er: 10,          // be seen in the emergency room
+  bake: 6,         // bake bread in the oven
+  help: 8,         // help bring in the wheat
+  fish: 8,         // fish off the jetty
+  read: 10,        // read today's book at the library
+  card: 3,         // write a postcard and post it
+  check: 5,        // a health check
+  look: 6,         // look round something (the fire engine)
+  cook: 5,         // cook a meal in your kitchen
+  // farm work is short, there's a lot of it (it used to be about 0.7 s, with no bar)
+  harvest: 1, plant: 1.1, animal: 1.2, tree: 1.4, yard: 1.2, trough: 1.6,
+};
+// v0.50: heavy rain, a storm or snow stops what's done outdoors (the park, the lake, the fields, the funfair, the zoo,
+// the stadium, the roof terrace); indoors carries on. Your own farm isn't stopped (crops would spoil).
+const OUTDOOR = { places: ['park', 'lake', 'fields'], venues: ['amuse', 'zoo', 'stadium', 'rooftop'], games: ['fishing', 'golf', 'karaoke', 'derby'] };
 // v0.33: ball games you really play on the park's courts, with a friend (or one of the people already playing there).
 // Tennis: one game, scored 15 / 30 / 40: the first to `to` points wins (at 40–40 the next point wins). Basketball: `spots` places round the hoop, `shots` each from every place, two points a
 // basket (three from the last place). Football: `kicks` penalties each; level after that is a draw (v0.34: no sudden death).

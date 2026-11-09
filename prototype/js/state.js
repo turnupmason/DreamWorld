@@ -905,6 +905,9 @@ function weatherNow() {
   if (w && w.real && S.weatherReal && now() - w.at < 3 * HOUR) return w;
   return simWeather();
 }
+// v0.50: heavy rain, a storm or snow: outdoor things stop for now (indoors carries on)
+function badWeather() { const w = weatherNow(); return w.kind === 'storm' || w.kind === 'snow' || (w.kind === 'rain' && !!w.heavy); }
+const outdoorPaused = where => badWeather() && (OUTDOOR.places.includes(where) || OUTDOOR.venues.includes(where) || OUTDOOR.games.includes(where));
 // Open-Meteo weather codes → our kinds.
 function codeKind(c) {
   if (c <= 1) return 'clear';
@@ -1986,7 +1989,7 @@ function wearClothes(k, h = S.me) {
 function watchMovie(k) {
   if (!MALL.movies[k]) return 'no';
   if (S.me.coins < MALL.movie) return 'poor';
-  S.me.coins -= MALL.movie; addNeed('fun', NEED_GAIN.movie); addNeed('social', NEED_GAIN.movieSocial);   // v0.25: a film is fun
+  S.me.coins -= MALL.movie;   // v0.50: the fun comes once you've watched it (filmWatched)
   if (S.mall.movies.includes(k)) return 'ok';
   S.mall.movies.push(k);
   const key = 'room:poster' + k; S.me.store[key] = (S.me.store[key] || 0) + 1;   // v0.20: its poster, for your home
@@ -2011,6 +2014,7 @@ function clawPrize(k) {
   if (S.mall.plush.length >= Object.keys(MALL.plush).length && !S.mall.bigTeddy) { S.mall.bigTeddy = true; S.me.store['room:bigteddy'] = (S.me.store['room:bigteddy'] || 0) + 1; return 'big'; }
   return 'ok';
 }
+function filmWatched() { addNeed('fun', NEED_GAIN.movie); addNeed('social', NEED_GAIN.movieSocial); }   // v0.25: a film is fun (v0.50: at the end)
 function eatFood(k) {
   const f = MALL.foods[k];
   if (!f) return 'no';
@@ -2306,11 +2310,15 @@ const fireTip = () => FIRE_TIPS[Math.floor(now() / 86400000) % FIRE_TIPS.length]
 function buySnack() { if (S.me.coins < SNACK.price) return 'poor'; S.me.coins -= SNACK.price; addNeed('hunger', FOOD_FILL.snack); addNeed('social', NEED_GAIN.snackSocial); return 'ok'; }
 // cooking at home: two things from your barn (crops, eggs, milk, fruit...) and a kitchen or a stove
 function canCook(h = S.me) { return hasFurn(h, 'kitchen') || hasFurn(h, 'stove'); }
-function cookMeal(h = S.me) {
+// v0.50: can you cook now (before you walk to the kitchen)
+function cookCheck(h = S.me) {
   if (!canCook(h)) return 'nokitchen';
+  const total = Object.keys(h.barn).filter(k => h.barn[k] > 0 && !k.startsWith('baby_') && (CROPS[k] || GOODS[k])).reduce((t, k) => t + h.barn[k], 0);
+  return total < 2 ? 'noingredients' : 'ok';
+}
+function cookMeal(h = S.me) {
+  if (cookCheck(h) !== 'ok') return cookCheck(h);
   const food = Object.keys(h.barn).filter(k => h.barn[k] > 0 && !k.startsWith('baby_') && (CROPS[k] || GOODS[k]));
-  const total = food.reduce((t, k) => t + h.barn[k], 0);
-  if (total < 2) return 'noingredients';
   let need = 2; for (const k of food) { while (need > 0 && h.barn[k] > 0) { h.barn[k]--; need--; } if (!h.barn[k]) delete h.barn[k]; }
   addNeed('hunger', FOOD_FILL.cook); addNeed('fun', NEED_GAIN.cookFun);
   return 'ok';

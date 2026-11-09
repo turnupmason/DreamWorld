@@ -624,6 +624,7 @@ body.dark .tro-medal { box-shadow: 0 0 0 6px #2a2622, 0 0 0 9px var(--c), 0 10px
 .off-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #b9b2a6; margin: 0 3px 1px 0; }
 .host-say { background: var(--chip); border-radius: 14px; padding: 10px 12px; font-weight: 700; margin: 10px 0 0; }
 .host-say.yes { background: #e3f6e8; color: #1f6b3a; }
+.card.wx-paused { background: #e8eef7; color: #2f4566; }   /* v0.50: bad weather, outdoor things wait */
 body.dark .host-say.yes { background: #1f3a2a; color: #9fe0b4; }
 .act-grid.three { grid-template-columns: repeat(3, 1fr); }
 
