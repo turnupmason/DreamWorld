@@ -247,7 +247,41 @@ function drawCarDir(c, px, py, dir, ts) {
   ctx.save();
   if (dir === '+x' || dir === '-x') { ctx.translate(p.x, 0); ctx.scale(-1, 1); ctx.translate(-p.x, 0); }
   CAR_REAR = dir === '-x' || dir === '-y';
-  try { drawCar(c, px - 0.5, py - len / 2, ts); } finally { CAR_REAR = false; ctx.restore(); }
+  try { drawCar(c, px - 0.5, py - len / 2, ts); if (!two) carExtras(c, px, py, len, s, ts, dir === '+x' || dir === '-x'); } finally { CAR_REAR = false; ctx.restore(); }
+}
+// v0.40: a police car's paint (its county's: COUNTIES[].police) and the light bar; a number plate on every car (the
+// state's colours: STATES[].plate; c.plate for your own car, which keeps your home state's plate wherever you go)
+const lumOf = col => { const [r, g, b] = rgbOf(col); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; };
+function carText(face, base, u, h, text, size, col, mirrored) {   // writing on a car's side that reads the right way round
+  const p = wallPt(face, base, u, h), [a, b] = face, k = (b.y - a.y) / ((b.x - a.x) || 1);
+  ctx.save(); ctx.translate(p.x, p.y); ctx.transform(1, k, 0, 1, 0, 0); if (mirrored) ctx.scale(-1, 1);
+  ctx.font = `900 ${size}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = col; ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+function carExtras(c, px, py, len, s, ts, mirrored) {
+  const z = cam.z, w = s.wid || 0.9, x = px - 0.5 + (1 - w) / 2, y = py - len / 2, base = s.sleek ? 2.6 : 3.5 + (s.lift || 0), body = s.body || 6;
+  const side = [iso(x + w, y + len), iso(x + w, y)], front = [iso(x, y + len), iso(x + w, y + len)], P = c.police;
+  if (P && z > 0.2) {
+    let under = P.body;
+    if (P.pat === 'doors') { wallRect(side, base, 0.3, 0.72, 0.4, body - 0.3, P.a); under = P.a; }
+    else if (P.pat === 'stripe') { wallRect(side, base, 0.02, 0.98, body * 0.28, body * 0.64, P.a); if (P.b && P.b !== P.a) wallRect(side, base, 0.02, 0.98, body * 0.68, body * 0.82, P.b); under = P.a; }
+    else if (P.pat === 'checks') { for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) wallRect(side, base, i / 8, (i + 1) / 8, body * (0.12 + j * 0.3), body * (0.42 + j * 0.3), (i + j) % 2 ? P.a : P.b); }
+    else if (P.pat === 'twotone') { wallRect(side, base, 0, 1, body * 0.5, body, P.a); wallRect(front, base, 0, 1, body * 0.5, body, P.a); under = P.a; }
+    if (z > 0.7 && P.text) carText(side, base, 0.5, P.pat === 'checks' ? body * 0.88 : body * 0.46, P.text, (P.text.length > 8 ? 1.9 : 2.4) * z, lumOf(P.pat === 'checks' ? P.body : under) > 0.55 ? '#1d1d1f' : '#ffffff', mirrored);
+    const L = P.lights || ['#ff4d4d', '#3b7bff'], lp = up(iso(px, py), (base + body + 6.3) * z), on = Math.floor(ts / 260) % 2;
+    ctx.save(); ctx.globalAlpha *= 0.35; circle(lp.x - 4 * z, lp.y, 7 * z, on ? L[0] : 'rgba(0,0,0,0)'); circle(lp.x + 4 * z, lp.y, 7 * z, on ? 'rgba(0,0,0,0)' : L[1]); ctx.restore();
+    rrect(lp.x - 7 * z, lp.y - 2 * z, 14 * z, 4 * z, 1.4 * z, '#2a2d33');
+    rrect(lp.x - 6.4 * z, lp.y - 1.5 * z, 6 * z, 3 * z, 1 * z, on ? L[0] : shade(L[0], -0.45)); rrect(lp.x + 0.4 * z, lp.y - 1.5 * z, 6 * z, 3 * z, 1 * z, on ? shade(L[1], -0.45) : L[1]);
+    if (NIGHT > 0.3) glow(lp.x, lp.y, 22 * z, 0.9);
+  }
+  const PL = c.plate || (typeof SCENE_TOWN !== 'undefined' ? stateOf(SCENE_TOWN).plate : null);
+  if (PL && z > 0.5) {
+    wallRect(front, base, 0.33, 0.67, 0.25, 2.55, PL.bg, 'rgba(0,0,0,.3)', 0.35);
+    if (PL.band) wallRect(front, base, 0.33, 0.385, 0.25, 2.55, PL.band);
+    if (PL.end) wallRect(front, base, 0.615, 0.67, 0.25, 2.55, PL.end);
+    if (PL.top) wallRect(front, base, 0.39, 0.61, 2.0, 2.5, PL.top);
+    wallLine(front, base, PL.band ? 0.41 : 0.38, 1.2, PL.end ? 0.59 : 0.62, 1.2, PL.fg, 0.9);
+  }
 }
 function drawCar(c, x, y, ts) {
   const z = cam.z, col = c.color, def = CARS[c.k] || {};
@@ -2041,10 +2075,7 @@ function storeShow(st, objs, ts) {
   const G = storeGeo(st), k = G.k, z = cam.z, sl = storeSlots(G, 6), dir = G.along === 'x' ? '+x' : '+y';
   const put = (px, py, f) => objs.push({ d: px + py + 0.5, f: () => f(px, py) });
   if (k === 'dealer') sl.slice(0, 3).forEach(([px, py], i) => put(px, py, () => drawCarDir({ k: ['sedan', 'suv', 'sports'][i], color: ['#2f80ed', '#f4f4f0', '#e5484d'][i] }, px, py, G.dir, ts)));
-  if (k === 'police' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => {
-    drawCarDir({ k: 'sedan', color: '#f4f4f0' }, px, py, G.dir, ts);
-    const lp = up(iso(px, py), 15 * z), on = Math.floor(ts / 300) % 2;
-    rrect(lp.x - 4 * z, lp.y - 1.2 * z, 4 * z, 2.4 * z, 0.6 * z, on ? '#ff4d4d' : '#9a2a2a'); rrect(lp.x, lp.y - 1.2 * z, 4 * z, 2.4 * z, 0.6 * z, on ? '#2f6fe0' : '#7ab0ff'); }); }
+  if (k === 'police' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const PC = countyOf(SCENE_TOWN).police; drawCarDir({ k: 'sedan', color: PC.body, police: PC }, px, py, G.dir, ts); }); }   // v0.40: the county's police car
   if (k === 'nursery') sl.forEach(([px, py], i) => put(px, py, () => { const p = iso(px, py); ellipse(p.x, p.y, 6 * z, 3 * z, '#9a6a44'); circle(p.x, p.y - 6 * z, 5 * z, PAL.leaf[i % 3]); circle(p.x - 2 * z, p.y - 9 * z, 3 * z, ['#ef6f6c', '#f3d36b', '#e88bb7'][i % 3]); }));
   if (k === 'ranch' && sl[0]) { const [px, py] = sl[0]; put(px, py, () => { const p = iso(px, py); drawAnimal('cow', 2, p.x, p.y, z * 0.85, { face: 1, ts, seed: 2 }); });
     if (sl[1]) { const [qx, qy] = sl[1]; put(qx, qy, () => { const p = iso(qx, qy); drawAnimal('sheep', 2, p.x, p.y, z * 0.85, { face: -1, ts, seed: 3 }); }); } }

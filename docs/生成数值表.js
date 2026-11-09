@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, CENTRE_NEW, TOWER_STOREYS, BUILDING_FLOORS, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY, STATES, COUNTIES, TERRAINS, SPECIALTIES, FOLK_NAMES, TOWNSFOLK, SPECIAL})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -225,6 +225,17 @@ P('');
   P(`高速上的车：每个方向每 0.7–2 秒从隧道（或大桥那头）开出来一辆，大约 ${Math.round(FW.exit * 100)}% 会在出口下高速开进镇里；镇上新出发的车大约 ${Math.round(FW.leave * 100)}% 会开上匝道离开。车靠右行驶，前面慢就从左边超车；大约一半的车超完会回右边。梧桐镇是 I-${F.no}，出口 ${F.exit}。`);
   P(''); }
 P('路口：两条大道（或大道和大马路）相交、或者街道整个穿过大道的地方有红绿灯（12 秒一轮）；其余路口小路那边有停车让行牌（车停 0.8 秒再走），两条小路相交就四个方向都停。乡间土路没有牌子。');
+
+// v0.40: states and counties
+P('### v0.40 州和县');
+P('');
+P(`每个镇都在一个县里，每个县在一个州（或者那个国家自己的一级行政区：省、府、大区……）。县决定：周围的地形、只有本县超市卖的特产、吃喝玩的物价（cost）、工资（wage）、警车；车牌按州。车、家具、房子、地的价钱全国一样（地价本来就按镇不同）。镇上除了你、朋友和家人，还有 ${D.TOWNSFOLK.residents} 个有名字的镇民，每栋楼柜台后面也是一个有名字的店员（名字按当地习惯取）。`);
+P('');
+table(['镇', '州 / 省', '县', '地形', '物价', '工资', '特产（美元，未乘物价）', '警车'], Object.entries(D.COUNTIES).map(([k, C]) => { const town = Object.entries(D.COMMUNITIES).find(([, c]) => c.county === k); const ST = D.STATES[C.state];
+  return [town ? town[1].zh : '', `${ST.zh} (${ST.en})`, `${C.zh} (${C.en})`, `${D.TERRAINS[C.terrain].e} ${D.TERRAINS[C.terrain].zh}`, `×${C.cost}`, `×${C.wage}`, C.specials.map(f => `${D.SPECIALTIES[f].e} ${D.SPECIALTIES[f].zh} 🪙${D.SPECIALTIES[f].base_price || D.SPECIALTIES[f].price}`).join('、'), C.police.text]; }));
+P('');
+P(`特产：在本县的超市（或者坐火车来的 ${D.SPECIAL.visitH} 小时里）买；当场吃加饱腹和娱乐，带走的可以送人（关系额外 +${D.SPECIAL.giftUp}）或者按 ${D.SPECIAL.sellBack * 100}% 卖掉。一共 ${Object.keys(D.SPECIALTIES).length} 种，买过的记进收集。吃喝玩的价钱（店里、餐厅、酒吧、商场、保龄球……）= 美东基础价 × 所在县的物价；打工时薪 = 基础时薪 × 你住的县的工资。`);
+P('');
 P('');
 P('## 手机：银行、贷款、股票（v0.26，v0.35 改成真实的银行）');
 P('');

@@ -351,7 +351,7 @@ function ensureNPCs(t) {
     };
     p.trees = Array.from({ length: p.orchardLv ? ORCHARD[p.orchardLv].slots : 0 }, () => [pick(Object.keys(TREES)), 2]);
     if (r() < 0.4) p.animals.push(['dog', 2]);
-    if (t !== HOME_TOWN) { p.house = Math.floor(r() * HOUSES.length); p.name = NPC_NAMES[(i + ti * 3) % NPC_NAMES.length]; }
+    if (t !== HOME_TOWN) { p.house = Math.floor(r() * HOUSES.length); p.name = tfName(t, i * 5 + ti * 3 + 7); }   // v0.40: named the way people are named there
     const h = homeFromPreset(p);
     h.npc = true; h.town = t; if (spec.fam && t === HOME_TOWN) h.fam = spec.fam;   // v0.27: your family
     relayoutYard(h);
@@ -790,6 +790,7 @@ function collectYard(id, h = S.me) {
 // ---------- barn ----------
 function barnInfo(k) {
   if (CROPS[k]) return { e: CROPS[k].e, name: nm(CROPS[k]), sell: CROPS[k].sell };
+  if (SPECIALTIES[k]) return { e: SPECIALTIES[k].e, name: nm(SPECIALTIES[k]), sell: Math.max(1, Math.round(SPECIALTIES[k].base_price * SPECIAL.sellBack)), special: true };   // v0.40
   if (GOODS[k]) return { e: GOODS[k].e, name: nm(GOODS[k]), sell: GOODS[k].sell };
   const a = ANIMALS[k.slice(5)];
   return { e: a.e, name: nm(a.baby), sell: a.sell[0], baby: k.slice(5) };
@@ -1719,7 +1720,7 @@ function unloadCargo() {
 
 // ---------- jobs (v0.14) ----------
 const jobRank = (rel = (S.job || {}).rel || 0) => JOB_RANKS.filter(r => rel >= r.at).length - 1;
-const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay * (1 + ((S.school || {}).certs || 0) * SCHOOL.certPay));
+const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay * (1 + ((S.school || {}).certs || 0) * SCHOOL.certPay) * countyOf(myTown()).wage);   // v0.40: pay goes by county
 function shiftEnd(place, ms = now()) { const d = new Date(ms); d.setHours(JOBS[place].to, 0, 0, 0); return d.getTime(); }
 function inShift(place, ms = now()) { const h = localHour(myTown(), ms); return h >= JOBS[place].from && h < JOBS[place].to; }
 function takeJob(place) { if (S.work) return 'working'; S.job = { place, rel: S.job && S.job.place === place ? S.job.rel : 0, since: now() }; return 'ok'; }
@@ -2200,6 +2201,7 @@ function doSocial(id, act, g) {
     const h = homeOf(id); if (h && h.barn) addBarn(h, g, 1);
     if (T.includes('foodie')) d += SOCIAL.foodieUp;
     if (g === 'bouquet') d += SOCIAL.bouquetUp;   // v0.37: flowers
+    if (SPECIALTIES[g]) d += SPECIAL.giftUp;   // v0.40: something special from far away
   }
   const K = knownOf(id); K.met = true;
   let tells = null;   // talking hobbies: you find out theirs (a shared one, or they tell you what they'd rather talk about)
@@ -2340,10 +2342,11 @@ function contacts() {
   const out = S.friends.map(h => ({ id: h.id, kind: 'friend' }));
   npcLots(HOME_TOWN).forEach(l => { const h = homeOf(l.id); if (h && h.fam) out.push({ id: l.id, kind: 'family' }); });   // v0.27
   if (S.job) workPeople(S.job.place).forEach(p => out.push({ id: p.id, kind: p.boss ? 'boss' : 'mate' }));
-  Object.keys(S.rel || {}).filter(id => !id.startsWith('work_') && !out.some(o => o.id === id) && homeOf(id)).forEach(id => out.push({ id, kind: 'neighbour' }));
+  Object.keys(S.rel || {}).filter(id => !id.startsWith('work_') && !out.some(o => o.id === id) && (homeOf(id) || (id.startsWith('tf_') && tfById(id)))).forEach(id => out.push({ id, kind: 'neighbour' }));   // v0.40: + townsfolk
   return out;
 }
 function whoIs(id) {
+  if (String(id).startsWith('tf_')) { const p = tfById(id); return p ? { name: nm(p.name), look: p.look, tf: p } : null; }   // v0.40: townsfolk
   const wp = S.job && id.startsWith('work_') ? workPeople(S.job.place).find(p => p.id === id) : null;
   if (wp) return { name: nm(wp.name), look: wp.look, wp };
   const h = homeOf(id);
@@ -2410,3 +2413,57 @@ function meetInPark(id) {
 
 // ---------- v0.27: an invite-only town ----------
 const homesIn = t => allLots(t).length;
+
+// ---------- v0.40: states and counties ----------
+// The county's specialties (only its supermarket sells them): eat one there (it fills you up a little and it's fun) or
+// take it with you (to give someone, or sell back). Each one you've bought goes in your collection (S.tasted).
+function buySpecial(k, take) {
+  const F = SPECIALTIES[k];
+  if (!F) return 'no';
+  if (F.county !== (COMMUNITIES[VIEW_TOWN] || {}).county) return 'far';
+  if (S.me.coins < F.price) return 'poor';
+  S.me.coins -= F.price;
+  S.tasted = S.tasted || {};
+  const first = !S.tasted[k];
+  if (first) S.tasted[k] = today();
+  if (take) addBarn(S.me, k, 1);
+  else { addNeed('hunger', F.hunger); addNeed('fun', F.fun); }
+  return first ? 'first' : 'ok';
+}
+const tastedCount = () => Object.keys(S.tasted || {}).filter(k => SPECIALTIES[k]).length;
+// A number plate in the state's style: @ = a letter, # = a digit, anything else as it is. Yours is made up once
+// from when you started (the same plate until you move to another state).
+function plateText(state, seed) {
+  const P = STATES[state].plate, r = seeded(hashStr(state + ':' + seed) + 11), L = 'ABCDEFGHJKLMNPRSTUVWXYZ';
+  return P.fmt.replace(/[@#]/g, ch => (ch === '@' ? L[Math.floor(r() * L.length)] : String(Math.floor(r() * 10))));
+}
+const myPlate = () => plateText(countyOf(myTown()).state, S.created || 1);
+// The people who live in a town and work in its shops, not only your friends and family. Named the way people are
+// named there (FOLK_NAMES by county). Made up from the town's key, so they're the same every time.
+// Residents: tf_<town>_r<i>. The person at the counter of each building: tf_<town>_<place> (made up when needed).
+const TF = {};
+function tfLook(r, uniform) {
+  const pick = a => a[Math.floor(r() * a.length)], old = r() < 0.18;
+  return dressUp({ shirt: pick(COLORS), skin: pick(SKINS), hair: pick(HAIRS), hairCol: old ? '#cfcac2' : pick(HAIR_COLORS), mob: r() < 0.06 ? 'wheel' : 'walk', ...(uniform || {}) }, String(r()));
+}
+function tfName(t, i) {
+  const N = FOLK_NAMES[countyOf(t).folk] || FOLK_NAMES.us, n = N[i % N.length];   // (two people with the same name in town is fine)
+  return { en: n[0], zh: n[1] };
+}
+function townsfolk(t) {
+  if (TF[t]) return TF[t];
+  const r = seeded(hashStr('folk:' + t) + 5), start = Math.floor(r() * 50);
+  return (TF[t] = Array.from({ length: TOWNSFOLK.residents }, (_, i) => ({ id: `tf_${t}_r${i}`, town: t, name: tfName(t, start + i), look: tfLook(r), job: null })));
+}
+// whoever works the counter of `place` in town t (VENUE_LOOK's uniform comes from the scene; here just who they are)
+function staffOf(t, place) {
+  const id = `tf_${t}_${place}`;
+  if (TF[id]) return TF[id];
+  const r = seeded(hashStr(id) + 3), i = Math.floor(r() * 1000);
+  return (TF[id] = { id, town: t, name: tfName(t, i), look: tfLook(r), job: place });
+}
+function tfById(id) {
+  const m = /^tf_([a-z]+)_(.+)$/.exec(id);
+  if (!m || !COMMUNITIES[m[1]]) return null;
+  return /^r\d+$/.test(m[2]) ? townsfolk(m[1]).find(p => p.id === id) || null : staffOf(m[1], m[2]);
+}

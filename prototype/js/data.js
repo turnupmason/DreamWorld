@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.39.0';
+const VERSION = '0.40.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -710,6 +710,148 @@ Object.assign(COMMUNITIES, {
   rio:     { zh: '海风湾', en: 'Sea Breeze Bay', place: { zh: '巴西 · 里约', en: 'Rio, Brazil' }, flag: '🇧🇷', lon: -43.2, lat: -22.9, theme: 'palm', price: 0.8, pop: 1120, region: 'sa' },
   capetown:{ zh: '好望角村', en: 'Cape Village', place: { zh: '南非 · 开普敦', en: 'Cape Town, South Africa' }, flag: '🇿🇦', lon: 18.4, lat: -33.9, theme: 'desert', price: 0.7, pop: 560, region: 'af' },
 });
+// ---------- v0.40: states and counties ----------
+// Like the US: every town is in a county, and every county in a state (or that country's own kind of region: a
+// province, a prefecture, a département; `kind` says which). Each county has its own land round the town (terrain:
+// the mountains, hills or mesas you see past the woods), its own specialties (only its supermarket sells them), its
+// own prices for food, drinks and fun (cost) and its own pay (wage), its own police cars, and its people's names
+// (folk). Number plates go by state. Cars, furniture, houses and land keep one price everywhere (land already had
+// its own, COMMUNITIES[].price).
+const STATES = {
+  ca: { zh: '加利福尼亚州', en: 'California', kind: 'state', abbr: 'CA', plate: { bg: '#f7f7f5', fg: '#1f3a7a', top: '#d6383e', name: 'California', fmt: '#@@@###' } },
+  fl: { zh: '佛罗里达州', en: 'Florida', kind: 'state', abbr: 'FL', plate: { bg: '#f7f7f5', fg: '#1f6b45', top: '#f28c28', name: 'Florida', fmt: '@@@ @##' } },
+  az: { zh: '亚利桑那州', en: 'Arizona', kind: 'state', abbr: 'AZ', plate: { bg: '#f4cf86', fg: '#7a2a2a', top: '#c05a3a', name: 'Arizona', fmt: '@@@####' } },
+  vt: { zh: '佛蒙特州', en: 'Vermont', kind: 'state', abbr: 'VT', plate: { bg: '#1f6b45', fg: '#f7f7f5', top: '#f7f7f5', name: 'Vermont', fmt: '@@@ ###' } },
+  ab: { zh: '艾伯塔省', en: 'Alberta', kind: 'province', abbr: 'AB', plate: { bg: '#f7f7f5', fg: '#d6383e', top: '#d6383e', name: 'Alberta', fmt: '@@@-####' } },
+  paca: { zh: '普罗旺斯-阿尔卑斯-蓝色海岸大区', en: 'Provence-Alpes-Côte d’Azur', kind: 'region', abbr: 'PACA', plate: { bg: '#f7f7f5', fg: '#1d1d1f', band: '#1f3a7a', end: '#1f3a7a', name: 'F', fmt: '@@-###-@@' } },
+  nh: { zh: '北荷兰省', en: 'North Holland', kind: 'province', abbr: 'NH', plate: { bg: '#f2c230', fg: '#1d1d1f', band: '#1f3a7a', name: 'NL', fmt: '##-@@@-#' } },
+  vl: { zh: '韦斯特兰郡', en: 'Vestland', kind: 'fylke', abbr: 'VL', plate: { bg: '#f7f7f5', fg: '#1d1d1f', band: '#1f3a7a', name: 'N', fmt: '@@ #####' } },
+  kyo: { zh: '京都府', en: 'Kyoto Prefecture', kind: 'prefecture', abbr: '京都', plate: { bg: '#f7f7f5', fg: '#1f6b45', name: '京都', fmt: '### さ ##-##' } },
+  zj: { zh: '浙江省', en: 'Zhejiang', kind: 'province', abbr: '浙', plate: { bg: '#2f5fb8', fg: '#f7f7f5', name: '浙A', fmt: '浙A·#@###' } },
+  nsw: { zh: '新南威尔士州', en: 'New South Wales', kind: 'state', abbr: 'NSW', plate: { bg: '#f2d24b', fg: '#1d1d1f', name: 'NSW', fmt: '@@-##-@@' } },
+  qui: { zh: '金迪奥省', en: 'Quindío', kind: 'department', abbr: 'QUI', plate: { bg: '#f2c230', fg: '#1d1d1f', name: 'Salento', fmt: '@@@ ###' } },
+  eng: { zh: '英格兰', en: 'England', kind: 'country', abbr: 'ENG', plate: { bg: '#f2c230', fg: '#1d1d1f', name: 'UK', fmt: '@@## @@@' } },
+  gg: { zh: '京畿道', en: 'Gyeonggi', kind: 'province', abbr: '京畿', plate: { bg: '#f7f7f5', fg: '#1d1d1f', name: '경기', fmt: '##가 ####' } },
+  rj: { zh: '里约热内卢州', en: 'Rio de Janeiro', kind: 'state', abbr: 'RJ', plate: { bg: '#f7f7f5', fg: '#1d1d1f', band: '#1f3a7a', top: '#1f3a7a', name: 'BRASIL', fmt: '@@@#@##' } },
+  wc: { zh: '西开普省', en: 'Western Cape', kind: 'province', abbr: 'WC', plate: { bg: '#f7f7f5', fg: '#1d1d1f', top: '#2f5fb8', name: 'Western Cape', fmt: 'CA ###-###' } },
+};
+// (plate fmt: @ = a letter, # = a digit, anything else as it is)
+// What the land round a town looks like. peak: how its mountains are drawn (peak: pointed, with snow if snow > 0;
+// dome: rounded hills; mesa: red rock with a flat top; table: a flat-topped mountain; sugar: steep granite domes;
+// none: flat country, no mountains); cols: their light and shady sides; tall: how high; hill: the colours of the
+// hill the interstate tunnels through (dark to light).
+const TERRAINS = {
+  golden:    { e: '🌾', zh: '金色丘陵', en: 'Golden hills', peak: 'dome', cols: ['#d8b664', '#b9954a'], tall: 0.75, hill: ['#8c6d2f', '#e6c97c'] },
+  wetland:   { e: '🐊', zh: '海边湿地', en: 'Coastal wetland', peak: 'none' },
+  desert:    { e: '🏜️', zh: '沙漠台地', en: 'Desert mesas', peak: 'mesa', cols: ['#d98a52', '#b5643a'], tall: 1.0 },
+  forest:    { e: '🌲', zh: '林木山地', en: 'Wooded mountains', peak: 'dome', cols: ['#4d8a4a', '#356b38'], tall: 1.0, hill: ['#2f5f33', '#6fae62'] },
+  alpine:    { e: '🏔️', zh: '雪山', en: 'Snowy peaks', peak: 'peak', cols: ['#8e9c86', '#6d7a67'], snow: 0.35, tall: 1.2 },
+  limestone: { e: '⛰️', zh: '石灰岩山', en: 'Limestone hills', peak: 'peak', cols: ['#b3ad95', '#938d78'], snow: 0.4, snowCol: '#efebe0', tall: 0.75, hill: ['#7f8f5f', '#c9c7a6'] },
+  polder:    { e: '🌷', zh: '圩田平原', en: 'Polder flats', peak: 'none' },
+  fjord:     { e: '🛶', zh: '峡湾高山', en: 'Fjord mountains', peak: 'peak', cols: ['#66746e', '#4a5752'], snow: 0.28, tall: 1.5, hill: ['#3a4a44', '#8fa49a'] },
+  tea:       { e: '🍵', zh: '茶山', en: 'Tea hills', peak: 'dome', cols: ['#6fae5a', '#4f8d45'], tall: 0.75, terraces: true, hill: ['#3f7a3a', '#9cd07f'] },
+  sandstone: { e: '🐨', zh: '砂岩丘陵', en: 'Sandstone hills', peak: 'dome', cols: ['#9cb38a', '#7a9468'], tall: 0.6, hill: ['#5f7a4f', '#c9b98a'] },
+  andes:     { e: '🌴', zh: '安第斯山', en: 'The Andes', peak: 'peak', cols: ['#4f8a4a', '#3a6d38'], tall: 1.3, hill: ['#2f5f2f', '#79b96a'] },
+  downs:     { e: '🐑', zh: '低缓丘陵', en: 'Rolling downs', peak: 'dome', cols: ['#8cc46b', '#6fa856'], tall: 0.42, hill: ['#4f8a45', '#a6d68a'] },
+  rocky:     { e: '🪨', zh: '青山', en: 'Rocky green hills', peak: 'peak', cols: ['#6f9a5f', '#557d48'], tall: 0.85, hill: ['#3f6a3a', '#93bf7f'] },
+  granite:   { e: '🗿', zh: '花岗岩峰', en: 'Granite domes', peak: 'sugar', cols: ['#8a948a', '#69736a'], tall: 1.5, hill: ['#4f5a50', '#a9b3a4'] },
+  table:     { e: '🍷', zh: '桌山', en: 'Table mountains', peak: 'table', cols: ['#8a9480', '#68735f'], tall: 1.1, hill: ['#5a6a4f', '#b3b89a'] },
+};
+// police cars: pattern (doors: dark car, white doors; stripe: a band down the side; checks: blocks in two colours;
+// twotone: dark below, white above), body / a / b colours, the word on the side, the lights on the roof
+const COUNTIES = {
+  monterey:  { zh: '蒙特雷县', en: 'Monterey County', state: 'ca', terrain: 'golden', cost: 1.15, wage: 1.2, folk: 'us', specials: ['avotoast', 'artichoke'],
+    near: [['萨利纳斯', 'Salinas'], ['卡梅尔', 'Carmel'], ['蒙特雷', 'Monterey'], ['金城', 'King City']], police: { pat: 'doors', body: '#1d1d1f', a: '#f4f4f0', text: 'SHERIFF', lights: ['#ff4d4d', '#3b7bff'] } },
+  collier:   { zh: '科利尔县', en: 'Collier County', state: 'fl', terrain: 'wetland', cost: 1.0, wage: 0.95, folk: 'us', specials: ['keylime', 'ojuice'],
+    near: [['那不勒斯', 'Naples'], ['伊莫卡利', 'Immokalee'], ['马可岛', 'Marco Island'], ['埃弗格雷兹城', 'Everglades City']], police: { pat: 'stripe', body: '#f4f4f0', a: '#1f6b45', b: '#c9a24a', text: 'SHERIFF', lights: ['#ff4d4d', '#3b7bff'] } },
+  pinal:     { zh: '皮纳尔县', en: 'Pinal County', state: 'az', terrain: 'desert', cost: 0.9, wage: 0.9, folk: 'us', specials: ['pricklypear', 'burrito'],
+    near: [['卡萨格兰德', 'Casa Grande'], ['佛罗伦萨', 'Florence'], ['马里科帕', 'Maricopa'], ['埃洛伊', 'Eloy']], police: { pat: 'stripe', body: '#f4f4f0', a: '#8a5a36', b: '#d9b866', text: 'SHERIFF', lights: ['#ff4d4d', '#3b7bff'] } },
+  lamoille:  { zh: '拉莫伊尔县', en: 'Lamoille County', state: 'vt', terrain: 'forest', cost: 1.0, wage: 0.95, folk: 'us', specials: ['maplesyrup', 'cheddar'],
+    near: [['斯托', 'Stowe'], ['莫里斯维尔', 'Morrisville'], ['约翰逊', 'Johnson'], ['海德公园', 'Hyde Park']], police: { pat: 'stripe', body: '#1f4d32', a: '#f2c230', b: '#f2c230', text: 'STATE POLICE', lights: ['#3b7bff', '#ff4d4d'] } },
+  bighorn:   { zh: '比格霍恩区', en: 'MD of Bighorn', state: 'ab', terrain: 'alpine', cost: 1.0, wage: 0.9, folk: 'ca', specials: ['poutine', 'beefjerky'],
+    near: [['班夫', 'Banff'], ['坎莫尔', 'Canmore'], ['埃克肖', 'Exshaw'], ['路易斯湖', 'Lake Louise']], police: { pat: 'stripe', body: '#f4f4f0', a: '#2f5fb8', b: '#f2c230', text: 'RCMP · GRC', lights: ['#ff4d4d', '#3b7bff'] } },
+  vaucluse:  { zh: '沃克吕兹省', en: 'Vaucluse', state: 'paca', terrain: 'limestone', cost: 1.05, wage: 0.95, folk: 'fr', specials: ['lavhoney', 'melon'],
+    near: [['阿维尼翁', 'Avignon'], ['卡瓦永', 'Cavaillon'], ['戈尔德', 'Gordes'], ['奥朗日', 'Orange']], police: { pat: 'stripe', body: '#1f3a7a', a: '#f4f4f0', b: '#e5484d', text: 'GENDARMERIE', lights: ['#3b7bff', '#3b7bff'] } },
+  zaanstad:  { zh: '赞斯塔德', en: 'Zaanstad', state: 'nh', terrain: 'polder', cost: 1.1, wage: 1.05, folk: 'nl', specials: ['gouda', 'stroopwafel'],
+    near: [['赞丹', 'Zaandam'], ['克罗门尼', 'Krommenie'], ['沃默', 'Wormer'], ['阿姆斯特丹', 'Amsterdam']], police: { pat: 'checks', body: '#f4f4f0', a: '#2f5fb8', b: '#f28c28', text: 'POLITIE', lights: ['#3b7bff', '#3b7bff'] } },
+  aurland:   { zh: '奥兰', en: 'Aurland', state: 'vl', terrain: 'fjord', cost: 1.3, wage: 1.25, folk: 'no', specials: ['salmon', 'brunost'],
+    near: [['弗洛姆', 'Flåm'], ['居德旺恩', 'Gudvangen'], ['莱达尔', 'Lærdal'], ['沃斯', 'Voss']], police: { pat: 'checks', body: '#f4f4f0', a: '#1d1d1f', b: '#f2c230', text: 'POLITI', lights: ['#3b7bff', '#3b7bff'] } },
+  uji:       { zh: '宇治市', en: 'Uji', state: 'kyo', terrain: 'tea', cost: 0.9, wage: 0.85, folk: 'jp', specials: ['matcha', 'dango'],
+    near: [['伏见', 'Fushimi'], ['城阳', 'Joyo'], ['宇治田原', 'Ujitawara'], ['京田边', 'Kyotanabe']], police: { pat: 'twotone', body: '#1d1d1f', a: '#f4f4f0', text: '警察', lights: ['#ff4d4d', '#ff4d4d'] } },
+  xihu:      { zh: '西湖区', en: 'Xihu District', state: 'zj', terrain: 'tea', cost: 0.7, wage: 0.65, folk: 'cn', specials: ['longjing', 'beggarchicken'],
+    near: [['龙井村', 'Longjing'], ['梅家坞', 'Meijiawu'], ['灵隐', 'Lingyin'], ['转塘', 'Zhuantang']], police: { pat: 'stripe', body: '#f4f4f0', a: '#2f5fb8', b: '#2f5fb8', text: '公安', lights: ['#ff4d4d', '#3b7bff'] } },
+  northbeach:{ zh: '北部海滩区', en: 'Northern Beaches', state: 'nsw', terrain: 'sandstone', cost: 1.15, wage: 1.1, folk: 'au', specials: ['meatpie', 'lamington'],
+    near: [['曼利', 'Manly'], ['迪怀', 'Dee Why'], ['阿瓦隆', 'Avalon'], ['棕榈滩', 'Palm Beach']], police: { pat: 'checks', body: '#f4f4f0', a: '#1f3a7a', b: '#f4f4f0', text: 'POLICE', lights: ['#ff4d4d', '#3b7bff'] } },
+  salento:   { zh: '萨伦托', en: 'Salento', state: 'qui', terrain: 'andes', cost: 0.6, wage: 0.55, folk: 'co', specials: ['coffee', 'arepa'],
+    near: [['菲兰迪亚', 'Filandia'], ['亚美尼亚', 'Armenia'], ['奇纳奇奥塔', 'Circasia'], ['科科拉谷', 'Cocora']], police: { pat: 'stripe', body: '#f4f4f0', a: '#1f6b45', b: '#1f6b45', text: 'POLICÍA', lights: ['#ff4d4d', '#3b7bff'] } },
+  surrey:    { zh: '萨里郡', en: 'Surrey', state: 'eng', terrain: 'downs', cost: 1.15, wage: 1.05, folk: 'uk', specials: ['creamtea', 'fishchips'],
+    near: [['吉尔福德', 'Guildford'], ['沃金', 'Woking'], ['多金', 'Dorking'], ['法纳姆', 'Farnham']], police: { pat: 'checks', body: '#f4f4f0', a: '#f2d24b', b: '#2f5fb8', text: 'POLICE', lights: ['#3b7bff', '#3b7bff'] } },
+  yangpyeong:{ zh: '杨平郡', en: 'Yangpyeong County', state: 'gg', terrain: 'rocky', cost: 0.9, wage: 0.85, folk: 'kr', specials: ['kimchi', 'tteokbokki'],
+    near: [['两水里', 'Dumulmeori'], ['龙门', 'Yongmun'], ['加平', 'Gapyeong'], ['南杨州', 'Namyangju']], police: { pat: 'stripe', body: '#f4f4f0', a: '#1f3a7a', b: '#f2c230', text: 'POLICE', lights: ['#ff4d4d', '#3b7bff'] } },
+  niteroi:   { zh: '尼泰罗伊', en: 'Niterói', state: 'rj', terrain: 'granite', cost: 0.7, wage: 0.6, folk: 'br', specials: ['acai', 'paodequeijo'],
+    near: [['伊卡拉伊', 'Icaraí'], ['圣贡萨洛', 'São Gonçalo'], ['马里卡', 'Maricá'], ['里约热内卢', 'Rio de Janeiro']], police: { pat: 'stripe', body: '#f4f4f0', a: '#1f3a7a', b: '#e5484d', text: 'POLÍCIA', lights: ['#ff4d4d', '#ff4d4d'] } },
+  stellenbosch: { zh: '斯泰伦博斯', en: 'Stellenbosch', state: 'wc', terrain: 'table', cost: 0.7, wage: 0.6, folk: 'za', specials: ['rooibos', 'biltong'],
+    near: [['弗朗斯胡克', 'Franschhoek'], ['帕尔', 'Paarl'], ['萨默塞特西', 'Somerset West'], ['开普敦', 'Cape Town']], police: { pat: 'stripe', body: '#f4f4f0', a: '#2f5fb8', b: '#f2c230', text: 'POLICE', lights: ['#3b7bff', '#3b7bff'] } },
+};
+Object.entries({ wutong: 'monterey', palmbay: 'collier', cactus: 'pinal', vermont: 'lamoille', banff: 'bighorn', provence: 'vaucluse', holland: 'zaanstad', fjord: 'aurland',
+  kyoto: 'uji', hangzhou: 'xihu', sydney: 'northbeach', andes: 'salento', london: 'surrey', seoul: 'yangpyeong', rio: 'niteroi', capetown: 'stellenbosch' }).forEach(([t, c]) => { COMMUNITIES[t].county = c; });
+// The county's own food and drink, sold only in its supermarket (real local prices in dollars). Eat it there, or take
+// it home to give someone. The first time you taste each one counts towards your collection (S.tasted).
+const SPECIALTIES = {
+  avotoast:     { e: '🥑', zh: '加州牛油果吐司', en: 'Avocado toast', price: 12, hunger: 30, fun: 6 },
+  artichoke:    { e: '🌿', zh: '炸洋蓟', en: 'Fried artichokes', price: 10, hunger: 25, fun: 6 },
+  keylime:      { e: '🥧', zh: '青柠派', en: 'Key lime pie', price: 7, hunger: 20, fun: 8 },
+  ojuice:       { e: '🍊', zh: '鲜榨橙汁', en: 'Fresh orange juice', price: 5, hunger: 10, fun: 6 },
+  pricklypear:  { e: '🌵', zh: '仙人掌果糖', en: 'Prickly pear candy', price: 6, hunger: 8, fun: 8 },
+  burrito:      { e: '🌯', zh: '墨西哥卷饼', en: 'Burrito', price: 11, hunger: 40, fun: 5 },
+  maplesyrup:   { e: '🍁', zh: '枫糖浆松饼', en: 'Pancakes & maple syrup', price: 13, hunger: 35, fun: 7 },
+  cheddar:      { e: '🧀', zh: '佛蒙特切达奶酪', en: 'Vermont cheddar', price: 9, hunger: 15, fun: 6 },
+  poutine:      { e: '🍟', zh: '肉汁奶酪薯条', en: 'Poutine', price: 11, hunger: 40, fun: 6 },
+  beefjerky:    { e: '🥩', zh: '艾伯塔牛肉干', en: 'Alberta beef jerky', price: 10, hunger: 15, fun: 5 },
+  lavhoney:     { e: '🍯', zh: '薰衣草蜂蜜', en: 'Lavender honey', price: 12, hunger: 8, fun: 8 },
+  melon:        { e: '🍈', zh: '卡瓦永甜瓜', en: 'Cavaillon melon', price: 6, hunger: 15, fun: 6 },
+  gouda:        { e: '🧀', zh: '豪达奶酪', en: 'Gouda cheese', price: 9, hunger: 15, fun: 6 },
+  stroopwafel:  { e: '🧇', zh: '焦糖华夫饼', en: 'Stroopwafel', price: 4, hunger: 10, fun: 8 },
+  salmon:       { e: '🐟', zh: '挪威三文鱼', en: 'Norwegian salmon', price: 18, hunger: 35, fun: 6 },
+  brunost:      { e: '🧀', zh: '挪威棕奶酪', en: 'Brown cheese', price: 9, hunger: 12, fun: 7 },
+  matcha:       { e: '🍵', zh: '宇治抹茶', en: 'Uji matcha', price: 6, hunger: 5, fun: 9 },
+  dango:        { e: '🍡', zh: '抹茶团子', en: 'Matcha dango', price: 4, hunger: 12, fun: 8 },
+  longjing:     { e: '🍵', zh: '西湖龙井', en: 'Longjing tea', price: 8, hunger: 5, fun: 9 },
+  beggarchicken:{ e: '🍗', zh: '叫花鸡', en: 'Beggar’s chicken', price: 16, hunger: 45, fun: 7 },
+  meatpie:      { e: '🥧', zh: '澳式肉派', en: 'Aussie meat pie', price: 7, hunger: 35, fun: 5 },
+  lamington:    { e: '🍰', zh: '拉明顿蛋糕', en: 'Lamington', price: 5, hunger: 12, fun: 8 },
+  coffee:       { e: '☕', zh: '哥伦比亚咖啡', en: 'Colombian coffee', price: 4, hunger: 5, fun: 9 },
+  arepa:        { e: '🫓', zh: '玉米饼', en: 'Arepa', price: 5, hunger: 30, fun: 5 },
+  creamtea:     { e: '🫖', zh: '司康下午茶', en: 'Cream tea', price: 12, hunger: 20, fun: 8 },
+  fishchips:    { e: '🐟', zh: '炸鱼薯条', en: 'Fish and chips', price: 14, hunger: 45, fun: 5 },
+  kimchi:       { e: '🥬', zh: '韩式泡菜', en: 'Kimchi', price: 7, hunger: 12, fun: 6 },
+  tteokbokki:   { e: '🍢', zh: '炒年糕', en: 'Tteokbokki', price: 6, hunger: 30, fun: 7 },
+  acai:         { e: '🍇', zh: '巴西莓碗', en: 'Açaí bowl', price: 8, hunger: 25, fun: 7 },
+  paodequeijo:  { e: '🧀', zh: '巴西奶酪面包', en: 'Pão de queijo', price: 4, hunger: 15, fun: 6 },
+  rooibos:      { e: '🫖', zh: '南非博士茶', en: 'Rooibos tea', price: 4, hunger: 5, fun: 8 },
+  biltong:      { e: '🥩', zh: '南非风干肉', en: 'Biltong', price: 9, hunger: 15, fun: 6 },
+};
+Object.entries(COUNTIES).forEach(([c, C]) => C.specials.forEach(k => { SPECIALTIES[k].county = c; }));
+// People's names in each part of the world (the people who live in a town and work in its shops: v0.40 townsfolk)
+const FOLK_NAMES = {
+  us: [['Emily', '艾米丽'], ['Jake', '杰克'], ['Olivia', '奥利维亚'], ['Ethan', '伊森'], ['Maria', '玛丽亚'], ['Carlos', '卡洛斯'], ['Darnell', '达内尔'], ['Mei', '小美'], ['Raj', '拉吉'], ['Grace', '格蕾丝'], ['Noah', '诺亚'], ['Ava', '艾娃'], ['Sofia', '索菲亚'], ['Tyrone', '泰隆']],
+  ca: [['Chloé', '克洛伊'], ['Liam', '利亚姆'], ['Émile', '埃米尔'], ['Sophie', '索菲'], ['Owen', '欧文'], ['Maya', '玛雅'], ['Jasmine', '茉莉'], ['Logan', '洛根'], ['Amélie', '阿梅莉'], ['Ravi', '拉维'], ['Hannah', '汉娜'], ['Gabriel', '加布里埃尔']],
+  fr: [['Camille', '卡米耶'], ['Louis', '路易'], ['Léa', '莉亚'], ['Hugo', '雨果'], ['Manon', '玛农'], ['Jules', '朱尔'], ['Inès', '伊内丝'], ['Arthur', '阿蒂尔'], ['Yasmine', '雅斯敏'], ['Théo', '泰奥'], ['Zoé', '佐伊'], ['Mathis', '马蒂斯']],
+  nl: [['Lotte', '洛特'], ['Daan', '达安'], ['Femke', '芬可'], ['Bram', '布拉姆'], ['Anouk', '阿努克'], ['Thijs', '泰斯'], ['Sanne', '桑妮'], ['Joost', '约斯特'], ['Noor', '努尔'], ['Sem', '塞姆'], ['Lieke', '莉可'], ['Ruben', '鲁本']],
+  no: [['Ingrid', '英格丽'], ['Lars', '拉尔斯'], ['Sigrid', '西格丽'], ['Magnus', '马格努斯'], ['Nora', '诺拉'], ['Erik', '埃里克'], ['Astrid', '阿斯特丽德'], ['Ole', '奥勒'], ['Maja', '玛雅'], ['Henrik', '亨里克'], ['Solveig', '索尔维格'], ['Jonas', '约纳斯']],
+  jp: [['Yuki', '由纪'], ['Haruto', '阳翔'], ['Sakura', '小樱'], ['Ren', '莲'], ['Aoi', '葵'], ['Sota', '苍太'], ['Hina', '阳菜'], ['Kenji', '健二'], ['Mio', '美绪'], ['Daiki', '大辉'], ['Emi', '惠美'], ['Takumi', '拓海']],
+  cn: [['Xiao Lin', '小林'], ['Wang Fang', '王芳'], ['Chen Jie', '陈杰'], ['Liu Yang', '刘洋'], ['Zhang Ting', '张婷'], ['Li Ming', '李明'], ['Zhou Yue', '周悦'], ['Zhao Lei', '赵磊'], ['Sun Li', '孙丽'], ['Hu Bo', '胡波'], ['Xu Qing', '许晴'], ['Ma Chao', '马超']],
+  au: [['Charlotte', '夏洛特'], ['Jack', '杰克'], ['Isla', '艾拉'], ['Oliver', '奥利弗'], ['Ruby', '露比'], ['Cooper', '库珀'], ['Matilda', '玛蒂尔达'], ['Lachlan', '拉克伦'], ['Mia', '米娅'], ['Kai', '凯'], ['Zara', '扎拉'], ['Hamish', '哈米什']],
+  co: [['Valentina', '瓦伦蒂娜'], ['Santiago', '圣地亚哥'], ['Camila', '卡米拉'], ['Mateo', '马特奥'], ['Isabella', '伊莎贝拉'], ['Juan', '胡安'], ['Luciana', '卢西亚娜'], ['Andrés', '安德烈斯'], ['Mariana', '玛丽安娜'], ['Felipe', '费利佩'], ['Daniela', '达妮埃拉'], ['Sebastián', '塞巴斯蒂安']],
+  uk: [['Amelia', '阿米莉亚'], ['Harry', '哈利'], ['Poppy', '波比'], ['George', '乔治'], ['Freya', '弗蕾亚'], ['Alfie', '阿尔菲'], ['Priya', '普丽娅'], ['Arthur', '亚瑟'], ['Imogen', '伊莫金'], ['Kwame', '夸梅'], ['Elsie', '埃尔西'], ['Oscar', '奥斯卡']],
+  kr: [['Ji-woo', '智宇'], ['Min-jun', '敏俊'], ['Seo-yeon', '书妍'], ['Do-yun', '道允'], ['Ha-eun', '夏恩'], ['Ji-ho', '智浩'], ['Su-a', '秀雅'], ['Joon', '俊'], ['Ye-jin', '艺珍'], ['Hyun', '贤'], ['Na-rae', '娜来'], ['Tae-min', '泰民']],
+  br: [['Ana', '安娜'], ['Pedro', '佩德罗'], ['Beatriz', '贝亚特丽斯'], ['Gabriel', '加布里埃尔'], ['Larissa', '拉丽莎'], ['Thiago', '蒂亚戈'], ['Júlia', '朱莉娅'], ['Rafael', '拉斐尔'], ['Luana', '卢安娜'], ['Caio', '卡伊奥'], ['Fernanda', '费尔南达'], ['Lucas', '卢卡斯']],
+  za: [['Thandi', '坦迪'], ['Sipho', '西波'], ['Lerato', '莱拉托'], ['Pieter', '彼得'], ['Naledi', '纳莱迪'], ['Johan', '约翰'], ['Zanele', '扎内莱'], ['Ruan', '鲁安'], ['Ayanda', '阿扬达'], ['Kagiso', '卡吉索'], ['Annelie', '安妮莉'], ['Musa', '穆萨']],
+};
+// v0.40: how many townsfolk live in each town (besides the ones who work in its shops)
+const TOWNSFOLK = { residents: 10 };
+// a specialty given as a gift: how much more it pleases them; sold back: this share of its price
+const SPECIAL = { giftUp: 3, sellBack: 0.5, visitH: 3 };   // visitH: after the train ride, hours you can shop in that town
 // Real time zones (v0.11): day and night in each community follow its own local time.
 const COMMUNITY_TZ = { wutong: 'America/Los_Angeles', palmbay: 'America/New_York', cactus: 'America/Phoenix', vermont: 'America/New_York',
   banff: 'America/Edmonton', provence: 'Europe/Paris', holland: 'Europe/Amsterdam', fjord: 'Europe/Oslo', kyoto: 'Asia/Tokyo',
@@ -1685,4 +1827,21 @@ const USD = {
   SNACK.price = X.snack; SICK.medicine = X.medicine; SCHOOL.fee = X.school;
   POLICE.fineMin = X.fineMin; POLICE.fineMax = X.fineMax; POLICE.bail = X.bail; STEAL_FINE[0] = X.stealFine[0]; STEAL_FINE[1] = X.stealFine[1];
   X.townLevels.forEach((v, i) => { TOWN_LEVELS[i] = v; });
+})();
+
+// v0.40: food, drinks and fun cost what they cost in the county you're in (COUNTIES[].cost): the cafés, restaurants,
+// bars, the mall, the bowling alley… Each price keeps its East Coast base (base_price); reading .price gives it in the
+// county of the town on screen (VIEW_TOWN, see state.js). Cars, furniture, houses and land cost the same everywhere.
+const countyOf = t => COUNTIES[(COMMUNITIES[t] || {}).county] || COUNTIES.monterey;
+const stateOf = t => STATES[countyOf(t).state];
+function localCost() { try { return typeof VIEW_TOWN !== 'undefined' && COMMUNITIES[VIEW_TOWN] ? countyOf(VIEW_TOWN).cost : 1; } catch (e) { return 1; } }
+(function localPrices() {
+  const localize = (o, key = 'price') => {
+    if (!o || typeof o[key] !== 'number') return;
+    const base = o[key];
+    Object.defineProperty(o, 'base_' + key, { value: base, enumerable: false });
+    Object.defineProperty(o, key, { get: () => Math.max(1, Math.round(base * localCost())), enumerable: true, configurable: true });
+  };
+  Object.values(VENUE).forEach(v => localize(v)); localize(SNACK); localize(MALL, 'movie'); localize(MALL, 'claw');
+  Object.values(MALL.foods).forEach(f => localize(f)); Object.values(VENUE_GAMES).forEach(g => localize(g)); Object.values(SPECIALTIES).forEach(f => localize(f));
 })();

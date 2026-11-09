@@ -887,20 +887,42 @@ const Scene = (() => {
     for (let y = WY0 + 8; y < WY1 + 6; y += 15) PEAKS.push({ x: WX0 - 16 + hash(y, 5) * 5, y: y + hash(y, 6) * 6, r: 9 + hash(y, 7) * 6, h: 150 + hash(y, 8) * 140 });
     return PEAKS;
   }
+  // v0.40: in the county's own shape (TERRAINS): pointed peaks (snow on top where it's cold), rounded hills, red mesas,
+  // flat-topped mountains, granite domes; none at all where the land is flat
+  const terrainNow = () => TERRAINS[countyOf(SCENE_TOWN).terrain] || TERRAINS.alpine;
   function mountains(objs, vr) {
-    const K = TL.lake;
+    const K = TL.lake, T = terrainNow();
+    if (T.peak === 'none') return;
     peaks().forEach(m => {
       if (m.x < vr.x0 - 20 || m.x > vr.x1 + 20 || m.y < vr.y0 - 20 || m.y > vr.y1 + 20) return;
       if (((m.x - K.x) / (K.rx + m.r + 4)) ** 2 + ((m.y - K.y) / (K.ry + m.r + 4)) ** 2 < 1) return;   // no mountains in the sea
-      objs.push({ d: m.x + m.y - 30, f: () => {
-        const z = cam.z, c = iso(m.x, m.y), hw = m.r * 34 * z, H = m.h * z, top = { x: c.x + hw * 0.08, y: c.y - H };
-        poly([{ x: c.x - hw, y: c.y }, top, { x: c.x + hw * 0.08, y: c.y + hw * 0.12 }], '#8e9c86');
-        poly([{ x: c.x + hw * 0.08, y: c.y + hw * 0.12 }, top, { x: c.x + hw, y: c.y }], '#6d7a67');
-        const sn = 0.3, a = lerp(top, { x: c.x - hw, y: c.y }, sn), b = lerp(top, { x: c.x + hw, y: c.y }, sn);
-        poly([a, top, b, { x: (top.x + b.x) / 2, y: b.y - H * 0.04 }, { x: top.x, y: a.y + H * 0.05 }, { x: (top.x + a.x) / 2, y: a.y - H * 0.05 }], '#f4f6f8');
-        ellipse(c.x, c.y, hw * 1.05, hw * 0.28, 'rgba(60,110,60,.35)');
-      } });
+      objs.push({ d: m.x + m.y - 30, f: () => drawPeak(T, m) });
     });
+  }
+  function drawPeak(T, m) {
+    const z = cam.z, c = iso(m.x, m.y), hw = m.r * 34 * z, H = m.h * z * (T.tall || 1), [lit, dark] = T.cols, L = { x: c.x - hw, y: c.y }, Rt = { x: c.x + hw, y: c.y };
+    ellipse(c.x, c.y, hw * 1.05, hw * 0.28, 'rgba(60,90,50,.3)');
+    if (T.peak === 'peak') {
+      const top = { x: c.x + hw * 0.08, y: c.y - H }, mid = { x: c.x + hw * 0.08, y: c.y + hw * 0.12 };
+      poly([L, top, mid], lit); poly([mid, top, Rt], dark);
+      if (T.snow) { const sn = T.snow, a = lerp(top, L, sn), b = lerp(top, Rt, sn);
+        poly([a, top, b, { x: (top.x + b.x) / 2, y: b.y - H * 0.04 }, { x: top.x, y: a.y + H * 0.05 }, { x: (top.x + a.x) / 2, y: a.y - H * 0.05 }], T.snowCol || '#f4f6f8'); }
+      return;
+    }
+    if (T.peak === 'mesa' || T.peak === 'table') {   // a flat top; red rock in bands, or a wide grey-green table
+      const tw = T.peak === 'table' ? 0.78 : 0.55, hh = H * (T.peak === 'table' ? 0.6 : 0.75), tl = { x: c.x - hw * tw, y: c.y - hh }, tr = { x: c.x + hw * tw, y: c.y - hh }, tm = { x: c.x + hw * 0.1, y: c.y - hh + hw * 0.05 };
+      poly([L, tl, tm, { x: c.x + hw * 0.1, y: c.y + hw * 0.1 }], lit); poly([{ x: c.x + hw * 0.1, y: c.y + hw * 0.1 }, tm, tr, Rt], dark);
+      poly([tl, { x: tl.x + hw * 0.08, y: tl.y - hw * 0.04 }, { x: tr.x - hw * 0.08, y: tr.y - hw * 0.05 }, tr, tm], shade(lit, 0.12));
+      if (T.peak === 'mesa') for (let k = 1; k <= 3; k++) { const f = k / 4, a = lerp(L, tl, f), b = lerp(Rt, tr, f); line(a.x, a.y, c.x + hw * 0.1, a.y + hw * 0.05, shade(lit, 0.18), 2 * z); line(c.x + hw * 0.1, a.y + hw * 0.05, b.x, b.y, shade(dark, 0.12), 2 * z); }
+      else if (Math.floor(m.x + m.y) % 3 === 0) { ellipse(c.x - hw * 0.2, tl.y - 4 * z, hw * 0.45, 9 * z, 'rgba(255,255,255,.85)'); ellipse(c.x + hw * 0.25, tl.y - 6 * z, hw * 0.35, 8 * z, 'rgba(255,255,255,.8)'); }   // the "tablecloth" cloud
+      return;
+    }
+    // rounded: hills (dome) or tall granite domes (sugar)
+    const w2 = T.peak === 'sugar' ? hw * 0.5 : hw * 0.82, hh = T.peak === 'sugar' ? H * 1.05 : H, n = 18, pts = [], right = [];
+    for (let i = 0; i <= n; i++) { const a = i / n * Math.PI, px = c.x - Math.cos(a) * w2, py = c.y - Math.pow(Math.sin(a), T.peak === 'sugar' ? 0.55 : 0.75) * hh; pts.push({ x: px, y: py }); if (i >= n / 2) right.push({ x: px, y: py }); }
+    poly(pts, lit); poly([{ x: c.x, y: c.y - hh }, ...right, { x: c.x + w2 * 0.1, y: c.y + w2 * 0.1 }], dark);
+    if (T.terraces && z > 0.06) for (let k = 1; k <= 4; k++) { const f = k / 5, yy = c.y - hh * f, ww = w2 * Math.sqrt(1 - f * f) * 0.95; ctx.save(); ctx.globalAlpha = 0.35; ellipse(c.x, yy, ww, ww * 0.1, null, '#d8f0b0', 1.4 * z); ctx.restore(); }
+    else if (T.peak === 'dome' && hh > 60 * z && z > 0.06) for (let k = 0; k < 6; k++) { const a = (k + 0.5) / 6 * Math.PI, rr = 0.75, q = { x: c.x - Math.cos(a) * w2 * rr * 0.8, y: c.y - Math.sin(a) * hh * rr * 0.85 }; circle(q.x, q.y, 7 * z, shade(dark, -0.12)); }
   }
   // Rivers and canals (water rectangles of the town plan): banks, water and a slow current along the long side.
   function river(vr) {
@@ -1133,8 +1155,8 @@ const Scene = (() => {
   }
   // a hill with a tunnel through it (the portal shows on the end that faces you)
   function drawHill(F, Hl) {
-    const z = cam.z, K = 9, n = 28, desert = PAL.tree === 'cactus', snow = !!PAL.snow;
-    const cols = desert ? ['#a8582f', '#b8663a', '#c47546', '#cf8553', '#d99462', '#e2a472', '#e8b283', '#eec094', '#f2cca4']
+    const z = cam.z, K = 9, n = 28, desert = PAL.tree === 'cactus', snow = !!PAL.snow, TH = terrainNow().hill;
+    const cols = TH ? Array.from({ length: 9 }, (_, i) => mixCol(TH[0], TH[1], i / 8)) : desert ? ['#a8582f', '#b8663a', '#c47546', '#cf8553', '#d99462', '#e2a472', '#e8b283', '#eec094', '#f2cca4']
       : snow ? ['#5f7d6a', '#6f8e78', '#86a28c', '#a9bfae', '#cddbd2', '#e4ece8', '#f1f6f4', '#f7fafa', '#ffffff']
       : ['#3f7a42', '#4a8a4a', '#559852', '#62a65b', '#6fb263', '#7cbd6c', '#89c675', '#95cd7e', '#a1d387'];
     for (let k = 0; k < K; k++) {
@@ -1176,6 +1198,7 @@ const Scene = (() => {
       wallText(face, 0.5, 40.5, t('fwy_tunnel', { name: townShort() }), 7.5 * z, '#ffffff');
     }
   }
+  const mixCol = (a, b, f) => { const A = rgbOf(a), B = rgbOf(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * f)).join(',')})`; };
   const townShort = () => { const c = COMMUNITIES[VIEW_TOWN] || COMMUNITIES[HOME_TOWN]; return nm(c); };
   // one slice of the raised road (the bridge over the cross road, or the sea bridge)
   function fwSlice(F, s0, s1, sea) {
@@ -2300,7 +2323,12 @@ const Scene = (() => {
     if (now2 > WALK.next && WALK.list.length < SHOW_LIMITS.town) {
       WALK.next = now2 + 2500 + Math.random() * 4000;
       const ids = allLots().map(l => l.id).filter(id => id !== 'me' && !WALK.list.some(w => w.id === id) && homeOf(id));
-      if (ids.length) {
+      const folk = townsfolk(VIEW_TOWN).filter(p => !WALK.list.some(w => w.id === p.id));
+      if (folk.length && (Math.random() < 0.55 || !ids.length)) {   // v0.40: one of the townsfolk
+        const p = folk[Math.floor(Math.random() * folk.length)], ends = [...TL.places, ...(TL.stores || []).map(st => storeGeo(st).door)].filter(Boolean);
+        const a = ends[Math.floor(Math.random() * ends.length)], b = ends[Math.floor(Math.random() * ends.length)];
+        if (a && b && a !== b) { const bike = Math.random() < 0.2, path = bike ? route(a, b, false) : route(a, b); WALK.list.push({ id: p.id, who: p, x: a[0], y: a[1], path, home: null, phase: 0, face: 1, moving: true, stay: 0, back: false, alpha: 0, bike, bikeCol: COLORS[Math.floor(Math.random() * COLORS.length)], ends }); }
+      } else if (ids.length) {
         const id = ids[Math.floor(Math.random() * ids.length)], g = gateOf(id);
         const others = allLots().filter(l => l.id !== id && homeOf(l.id)), dest = Math.random() < 0.3 && others.length ? gateOf(others[Math.floor(Math.random() * others.length)].id) : TL.places[Math.floor(Math.random() * TL.places.length)];
         const bike = Math.random() < 0.3;   // v0.25: some people ride their bikes (on the road)
@@ -2308,22 +2336,25 @@ const Scene = (() => {
       }
     }
     WALK.list = WALK.list.filter(w => {
-      if (w.stay > 0) { w.stay -= dt; w.moving = false; if (w.stay <= 0) { w.path = route([w.x, w.y], w.home, !w.bike).concat([[w.home[0], w.home[1] - 1.2]]); w.going = true; } }
+      if (w.fade) { w.alpha -= dt * 1.5; if (w.alpha <= 0) return false; }
+      else if (w.stay > 0) { w.stay -= dt; w.moving = false; if (w.stay <= 0) { if (w.who) { const b = w.ends[Math.floor(Math.random() * w.ends.length)]; w.path = route([w.x, w.y], b, !w.bike); } else w.path = route([w.x, w.y], w.home, !w.bike).concat([[w.home[0], w.home[1] - 1.2]]); w.going = true; } }
       else if (w.path.length) {
         const [tx, ty] = w.path[0], dx = tx - w.x, dy = ty - w.y, d = Math.hypot(dx, dy), st = (w.bike ? 4.2 : 1.6) * dt;
         if (w.bike && mustStop(w.x, w.y, tx, ty)) { w.moving = false; } else if (d <= st) { w.x = tx; w.y = ty; w.path.shift(); } else { w.x += dx / d * st; w.y += dy / d * st; }
         faceTo(w, dx, dy); if (d > 0.01) w.cdir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? '+x' : '-x') : (dy > 0 ? '+y' : '-y'); w.phase += dt * (w.bike ? 8 : 9.5); w.moving = true;
-        if (!w.path.length) { if (w.going) return false; w.stay = 6 + Math.random() * 10; }
+        if (!w.path.length) { if (w.going) { if (!w.who) return false; w.fade = true; } else w.stay = 6 + Math.random() * 10; }
       }
-      w.alpha = Math.min(1, w.alpha + dt * 2);
+      if (!w.fade) w.alpha = Math.min(1, w.alpha + dt * 2);
       objs.push({ d: w.x + w.y, f: () => {
         const riding = w.bike && w.path.length, o = riding ? { '+x': [0, 0.85], '-x': [0, -0.85], '+y': [-0.85, 0], '-y': [0.85, 0] }[w.cdir || '+x'] : [0, 0], p = iso(w.x + o[0], w.y + o[1]);
         ctx.save(); ctx.globalAlpha = w.alpha;
-        if (riding) { drawPerson(p.x, p.y, z, { look: w.h.look, face: w.cdir === '+x' || w.cdir === '-y' ? 1 : -1, energy: 'good', ts, seed: w.x, pose: 'bike', phase: w.phase, bikeCol: w.bikeCol }); }   // v0.25: on a bike, at the right-hand edge of the road
-        else drawPerson(p.x, p.y, z, { look: w.h.look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: chatWave(w.id) || (!w.moving && !chatting(w.id) && Math.sin(ts / 900 + w.x) > 0.7) });
+        const look = (w.h || w.who).look;
+        if (riding) { drawPerson(p.x, p.y, z, { look, face: w.cdir === '+x' || w.cdir === '-y' ? 1 : -1, energy: 'good', ts, seed: w.x, pose: 'bike', phase: w.phase, bikeCol: w.bikeCol }); }   // v0.25: on a bike, at the right-hand edge of the road
+        else drawPerson(p.x, p.y, z, { look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: chatWave(w.id) || (!w.moving && !chatting(w.id) && Math.sin(ts / 900 + w.x) > 0.7) });
         ctx.restore();
         if (chatting(w.id)) chatBubble(p.x + 12 * z, p.y - 58 * z, z, false, ts);   // v0.25: talking with you
-        if (z > 0.3) pill(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z));
+        if (w.who) { if (z > 0.3) pill(nm(w.who.name), p.x, p.y - 50 * z, 'rgba(255,255,255,.85)', '#5a4a3a', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z)); }   // v0.40: a townsperson
+        else if (z > 0.3) pill(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z));
         else if (z > 0.12) circle(p.x, p.y - 48 * z, Math.max(2, 3.5 * z), '#34c759', '#fff', 1);
         if (z > 0.2) hits.push({ kind: 'person', id: w.id, pri: 2, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 46 * z, y1: p.y + 4 });   // v0.25: talk to them
       } });
@@ -2357,9 +2388,9 @@ const Scene = (() => {
   function parkList() {
     if (VIEW_TOWN !== myTown() || !TL.park) return [];
     const P = TL.park, dayN = Math.floor(now() / DAY), list = [];
-    const ids = allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id));
+    const ids = [...allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id)), ...townsfolk(VIEW_TOWN).map(p => p.id)];   // v0.40: + townsfolk
     const PP = parkPlan(), b0 = PP.benches[0], pc = PP.picnic[0] || [PP.play.x + 1, PP.play.y + 6], T = PP.ten;   // v0.32
-    [[b0[0] + 0.4, b0[1] + 1.4], [b0[0] + 1.3, b0[1] + 1.3], [pc[0] - 0.5, pc[1] + 0.6], [T.x + 2.2, T.y + T.d + 0.9]].forEach(([x, y], i) => { const id = ids[(dayN * 3 + i * 7) % Math.max(1, ids.length)]; if (id) list.push({ id, look: homeOf(id).look, x, y, i }); });
+    [[b0[0] + 0.4, b0[1] + 1.4], [b0[0] + 1.3, b0[1] + 1.3], [pc[0] - 0.5, pc[1] + 0.6], [T.x + 2.2, T.y + T.d + 0.9]].forEach(([x, y], i) => { const id = ids[(dayN * 3 + i * 7) % Math.max(1, ids.length)]; if (id) list.push({ id, look: whoIs(id).look, x, y, i }); });
     if (S.meet && S.meet.until > now()) { const who = whoIs(S.meet.id); if (who) list.push({ id: S.meet.id, look: who.look, x: PP.cx - 1.6, y: PP.cy + 2.7, i: 11, work: !!who.wp, boss: !!(who.wp && who.wp.boss) }); }   // v0.26: you asked them on the phone
     const wp = S.job ? workPeople(S.job.place) : [];
     if (wp.length && !S.work && (dayN + new Date(now()).getHours()) % 3 === 0) list.push({ id: wp[1].id, look: wp[1].look, x: PP.cx + 3.6, y: PP.cy - 2.4, i: 9, work: true });
@@ -2553,7 +2584,7 @@ const Scene = (() => {
     const now2 = performance.now(), kinds = Object.keys(CARS).filter(k => !CARS[k].excl && CARS[k].kind !== 'two' && k !== 'tractor');
     if (!CARS_OUT.list.some(c => c.police)) {   // v0.25: a police car on patrol
       const ends = [...TL.places, ...(TL.stores || []).map(st => storeGeo(st).bay)], a = ends[Math.floor(Math.random() * ends.length)], b = ends[Math.floor(Math.random() * ends.length)];
-      if (a && b && a !== b) { const path = route(a, b, false); if (path.length > 2) CARS_OUT.list.push({ police: true, car: { k: 'sedan', color: '#24324f' }, x: path[0][0], y: path[0][1], path: path.slice(1), dir: '+x', h: 0, alpha: 0 }); }
+      if (a && b && a !== b) { const path = route(a, b, false); if (path.length > 2) CARS_OUT.list.push({ police: true, car: (PC => ({ k: 'sedan', color: PC.body, police: PC }))(countyOf(VIEW_TOWN).police), x: path[0][0], y: path[0][1], path: path.slice(1), dir: '+x', h: 0, alpha: 0 }); }
     }
     if (now2 > CARS_OUT.next && CARS_OUT.list.length < 8) {
       CARS_OUT.next = now2 + 1800 + Math.random() * 2600;
@@ -2581,13 +2612,6 @@ const Scene = (() => {
       // keep to the right-hand side of the road (v0.39: in its lane)
       const off = [c.ox || 0, c.oy || 0];
       objs.push({ d: carDepth(c), f: () => { ctx.save(); ctx.globalAlpha = Math.max(0, c.alpha); ctx.translate(0, -(c.h || 0) * cam.z); drawCarDir(c.car, c.x + off[0], c.y + off[1], c.dir, ts);
-        if (c.police) {   // a light bar on the roof, flashing red and blue
-          const z2 = cam.z, lp = up(iso(c.x + off[0], c.y + off[1]), 16 * z2), on = Math.floor(ts / 260) % 2;
-          ctx.save(); ctx.globalAlpha *= 0.35; circle(lp.x - 4 * z2, lp.y, 7 * z2, on ? '#ff4d4d' : 'rgba(0,0,0,0)'); circle(lp.x + 4 * z2, lp.y, 7 * z2, on ? 'rgba(0,0,0,0)' : '#3b7bff'); ctx.restore();
-          rrect(lp.x - 7 * z2, lp.y - 2 * z2, 14 * z2, 4 * z2, 1.4 * z2, '#2a2d33');
-          rrect(lp.x - 6.4 * z2, lp.y - 1.5 * z2, 6 * z2, 3 * z2, 1 * z2, on ? '#ff4d4d' : '#8a2020'); rrect(lp.x + 0.4 * z2, lp.y - 1.5 * z2, 6 * z2, 3 * z2, 1 * z2, on ? '#2a5fd8' : '#7ab0ff');
-          if (NIGHT > 0.3) glow(lp.x, lp.y, 22 * z2, 0.9);
-        }
         ctx.restore(); } });
       return true;
     });
@@ -2736,7 +2760,7 @@ const Scene = (() => {
   }
   function drawTrip(ts) {
     const z = cam.z, p = iso(trip.x, trip.y);
-    if (trip.inCar) { const off = (trip.h || 0) > 1 ? [0, 0] : [trip.ox || 0, trip.oy || 0]; ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir(trip.car, trip.x + off[0], trip.y + off[1], trip.dir, ts); ctx.restore(); return; }   // v0.24: on the right (v0.39: in its lane)
+    if (trip.inCar) { const off = (trip.h || 0) > 1 ? [0, 0] : [trip.ox || 0, trip.oy || 0]; ctx.save(); ctx.translate(0, -(trip.h || 0) * z); drawCarDir({ ...trip.car, plate: stateOf(myTown()).plate }, trip.x + off[0], trip.y + off[1], trip.dir, ts); ctx.restore(); return; }   // v0.24: on the right (v0.39: in its lane)
     drawPerson(p.x, p.y, z, { look: S.me.look, face: trip.face, back: trip.back && trip.moving, view: trip.view, turn: trip.turn, moving: trip.moving, phase: trip.phase, energy: energyLevel(), ts, seed: 3, pose: trip.moving ? 'walk' : 'stand' });
     carryBox(p, z);
     if (z > 0.3) nameTag(p, S.me.name || '🙂', true);
@@ -2759,12 +2783,12 @@ const Scene = (() => {
     const c = S.carAt, car = S.me.cars[S.me.car];
     if (!c || !car || c.town !== VIEW_TOWN || (trip && trip.inCar && !trip.arrived)) return;
     const [x, y] = c.pt;
-    objs.push({ d: x + y, f: () => drawCarDir(car, x, y, c.dir, ts) });
+    objs.push({ d: x + y, f: () => drawCarDir({ ...car, plate: stateOf(myTown()).plate }, x, y, c.dir, ts) });
   }
   // ---------- inside a store (v0.20): walk round it, the things for sale on show, the shopkeeper at the counter ----------
   const SHOPS = {}, IMGS = {};
   const meS = { x: 0, y: 0, path: [], face: 1, phase: 0, moving: false, then: null };
-  const SHOP_W = { market: 13, nursery: 17, ranch: 15, petshop: 13, furniture: 17, realty: 13, dealer: 17, mall: 17 };
+  const SHOP_W = { market: 18, nursery: 17, ranch: 15, petshop: 13, furniture: 17, realty: 13, dealer: 17, mall: 17 };
   const SHOP_FLOOR = { market: ['#efe9dc', '#e6dfcf'], nursery: ['#d9cdb3', '#cfc2a6'], ranch: ['#d8c39a', '#ccb68b'], petshop: ['#eef1f6', '#e3e7ee'], furniture: ['#e6d3b8', '#dcc7a8'],
     realty: ['#efeae2', '#e5ded3'], dealer: ['#e9edf1', '#dfe4ea'], mall: ['#f2ede6', '#e8e1d8'] };
   // ---------- inside every building (v0.30) ----------
@@ -3178,6 +3202,7 @@ const Scene = (() => {
     const ids = allLots(myTown()).map(l => l.id).filter(id => id !== 'me' && homeOf(id));
     if (S.job) workPeople(S.job.place).forEach(p => ids.push(p.id));
     visitorTowns().forEach(t2 => npcLots(t2).forEach(l => { if (homeOf(l.id)) ids.push(l.id); }));
+    townsfolk(VIEW_TOWN).forEach(p => ids.push(p.id));   // v0.40: the people who live here
     return ids;
   }
   const onWheels = id => { const w = id && whoIs(id); return !!(w && w.look && w.look.mob === 'wheel'); };
@@ -3589,6 +3614,15 @@ const Scene = (() => {
         if (z > 0.4) { const q = up(c, 30 * z); pill(curLang() === 'zh' ? '🥬 生鲜' : '🥬 Fresh', q.x, q.y, '#34b27b', '#ffffff', `800 ${Math.max(8, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(12, 14 * z)); }
         return true;
       }
+      case 'localstand': {   // v0.40: a stall of the county's specialties under a striped awning, a little board with the county's name
+        const C = countyOf(VIEW_TOWN), sp = C.specials, PL = stateOf(VIEW_TOWN).plate, col = [PL.top, PL.band, PL.fg, PL.bg].find(k4 => k4 && lumOf(k4) < 0.75) || '#e5484d';
+        box(x, y, d.w, d.d, 13, '#a46e40', 0, { top: '#c99a6b' });
+        [0.12, 0.88].forEach(u => { const a = iso(x + u * d.w, y + 0.12), b = up(a, 40 * z); line(a.x, a.y, b.x, b.y, '#8a5a36', 2 * z); });
+        for (let k2 = 0; k2 < 6; k2++) { const a = up(iso(x + k2 / 6 * d.w, y), 40 * z), b = up(iso(x + (k2 + 1) / 6 * d.w, y), 40 * z), a2 = up(iso(x + k2 / 6 * d.w, y + 0.7), 34 * z), b2 = up(iso(x + (k2 + 1) / 6 * d.w, y + 0.7), 34 * z); poly([a, b, b2, a2], k2 % 2 ? '#ffffff' : col); }
+        sp.forEach((k3, i) => { const q = up(iso(x + (i + 0.5) / sp.length * d.w, y + d.d * 0.5), 13 * z); rrect(q.x - 9 * z, q.y - 4 * z, 18 * z, 6 * z, 1.2 * z, '#f4ead8', '#c99a6b', 0.6 * z); emoji(SPECIALTIES[k3].e, q.x, q.y - 6 * z, 13 * z); });
+        if (z > 0.4) { const q = up(c, 48 * z); pill(`🧺 ${nm(C)}`, q.x, q.y, '#3b3125', '#ffe17a', `800 ${Math.max(8, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(12, 14 * z)); }
+        return true;
+      }
       case 'grocery': {   // a supermarket aisle shelf, stocked both sides
         const b = box(x, y, d.w, d.d, 34, '#f4f4f0', 0, { top: '#e8ecf0' }), cols = ['#e5484d', '#f2c230', '#38a3e0', '#34b27b', '#f59e0b', '#a46ef0', '#ec6aa8'];
         [4, 13, 22, 31].forEach((h, r) => { wallRect(b.left, 0, 0.01, 0.99, h - 1, h, '#c9cfd6'); for (let k2 = 0; k2 < 10; k2++) wallRect(b.left, 0, k2 / 10 + 0.01, (k2 + 1) / 10 - 0.01, h - 7, h - 1, cols[(k2 * 3 + r + Math.round(x)) % cols.length]); });
@@ -3698,6 +3732,7 @@ const Scene = (() => {
     if (k === 'market') {   // v0.37: a real supermarket below the seeds: fresh food (buy groceries), aisles, the dairy fridge, more tills, trolleys, shoppers
       const y0 = y + rowD + 1.6, dc = (kind, dx, dy, dw, dd, ex = {}) => decor.push({ kind, x: dx, y: dy, w: dw, d: dd, ...ex });
       placed.push({ id: 'spot:groceries', kind: 'spot', k: 'groceries', draw: 'produce', x: 1, y: y0, w: 3.2, d: 1.4, price: 0, stand: [2.6, y0 + 2.0] });
+      placed.push({ id: 'spot:local', kind: 'spot', k: 'local', draw: 'localstand', x: 13.8, y: y0, w: 3.2, d: 1.4, price: 0, stand: [15.4, y0 + 2.0] });   // v0.40: the county's specialties
       dc('grocery', 5.0, y0, 3.6, 0.8); dc('grocery', 5.0, y0 + 2.4, 3.6, 0.8); if (RW >= 15) { dc('grocery', 9.4, y0, 3.6, 0.8); dc('grocery', 9.4, y0 + 2.4, 3.6, 0.8); }
       dc('dairy', 0.3, y0 + 2.4, 0.7, 2.6);
       dc('person', 6.2, y0 + 1.5, 0.5, 0.5, { cast: true, view: 'back', turn: [0.2, -1] }); dc('cart', 6.7, y0 + 1.3, 0.6, 0.4);
@@ -4050,8 +4085,10 @@ const Scene = (() => {
       objs.push({ d: w.x + w.y + (w.w + w.d) / 2, f: () => { const r = drawWare(w, ts); if (r) hits.push({ kind: 'ware', id: w.id, wk: w.kind, k: w.k, ...r }); } }); });
     (P.decor || []).forEach((dd, i) => objs.push({ d: dd.flat ? -1e4 + i : dd.kind === 'person' ? dd.x + dd.y + 0.3 + (dd.dz || 0) : dd.x + dd.y + (dd.w + dd.d) / 2, f: () => drawVenueDecor(dd, ts, i) }));   // v0.30
     const C = P.counter;
-    if (!P.noClerk) objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: VL ? { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', top: 'polo', bottom: 'jeans', shoes: 'sneakers', hat: 'nohat', ...VL.clerk } : { shirt: acc, skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: Math.sin(ts / 2300) > 0.75 ? null : 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
-      hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${VL ? t('vrole_' + owner) : t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
+    if (!P.noClerk) objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]), ST = staffOf(VIEW_TOWN, owner), me2 = { skin: ST.look.skin, hair: ST.look.hair, hairCol: ST.look.hairCol, body: ST.look.body || 'regular' };   // v0.40: somebody from town, with a name
+      FOLK_AT[ST.id] = P.clerk;
+      drawPerson(p2.x, p2.y, z, { look: VL ? { shirt: acc, mob: 'walk', top: 'polo', bottom: 'jeans', shoes: 'sneakers', hat: 'nohat', ...VL.clerk, ...me2 } : { shirt: acc, mob: 'walk', top: 'polo', ...me2 }, face: -1, view: Math.sin(ts / 2300) > 0.75 ? null : 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
+      hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${nm(ST.name)} · ${VL ? t('vrole_' + owner) : t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
     if (!P.noClerk) objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#c99a6b', 0, { top: '#e6c79a' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji(VL ? VL.till : '💳', p2.x, p2.y, 9 * z); } });
     shoppers(P, objs, dt, ts);
     objs.push({ d: meS.use && !meS.moving ? meS.use.at[0] + meS.use.at[1] + 0.5 : meS.x + meS.y + 0.3, f: () => drawMeShop(z, ts) });
@@ -4111,8 +4148,8 @@ const Scene = (() => {
     P.wares.forEach(w => objs.push({ d: w.x + w.y + (w.w + w.d) / 2, f: () => { const r = drawMallWare(w, ts); if (r) hits.push({ kind: 'ware', id: w.id, wk: w.kind, k: w.k, ...r }); } }));
     if (P.counter) {
       const C = P.counter;
-      objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]); drawPerson(p2.x, p2.y, z, { look: { shirt: acc, skin: '#f3c59f', hair: 'long', hairCol: '#2b1d14', mob: 'walk', top: 'polo' }, face: -1, view: 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
-        hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
+      objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]), ST = staffOf(VIEW_TOWN, owner); FOLK_AT[ST.id] = P.clerk; drawPerson(p2.x, p2.y, z, { look: { shirt: acc, mob: 'walk', top: 'polo', skin: ST.look.skin, hair: ST.look.hair, hairCol: ST.look.hairCol }, face: -1, view: 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
+        hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${nm(ST.name)} · ${t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
       objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#f4f1ea', 0, { top: '#c9a26b' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji('💳', p2.x, p2.y, 9 * z); } });
     }
     if (!P.dark) shoppers(P, objs, dt, ts);
@@ -4188,10 +4225,17 @@ const Scene = (() => {
     OUT_CHUNKS = []; OUT_CHUNKS.id = TL.id;
     for (let y = OUT.y0; y < OUT.y1; y += OUT.ch) for (let x = OUT.x0; x < OUT.x1; x += OUT.ch) {
       if (x + OUT.ch > WX0 - 2 && x < WX1 + 2 && y + OUT.ch > WY0 - 2 && y < WY1 + 2) continue;   // the town and its woods
-      if ((y + OUT.ch > WY0 - 24 && y < WY0 && x < WX1 + 30) || (x + OUT.ch > WX0 - 24 && x < WX0 && y < WY1 + 30)) { OUT_CHUNKS.push({ x, y, k: 'forest' }); continue; }   // under the mountains
+      if (terrainNow().peak !== 'none' && ((y + OUT.ch > WY0 - 24 && y < WY0 && x < WX1 + 30) || (x + OUT.ch > WX0 - 24 && x < WX0 && y < WY1 + 30))) { OUT_CHUNKS.push({ x, y, k: 'forest' }); continue; }   // under the mountains
       const v = hash(x * 0.37 + 11, y * 0.61 + 7);
       OUT_CHUNKS.push({ x, y, k: v < 0.34 ? 'village' : v < 0.68 ? 'farm' : v < 0.92 ? 'forest' : 'lake', v });
     }
+    // v0.40: the villages nearest town, one on each side, are the county's other towns (with their names)
+    const near = countyOf(SCENE_TOWN).near || [], cx = (WX0 + WX1) / 2, cy = (WY0 + WY1) / 2, used = new Set();
+    near.forEach((nmz, i) => {
+      const ang = [Math.PI * 0.25, Math.PI * 0.75, -Math.PI * 0.75, -Math.PI * 0.25][i % 4];
+      const best = OUT_CHUNKS.filter(c => c.k === 'village' && !used.has(c)).map(c => { const dx = c.x + OUT.ch / 2 - cx, dy = c.y + OUT.ch / 2 - cy; return { c, s: Math.hypot(dx, dy) * (1.6 - Math.cos(Math.atan2(dy, dx) - ang)) }; }).sort((a, b) => a.s - b.s)[0];
+      if (best) { best.c.name = nmz; used.add(best.c); }
+    });
     return OUT_CHUNKS;
   }
   const OUT_ROOF = ['#c0453a', '#3f6fb5', '#5a8a46', '#8a5a9a', '#d98a2e', '#6b5f50'];
@@ -4234,6 +4278,11 @@ const Scene = (() => {
       }
     }
     things.sort((a, b) => a.d - b.d).forEach(o => o.f());
+    if (z < 0.4) for (const c of outChunks()) {   // v0.40: the county's other towns
+      if (!c.name || c.x > vr.x1 || c.x + S2 < vr.x0 || c.y > vr.y1 || c.y + S2 < vr.y0) continue;
+      const p = iso(c.x + S2 / 2, c.y + S2 / 2);
+      pill(`🏘️ ${curLang() === 'zh' ? c.name[0] : c.name[1]}`, p.x, p.y - 60 * z, 'rgba(255,253,248,.92)', '#3b3125', `800 ${Math.max(10, 13 * Math.min(1, z * 3))}px ${UI_FONT},${EMOJI_FONT}`, Math.max(18, 22 * Math.min(1, z * 3)));
+    }
   }
   // A few house styles for the villages around town (a short list, so their pictures can be reused).
   const OUT_HOMES = [[1, '#f4e7cc', '#c0453a'], [2, '#e8d6b8', '#3f6fb5'], [3, '#fbf3e4', '#5a8a46'], [1, '#f6e0c8', '#8a5a9a'], [4, '#efe6d6', '#d98a2e'],
@@ -5349,7 +5398,7 @@ const Scene = (() => {
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
     _fly(x, y, z) { flyTo(x, y, z, true); },   // (testing: jump the camera)
-    _traffic() { const N = roadNet(); return { fw: FW, town: CARS_OUT, stops: stops().list.length, signs: roadSigns().list.length, signals: signals().list.length, juncs: junctions().list.map(J => [J.x, J.y, J.h.kind, J.v.kind, J.k, signals().at.has(J.key) ? 'L' : stops().at.has(J.key) ? 'S' : '-']) }; },   // (testing, v0.39)
+    _traffic() { const N = roadNet(); return { walk: WALK.list.map(w => [w.id, Math.round(w.x), Math.round(w.y)]), fw: FW, town: CARS_OUT, stops: stops().list.length, signs: roadSigns().list.length, signals: signals().list.length, juncs: junctions().list.map(J => [J.x, J.y, J.h.kind, J.v.kind, J.k, signals().at.has(J.key) ? 'L' : stops().at.has(J.key) ? 'S' : '-']) }; },   // (testing, v0.39)
     trainBoard: () => trainBoard(),   // v0.38: the station's departures
     tripPlan(to, how, dest, place) { return planTrip(to, how, dest, place); },   // for testing
     tripNow() { return trip && !trip.arrived ? { how: trip.inCar ? trip.how : 'walk', toCar: !!(trip.legs[trip.li] || {}).toCar, kind: trip.kind || null } : null; },

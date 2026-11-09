@@ -1103,3 +1103,24 @@ Object.assign(STR.en, {
   fwy_tunnel: '{name} Tunnel', fwy_exit: 'EXIT', fwy_downtown: 'Downtown', fwy_east: 'EAST', fwy_west: 'WEST', fwy_north: 'NORTH', fwy_south: 'SOUTH',
   sign_stop: 'STOP',
 });
+// ---------- v0.40: states and counties, specialties, townsfolk, number plates ----------
+Object.assign(STR.zh, {
+  st_kind_state: '州', st_kind_province: '省', st_kind_region: '大区', st_kind_fylke: '郡', st_kind_prefecture: '府', st_kind_department: '省', st_kind_country: '地区',
+  county_cost: '物价', county_wage: '工资', county_avg: '平均', county_specials: '当地特产（只有这里的超市卖）', county_near: '县里的其他镇',
+  sp_market_local: '当地特产', sp_market_local_d: '本县才有的吃的喝的。在这儿尝尝，或者带走送人。',
+  special_take: '带走', special_ate: '尝了{name}', special_took: '买了{name}，放进仓库', special_new: '收集了 {n}/{m} 种特产',
+  special_far: '坐火车来这个镇（或者住在这个县）才能买它的特产', special_can_buy: '可以买当地特产', special_note: '去过的县越多，尝过的特产越多：{n}/{m}。带走的特产可以送人（关系多加一点），也可以卖掉。',
+  tasted_n: '尝过的特产 {n}/{m}',
+  tf_staff: '{place}的店员', tf_resident: '{town}的镇民', chat_with: '和{name}聊聊',
+  my_plate: '你的车牌', my_plate_d: '{state}的车牌；搬到别的州就换成那里的', wage_note: '', wage_county: '{county}的工资是平均的 ×{k}',
+});
+Object.assign(STR.en, {
+  st_kind_state: 'State', st_kind_province: 'Province', st_kind_region: 'Region', st_kind_fylke: 'County', st_kind_prefecture: 'Prefecture', st_kind_department: 'Department', st_kind_country: 'Country',
+  county_cost: 'Prices', county_wage: 'Pay', county_avg: 'average', county_specials: 'Local specialties (only sold here)', county_near: 'Other towns in the county',
+  sp_market_local: 'Local specialties', sp_market_local_d: 'Food and drink you only get in this county. Try some here, or take some to give away.',
+  special_take: 'Take', special_ate: 'You tried {name}', special_took: 'Bought {name}: it’s in your storage', special_new: '{n}/{m} specialties tried',
+  special_far: 'Come to this town by train (or live in this county) to buy its specialties', special_can_buy: 'you can buy the local specialties', special_note: 'The more counties you visit, the more you can try: {n}/{m}. Ones you take can be given away (people like them a bit more) or sold.',
+  tasted_n: 'Specialties tried {n}/{m}',
+  tf_staff: 'Works at {place}', tf_resident: 'Lives in {town}', chat_with: 'Talk to {name}',
+  my_plate: 'Your number plate', my_plate_d: 'A {state} plate; move to another state and it changes', wage_note: '', wage_county: 'Pay in {county}: ×{k} the average',
+});
