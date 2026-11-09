@@ -840,3 +840,7 @@ body.dark .mg-got span { background: #3a2c1f; }
   box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
 .police-chip i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
 .col-btns { display: flex; flex-direction: column; gap: 4px; }
+
+/* v0.42: the stadium's game card */
+.game-card .gm-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 15px; }
+.game-card .gm-row b { font-size: 20px; font-weight: 900; min-width: 28px; text-align: right; }

@@ -1050,6 +1050,16 @@ const SHEETS = {
     else if (key === 'amuse|candy') body = go('candy', `🍭 ${t('sp_candy_btn', { n: VENUE.candy.price, h: VENUE.candy.hunger })}`, S.me.coins >= VENUE.candy.price);
     else if (key === 'amuse|golf') body = gameBlock('golf');
     else if (key === 'amuse|stage') body = gameBlock('karaoke');
+    // v0.42: the zoo (each animal once a day, the giraffes, the petting farm, the shop, popcorn) and the stadium
+    else if (v === 'zoo' && ZOO_ANIMALS[k]) body = `<div class="card lib-card"><p class="lib-text">${nm(zooFact(k))}</p></div>` + once('zv_' + k, 'zv_' + k, `👀 ${t('sp_zoo_look_btn', { n: VENUE['zv_' + k].fun })}`);
+    else if (key === 'zoo|giraffefeed') body = go('giraffefeed', `🥬 ${t('sp_giraffefeed_btn', { n: VENUE.giraffefeed.price, f: VENUE.giraffefeed.fun })}`, S.me.coins >= VENUE.giraffefeed.price);
+    else if (key === 'zoo|petting') body = once('petting', 'petting', `🐐 ${t('sp_petting_btn', { n: VENUE.petting.fun })}`);
+    else if (key === 'zoo|shop') body = `<p class="muted small">${t('sp_zooplush_note')}</p><div class="act-grid">${ZOO_SHOP.map(pk => `<button class="act-tile" data-act="zooPlushBuy" data-arg="${pk}" ${S.me.coins >= VENUE.zooplush.price ? '' : 'disabled'}><span>${{ plushlion: '🦁', plushelephant: '🐘', plushgiraffe: '🦒', plushpenguin: '🐧' }[pk]}</span><b>${nm(FURN[pk])}</b><i>🪙${VENUE.zooplush.price}${S.me.store['room:' + pk] ? ' · ' + t('sp_zooplush_have', { n: S.me.store['room:' + pk] }) : ''}</i></button>`).join('')}</div>`;
+    else if (key === 'zoo|kiosk') body = snackBtn('zoo');
+    else if (key === 'stadium|seats') { const g = stadiumGame(VIEW_TOWN); body = gameCard(VIEW_TOWN) + (g.on ? go('match', `🎟️ ${t('sp_match_btn', { n: VENUE.match.price, f: VENUE.match.fun })}`, S.me.coins >= VENUE.match.price) : once('tour', 'tour', `👀 ${t('sp_tour_btn', { n: VENUE.tour.fun })}`)); }
+    else if (key === 'stadium|board') body = gameCard(VIEW_TOWN) + `<p class="muted small">${t('sp_board_games', { a: STADIUM.slots[0], b: STADIUM.slots[1], n: STADIUM.len })}</p>`;
+    else if (key === 'stadium|hotdog') body = go('hotdog', `🌭 ${t('sp_hotdog_btn', { n: VENUE.hotdog.price, h: VENUE.hotdog.hunger })}`, S.me.coins >= VENUE.hotdog.price);
+    else if (key === 'stadium|cage') body = gameBlock('derby');
     else if (key === 'aquatic|race') body = gameBlock('race');
     else if (key === 'bowling|arcade') body = go('arcade', `🕹️ ${t('sp_arcade_btn', { n: VENUE.arcade.price, f: VENUE.arcade.fun })}`, S.me.coins >= VENUE.arcade.price);
     else if (key === 'bowling|snack' || key === 'station|kiosk') body = snackBtn(v);
@@ -1732,6 +1742,7 @@ const ACT = {
     closeSheet(); Scene.venueUse('chair', VENUE.haircut.sec, () => { if (haircut(hair, col) === 'ok') { Sound.play('levelup'); snack(`💇 ${t('sp_haircut_done')}`); save(); } refresh(); });
   },
   // v0.38
+  zooPlushBuy(k) { const r = buyZooPlush(k); if (r === 'ok') { Sound.play('collect'); snack(`${{ plushlion: '🦁', plushelephant: '🐘', plushgiraffe: '🦒', plushpenguin: '🐧' }[k]} ${t('sp_zooplush_ok', { name: nm(FURN[k]) })}`); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },   // v0.42
   souvenirBuy() { if (buySouvenir() === 'ok') { Sound.play('collect'); snack(`🦖 ${t('sp_souvenir_ok')}`); save(); } else { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },
   roomBook() { const r = bookRoom(); if (r === 'ok') { Sound.play('coins'); snack(`🔑 ${t('room_booked', { h: VENUE.room.checkout })}`); save(); } else if (r === 'poor') { Sound.play('oops'); snack(t('snack_poor')); } renderSheet(); },
   trainGo(town) {   // ride the train to look round a town nearby
@@ -1788,7 +1799,8 @@ const ACT = {
     if (act === 'gym') return Scene.venueUse(k, VENUE.gym.sec, () => { if (venueUse('gym') === 'ok') fin('💪', t('sp_worked_out')); });
     if (act === 'rest') return Scene.venueUse(k, S.sick && S.sick.med ? SICK.restSec : 6, () => { if (S.sick && S.sick.med && restInBed(SICK.restSec)) { Sound.play('levelup'); snack(`🎉 ${t('sp_cured')}`); save(); refresh(); } else fin('😌', t('sp_rested')); });
     // v0.37: the new places. Paid things: you pay, sit down, enjoy it. Free ones: once a day (the pool twice).
-    const PAID = { dinner: '🍝', drink: '🍹', tea: '🫖', book: '📖', arcade: '🕹️', wheel: '🎡', coaster: '🎢', carousel: '🎠', bumper: '🚗', candy: '🍭' };   // v0.41: + the rides
+    const PAID = { dinner: '🍝', drink: '🍹', tea: '🫖', book: '📖', arcade: '🕹️', wheel: '🎡', coaster: '🎢', carousel: '🎠', bumper: '🚗', candy: '🍭', giraffefeed: '🦒', hotdog: '🌭', match: '🏟️' };   // v0.41: + the rides; v0.42: + the zoo, the stadium
+    if (act === 'match' && !stadiumGame(VIEW_TOWN).on) { Sound.play('oops'); return snack(t('sp_match_over')); }   // v0.42: it finished while you were deciding
     if (PAID[act]) { if (S.me.coins < VENUE[act].price) { Sound.play('oops'); return snack(t('snack_poor')); } return Scene.venueUse(k, VENUE[act].sec, () => { if (venueBuy(act) === 'ok') fin(PAID[act], t('sp_' + act + '_done')); }); }
     if (act === 'date' || act === 'lounge') {   // someone you know joins you
       if (act === 'date' && S.me.coins < VENUE.date.price) { Sound.play('oops'); return snack(t('snack_poor')); }
@@ -1799,8 +1811,9 @@ const ACT = {
         if (r === 'ok') { if (act === 'date' && id) { S.rel = S.rel || {}; S.rel[id] = Math.min(100, relOf(id) + VENUE.date.rel); } fin(act === 'date' ? '🥂' : '💬', t('sp_' + act + '_done', { name: h ? homeName(h) : '' })); }
       }, h ? h.look : null);
     }
-    const ONCE = { swim: '🏊', sunbathe: '😎', view: '🏙️', dive: '🤸', sauna: '🧖', visit: '🫶', babies: '👶', trains: '🚆', bed: '😴', bath: '🛁', ex_dino: '🦖', ex_space: '🚀', ex_art: '🖼️', ex_history: '🏺' };   // v0.38: + the new ones
-    if (ONCE[act]) return Scene.venueUse(k, VENUE[act].sec, () => { if (venueUse(act) === 'ok') fin(ONCE[act], t(act.startsWith('ex_') ? 'sp_exhibit_done' : 'sp_' + act + '_done')); });
+    const ONCE = { swim: '🏊', sunbathe: '😎', view: '🏙️', dive: '🤸', sauna: '🧖', visit: '🫶', babies: '👶', trains: '🚆', bed: '😴', bath: '🛁', ex_dino: '🦖', ex_space: '🚀', ex_art: '🖼️', ex_history: '🏺', petting: '🐐', tour: '🏟️' };   // v0.38: + the new ones (v0.42: + the zoo, the stadium)
+    Object.keys(ZOO_ANIMALS).forEach(a => { ONCE['zv_' + a] = ZOO_ANIMALS[a].e; });
+    if (ONCE[act]) return Scene.venueUse(k, VENUE[act].sec, () => { if (venueUse(act) === 'ok') fin(ONCE[act], t(act.startsWith('ex_') ? 'sp_exhibit_done' : act.startsWith('zv_') ? 'sp_zoo_look_done' : 'sp_' + act + '_done')); });
     if (act === 'donate') return Scene.venueUse(k, VENUE.donate.sec, () => { if (donateBlood() === 'ok') { fin('🩸', t('sp_donate_done')); } });
   },
   leaveStore() {
@@ -2799,7 +2812,7 @@ function placeBody(key) {
   }
   if (key === 'firestation' || key === 'gas') return `<p>${t('st_desc_' + key)}</p>`;
   if (key === 'office') return `<p>${t('pl_desc_office')}</p>` + jobSection('office');   // v0.37
-  if (['hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse'].includes(key)) return `<p>${t('st_desc_' + key)}</p><p class="muted small">${t('pl_tap_inside')}</p>` + jobSection(key);   // v0.38
+  if (['hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium'].includes(key)) return `<p>${t('st_desc_' + key)}</p>${key === 'stadium' ? gameCard(VIEW_TOWN) : ''}<p class="muted small">${t('pl_tap_inside')}</p>` + jobSection(key);   // v0.38 (v0.42: + the zoo, the stadium and today's game)
   if (key === 'hotel') return hotelDesk() + `<p class="muted small">${t('pl_tap_inside')}</p>`;
   if (['tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist', 'bank', 'restaurant', 'rooftop', 'suite'].includes(key)) return `<p class="muted small">${t('pl_tap_inside')}</p>`;
   if (key === 'police') {   // v0.18: the holding cell (when you're held) or how the police work
@@ -3110,7 +3123,7 @@ document.addEventListener('click', e => {
 const CLICK_SOUND = { shopCat: 'select', shopSub: 'select', tab: 'select', petPick: 'select', worldPick: 'select' };
 // v0.34: in a store or building a tap only opens things; these buttons are where you actually do something, so your
 // townie walks over to it then (to the shelf, the counter, the table)
-const GO_ACTS = new Set(['specialBuy', 'addWare', 'wareDeal', 'loanSign', 'payWith', 'snackBuy', 'buyMed', 'venueDo', 'placeDo', 'mailOpen', 'ranking', 'eatFood', 'clawTry', 'watchMovie', 'takeClass', 'payBail', 'jobApply', 'bouquetBuy', 'groceriesBuy', 'souvenirBuy', 'roomBook']);
+const GO_ACTS = new Set(['specialBuy', 'addWare', 'wareDeal', 'loanSign', 'payWith', 'snackBuy', 'buyMed', 'venueDo', 'placeDo', 'mailOpen', 'ranking', 'eatFood', 'clawTry', 'watchMovie', 'takeClass', 'payBail', 'jobApply', 'bouquetBuy', 'groceriesBuy', 'souvenirBuy', 'roomBook', 'zooPlushBuy']);
 function goToSheetThing() {
   const sh = UI.sheet; if (!sh) return;
   const arg = String(sh.arg == null ? '' : sh.arg);
@@ -3218,7 +3231,8 @@ function playMovie() {
 
 // ---------- v0.25: needs in the HUD; a bite to eat; the people you work with ----------
 const PARK_KIND = { tennis: 'watch', basketball: 'watch', soccer: 'watch', pond: 'ducks', bench: 'bench', play: 'play', cart: 'icecream' };
-const SPOT_E = { 'amuse|wheel': '🎡', 'amuse|coaster': '🎢', 'amuse|carousel': '🎠', 'amuse|bumper': '🚗', 'amuse|golf': '⛳', 'amuse|stage': '🎤', 'amuse|candy': '🍭', 'bowling|claw': '🧸', 'market|local': '🧺', 'park|tennis': '🎾', 'park|basketball': '🏀', 'park|soccer': '⚽', 'park|pond': '🦆', 'park|bench': '🪑', 'park|cart': '🍦', 'park|play': '🛝', 'bakery|case': '🥐', 'bakery|oven': '🔥', 'bakery|table': '🍽️', 'cafe|menu': '☕', 'cafe|table': '💬', 'cafe|sofa': '🛋️', 'clinic|bed': '🛏️', 'clinic|scale': '🩺', 'clinic|pharmacy': '💊',
+const SPOT_E = { 'zoo|lion': '🦁', 'zoo|elephant': '🐘', 'zoo|giraffe': '🦒', 'zoo|penguin': '🐧', 'zoo|monkey': '🐒', 'zoo|panda': '🐼', 'zoo|giraffefeed': '🥬', 'zoo|petting': '🐐', 'zoo|shop': '🧸', 'zoo|kiosk': '🍿',
+  'stadium|seats': '🏟️', 'stadium|board': '📺', 'stadium|hotdog': '🌭', 'stadium|cage': '⚾', 'amuse|wheel': '🎡', 'amuse|coaster': '🎢', 'amuse|carousel': '🎠', 'amuse|bumper': '🚗', 'amuse|golf': '⛳', 'amuse|stage': '🎤', 'amuse|candy': '🍭', 'bowling|claw': '🧸', 'market|local': '🧺', 'park|tennis': '🎾', 'park|basketball': '🏀', 'park|soccer': '⚽', 'park|pond': '🦆', 'park|bench': '🪑', 'park|cart': '🍦', 'park|play': '🛝', 'bakery|case': '🥐', 'bakery|oven': '🔥', 'bakery|table': '🍽️', 'cafe|menu': '☕', 'cafe|table': '💬', 'cafe|sofa': '🛋️', 'clinic|bed': '🛏️', 'clinic|scale': '🩺', 'clinic|pharmacy': '💊',
   'library|featured': '⭐', 'library|table': '📖', 'gym|treadmill': '🏃', 'gym|spinbike': '🚴', 'gym|dumbbells': '🏋️', 'gym|boxing': '🥊', 'gym|yogamat': '🧘', 'gym|elliptical': '🏃', 'gym|rower': '🚣', 'gym|ropes': '💥', 'gym|squat': '🏋️',
   'bank|lift': '🛗', 'office|lift': '🛗', 'restaurant|lift': '🛗', 'hotel|lift': '🛗', 'rooftop|lift': '🛗', 'bank|teller': '🏦', 'bank|atm': '🏧', 'bank|loans': '📝', 'office|coffee': '☕', 'office|view': '🏙️',
   'restaurant|table': '🍝', 'restaurant|date': '🥂', 'restaurant|bar': '🍹', 'hotel|bar': '🍹', 'hotel|tea': '🫖', 'rooftop|pool': '🏊', 'rooftop|lounger': '😎', 'apartments|mail': '📬', 'apartments|lounge': '🛋️',
@@ -3241,7 +3255,7 @@ function sportBlock(k) {
     <div class="card sport-list">${rows.map(r => `<div class="list-item">${avatar(r.look)}<div class="grow"><b>${esc(r.name)}</b><div class="muted small">${r.tag} · ${t('mg_skill')} <span class="stars">${stars(r.id)}</span></div></div><button class="btn small primary" data-act="sportGo" data-arg="${k}|${r.id}">${t('mg_play_btn')}</button></div>`).join('')}</div>
     ${R.p ? `<p class="muted small center">${sportRecText(k)}</p>` : ''}`;
 }
-function sportRecText(k) { const R = sportRec(k); return t('mg_rec', { p: R.p, w: R.w }) + (k === 'basketball' && R.best ? ' · ' + t('mg_rec_best', { b: R.best }) : k === 'bowling' && R.best ? ' · ' + t('mg_rec_bowl', { b: R.best }) : k === 'race' && R.best ? ' · ' + t('mg_rec_race', { b: R.best.toFixed(1) }) : R.best && ['golf', 'karaoke', 'fishing', 'claw'].includes(k) ? ' · ' + t('mg_rec_' + k, { b: k === 'fishing' ? R.best.toFixed(1) : R.best }) : ''); }   // v0.41
+function sportRecText(k) { const R = sportRec(k); return t('mg_rec', { p: R.p, w: R.w }) + (k === 'basketball' && R.best ? ' · ' + t('mg_rec_best', { b: R.best }) : k === 'bowling' && R.best ? ' · ' + t('mg_rec_bowl', { b: R.best }) : k === 'race' && R.best ? ' · ' + t('mg_rec_race', { b: R.best.toFixed(1) }) : R.best && ['golf', 'karaoke', 'fishing', 'claw'].includes(k) ? ' · ' + t('mg_rec_' + k, { b: k === 'fishing' ? R.best.toFixed(1) : R.best }) : k === 'derby' && R.best ? ' · ' + t('mg_rec_derby', { b: R.best, f: derbyDist(R.far || 0) }) : ''); }   // v0.41 (v0.42: + the derby)
 // v0.38: bowling and the swimming race, in the new district: the same list of who to play with, a price for the lane
 const venueMate = k => ({ name: t('mg_court_' + k), look: dressUp({ shirt: k === 'race' ? '#e5484d' : '#3e7cc9', skin: SKINS[2], hair: k === 'race' ? 'short' : 'curly', hairCol: HAIR_COLORS[1], mob: 'walk' }, 'vg_' + k) });
 function gameBlock(k) {
@@ -3249,7 +3263,7 @@ function gameBlock(k) {
   const stars = id => { const s = sportSkill(id); return '⭐'.repeat(s < 0.45 ? 2 : s < 0.6 ? 3 : s < 0.75 ? 4 : 5); };
   const rows = [{ id: 'court', name: m.name, look: m.look, tag: t('mg_here_tag') }]
     .concat(contacts().map(c => { const w = whoIs(c.id); return w && { id: c.id, name: w.name, look: w.look, tag: relTag(c.id) }; }).filter(Boolean));
-  return `<div class="sec-title">${G.e} ${t('mg_play_' + k)}</div>
+  return `<div class="sec-title">${G.e} ${t('mg_play_' + k, { n: G.pitches || '' })}</div>
     <p class="muted small">${G.price ? t(STR.zh['mg_price_' + k] ? 'mg_price_' + k : 'mg_price', { n: G.price }) + ' · ' : ''}${first ? t('mg_reward_first', { f: BALL.fun, s: BALL.social, r: BALL.rel }) : t('mg_reward_again', { f: BALL.againFun })}</p>
     <div class="card sport-list">${rows.map(r => `<div class="list-item">${avatar(r.look)}<div class="grow"><b>${esc(r.name)}</b><div class="muted small">${r.tag} · ${t('mg_skill')} <span class="stars">${stars(r.id)}</span></div></div><button class="btn small primary" data-act="gameGo" data-arg="${k}|${r.id}" ${can ? '' : 'disabled'}>${t('mg_play_btn')}</button></div>`).join('')}</div>
     ${R.p ? `<p class="muted small center">${sportRecText(k)}</p>` : ''}`;
@@ -3278,7 +3292,18 @@ function roleOf(id) {
   return wp ? `💼 ${t(wp.boss ? 'boss' : 'coworker')} · ${nm(JOBS[S.job.place])}` : isFriend(id) ? `💛 ${t('friend')}` : h && h.fam ? `👪 ${t('family')}` : h && h.town && h.town !== myTown() ? `🏘️ ${t('from_town', { town: nm(COMMUNITIES[h.town]) })}` : `🏡 ${t('neighbour')}`;
 }
 function relTag(id) { const lv = relLevel(relOf(id)); return `${lv.e} ${nm(lv)}`; }
-function snackBtn(key) { return `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${{ cafe: '☕', station: '☕', bowling: '🌭' }[key] || '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`; }
+// v0.42: how far a hit went, in metres (Chinese) or feet (English)
+const derbyDist = m => (curLang() === 'zh' ? Math.round(m) : Math.round(m * 3.281));
+// v0.42: the game at the stadium: who's playing, the score and how far it's got (or when the next one is)
+function gameCard(town) {
+  const g = stadiumGame(town), SP = STADIUM.sports[g.sport], H = teamOf(town), nextT = g.next ? t('gm_next', { h: g.next }) : t('gm_tomorrow', { h: STADIUM.slots[0] });
+  if (!g.on && !g.done) return `<div class="card"><b>${SP.e} ${nextT}</b><p class="muted small">${t('gm_home', { team: esc(nm(H)), sport: nm(SP) })}</p></div>`;
+  const A = teamOf(g.away), ord = n => (curLang() === 'zh' ? n : n + ((n % 100 > 10 && n % 100 < 14) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'));
+  const st = g.done ? t('gm_final') : g.sport === 'baseball' ? t(g.top ? 'gm_top' : 'gm_bot', { n: ord(g.part) }) : t('gm_min', { n: g.minute });
+  return `<div class="card game-card"><div class="muted small">${SP.e} ${nm(SP)} · ${g.on ? '🔴 ' : ''}${st}${g.done ? ' · ' + nextT : ''}</div>
+    <div class="gm-row"><span>${A.e} ${esc(nm(A))}</span><b>${g.score[1]}</b></div><div class="gm-row"><span>${H.e} ${esc(nm(H))}</span><b>${g.score[0]}</b></div></div>`;
+}
+function snackBtn(key) { return `<button class="btn block gap-top" data-act="snackBuy" ${S.me.coins >= SNACK.price ? '' : 'disabled'}>${{ cafe: '☕', station: '☕', bowling: '🌭', zoo: '🍿' }[key] || '🥐'} ${t('snack_buy', { n: SNACK.price, h: FOOD_FILL.snack })}</button>`; }
 function workmates(key) {
   const at = S.work && S.work.place === key, day = today();
   return `<div class="muted small gap-top">${t('job_people')}</div>${workPeople(key).map(p => { const done = (S.chatDay || {})[p.id + '@' + day];

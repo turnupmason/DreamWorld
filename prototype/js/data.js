@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.41.0';
+const VERSION = '0.42.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // farm actions per day (planting, sneaking). Harvesting, selling and shopping are free.
@@ -337,6 +337,9 @@ const FURN = {
   plushcat: { zh: '小猫玩偶', en: 'Kitty plush', w: 1, d: 1, price: 0, plush: true, value: 40 }, plushdino: { zh: '恐龙玩偶', en: 'Dino plush', w: 1, d: 1, price: 0, plush: true, value: 40 },
   plushduck: { zh: '小鸭玩偶', en: 'Duckling plush', w: 1, d: 1, price: 0, plush: true, value: 40 }, plushpanda: { zh: '熊猫玩偶', en: 'Panda plush', w: 1, d: 1, price: 0, plush: true, value: 40 },
   bigteddy: { zh: '巨型泰迪熊', en: 'Giant teddy', w: 2, d: 2, price: 0, plush: true, value: 300 },
+  // v0.42: from the zoo shop (not part of the claw machine's set)
+  plushlion: { zh: '狮子玩偶', en: 'Lion plush', w: 1, d: 1, price: 0, plush: true, value: 40 }, plushelephant: { zh: '大象玩偶', en: 'Elephant plush', w: 1, d: 1, price: 0, plush: true, value: 40 },
+  plushgiraffe: { zh: '长颈鹿玩偶', en: 'Giraffe plush', w: 1, d: 1, price: 0, plush: true, value: 40 }, plushpenguin: { zh: '企鹅玩偶', en: 'Penguin plush', w: 1, d: 1, price: 0, plush: true, value: 40 },
   // v0.20: film posters from the cinema (one per film you've seen), on a stand
   posterdino: { zh: '《恐龙乐园》海报', en: 'Dino Park poster', w: 1, d: 1, price: 0, poster: 'dino', value: 60 }, posterspace: { zh: '《星际旅行》海报', en: 'Space Trip poster', w: 1, d: 1, price: 0, poster: 'space', value: 60 },
   posterlove: { zh: '《怦然心动》海报', en: 'Heartbeat poster', w: 1, d: 1, price: 0, poster: 'love', value: 60 }, posterocean: { zh: '《深海奇遇》海报', en: 'Deep Blue poster', w: 1, d: 1, price: 0, poster: 'ocean', value: 60 },
@@ -947,6 +950,8 @@ const STORES = {
   hospital:  { e: '🚑', zh: '医院', en: 'Hospital', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#f4f7f9', roof: '#e5484d' },
   bowling:   { e: '🎳', zh: '保龄球馆', en: 'Bowling alley', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#33407a', roof: '#f2c230' },
   amuse:     { e: '🎡', zh: '游乐园', en: 'Amusement park', cats: [], civic: true, late: 2, w: 16, d: 11, wall: '#f4ead8', roof: '#e5484d' },   // v0.41: rides out in the open, after the interstate is built
+  zoo:       { e: '🦁', zh: '动物园', en: 'Zoo', cats: [], civic: true, late: 2, w: 16, d: 12, wall: '#efe3c4', roof: '#3f8a4a' },   // v0.42: animals in the open, after the amusement park
+  stadium:   { e: '🏟️', zh: '体育场', en: 'Stadium', cats: [], civic: true, late: 2, w: 16, d: 13, wall: '#d8dde3', roof: '#2f5fa8' },   // v0.42: an open bowl with floodlights
   aquatic:   { e: '🏊', zh: '游泳馆', en: 'Swimming centre', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#e6f3fa', roof: '#38a3e0' },
   museum:    { e: '🦖', zh: '博物馆', en: 'Museum', cats: [], civic: true, late: true, w: 10, d: 7, wall: '#efe8da', roof: '#8a7a5a' },
   station:   { e: '🚉', zh: '火车站', en: 'Train station', cats: [], civic: true, late: true, w: 10, d: 6, wall: '#c98a5a', roof: '#3d4a66' },
@@ -1479,6 +1484,8 @@ const JOBS = {
   hospital: { zh: '医院护工', en: 'Care assistant', wage: 19, from: 7, to: 15 },
   bowling:  { zh: '保龄球馆店员', en: 'Bowling alley crew', wage: 15, from: 14, to: 22 },
   amuse:    { zh: '游乐园操作员', en: 'Ride operator', wage: 16, from: 10, to: 18 },   // v0.41
+  zoo:      { zh: '饲养员', en: 'Zookeeper', wage: 17, from: 8, to: 16 },   // v0.42
+  stadium:  { zh: '体育场工作人员', en: 'Stadium crew', wage: 16, from: 14, to: 22 },   // v0.42
   aquatic:  { zh: '救生员', en: 'Lifeguard', wage: 18, from: 10, to: 18 },
   museum:   { zh: '博物馆讲解员', en: 'Museum guide', wage: 21, from: 9, to: 17 },
   station:  { zh: '列车员', en: 'Train conductor', wage: 30, from: 6, to: 14 },
@@ -1584,6 +1591,13 @@ const VENUE = {
   // v0.41: the amusement park's rides (pay each time; you ride along) and its cotton candy
   wheel: { price: 6, fun: 10, sec: 14 }, coaster: { price: 8, fun: 14, sec: 10 }, carousel: { price: 4, fun: 8, sec: 10 }, bumper: { price: 5, fun: 10, sec: 10 },
   candy: { price: 4, hunger: 10, fun: 4, sec: 3 },
+  // v0.42: the zoo: each animal once a day (a look, and something you didn't know); feeding the giraffes (a lettuce leaf,
+  // as often as you like); the petting farm (once a day); a plush animal from the zoo shop
+  zv_lion: { fun: 5, sec: 8 }, zv_elephant: { fun: 5, sec: 8 }, zv_giraffe: { fun: 5, sec: 8 }, zv_penguin: { fun: 5, sec: 8 }, zv_monkey: { fun: 5, sec: 8 }, zv_panda: { fun: 5, sec: 8 },
+  giraffefeed: { price: 3, fun: 8, sec: 8 }, petting: { fun: 8, sec: 10 }, zooplush: { price: 15 },
+  // v0.42: the stadium: a ticket for the game that's on (sit in the stands and watch), a look round when there's no game
+  // (once a day), a hot dog
+  match: { price: 10, fun: 15, sec: 24 }, tour: { fun: 5, sec: 10 }, hotdog: { price: 5, hunger: 15, fun: 3, sec: 4 },
   dive: { fun: 8, sec: 6 },                                     // the diving board at the swimming centre
   sauna: { fun: 6, sec: 12 },                                   // a sit in the sauna
   visit: { social: 10, sec: 10 },                               // keep a patient in hospital company for a while
@@ -1608,6 +1622,9 @@ const VENUE_GAMES = {
   karaoke: { e: '🎤', price: 0, place: 'amuse', spot: 'stage' },
   claw: { e: '🧸', grabs: 3, price: 5, place: 'bowling', places: ['bowling', 'mall'], spot: 'claw' },
   fishing: { e: '🎣', secs: 60, price: 0, place: 'lake' },
+  // v0.42: a home run derby in the stadium's batting cage: `pitches` pitches each, most home runs wins (the longest one
+  // if it's level); price: a bucket of balls
+  derby: { e: '⚾', pitches: 8, price: 6, place: 'stadium', spot: 'cage' },
   race:    { e: '🏊', len: 25, price: 0, place: 'aquatic', spot: 'race' },
 };
 // v0.38: what's on the cards in the museum's four halls (one a day each)
@@ -1633,8 +1650,64 @@ const MUSEUM_FACTS = {
     { zh: '古罗马人就已经有地暖和公共浴场了。', en: 'The ancient Romans already had heated floors and public baths.' },
   ],
 };
+// v0.42: the zoo's animals (one enclosure each; the giraffes share theirs with zebras) and what's on the sign by each
+// (one a day); what the zoo shop sells
+const ZOO_ANIMALS = {
+  lion: { e: '🦁', zh: '狮子', en: 'Lions' }, elephant: { e: '🐘', zh: '大象', en: 'Elephants' }, giraffe: { e: '🦒', zh: '长颈鹿和斑马', en: 'Giraffes and zebras' },
+  penguin: { e: '🐧', zh: '企鹅', en: 'Penguins' }, monkey: { e: '🐒', zh: '猴子', en: 'Monkeys' }, panda: { e: '🐼', zh: '大熊猫', en: 'Giant pandas' },
+};
+const ZOO_FACTS = {
+  lion: [
+    { zh: '狮子是唯一成群生活的大猫，一群狮子叫「狮群」。', en: 'Lions are the only big cats that live in groups, called prides.' },
+    { zh: '狮子的吼声在 8 公里外都能听到。', en: 'A lion’s roar can be heard up to 8 km (5 miles) away.' },
+    { zh: '狮子一天要睡 16 到 20 个小时。', en: 'Lions sleep 16 to 20 hours a day.' },
+  ],
+  elephant: [
+    { zh: '大象的鼻子里大约有 4 万块肌肉。', en: 'An elephant’s trunk has around 40,000 muscles.' },
+    { zh: '大象扇动大耳朵，是在给自己扇风降温。', en: 'Elephants flap their big ears to cool down.' },
+    { zh: '小象一出生就有 100 公斤左右重。', en: 'A baby elephant weighs about 100 kg (220 lb) when it’s born.' },
+  ],
+  giraffe: [
+    { zh: '长颈鹿的脖子和我们一样，只有 7 块颈椎骨。', en: 'A giraffe’s neck has just seven bones, the same as ours.' },
+    { zh: '长颈鹿的舌头大约有 50 厘米长，是深蓝紫色的。', en: 'A giraffe’s tongue is about 50 cm (20 in) long and dark blue-purple.' },
+    { zh: '每匹斑马的条纹都不一样，就像人的指纹。', en: 'Every zebra’s stripes are different, like fingerprints.' },
+  ],
+  penguin: [
+    { zh: '企鹅不会飞，但在水里游得飞快。', en: 'Penguins can’t fly, but they’re very fast swimmers.' },
+    { zh: '帝企鹅爸爸会把蛋放在脚背上，一孵就是两个多月。', en: 'Emperor penguin dads keep the egg on their feet for over two months.' },
+    { zh: '企鹅黑背白肚：从上面看像海水，从下面看像天空。', en: 'Black backs, white fronts: from above they look like the sea, from below like the sky.' },
+  ],
+  monkey: [
+    { zh: '有些猴子的尾巴能像手一样抓住树枝。', en: 'Some monkeys can hold on to branches with their tails, like an extra hand.' },
+    { zh: '猴子互相梳毛，是在交朋友。', en: 'Monkeys groom each other to make and keep friends.' },
+    { zh: '吼猴的叫声在 5 公里外都能听到。', en: 'Howler monkeys can be heard about 5 km (3 miles) away.' },
+  ],
+  panda: [
+    { zh: '大熊猫一天大约要花 12 个小时吃竹子。', en: 'Giant pandas spend about 12 hours a day eating bamboo.' },
+    { zh: '熊猫宝宝刚出生时，差不多只有一根香蕉那么重。', en: 'A newborn panda weighs about as much as a banana.' },
+    { zh: '大熊猫的前掌上有一根「假拇指」，专门用来抓竹子。', en: 'Pandas have a “false thumb” on each front paw for holding bamboo.' },
+  ],
+};
+const ZOO_SHOP = ['plushlion', 'plushelephant', 'plushgiraffe', 'plushpenguin'];
+// v0.42: the stadium: two games a day in town time (starting at `slots`, `len` hours each). The home team plays the
+// town's own sport (baseball in the towns listed, soccer everywhere else) against a team from another town; the score
+// is the same for everyone (from the town and the day). parts: innings, or 10-minute spells of a soccer game.
+const STADIUM = {
+  slots: [13, 19], len: 3,
+  sports: { baseball: { e: '⚾', zh: '棒球', en: 'Baseball', parts: 9 }, soccer: { e: '⚽', zh: '足球', en: 'Soccer', parts: 9 } },
+  baseball: ['wutong', 'palmbay', 'cactus', 'vermont', 'banff', 'kyoto', 'seoul'],
+};
+// every town's team: the town's name and one of these (in the order of COMMUNITIES)
+const TEAM_MASCOTS = [
+  { e: '🐯', zh: '老虎', en: 'Tigers', col: '#f28c28' }, { e: '🐬', zh: '海豚', en: 'Dolphins', col: '#38a3e0' }, { e: '🦂', zh: '蝎子', en: 'Scorpions', col: '#c9893a' },
+  { e: '🦌', zh: '红鹿', en: 'Stags', col: '#b5302a' }, { e: '🐻', zh: '灰熊', en: 'Grizzlies', col: '#8a5a36' }, { e: '🐝', zh: '蜜蜂', en: 'Bees', col: '#f2c230' },
+  { e: '🦁', zh: '狮子', en: 'Lions', col: '#e5484d' }, { e: '🐺', zh: '灰狼', en: 'Wolves', col: '#6b7280' }, { e: '🦊', zh: '狐狸', en: 'Foxes', col: '#e86a2a' },
+  { e: '🐉', zh: '青龙', en: 'Dragons', col: '#34b27b' }, { e: '🦈', zh: '鲨鱼', en: 'Sharks', col: '#2f6fb2' }, { e: '🦅', zh: '雄鹰', en: 'Eagles', col: '#3d4a66' },
+  { e: '🦉', zh: '猫头鹰', en: 'Owls', col: '#7a5a9a' }, { e: '🐯', zh: '猛虎', en: 'Tigers', col: '#f28c28' }, { e: '🐆', zh: '美洲豹', en: 'Jaguars', col: '#2f9a5a' },
+  { e: '🦓', zh: '斑马', en: 'Zebras', col: '#2d2d34' },
+];
 const VENUE_PLACES = ['bakery', 'cafe', 'clinic', 'library', 'gym', 'post', 'school', 'plaza', 'police', 'firestation', 'gas', 'tower', 'hotel', 'apartments', 'bookstore', 'salon', 'florist',
-  'hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse'];   // v0.37 / v0.38 / v0.41: + the new ones
+  'hospital', 'bowling', 'aquatic', 'museum', 'station', 'amuse', 'zoo', 'stadium'];   // v0.37 / v0.38 / v0.41 / v0.42: + the new ones
 // The fire station's tips, one a day.
 const FIRE_TIPS = [
   { zh: '家里装一个烟雾报警器，每个月按一下试试。', en: 'Fit a smoke alarm at home and press its test button once a month.' },

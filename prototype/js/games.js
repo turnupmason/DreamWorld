@@ -9,6 +9,7 @@
 //   bowling     (v0.38, the bowling alley) swipe up the lane: where you start is where the ball leaves your hand, a
 //               slanted swipe sends it slanting, a longer one is faster. Frames of two balls; strikes and spares score extra.
 //   race        (v0.38, the swimming centre) tap left, right, left… to swim a length; dive in on the whistle.
+//   derby       (v0.42, the stadium) tap to swing as the pitch reaches the ring over home plate; most home runs wins.
 // Games.open(kind, partner, onEnd, onClose): partner = { id, name, look, skill }. onEnd(result) runs when a game is
 // over and returns the html for what it gave; onClose() when you go back to the park.
 const Games = (() => {
@@ -1263,7 +1264,130 @@ const Games = (() => {
     return { step, draw, input, ptr, hint, hud, dbg: () => ({ st, me: me.kg, them: them.kg, tension, fish, bob }) };
   }
 
-  const MAKE = { tennis: Tennis, basketball: Hoops, soccer: Penalty, bowling: Bowling, race: Race, golf: Golf, claw: Claw, karaoke: Karaoke, fishing: Fishing };
+  // =========================================================================== home run derby (v0.42, the stadium)
+  // From behind home plate: the pitch comes in; tap to swing as it reaches the ring. On time goes furthest; early pulls it
+  // left, late pushes it right; too early or late misses. You and them take turns, `pitches` each; most home runs wins
+  // (if it's level, the longest one). Metres throughout; the fence is 95 m down the lines and 115 m to centre.
+  function Derby() {
+    const DG = VENUE_GAMES.derby, sk = mate.skill, N = DG.pitches, g = 9.8, DRAG = 0.0045, WIN = [0.045, 0.09, 0.15];
+    const fence = a => 95 + 20 * Math.cos(2 * a);   // a: radians from straight out to centre field
+    const team = teamOf(myTown()), PITCH = { shirt: team.col, top: 'tshirt', skin: SKINS[2], hair: 'short', hairCol: HAIR_COLORS[0], mob: 'walk', hat: 'cap', hatCol: team.col };
+    const FIELD = [[-24, 78], [0, 92], [24, 78], [-14, 34], [14, 34], [18, 20], [-18, 20]].map((p, i) => ({ x: p[0], y: p[1], hx: p[0], hy: p[1], i }));
+    const res = [[], []], best = [0, 0];
+    let bat = 0, st = 'ready', pitch = null, ball = null, swingAt = -9, plan = null, outcome = '', wait = 0, taps = 0, over = false, flash = null, readyLeft = 0, trail = [];
+    const homers = w => res[w].filter(r => r.hr).length;
+    function setUp() {
+      st = 'ready'; readyLeft = 0.85; ball = null; trail = []; swingAt = -9; outcome = ''; flash = null; FIELD.forEach(f => { f.x = f.hx; f.y = f.hy; });
+      const Tp = [0.62, 0.7, 0.82][Math.floor(Math.random() * 3)];
+      pitch = { Tp, x1: rnd(-0.15, 0.15), z1: rnd(0.65, 0.95), start: null };   // thrown when the wind-up's done (only while you're playing)
+      plan = bat ? { off: gauss() * (0.085 - sk * 0.045), miss: Math.random() < 0.08 } : null;
+      if (res[bat].length === 0 || bat) say(bat ? t('mg_d_their', { name: mate.name }) : t('mg_d_tap'), t('mg_d_left', { n: N - res[bat].length }), '#fff', 0.9);
+    }
+    // where the pitch is at time tt (null before it's thrown)
+    function pitchAt(tt) {
+      if (pitch.start === null) return null; const u = (tt - pitch.start) / pitch.Tp; if (u < 0) return null;
+      return { x: 0.25 + (pitch.x1 - 0.25) * u, y: 17.6 * (1 - u), z: 1.9 + (pitch.z1 - 1.9) * u + 0.35 * Math.sin(Math.min(1, u) * Math.PI) * (pitch.Tp - 0.55), u };
+    }
+    // the swing: how far off the timing was decides it
+    function swing(at) {
+      if (st !== 'pitch' || swingAt > 0) return;
+      swingAt = at; const dt = at - (pitch.start + pitch.Tp);
+      if (Math.abs(dt) > WIN[2] || (bat && plan.miss)) { Sound.play('swish'); return; }   // missed: the ball goes on into the catcher's mitt
+      const q = 1 - Math.abs(dt) / WIN[2], a = dt / WIN[2] * 0.95 + rnd(-0.06, 0.06);
+      const v = 28 + 24 * q + gauss() * 1.4, th = (18 + 14 * q + gauss() * 4) * Math.PI / 180;
+      ball = { x: pitch.x1, y: 0, z: pitch.z1, vx: v * Math.cos(th) * Math.sin(a), vy: v * Math.cos(th) * Math.cos(a), vz: v * Math.sin(th), a, q, live: true };
+      // where it comes down (on a flat field), so we know straight away what it is
+      const s2 = { ...ball }; let L = 0; for (let i = 0; i < 2000 && s2.z > 0; i++) { const sp = Math.hypot(s2.vx, s2.vy, s2.vz), h = 0.01; s2.vx -= DRAG * sp * s2.vx * h; s2.vy -= DRAG * sp * s2.vy * h; s2.vz -= (g + DRAG * sp * s2.vz) * h; s2.x += s2.vx * h; s2.y += s2.vy * h; s2.z += s2.vz * h; }
+      L = Math.hypot(s2.x, s2.y); ball.land = [s2.x, s2.y]; ball.dist = Math.round(L);
+      outcome = Math.abs(a) > Math.PI / 4 ? 'foul' : L > fence(a) + 1.5 ? 'hr' : 'out';
+      Sound.play('racket'); st = 'hit';
+      if (q > 0.7 && !bat) pop(q > 0.85 ? t('mg_k_perfect') : t('mg_k_good'), W / 2, H * 0.62, '#ffe066');
+      if (outcome === 'out') { const f = FIELD.reduce((b2, f2) => (Math.hypot(f2.x - s2.x, f2.y - s2.y) < Math.hypot(b2.x - s2.x, b2.y - s2.y) ? f2 : b2), FIELD[0]); ball.catcher = f; }
+    }
+    function decide(o, dist) {
+      res[bat].push({ hr: o === 'hr', dist }); if (o === 'hr') best[bat] = Math.max(best[bat], dist);
+      const good = bat === 0 ? o === 'hr' : false;
+      say(o === 'hr' ? t('mg_d_hr') : o === 'foul' ? t('mg_d_foul') : o === 'out' ? t('mg_d_out') : t('mg_d_miss'), o === 'hr' || o === 'out' ? t('mg_d_dist', { n: derbyDist(dist) }) : '', o === 'hr' ? '#ffe066' : '#fff', o === 'hr' ? 1.6 : 1.1);
+      Sound.play(o === 'hr' ? 'cheer' : o === 'miss' ? 'pop' : 'pop');
+      if (good) flash = T;
+      st = 'after'; wait = o === 'hr' ? 1.3 : 0.9;
+      if (res[0].length >= N && res[1].length >= N) over = true;
+    }
+    function step(dt) {
+      if (st === 'ready' && (readyLeft -= dt) <= 0) { st = 'pitch'; pitch.start = T; if (plan) plan.at = T + pitch.Tp + plan.off; }
+      if (st === 'pitch') {
+        if (bat && T >= plan.at) swing(plan.at);
+        if (st === 'pitch' && T > pitch.start + pitch.Tp + 0.28) { Sound.play('clang'); decide('miss', 0); }
+      }
+      if (st === 'hit' && ball) {
+        const n = 6, h = dt * 2.2 / n;   // faster than life, so a derby doesn't take all day
+        for (let i = 0; i < n; i++) { const sp = Math.hypot(ball.vx, ball.vy, ball.vz); ball.vx -= DRAG * sp * ball.vx * h; ball.vy -= DRAG * sp * ball.vy * h; ball.vz -= (g + DRAG * sp * ball.vz) * h; ball.x += ball.vx * h; ball.y += ball.vy * h; ball.z += ball.vz * h; }
+        trail.push([ball.x, ball.y, ball.z]); if (trail.length > 16) trail.shift();
+        const d = Math.hypot(ball.x, ball.y), f = ball.catcher;
+        if (f) { const k = Math.min(1, dt * 7 / Math.max(1, Math.hypot(ball.land[0] - f.x, ball.land[1] - f.y))); f.x += (ball.land[0] - f.x) * k * 1.5; f.y += (ball.land[1] - f.y) * k * 1.5; }
+        if (outcome === 'hr' && d > fence(ball.a) + 6 && ball.z < 6 + (d - fence(ball.a)) * 0.5) decide('hr', ball.dist);
+        else if (ball.z <= 0 || (f && ball.z < 2.2 && Math.hypot(ball.x - f.x, ball.y - f.y) < 2)) { if (ball.z < 0) ball.z = 0; decide(outcome, ball.dist); }
+      }
+      if (st === 'after' && (wait -= dt) <= 0) {
+        if (over) return finish({ won: homers(0) > homers(1) || (homers(0) === homers(1) && best[0] > best[1]) ? true : homers(0) < homers(1) || best[0] < best[1] ? false : null, me: homers(0), them: homers(1), far: best[0] });
+        if (res[1 - bat].length < N) bat = 1 - bat; setUp();
+      }
+    }
+    function ptr(type) { if (type === 'down' && bat === 0) { taps++; swing(T); } }
+    function input() { }
+    function cam() { fit(0, 0.86, 3.6, 110, 0.36, 4); }
+    function draw() {
+      cam();
+      const zh = curLang() === 'zh', lit = NIGHT > 0.3;
+      sky(P(0, 400, 0).y, lit ? '#1d2a4a' : '#8fcdf0', lit ? '#3a4a7a' : '#d8f0fb');
+      ctx.fillStyle = '#4f9a45'; ctx.fillRect(0, P(0, 160, 0).y, W, H);
+      // the stands behind the fence: rows of seats full of people, rising
+      const arc = (r, z, n = 40) => Array.from({ length: n + 1 }, (_, i) => { const a = -Math.PI / 4 - 0.25 + (Math.PI / 2 + 0.5) * i / n; return [Math.sin(a) * r(a), Math.cos(a) * r(a), z]; });
+      for (let k = 7; k >= 0; k--) { const r0 = a => fence(a) + 4 + k * 4, A = arc(r0, 3 + k * 2.6), B = arc(a => r0(a) + 4, 3 + (k + 1) * 2.6);
+        gpoly([...A, ...B.reverse()], k % 2 ? shade(team.col, -0.1) : '#8e99a6');
+        A.forEach(([x, y, z], i) => { if (i % 2) return; const q = P(x, y, z + 0.6); circle(q.x, q.y, Math.max(1, 0.45 * q.k), SKINS[(i + k) % 4]); }); }
+      { const q = P(0, 150, 26); rrect(q.x - 46, q.y - 30, 92, 34, 4, '#1d1d22', '#9aa3ad', 1.5); txt(`${homers(0)} : ${homers(1)}`, q.x, q.y - 13, 14, '#ffd36b'); }
+      [-1, 1].forEach(sd => { const b = P(sd * 95, 120, 0), t2 = P(sd * 95, 120, 40); line(b.x, b.y, t2.x, t2.y, '#9aa3ad', 2); rrect(t2.x - 12, t2.y - 8, 24, 9, 2, '#5b6470'); if (lit) glow(t2.x, t2.y, 60, 0.9); });
+      // the field: grass stripes, the infield dirt, the base paths, the fence
+      for (let k = 0; k < 12; k++) if (k % 2) gpoly([[-120, k * 10], [120, k * 10], [120, k * 10 + 10], [-120, k * 10 + 10]], 'rgba(255,255,255,.05)');
+      { const fan = [], ring = []; for (let i = 0; i <= 24; i++) { const a = -Math.PI / 4 + i / 24 * Math.PI / 2; fan.push([Math.sin(a) * 29, Math.cos(a) * 29, 0]); }
+        for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; ring.push([Math.sin(a) * 4, Math.cos(a) * 4, 0]); }
+        gpoly([[0, 0, 0], ...fan], '#c9925a'); gpoly(ring, '#c9925a'); }
+      gpoly([[0, 1.2], [18, 19.4], [0, 37.6], [-18, 19.4]], '#5aa84f');
+      const fz = arc(fence, 0), ft = arc(fence, 3);
+      gpoly([...fz, ...ft.slice().reverse()], '#2f6f3a'); for (let i = 0; i < fz.length - 1; i += 2) seg3(ft[i], ft[i + 1], 0.25, '#f2c230');
+      seg3([0, 0, 0], [fence(Math.PI / 4) * Math.SQRT1_2, fence(Math.PI / 4) * Math.SQRT1_2, 0], 0.12, '#ffffff'); seg3([0, 0, 0], [-fence(Math.PI / 4) * Math.SQRT1_2, fence(Math.PI / 4) * Math.SQRT1_2, 0], 0.12, '#ffffff');
+      [[19.4, 19.4], [0, 38.8], [-19.4, 19.4]].forEach(([x, y]) => gpoly([[x - 0.4, y], [x, y - 0.4], [x + 0.4, y], [x, y + 0.4]], '#ffffff'));
+      { const m = P(0, 18.4, 0); ellipse(m.x, m.y, 2.6 * m.k, 1.2 * m.k * 0.4, '#c08550'); }
+      // the fielders (one runs to catch a fly ball)
+      FIELD.slice().sort((a, b) => b.y - a.y).forEach(f => townie(PITCH, f.x, f.y, { view: 'front', seed: 20 + f.i, pose: ball && ball.catcher === f && st === 'hit' ? 'run' : 'stand', phase: T * 12, hands: ball && ball.catcher === f && ball.z < 6 ? [[-3, -32], [3, -32]] : undefined }));
+      // the ball out in the field
+      if (ball && (st === 'hit' || st === 'after') && ball.y > 19) { shadow(ball.x, ball.y, 0.5, 0.18); trail.forEach((p, i) => { const q = P(...p); circle(q.x, q.y, Math.max(1, 2.6 * i / trail.length), `rgba(255,255,255,${0.5 * i / trail.length})`); }); const q = P(ball.x, ball.y, ball.z); circle(q.x, q.y, Math.max(3.5, 0.2 * q.k), '#ffffff', '#c9cfd6', 1); }
+      // the pitcher: winds up and throws
+      const ps = pitch.start !== null ? pitch.start : T + readyLeft, wu = Math.max(0, Math.min(1, (T - (ps - 0.6)) / 0.6)), thrown = T >= ps;
+      townie(PITCH, 0, 18.4, { view: 'front', seed: 7, hands: thrown && T - ps < 0.4 ? [[-6, -20], [9, -10]] : wu > 0 ? [[-2, -36 * wu - 16 * (1 - wu)], [3, -36 * wu - 16 * (1 - wu)]] : [[-4, -18], [4, -18]] });
+      // the pitch on its way in, the ring to hit it in
+      const ring = P(0.05, 0, 0.85), pa = st === 'pitch' || (st === 'after' && outcome === '') ? pitchAt(T) : null, inRing = pa && Math.abs(T - (ps + pitch.Tp)) < WIN[1];
+      if (st === 'pitch' || st === 'ready') { ellipse(ring.x, ring.y, 0.42 * ring.k, 0.42 * ring.k, inRing ? 'rgba(90,209,122,.25)' : 'rgba(255,255,255,.08)', inRing ? '#5ad17a' : 'rgba(255,255,255,.7)', 2.5); }
+      if (pa && pa.u <= 1.12) { const q = P(pa.x, Math.max(-0.4, pa.y), pa.z), sh = P(pa.x, Math.max(-0.4, pa.y), 0); ellipse(sh.x, sh.y, 0.1 * sh.k, 0.04 * sh.k, 'rgba(0,0,0,.25)'); circle(q.x, q.y, Math.max(2.5, 0.075 * q.k), '#ffffff', '#c9cfd6', 1); if (q.k > 20) { ctx.strokeStyle = '#e5484d'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(q.x - 0.06 * q.k, q.y, 0.05 * q.k, -0.9, 0.9); ctx.stroke(); } }
+      // home plate, the batter's boxes, the batter with the bat
+      gpoly([[-0.22, 0.22], [0.22, 0.22], [0.22, 0], [0, -0.22], [-0.22, 0]], '#ffffff');
+      [[-1.25, -0.45], [0.45, 1.25]].forEach(([a, b]) => { seg3([a, -0.9, 0], [b, -0.9, 0], 0.04, 'rgba(255,255,255,.7)'); seg3([a, 0.9, 0], [b, 0.9, 0], 0.04, 'rgba(255,255,255,.7)'); seg3([a, -0.9, 0], [a, 0.9, 0], 0.04, 'rgba(255,255,255,.7)'); seg3([b, -0.9, 0], [b, 0.9, 0], 0.04, 'rgba(255,255,255,.7)'); });
+      const sw = swingAt > 0 ? Math.min(1, (T - swingAt) / 0.22) : 0, ba = -2.3 - sw * 4.7;   // round and through, up over the other shoulder
+      const L = bat ? mate.look : S.me.look;
+      townie(L, -0.85, -0.15, { face: 1, view: 'front', turn: 0.45, seed: bat ? 5 : 3, hands: [[5, -20], [6, -19]], wave: !bat && flash && T - flash < 1.4 && Math.sin(T * 9) > 0, after: () => { line(5.5, -19.5, 5.5 + Math.cos(ba) * 16, -19.5 + Math.sin(ba) * 16, '#c99a5a', 2.2); circle(5.5 + Math.cos(ba) * 16, -19.5 + Math.sin(ba) * 16, 1.3, '#b8874a'); } });
+      if (ball && st === 'hit' && ball.y <= 19) { const q = P(ball.x, ball.y, ball.z); circle(q.x, q.y, Math.max(2, 0.075 * q.k), '#ffffff', '#c9cfd6', 1); }
+    }
+    function hint() {
+      if (phase !== 'play' || bat || taps >= 2 || st !== 'pitch') return null;
+      const ring = P(0.05, 0, 0.85); return ['tap', ring.x + 30, ring.y + 40, t('mg_d_tap')];
+    }
+    function hud() { const row = w => `<small>${res[w].map(r => (r.hr ? '⚾' : '·')).join('')}${'○'.repeat(Math.max(0, N - res[w].length))}</small>`; return { me: homers(0), them: homers(1), meSub: row(0), themSub: row(1), mid: `⚾ ${t('mg_d_title')}` }; }
+    setUp();
+    return { step, draw, input, ptr, hint, hud, dbg: () => ({ st, bat, res, best, outcome, ball, pitch }) };
+  }
+
+  const MAKE = { tennis: Tennis, basketball: Hoops, soccer: Penalty, bowling: Bowling, race: Race, golf: Golf, claw: Claw, karaoke: Karaoke, fishing: Fishing, derby: Derby };
 
   // ---------- the screen: a canvas, the score at the top, cards for how to play and for the result ----------
   function build() {
@@ -1307,8 +1431,8 @@ const Games = (() => {
       <div class="mg-p r"><div><b>${esc(mate.name)}</b><span class="mg-n">${h.them}</span>${h.themSub || ''}</div>${avatar(mate.look)}</div></div>`;
   }
   function howTo() {
-    const k = { tennis: 't', basketball: 'b', soccer: 's', bowling: 'w', race: 'r', golf: 'g', claw: 'c', karaoke: 'k', fishing: 'f' }[kind], e = (BALL_GAMES[kind] || VENUE_GAMES[kind]).e;
-    const n = { tennis: BALL_GAMES.tennis.to, basketball: BALL_GAMES.basketball.spots, soccer: BALL_GAMES.soccer.kicks, bowling: VENUE_GAMES.bowling.frames, race: VENUE_GAMES.race.len, golf: VENUE_GAMES.golf.holes, claw: VENUE_GAMES.claw.grabs, karaoke: 2, fishing: VENUE_GAMES.fishing.secs }[kind];
+    const k = { tennis: 't', basketball: 'b', soccer: 's', bowling: 'w', race: 'r', golf: 'g', claw: 'c', karaoke: 'k', fishing: 'f', derby: 'd' }[kind], e = (BALL_GAMES[kind] || VENUE_GAMES[kind]).e;
+    const n = { tennis: BALL_GAMES.tennis.to, basketball: BALL_GAMES.basketball.spots, soccer: BALL_GAMES.soccer.kicks, bowling: VENUE_GAMES.bowling.frames, race: VENUE_GAMES.race.len, golf: VENUE_GAMES.golf.holes, claw: VENUE_GAMES.claw.grabs, karaoke: 2, fishing: VENUE_GAMES.fishing.secs, derby: VENUE_GAMES.derby.pitches }[kind];
     card.innerHTML = `<div class="mg-box"><div class="mg-big">${e}</div><h2>${t('mg_' + k + '_title')}</h2><p class="muted">${t('mg_with', { name: esc(mate.name) })}</p>
       <div class="mg-how"><div><span class="mg-fing">${kind === 'soccer' ? '👆' : '👆'}</span>${t('mg_' + k + '_how1')}</div><div><span>🎯</span>${t('mg_' + k + '_how2')}</div><div><span>🏁</span>${t('mg_' + k + '_how3', { n, s: BALL_GAMES.basketball.shots, x: VENUE_GAMES.bowling.strike, p: VENUE_GAMES.bowling.spare, m: VENUE_GAMES.golf.max })}</div></div>
       <button class="btn primary block" data-mg="start">${t('mg_start')}</button></div>`;

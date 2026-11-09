@@ -2825,6 +2825,8 @@ const Scene = (() => {
     museum:     { wall: '#efe8da', roof: '#8a7a5a', floor: ['#d9cfc2', '#cfc4b6'], till: '🎟️', clerk: { shirt: '#3b3125', top: 'jacket', inner: '#f4f4f0', hair: 'bun' } },
     station:    { wall: '#efe2d2', roof: '#3d4a66', floor: ['#d9d4ca', '#cfc9bd'], till: '🎫', clerk: { shirt: '#3d4a66', top: 'jacket', inner: '#f4f4f0', hat: 'cap', hatCol: '#3d4a66' } },
     amuse:      { wall: '#f4ead8', roof: '#e5484d', floor: ['#a6d67f', '#9ccf76'], till: '🎟️', clerk: { shirt: '#e5484d', top: 'polo', hat: 'cap', hatCol: '#f2c230' } },   // v0.41
+    zoo:        { wall: '#efe3c4', roof: '#3f8a4a', floor: ['#b9d98a', '#b2d483'], till: '🎟️', clerk: { shirt: '#4f7a3a', top: 'polo', hat: 'cap', hatCol: '#c9b08a' } },   // v0.42
+    stadium:    { wall: '#d8dde3', roof: '#2f5fa8', floor: ['#cfd3d8', '#c8ccd1'], till: '🎟️', clerk: { shirt: '#2f5fa8', top: 'polo', hat: 'cap', hatCol: '#2f5fa8' } },   // v0.42
     suite:      { wall: '#f4ead8', roof: '#b08d57', floor: ['#c9a27a', '#bf9670'], till: '🛎️', clerk: { shirt: '#8a2a34', top: 'jacket' } },
   };
   const venueLook = k => VENUE_LOOK[k] && { ...(STORES[k] || {}), ...(PLACE_INFO[k] || {}), wall: VENUE_LOOK[k].wall || (STORES[k] || {}).wall || '#f1f0ea', roof: VENUE_LOOK[k].roof || (STORES[k] || {}).roof || '#c9893a' };
@@ -3163,6 +3165,37 @@ const Scene = (() => {
       guest(9.6, 15.6, { face: 1 }); guest(19.2, 6.9, { view: 'front', turn: [-0.4, 1] });
       who(10.4, 8.6, { pose: 'stand', face: 1, scale: 0.72, look: 2 }); who(4.6, 15.8, { pose: 'stand', face: -1, scale: 0.72, look: 5 });
       P = { RW: 22, RD: 18, door: [11, 17.4], counter: { x: 9.4, y: 10.2, w: 3.2, d: 0.9 }, open: true };
+    } else if (k === 'zoo') {   // v0.42: out in the open: six enclosures along the paths, the giraffes' feeding platform, a petting farm, the shop
+      dec('path', 0.3, 5.8, 21.4, 1.2, { flat: true }); dec('path', 10.4, 5.8, 1.2, 11.8, { flat: true }); dec('path', 0.3, 12.2, 21.4, 1.2, { flat: true });
+      const pen = (key, x, y, w, d, stand, ex = {}) => spot(key, x, y, w, d, { draw: 'zoopen', pen: key, stand, ...ex });
+      pen('lion', 0.6, 0.4, 4.8, 5.0, [3.0, 6.4]);
+      pen('elephant', 5.8, 0.4, 6.4, 5.0, [9.0, 6.4]);
+      spot('giraffefeed', 12.7, 2.2, 1.9, 1.8, { draw: 'feedplatform', stand: [13.6, 6.4], use: { at: [13.8, 3.2], pose: 'stand', face: 1, prop: '🥬' } });
+      pen('giraffe', 15.0, 0.4, 6.6, 5.0, [18.3, 6.4], { feedAt: [16.0, 3.4] });
+      pen('penguin', 0.6, 7.4, 4.8, 4.4, [3.0, 12.8]);
+      pen('monkey', 5.8, 7.4, 4.2, 4.4, [7.9, 12.8]);
+      pen('petting', 12.2, 7.4, 4.6, 4.4, [14.5, 12.8], { use: { at: [14.5, 12.8], pose: 'stand', ride: 'petting' } });
+      pen('panda', 17.2, 7.4, 4.4, 4.4, [19.4, 12.8]);
+      spot('shop', 1.0, 14.3, 3.2, 1.4, { draw: 'zooshop', stand: [2.6, 16.6] });
+      spot('kiosk', 6.2, 14.5, 1.6, 1.0, { draw: 'popcorn', stand: [7.0, 16.3] });
+      dec('zoomap', 8.8, 14.6, 1.2, 0.3); dec('bench', 17.0, 15.0, 2.4, 0.6); guest(17.7, 15.4, { pose: 'sit', seatH: 7, sit: 'phone', face: -1, dz: 0.4 });
+      dec('parktree', 20.6, 14.0, 0.8, 0.8); dec('parktree', 0.2, 16.6, 0.8, 0.8); dec('parktree', 12.2, 0.2, 0.8, 0.8);
+      guest(3.6, 6.5, { view: 'back', turn: [0.1, -1] }); who(4.4, 6.7, { view: 'back', turn: [0.2, -1], scale: 0.72, look: 2 });
+      guest(8.2, 6.6, { view: 'back', turn: [-0.1, -1] }); guest(19.0, 6.5, { view: 'back', turn: [0.1, -1] });
+      guest(2.2, 12.9, { view: 'back', turn: [-0.2, -1] }); who(8.8, 12.9, { view: 'back', turn: [0.1, -1], scale: 0.72, look: 5 }); guest(20.2, 12.8, { view: 'back', turn: [0.2, -1] });
+      who(5.5, 12.6, { staff: true, face: -1, prop: '🪣', look: { shirt: '#4f7a3a', top: 'polo', hat: 'cap', hatCol: '#c9b08a', hair: 'short', hairCol: '#2b1d14', skin: '#d39a6c' } });
+      P = { RW: 22, RD: 18, door: [11, 17.4], counter: { x: 13.0, y: 15.0, w: 2.8, d: 0.9 }, open: true };
+    } else if (k === 'stadium') {   // v0.42: tiers of seats on two sides of the field, the scoreboard in the corner; along the front the hot dog stand and the batting cage
+      dec('standsback', 3.2, 0.1, 20.7, 2.9, { flat: true });
+      dec('pitch', 3.7, 3.5, 19.9, 10.2, { flat: true });
+      spot('board', 0.1, 0.1, 2.9, 2.9, { draw: 'scoreboard', stand: [4.4, 15.2] });
+      spot('seats', 0.1, 3.1, 2.9, 11.4, { draw: 'stands', stand: [3.3, 15.0], use: { at: [3.3, 15.0], pose: 'sit', ride: 'seats' } });
+      spot('hotdog', 9.4, 15.0, 1.8, 1.0, { draw: 'hotdogstand', stand: [10.3, 16.6] });
+      spot('cage', 17.8, 14.7, 5.4, 2.4, { draw: 'battingcage', stand: [20.5, 17.4] });
+      guest(8.2, 16.0, { face: 1 }); guest(12.6, 15.4, { view: 'back', turn: [0.3, -1] }); who(13.2, 15.7, { view: 'back', turn: [0.2, -1], scale: 0.72, look: 4 });
+      guest(16.4, 16.6, { view: 'front', turn: [-0.3, 1] }); guest(23.2, 15.6, { face: -1 });
+      who(11.4, 14.8, { staff: true, face: 1, prop: '🌭', look: { shirt: '#ffffff', top: 'tshirt', hat: 'cap', hatCol: '#e5484d', hair: 'curly', hairCol: '#2b1d14', skin: '#9a6440' } });
+      P = { RW: 24, RD: 18, door: [13, 17.4], counter: { x: 5.0, y: 15.6, w: 2.8, d: 0.9 }, open: true };
     } else if (k === 'station') {   // the platform at the back (trains come and go), the departures board, ticket machines, a coffee kiosk, benches
       dec('rails', 0, 0.15, 16, 1.5, { flat: true }); dec('platformedge', 0, 1.65, 16, 0.35, { flat: true });
       dec('train', 0, 0.2, 16, 1.4);
@@ -3621,6 +3654,95 @@ const Scene = (() => {
       case 'candycart': { box(x, y, d.w, d.d, 14, '#f2a6c8', 0, { top: '#ffffff' }); const q = up(c, 14 * z); ellipse(q.x, q.y - 8 * z, 8 * z, 7 * z, '#f7c6dc'); line(q.x, q.y, q.x, q.y - 4 * z, '#ffffff', 1 * z); const r2 = up(c, 34 * z); for (let k2 = 0; k2 < 5; k2++) poly([r2, { x: r2.x - 16 * z + k2 * 8 * z, y: r2.y + 8 * z }, { x: r2.x - 8 * z + k2 * 8 * z, y: r2.y + 8 * z }], k2 % 2 ? '#ffffff' : '#ec6aa8'); return true; }
       case 'balloons': { for (let k2 = 0; k2 < 5; k2++) { const wv = Math.sin(t * 2 + k2) * 1.6 * z, q = { x: c.x + (k2 - 2) * 4 * z + wv, y: c.y - 34 * z - (k2 % 2) * 6 * z }; line(c.x, c.y - 8 * z, q.x, q.y + 5 * z, '#888', 0.5 * z); ellipse(q.x, q.y, 4 * z, 5 * z, RIDE_COLS[k2]); } return true; }
       case 'parktree': drawWildTree(x + 0.4, y + 0.4, 0.5, ts); return true;
+      // ----- v0.42: the zoo -----
+      case 'path': flatRect(x, y, d.w, d.d, '#e9dcb8'); return true;
+      case 'zoopen': {   // an enclosure (you can be in the petting farm), with a little sign at the front
+        const me = meS.use && !meS.moving && meS.use.ride === d.k ? { at: [x + d.w * 0.5, y + d.d * 0.62], look: S.me.look } : null;
+        const feed = d.k === 'giraffe' && meS.use && !meS.moving && meS.use.k === 'giraffefeed' ? d.feedAt : null;
+        zooPen(d.pen, x, y, d.w, d.d, ts, 1.5, { feed, me });
+        const sp = iso(x + 0.5, y + d.d + 0.25); line(sp.x, sp.y, sp.x, sp.y - 14 * z, '#7a5a3a', 1.4 * z); rrect(sp.x - 9 * z, sp.y - 24 * z, 18 * z, 11 * z, 2 * z, '#c9a36a', '#7a5a3a', 0.8 * z);
+        emoji((ZOO_ANIMALS[d.k] || { e: '🐐' }).e, sp.x, sp.y - 18.5 * z, 8 * z);
+        return true;
+      }
+      case 'feedplatform': {   // a wooden deck with a railing, up to giraffe height
+        box(x, y, d.w, d.d, 12, '#8a6a4a', 0, { top: '#c9a36a' });
+        [[x, y, x + d.w, y], [x + d.w, y, x + d.w, y + d.d]].forEach(([ax, ay, bx, by]) => { const a = up(iso(ax, ay), 12 * z), b2 = up(iso(bx, by), 12 * z); line(a.x, a.y - 10 * z, b2.x, b2.y - 10 * z, '#7a5a3a', 1.4 * z); [0, 0.5, 1].forEach(u => { const q = lerp(a, b2, u); line(q.x, q.y, q.x, q.y - 10 * z, '#7a5a3a', 1.2 * z); }); });
+        for (let k2 = 0; k2 < 3; k2++) box(x + 0.15 + k2 * 0.35, y + d.d, 0.35, 0.5, 9 - k2 * 3, '#a0805a', 0, { top: '#c9a36a', shadow: false });
+        const q = up(iso(x + 0.4, y + 0.4), 12 * z); emoji('🥬', q.x, q.y - 4 * z, 9 * z);
+        return true;
+      }
+      case 'zooshop': {   // a little shop hut with a green and white awning and plush animals in the window
+        const b = box(x, y, d.w, d.d, 30, '#efe3c4', 0, { top: '#3f8a4a' });
+        for (let k2 = 0; k2 < 8; k2++) wallRect(b.left, 0, k2 / 8, (k2 + 1) / 8, 24, 30, k2 % 2 ? '#ffffff' : '#3f8a4a');
+        wallRect(b.left, 0, 0.1, 0.9, 6, 20, NIGHT > 0.3 ? '#ffe39a' : '#bfe6f7', '#fffaf0', 1.2);
+        ['🦁', '🐘', '🦒', '🐧'].forEach((e, k2) => { const q = wallPt(b.left, 0, 0.18 + k2 * 0.21, 10); emoji(e, q.x, q.y, 8 * z); });
+        if (z > 0.4) { const q = up(c, 44 * z); pill(`🧸 ${curLang() === 'zh' ? '纪念品' : 'Gifts'}`, q.x, q.y, '#3f8a4a', '#ffffff', `800 ${Math.max(8, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(12, 14 * z)); }
+        return true;
+      }
+      case 'popcorn': { box(x, y, d.w, d.d, 16, '#e5484d', 0, { top: '#ffffff' }); const q = up(c, 16 * z); rrect(q.x - 7 * z, q.y - 16 * z, 14 * z, 14 * z, 2 * z, 'rgba(255,250,230,.85)', '#e5484d', 0.8 * z); for (let k2 = 0; k2 < 7; k2++) circle(q.x - 4 * z + (k2 % 4) * 2.6 * z, q.y - 6 * z - Math.floor(k2 / 4) * 3 * z, 1.6 * z, '#fff3c4'); emoji('🍿', q.x, q.y - 22 * z, 9 * z); return true; }
+      case 'zoomap': { const a = iso(x + 0.2, y + 0.15), b2 = iso(x + d.w - 0.2, y + 0.15); [a, b2].forEach(q => line(q.x, q.y, q.x, q.y - 20 * z, '#7a5a3a', 1.4 * z)); poly([up(a, 18 * z), up(b2, 18 * z), up(b2, 34 * z), up(a, 34 * z)], '#fffaf0', '#7a5a3a', 1 * z);
+        ['🦁', '🐘', '🐧', '🐼'].forEach((e, k2) => { const q = up(lerp(a, b2, 0.2 + k2 * 0.2), 26 * z); emoji(e, q.x, q.y, 5 * z); }); return true; }
+      // ----- v0.42: the stadium -----
+      case 'stands': case 'standsback': {   // tiers of seats rising away from the field; full of people while a game is on (with a wave now and then)
+        const back = (d.draw || d.kind) === 'standsback', g = stadiumGame(VIEW_TOWN), team = teamOf(VIEW_TOWN), rows = 5;
+        const meRow = !back && meS.use && !meS.moving && meS.use.ride === 'seats' ? 1 : -1, wv = ((t % 24) / 24) * 1.8 - 0.4;
+        for (let r = rows - 1; r >= 0; r--) {
+          const h = 6 + r * 8, bx = back ? x : x + (rows - 1 - r) * d.w / rows, by = back ? y + (rows - 1 - r) * d.d / rows : y, bw = back ? d.w : d.w / rows, bd = back ? d.d / rows : d.d;
+          box(bx, by, bw, bd, h, '#aab2bb', 0, { top: '#cdd3d9', shadow: false });
+          const n = Math.round((back ? bw : bd) / 0.55);
+          for (let k2 = 0; k2 < n; k2++) {
+            const u = (k2 + 0.5) / n, sx = back ? bx + u * bw : bx + bw * 0.5, sy = back ? by + bd * 0.5 : by + u * bd, p = up(iso(sx, sy), h * z);
+            rrect(p.x - 3 * z, p.y - 3.5 * z, 6 * z, 3.5 * z, 1 * z, Math.floor(u * 6) % 2 ? team.col : '#8e99a6');
+            if (r === meRow && k2 === Math.floor(n * 0.62)) { drawPerson(p.x, p.y, z, { look: S.me.look, face: 1, view: 'front', energy: 'great', ts, seed: 3, pose: 'sit', seatH: 0, wave: g.on && Math.floor(t * 1.5) % 3 === 0 }); continue; }
+            if (hash(k2, r + 7) > (g.on ? 0.85 : 0.05)) continue;
+            const lift = g.on ? Math.exp(-Math.pow((u - wv) * 7, 2)) * 7 : 0, i2 = k2 * 7 + r, shirt = i2 % 3 ? team.col : ['#ffffff', '#3d4a66', '#f2c230'][i2 % 3];
+            rrect(p.x - 2.6 * z, p.y - (9 + lift) * z, 5.2 * z, 6.5 * z, 2 * z, shirt);
+            circle(p.x, p.y - (11.6 + lift) * z, 2.4 * z, SKINS[i2 % 4]);
+            if (lift > 3) { line(p.x - 2 * z, p.y - (8 + lift) * z, p.x - 4 * z, p.y - (15 + lift) * z, SKINS[i2 % 4], 1 * z); line(p.x + 2 * z, p.y - (8 + lift) * z, p.x + 4 * z, p.y - (15 + lift) * z, SKINS[i2 % 4], 1 * z); }
+          }
+        }
+        return true;
+      }
+      case 'pitch': {   // the field (the game on it while there is one) and a low padded wall round it
+        const g = stadiumGame(VIEW_TOWN), team = teamOf(VIEW_TOWN), lit = NIGHT > 0.3 && g.on;
+        flatRect(x - 0.3, y - 0.3, d.w + 0.6, d.d + 0.6, '#b88a5a');
+        flatRect(x, y, d.w, d.d, lit ? '#6cc25a' : '#5aa84f');
+        for (let k2 = 0; k2 < 12; k2++) if (k2 % 2) flatRect(x + k2 * d.w / 12, y, d.w / 12, d.d, 'rgba(255,255,255,.06)');
+        drawPitch(x, y, d.w, d.d, ts, stadiumSport(VIEW_TOWN), 'S', g, true);
+        box(x - 0.5, y + d.d + 0.3, d.w + 0.8, 0.16, 9, team.col, 0, { shadow: false, top: shade(team.col, 0.2) });
+        if (lit) [[x, y], [x + d.w, y], [x, y + d.d]].forEach(([lx, ly]) => { const q = iso(lx, ly); glow(q.x, q.y - 60 * z, 120 * z, 0.5); });
+        return true;
+      }
+      case 'scoreboard': {   // a big screen in the corner: who's playing, the score, and the inning / the minute (or when the next game is)
+        const g = stadiumGame(VIEW_TOWN), zh = curLang() === 'zh';
+        box(x + 0.9, y + 0.9, d.w - 1.8, d.d - 1.8, 70, '#5b6470', 0, { top: '#6b7480' });
+        const q = up(iso(x + d.w / 2, y + d.d / 2), 70 * z), W2 = 76 * z, H2 = 50 * z;
+        rrect(q.x - W2 / 2, q.y - H2, W2, H2, 3 * z, '#1d1d22', '#9aa3ad', 1.6 * z);
+        if (z > 0.3) {
+          const row = (s2, yy, col, size = 7) => { ctx.font = `800 ${Math.max(5, size * z)}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = col; ctx.fillText(s2, q.x, yy); };
+          const SP = STADIUM.sports[stadiumSport(VIEW_TOWN)];
+          if (g.on || g.done) {
+            const H3 = teamOf(g.home), A3 = teamOf(g.away), sh = T3 => (zh ? TEAM_MASCOTS[Object.keys(COMMUNITIES).indexOf(T3.town) % TEAM_MASCOTS.length].zh : T3.en.split(' ').pop());
+            row(g.done ? (zh ? '终场' : 'FINAL') : g.sport === 'baseball' ? (zh ? `第 ${g.part} 局${g.top ? '上' : '下'}` : `${g.top ? 'TOP' : 'BOT'} ${g.part}`) : `${g.minute}′`, q.y - H2 + 9 * z, '#ffd36b', 6.5);
+            row(`${A3.e} ${sh(A3)}  ${g.score[1]}`, q.y - H2 + 22 * z, '#ffffff', 8);
+            row(`${H3.e} ${sh(H3)}  ${g.score[0]}`, q.y - H2 + 36 * z, '#ffffff', 8);
+          } else { row(`${SP.e} ${zh ? '下一场' : 'NEXT GAME'}`, q.y - H2 + 16 * z, '#ffd36b', 7); row(`${g.next}:00`, q.y - H2 + 32 * z, '#ffffff', 10); }
+        }
+        return true;
+      }
+      case 'hotdogstand': { const b = box(x, y, d.w, d.d, 16, '#e5484d', 0, { top: '#f2c230' }); [0.08, 0.92].forEach(u => wallLine(b.left, 0, u, 16, u, 38, '#c9cfd6', 1.2)); for (let k2 = 0; k2 < 6; k2++) wallRect(b.left, 0, k2 / 6, (k2 + 1) / 6, 36, 42, k2 % 2 ? '#ffffff' : '#e5484d');
+        const q = up(c, 16 * z); emoji('🌭', q.x - 5 * z, q.y, 9 * z); emoji('🥤', q.x + 6 * z, q.y + 1 * z, 8 * z); return true; }
+      case 'battingcage': {   // a long net tunnel: home plate at this end, a pitching machine at the far end
+        flatRect(x, y, d.w, d.d, '#3fa55a'); flatRect(x + 0.2, y + d.d * 0.3, d.w - 0.4, d.d * 0.4, '#c9925a');
+        const hp = iso(x + d.w - 0.7, y + d.d / 2); poly([{ x: hp.x - 3 * z, y: hp.y }, { x: hp.x, y: hp.y - 2 * z }, { x: hp.x + 3 * z, y: hp.y }, { x: hp.x, y: hp.y + 2 * z }], '#ffffff');
+        box(x + 0.3, y + d.d / 2 - 0.35, 0.7, 0.7, 14, '#5b6470', 0, { top: '#6b7480' }); const m = up(iso(x + 0.65, y + d.d / 2), 14 * z); circle(m.x, m.y - 4 * z, 4 * z, '#9aa3ad', '#2d2d34', 1 * z);
+        const T2 = (px, py) => up(iso(px, py), 34 * z), cs = [[x, y], [x + d.w, y], [x + d.w, y + d.d], [x, y + d.d]];
+        cs.forEach(([px, py]) => { const a = iso(px, py), b2 = T2(px, py); line(a.x, a.y, b2.x, b2.y, '#5b6470', 1.4 * z); });
+        poly(cs.map(([px, py]) => T2(px, py)), 'rgba(40,50,60,.10)', 'rgba(60,70,80,.7)', 1 * z);
+        poly([iso(x, y + d.d), iso(x + d.w, y + d.d), T2(x + d.w, y + d.d), T2(x, y + d.d)], 'rgba(40,50,60,.12)', 'rgba(60,70,80,.5)', 0.8 * z);
+        if (z > 0.4) { const q = T2(x + d.w / 2, y + d.d / 2); pill(`⚾ ${curLang() === 'zh' ? '本垒打大赛' : 'Home Run Derby'}`, q.x, q.y - 10 * z, '#2f5fa8', '#ffffff', `800 ${Math.max(8, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(12, 14 * z)); }
+        return true;
+      }
       case 'kingbed': { box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 6, '#6b4428', 0); box(x, y, d.w, d.d, 4, '#ffffff', 6, { top: '#fbfbf7' }); box(x + 0.1, y + 0.15, 0.6, d.d - 0.3, 3, '#ffffff', 10, { shadow: false, top: '#ffffff' });
         box(x + 1.0, y + 0.05, d.w - 1.1, d.d - 0.1, 1.4, '#8a2a34', 10, { shadow: false, top: '#a23a44' }); box(x - 0.1, y - 0.05, 0.15, d.d + 0.1, 30, '#6b4428', 0, { shadow: false }); return true; }
       case 'minibar': { box(x, y, d.w, d.d, 18, '#3b3125', 0, { top: '#5a4632' }); const q = up(c, 18 * z); emoji('🍾', q.x - 4 * z, q.y, 8 * z); emoji('🥂', q.x + 5 * z, q.y + 1 * z, 8 * z); return true; }

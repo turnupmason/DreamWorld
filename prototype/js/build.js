@@ -2029,6 +2029,8 @@ function drawStore(st, ts) {
     wallLine(F, 0, 0.35, 0, 0.65, 18, '#fff', 1); wallLine(F, 0, 0.65, 0, 0.35, 18, '#fff', 1);
     gable(x + 0.2, y + 0.2, w - 0.4, d - 0.4, wh, 14, S2.roof, shade(S2.roof, 0.15));
   } else if (k === 'amuse') b = drawAmusement(G, x, y, w, d, ts);   // v0.41: rides in the open
+  else if (k === 'zoo') b = drawZoo(G, x, y, w, d, ts);   // v0.42: animals in the open
+  else if (k === 'stadium') b = drawStadium(G, x, y, w, d, ts);   // v0.42: an open bowl
   else if (CIVIC_WH[k]) b = drawCivic(k, G, x, y, w, d, wh, ts);   // v0.38: the new district's buildings
   else {
     b = box(x, y, w, d, wh, S2.wall);
@@ -2207,10 +2209,220 @@ function drawAmusement(G, x, y, w, d, ts) {
   [at(0.4, 0.55), at(0.9, 0.5), at(0.08, 0.92)].forEach(([bx2, by2], i) => { const p = iso(bx2, by2), wv = Math.sin(ts / 400 + i) * 1.5 * z; line(p.x, p.y, p.x + wv, p.y - 22 * z, '#888', 0.6 * z); circle(p.x + wv, p.y - 26 * z, 4 * z, RIDE_COLS[(i * 3) % 8]); });   // balloons
   return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
 }
+// ---------- v0.42: the zoo ----------
+// One enclosure (world tiles x, y, w, d), the same in town (from outside the fence) and inside the zoo. as: how big the
+// animals are (× the zoom). o: { feed: the giraffes come to the feeding platform at [x, y], pet: someone's in the petting
+// farm }. Returns nothing; draws the ground, what's in it, the animals (back to front) and the fence.
+const ZOO_GROUND = { lion: '#dcc08a', elephant: '#c9a47a', giraffe: '#d9cb8c', penguin: '#eef6fa', monkey: '#9fd07c', panda: '#a9cf7e', petting: '#e8d39a' };
+function zooPen(kind, x, y, w, d, ts, as = 1, o = {}) {
+  const z = cam.z, s = z * as, objs = [], at = (u, v) => [x + u * w, y + v * d];
+  const put = (wx, wy, f) => objs.push({ k: wx + wy, f });
+  const pal = n => Math.min(w, d) * n;
+  // the ground
+  flatRect(x, y, w, d, ZOO_GROUND[kind]);
+  for (let k = 0; k < Math.round(w * d / 3); k++) { const p = iso(x + 0.3 + hash(k, 11) * (w - 0.6), y + 0.3 + hash(k, 12) * (d - 0.6)); line(p.x, p.y, p.x - 1.5 * z, p.y - 3 * z, 'rgba(90,120,50,.35)', 0.8 * z); line(p.x, p.y, p.x + 1.5 * z, p.y - 3 * z, 'rgba(90,120,50,.35)', 0.8 * z); }
+  const wander = (seed, sp, mg = 0.12) => { const q = zooWander(seed, ts, sp); return { ...q, x: x + w * (mg + (1 - 2 * mg) * q.u), y: y + d * (mg + (1 - 2 * mg) * q.v) }; };
+  const animal = (k, q, sc, ex = {}) => put(q.x, q.y, () => { const p = iso(q.x, q.y); drawZooAnimal(k, p.x, p.y - (ex.lift || 0) * z, s * sc, { ts, seed: ex.seed || 0, face: q.face, moving: q.moving, phase: q.phase, act: ex.act }); });
+  if (kind === 'lion') {
+    const [rx, ry] = at(0.32, 0.4), R = pal(0.2), rh = 12;
+    put(rx, ry, () => { const p = iso(rx, ry); ellipse(p.x, p.y + 2 * z, R * 40 * z, R * 18 * z, 'rgba(0,0,0,.14)'); ellipse(p.x, p.y - rh * 0.4 * z, R * 34 * z, R * 15 * z + rh * 0.5 * z, '#a99a84'); ellipse(p.x - 4 * z, p.y - rh * z, R * 30 * z, R * 12 * z, '#bfb19c'); ellipse(p.x - 8 * z, p.y - (rh + 1) * z, R * 14 * z, R * 6 * z, '#cfc3b0');
+      drawZooAnimal('lion', p.x, p.y - rh * z, s, { ts, seed: 1, face: 1, act: 'lie' }); });
+    animal('lioness', wander(3, 0.035), 1, { seed: 3 });
+    const [tx, ty] = at(0.85, 0.15); put(tx, ty, () => drawWildTree(tx, ty, 0.3, ts));
+  } else if (kind === 'elephant') {
+    const [px, py] = at(0.72, 0.32), pr = pal(0.22), pp = iso(px, py);
+    ellipse(pp.x, pp.y, pr * 46 * z, pr * 23 * z, '#a88a64'); ellipse(pp.x, pp.y, pr * 42 * z, pr * 21 * z, '#5ab8dc');
+    for (let k = 0; k < 4; k++) { const u = (ts / 3000 + k / 4) % 1; ellipse(pp.x + (k - 1.5) * pr * 16 * z, pp.y + (k % 2 - 0.5) * pr * 8 * z, pr * 10 * z * (0.5 + u), pr * 3 * z * (0.5 + u), `rgba(255,255,255,${0.35 * (1 - u)})`); }
+    const big = wander(5, 0.025, 0.22), spray = !big.moving && Math.sin(ts / 2600) > 0.4;
+    animal('elephant', big, 1.2, { seed: 5, act: spray ? 'spray' : !big.moving ? 'eat' : null });
+    const baby = { ...big, x: big.x - 0.9 * big.face, y: big.y + 0.6, phase: big.phase + 1 };
+    animal('elephant', baby, 0.62, { seed: 6 });
+    const [hx, hy] = at(0.12, 0.2); put(hx, hy, () => { const p = iso(hx, hy); ellipse(p.x, p.y - 3 * z, 10 * z, 5 * z, '#c9b25a'); ellipse(p.x, p.y - 6 * z, 8 * z, 4 * z, '#dcc76a'); });   // hay
+  } else if (kind === 'giraffe') {
+    const [tx, ty] = at(0.78, 0.22);
+    put(tx, ty, () => { const p = iso(tx, ty); line(p.x, p.y, p.x - 2 * z, p.y - 44 * z, '#7a5a3a', 3 * z); line(p.x - 2 * z, p.y - 34 * z, p.x - 14 * z, p.y - 48 * z, '#7a5a3a', 2 * z); line(p.x - 1 * z, p.y - 38 * z, p.x + 12 * z, p.y - 50 * z, '#7a5a3a', 2 * z);
+      ellipse(p.x - 2 * z, p.y - 56 * z, 30 * z, 7 * z, '#4f8a3a'); ellipse(p.x - 6 * z, p.y - 60 * z, 20 * z, 5 * z, '#5f9c45'); ellipse(p.x + 6 * z, p.y - 59 * z, 16 * z, 4 * z, '#6aaa4f'); });
+    const eatAt = { x: tx + 0.9, y: ty + 0.6, face: -1, moving: false, phase: 0 };
+    animal('giraffe', eatAt, 1.3, { seed: 7, act: 'eat' });
+    const g2 = o.feed ? { x: o.feed[0], y: o.feed[1], face: -1, moving: false, phase: 0 } : wander(8, 0.03, 0.18);
+    animal('giraffe', g2, 1.3, { seed: 8, act: o.feed ? 'reach' : null });
+    [11, 12].forEach(sd => { const q = wander(sd, 0.04, 0.15); animal('zebra', q, 0.9, { seed: sd, act: q.moving ? null : 'eat' }); });
+  } else if (kind === 'penguin') {
+    const wd = 0.58; flatRect(x, y, w, d * wd, '#5ac8e8');
+    for (let k = 0; k < 6; k++) { const u = (ts / 4000 + k / 6) % 1, p = iso(x + w * (0.1 + hash(k, 3) * 0.8), y + d * wd * (0.15 + 0.7 * u)); ellipse(p.x, p.y, 7 * z, 1.6 * z, 'rgba(255,255,255,.4)'); }
+    const [ix, iy] = at(0.2, 0.5); put(ix - 0.5, iy - 0.5, () => { const p = iso(ix, iy); ellipse(p.x, p.y - 4 * z, 16 * z, 7 * z, '#ffffff', '#cfe4ee', 0.8 * z); ellipse(p.x + 4 * z, p.y - 8 * z, 9 * z, 4 * z, '#f4fbff'); });
+    [21, 22].forEach(sd => { const q = zooWander(sd, ts, 0.06), wx = x + w * (0.1 + 0.8 * q.u), wy = y + d * wd * (0.15 + 0.7 * q.v); put(wx, wy, () => { const p = iso(wx, wy); drawZooAnimal('penguin', p.x, p.y, s * 1.3, { ts, seed: sd, face: q.face, act: 'swim' }); }); });
+    [23, 24, 25].forEach((sd, i) => { const q = zooWander(sd, ts, 0.03), wx = x + w * (0.12 + 0.76 * q.u), wy = y + d * (wd + 0.06 + (0.88 - wd) * q.v); put(wx, wy, () => { const p = iso(wx, wy); drawZooAnimal('penguin', p.x, p.y, s * 1.3, { ts, seed: sd, face: q.face, moving: q.moving, phase: q.phase }); }); });
+  } else if (kind === 'monkey') {
+    const c = iso(x + w / 2, y + d / 2), rr = Math.min(w, d) * 17;
+    ellipse(c.x, c.y, rr * 1.9 * z, rr * 0.95 * z, '#5ab8dc'); ellipse(c.x, c.y - 1 * z, rr * 1.45 * z, rr * 0.72 * z, '#8a6a4a'); ellipse(c.x, c.y - 3 * z, rr * 1.4 * z, rr * 0.68 * z, '#9fd07c');
+    put(x + w / 2, y + d / 2, () => {
+      const top = c.y - 46 * z; line(c.x - 10 * z, c.y - 2 * z, c.x - 10 * z, top, '#8a5a36', 2.6 * z); line(c.x + 12 * z, c.y + 1 * z, c.x + 12 * z, top + 4 * z, '#8a5a36', 2.6 * z);
+      line(c.x - 14 * z, top + 1 * z, c.x + 16 * z, top + 5 * z, '#8a5a36', 2.2 * z);
+      ctx.beginPath(); ctx.moveTo(c.x - 10 * z, top + 10 * z); ctx.quadraticCurveTo(c.x + 1 * z, top + 22 * z, c.x + 12 * z, top + 14 * z); ctx.strokeStyle = '#c9a36a'; ctx.lineWidth = 1.2 * z; ctx.stroke();
+      ellipse(c.x - 12 * z, top - 4 * z, 12 * z, 6 * z, '#4f9a4a'); ellipse(c.x + 14 * z, top - 1 * z, 11 * z, 5 * z, '#5aa84f');
+      const sw = Math.sin(ts / 600) * 0.35, hx = c.x + 3 * z, hy = top + 3 * z;
+      ctx.save(); ctx.translate(hx, hy); ctx.rotate(sw); drawZooAnimal('monkey', 0, 24 * s * 1.2, s * 1.2, { ts, seed: 31, face: 1, act: 'hang' }); ctx.restore();
+      drawZooAnimal('monkey', c.x - 12 * z, c.y - 3 * z, s * 1.2, { ts, seed: 32, face: 1, act: 'sit' });
+      const q = zooWander(33, ts, 0.06); drawZooAnimal('monkey', c.x + (q.u - 0.5) * rr * 1.6 * z, c.y - 3 * z + (q.v - 0.5) * rr * 0.7 * z, s * 1.2, { ts, seed: 33, face: q.face, moving: q.moving, phase: q.phase });
+    });
+  } else if (kind === 'panda') {
+    for (let k = 0; k < 9; k++) { const bx = x + w * (0.08 + k * 0.1), by = y + d * (0.12 + (k % 3) * 0.06); put(bx, by, () => { const p = iso(bx, by), hh = (26 + hash(k, 5) * 16) * z; line(p.x, p.y, p.x + 1 * z, p.y - hh, '#7cb342', 1.6 * z); for (let j = 1; j < 4; j++) { const yy = p.y - hh * j / 4; ellipse(p.x + 4 * z, yy, 4 * z, 1.2 * z, '#5a9a3a', null, 0, -0.5); ellipse(p.x - 3 * z, yy - 2 * z, 3.4 * z, 1 * z, '#6aaa45', null, 0, 0.6); } }); }
+    const [sx, sy] = at(0.4, 0.55); animal('panda', { x: sx, y: sy, face: 1, moving: false }, 1.1, { seed: 41 });
+    const q = wander(42, 0.03, 0.2); animal('panda', q, 0.7, { seed: 42 });
+    const [lx, ly] = at(0.8, 0.7); put(lx, ly, () => { const p = iso(lx, ly); box(lx - 0.5, ly - 0.25, 1.0, 0.5, 4, '#8a6a4a', 0, { top: '#a0805a', shadow: false }); });
+  } else if (kind === 'petting') {
+    const L = [['goat', 2], ['goat', 1], ['sheep', 2], ['rabbit', 2], ['rabbit', 1], ['goat', 0]];
+    L.forEach(([k, st], i) => { const q = wander(51 + i, k === 'rabbit' ? 0.08 : 0.04, 0.14); put(q.x, q.y, () => { const p = iso(q.x, q.y); drawAnimal(k, st, p.x, p.y, s * 0.95, { face: q.face, ts, seed: 51 + i, moving: q.moving, phase: q.phase }); }); });
+    const [hx, hy] = at(0.85, 0.2); put(hx, hy, () => { const p = iso(hx, hy); box(hx - 0.35, hy - 0.25, 0.7, 0.5, 6, '#8a6a4a', 0, { top: '#e0c56a' }); });
+  }
+  if (o.me) put(o.me.at[0], o.me.at[1], () => { const p = iso(...o.me.at); drawPerson(p.x, p.y, z, { look: o.me.look, face: 1, view: 'front', energy: 'great', ts, seed: 3, pose: 'stand', wave: Math.floor(ts / 700) % 3 === 0 }); });   // you, in the petting farm
+  objs.sort((a, b) => a.k - b.k).forEach(q => q.f());
+  // the fence: the far sides first would be hidden by what's inside, so all of it goes on top, low enough to see over
+  const glass = kind === 'penguin', fh = (glass ? 12 : kind === 'petting' ? 6 : 8) * z, col = kind === 'petting' ? '#fbfbf7' : '#8a6a4a';
+  [[[x, y], [x + w, y]], [[x, y], [x, y + d]], [[x + w, y], [x + w, y + d]], [[x, y + d], [x + w, y + d]]].forEach(([a0, b0], fi) => {
+    if (o.open === fi) return;
+    const a = iso(...a0), b = iso(...b0);
+    if (glass) { poly([a, b, up(b, fh), up(a, fh)], 'rgba(190,230,250,.28)', 'rgba(255,255,255,.7)', 0.8 * z); return; }
+    const n = Math.max(2, Math.round(Math.hypot(b0[0] - a0[0], b0[1] - a0[1]) * 1.4));
+    for (let k = 0; k <= n; k++) { const q = lerp(a, b, k / n); line(q.x, q.y, q.x, q.y - fh, shade(col, -0.15), 1.1 * z); }
+    line(a.x, a.y - fh, b.x, b.y - fh, col, 1.4 * z); line(a.x, a.y - fh * 0.5, b.x, b.y - fh * 0.5, col, 1 * z);
+  });
+}
+// the zoo seen from the town: a fenced garden with paths, six enclosures and a gateway with the zoo's name
+function drawZoo(G, x, y, w, d, ts) {
+  // fx across, fy from the back (0) to the gate (1)
+  const z = cam.z, at = (fx, fy) => ({ S: [x + fx * w, y + fy * d], N: [x + (1 - fx) * w, y + (1 - fy) * d], E: [x + fy * w, y + (1 - fx) * d], W: [x + (1 - fy) * w, y + fx * d] }[G.front] || [x + fx * w, y + fy * d]);
+  const rect = (u0, v0, u1, v1) => { const [ax, ay] = at(u0, v0), [bx, by] = at(u1, v1); return [Math.min(ax, bx), Math.min(ay, by), Math.abs(bx - ax), Math.abs(by - ay)]; };
+  flatRect(x, y, w, d, '#b9d98a');
+  const path = (u0, v0, u1, v1) => { const [a, b, c2, e] = rect(u0, v0, u1, v1); flatRect(a, b, c2 || 0.8, e || 0.8, '#e9dcb8'); };
+  path(0.02, 0.5, 0.98, 0.56); path(0.47, 0.5, 0.53, 1.0); path(0.38, 0.05, 0.43, 0.5);
+  const fence = (ax, ay, bx, by) => { const a = iso(ax, ay), b = iso(bx, by); line(a.x, a.y - 6 * z, b.x, b.y - 6 * z, '#3f8a4a', 1.6 * z); for (let k = 0; k <= 12; k++) { const q = lerp(a, b, k / 12); line(q.x, q.y, q.x, q.y - 7 * z, '#2f6f3a', 1.2 * z); } };
+  fence(x, y, x + w, y); fence(x, y, x, y + d);
+  const pens = [['giraffe', 0.03, 0.04, 0.36, 0.46], ['elephant', 0.45, 0.04, 0.78, 0.46], ['penguin', 0.82, 0.06, 0.97, 0.42], ['lion', 0.04, 0.62, 0.34, 0.94], ['monkey', 0.36, 0.62, 0.45, 0.92], ['panda', 0.56, 0.62, 0.95, 0.92]]
+    .map(([k, ...r]) => [k, ...rect(...r)]).sort((a, b) => a[1] + a[2] + (a[3] + a[4]) / 2 - (b[1] + b[2] + (b[3] + b[4]) / 2));
+  pens.forEach(([k, px, py, pw, pd]) => zooPen(k, px, py, pw, pd, ts, 1.15));
+  fence(x + w, y, x + w, y + d); fence(x, y + d, x + w, y + d);
+  // the gateway: two stone posts and a green arch with the name
+  const gx = G.front === 'S' ? [x + w / 2, y + d] : G.front === 'N' ? [x + w / 2, y] : G.front === 'E' ? [x + w, y + d / 2] : [x, y + d / 2], ax = G.front === 'S' || G.front === 'N';
+  const pa = iso(gx[0] - (ax ? 1.4 : 0), gx[1] - (ax ? 0 : 1.4)), pb = iso(gx[0] + (ax ? 1.4 : 0), gx[1] + (ax ? 0 : 1.4));
+  [pa, pb].forEach(p => { rrect(p.x - 3 * z, p.y - 30 * z, 6 * z, 30 * z, 1.5 * z, '#c9b08a', '#8a6a4a', 0.6 * z); ellipse(p.x, p.y - 31 * z, 5 * z, 2.4 * z, '#4f8a3a'); });
+  const m = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 - 38 * z };
+  ctx.beginPath(); ctx.moveTo(pa.x, pa.y - 28 * z); ctx.quadraticCurveTo(m.x, m.y - 14 * z, pb.x, pb.y - 28 * z); ctx.strokeStyle = '#3f8a4a'; ctx.lineWidth = 6 * z; ctx.stroke(); ctx.strokeStyle = '#6fb44e'; ctx.lineWidth = 2 * z; ctx.stroke();
+  if (z > 0.18) { circle(m.x, m.y, 8 * z, '#fffaf0', '#3f8a4a', 1.4 * z); emoji('🦁', m.x, m.y + 1 * z, 10 * z); }
+  if (NIGHT > 0.3) [pa, pb].forEach(p => glow(p.x, p.y - 32 * z, 16 * z, 0.6));
+  return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
+}
+// ---------- v0.42: the stadium ----------
+// The playing field (world tiles x, y, w, d): a baseball diamond with home plate on the `front` side, or a soccer
+// pitch along its longer side; and, while a game is on (g: stadiumGame()), the two teams playing. big: real townies
+// (inside the stadium) instead of little figures (from the town).
+const PITCH_LOOKS = {};
+function pitchLook(col, i, cap) { const k = col + i + cap; return PITCH_LOOKS[k] || (PITCH_LOOKS[k] = { shirt: col, top: 'tshirt', skin: SKINS[i % 4], hair: ['short', 'curly', 'bun', 'buzz'][i % 4], hairCol: HAIR_COLORS[i % 3], body: 'regular', mob: 'walk', hat: cap ? 'cap' : undefined, hatCol: col }); }
+function drawPitch(x, y, w, d, ts, sport, front, g, big) {
+  const z = cam.z, t = ts / 1000, lines = 'rgba(255,255,255,.9)', lw = Math.max(0.8, (big ? 1.6 : 0.9) * z);
+  const seg = (a, b) => { const p = iso(...a), q = iso(...b); line(p.x, p.y, q.x, q.y, lines, lw); };
+  const fig = (wx, wy, col, i, run, o = {}) => {   // one player
+    const p = iso(wx, wy);
+    if (big) { drawPerson(p.x, p.y, z * 0.62, { look: pitchLook(col, i, sport === 'baseball'), face: o.face || (wx - wy > 0 ? 1 : -1), pose: run ? 'run' : 'stand', phase: t * 12 + i, ts, seed: i, view: o.view, after: o.after }); return; }
+    ellipse(p.x, p.y, 2.2 * z, 1 * z, 'rgba(0,0,0,.2)'); line(p.x, p.y - 1 * z, p.x, p.y - 4.6 * z, col, 2.4 * z); circle(p.x, p.y - 6 * z, 1.4 * z, SKINS[i % 4]);
+  };
+  const T = g && g.on ? [teamOf(g.home).col, teamOf(g.away).col] : null;
+  if (sport === 'baseball') {
+    // home plate in the corner nearest you, the foul lines along the two edges, second base straight up the middle
+    const s = Math.min(w, d) * 0.42, H = [x + w - Math.min(w, d) * 0.08, y + d - Math.min(w, d) * 0.08], at = (a, c) => [H[0] - a * s, H[1] - c * s];
+    const fan = []; for (let k = 0; k <= 16; k++) { const an = k / 16 * Math.PI / 2; fan.push(iso(...at(Math.cos(an) * 1.5, Math.sin(an) * 1.5))); }
+    poly([iso(...at(-0.15, -0.15)), iso(...at(-0.15, 1.5)), ...fan.reverse(), iso(...at(1.5, -0.15))], '#c9925a');
+    poly([iso(...at(0.14, 0.14)), iso(...at(0.86, 0.14)), iso(...at(0.86, 0.86)), iso(...at(0.14, 0.86))], '#6fbf5a');
+    const L = Math.min(w, d) * 0.9 / s; seg(at(0, 0), at(L, 0)); seg(at(0, 0), at(0, L));
+    [[0, 0], [1, 0], [1, 1], [0, 1]].forEach(([a, c]) => { const p = iso(...at(a, c)); poly([{ x: p.x, y: p.y - 2 * z }, { x: p.x + 3 * z, y: p.y }, { x: p.x, y: p.y + 2 * z }, { x: p.x - 3 * z, y: p.y }], '#ffffff'); });
+    const mound = iso(...at(0.47, 0.47)); ellipse(mound.x, mound.y, 7 * z, 3.5 * z, '#c08550');
+    if (!T) return;
+    // the visitors bat first: in the top of an inning the home team is out in the field
+    const fieldC = g.top ? T[0] : T[1], batC = g.top ? T[1] : T[0];
+    const C = 5, k = Math.floor(t / C), u = (t % C) / C, hit = hash(k, 3) < 0.38, LD = [1.2 + hash(k, 4) * 1.3, 1.2 + hash(k, 5) * 1.3];
+    const POS = [[0.47, 0.47], [-0.16, -0.16], [0.12, 0.9], [0.55, 1.18], [1.18, 0.55], [0.9, 0.12], [2.1, 0.8], [1.8, 1.8], [0.8, 2.1]];
+    const near = POS.reduce((bi, p, i) => (i > 1 && Math.hypot(p[0] - LD[0], p[1] - LD[1]) < Math.hypot(POS[bi][0] - LD[0], POS[bi][1] - LD[1]) ? i : bi), 2);
+    const e = hit ? Math.max(0, Math.min(1, (u - 0.42) / 0.4)) : 0;
+    const who = POS.map((p, i) => { const q = i === near && hit ? [p[0] + (LD[0] - p[0]) * e, p[1] + (LD[1] - p[1]) * e] : p; return { w: at(...q), col: fieldC, i, run: i === near && hit && e > 0 && e < 1 }; });
+    const ru = hit ? Math.max(0, Math.min(1, (u - 0.45) / 0.45)) : 0;
+    who.push({ w: hit && ru > 0 ? at(0, ru) : at(-0.05, 0.12), col: batC, i: 20, run: ru > 0 && ru < 1, bat: !hit || ru === 0 });
+    who.sort((a, b) => a.w[0] + a.w[1] - (b.w[0] + b.w[1])).forEach(o => fig(o.w[0], o.w[1], o.col, o.i, o.run, o.bat && big ? { view: 'back', after: () => line(4, -16, 13, -30 + (u > 0.38 && u < 0.5 ? 18 : 0), '#c99a5a', 1.6) } : {}));
+    // the ball: pitched, then hit out into the field
+    let bp = null;
+    if (u > 0.22 && u < 0.4) { const v = (u - 0.22) / 0.18; bp = up(iso(...at(0.47 * (1 - v), 0.47 * (1 - v))), (big ? 14 : 5) * z); }
+    else if (hit && u >= 0.4 && u < 0.82) { const v = (u - 0.4) / 0.42; bp = up(iso(...at(LD[0] * v, LD[1] * v)), Math.sin(v * Math.PI) * (big ? 70 : 30) * z + 4 * z); }
+    if (bp) circle(bp.x, bp.y, Math.max(1, (big ? 2.2 : 1.2) * z), '#ffffff', '#c9cfd6', 0.4 * z);
+    return;
+  }
+  // soccer: the pitch along the longer side
+  const long = w >= d, X0 = x + w * 0.06, Y0 = y + d * 0.06, W2 = w * 0.88, D2 = d * 0.88;
+  const at = (a, c) => (long ? [X0 + W2 * (a + 1) / 2, Y0 + D2 * (c + 1) / 2] : [X0 + W2 * (c + 1) / 2, Y0 + D2 * (a + 1) / 2]);
+  for (let k = 0; k < 10; k++) if (k % 2) poly([iso(...at(-1 + k / 5, -1)), iso(...at(-0.8 + k / 5, -1)), iso(...at(-0.8 + k / 5, 1)), iso(...at(-1 + k / 5, 1))], 'rgba(255,255,255,.07)');
+  [[[-1, -1], [1, -1]], [[1, -1], [1, 1]], [[1, 1], [-1, 1]], [[-1, 1], [-1, -1]], [[0, -1], [0, 1]]].forEach(([a, b]) => seg(at(...a), at(...b)));
+  [-1, 1].forEach(sd => { const bx = sd * 0.68; seg(at(sd, -0.45), at(bx, -0.45)); seg(at(bx, -0.45), at(bx, 0.45)); seg(at(bx, 0.45), at(sd, 0.45));
+    const g0 = at(sd * 1.03, -0.13), g1 = at(sd * 1.03, 0.13); [g0, g1].forEach(gp => { const p = iso(...gp); line(p.x, p.y, p.x, p.y - 7 * z, '#ffffff', 1.2 * z); }); const p0 = up(iso(...g0), 7 * z), p1 = up(iso(...g1), 7 * z); line(p0.x, p0.y, p1.x, p1.y, '#ffffff', 1.2 * z); });
+  { const c0 = iso(...at(0, 0)), r0 = Math.min(W2, D2) * 0.13; ellipse(c0.x, c0.y, r0 * 32 * z, r0 * 16 * z, null, lines, lw); }
+  if (!T) return;
+  const ball = [0.75 * Math.sin(t * 0.37) + 0.15 * Math.sin(t * 1.3), 0.7 * Math.sin(t * 0.53 + 1)];
+  const FORM = [[-0.95, 0], [-0.6, -0.6], [-0.65, -0.2], [-0.65, 0.2], [-0.6, 0.6], [-0.2, -0.65], [-0.25, -0.2], [-0.25, 0.2], [-0.2, 0.65], [0.15, -0.25], [0.15, 0.25]];
+  const ps = [];
+  [0, 1].forEach(side => FORM.forEach((f, i) => {
+    const bx = side ? -f[0] : f[0], by = side ? -f[1] : f[1], pull = i ? 0.35 : 0.06, jx = Math.sin(t * 0.9 + i * 2 + side) * 0.04;
+    const px = bx + (ball[0] - bx) * pull + jx, py = by + (ball[1] - by) * pull * 0.8, dist = Math.hypot(ball[0] - px, ball[1] - py);
+    ps.push({ w: at(Math.max(-1, Math.min(1, px)), Math.max(-1, Math.min(1, py))), col: i ? T[side] : shade(T[side], 0.35), i: i + side * 11, run: dist < 0.5 });
+  }));
+  ps.sort((a, b) => a.w[0] + a.w[1] - (b.w[0] + b.w[1])).forEach(o => fig(o.w[0], o.w[1], o.col, o.i, o.run));
+  const bp = iso(...at(...ball)); circle(bp.x, bp.y - 1 * z, Math.max(1, (big ? 2.4 : 1.2) * z), '#ffffff', '#2d2d2d', 0.4 * z);
+}
+// the stadium seen from the town: a rounded bowl of stands round the field, floodlights at the corners, a scoreboard
+// over the far stands and flags on top
+function drawStadium(G, x, y, w, d, ts) {
+  const z = cam.z, cx = x + w / 2, cy = y + d / 2, RX = w / 2 - 0.2, RY = d / 2 - 0.2, e = 0.5, H = 34, h0 = 8, N = 72;
+  const town = SCENE_TOWN, g = stadiumGame(town), sport = stadiumSport(town), team = teamOf(town), lit = NIGHT > 0.3, full = g.on;
+  const pt = (a, f) => { const c = Math.cos(a), s = Math.sin(a); return [cx + f * RX * Math.sign(c) * Math.pow(Math.abs(c), e), cy + f * RY * Math.sign(s) * Math.pow(Math.abs(s), e)]; };
+  flatRect(x, y, w, d, '#cfd3d8');
+  const corners = [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75].map(a => pt(a, 1.02)).sort((p, q) => p[0] + p[1] - (q[0] + q[1]));
+  const tower = ([tx, ty]) => { const p = iso(tx, ty), tp = up(p, 74 * z); line(p.x, p.y, tp.x, tp.y, '#9aa3ad', 2.2 * z); rrect(tp.x - 9 * z, tp.y - 8 * z, 18 * z, 9 * z, 1.5 * z, '#5b6470');
+    for (let k = 0; k < 6; k++) circle(tp.x - 6.5 * z + (k % 3) * 6.5 * z, tp.y - 5.5 * z + Math.floor(k / 3) * 4 * z, 1.5 * z, lit && full ? '#fffbe0' : '#dfe6ea');
+    if (lit && full) glow(tp.x, tp.y - 3 * z, 60 * z, 0.9); };
+  corners.slice(0, 2).forEach(tower);
+  // the field
+  const inner = Array.from({ length: N }, (_, i) => iso(...pt(i / N * Math.PI * 2, 0.62)));
+  poly(inner, lit && full ? '#6cc25a' : '#5aa84f');
+  drawPitch(cx - RX * 0.52, cy - RY * 0.52, RX * 1.0, RY * 1.0, ts, sport, G.front, g, false);
+  // the stands, far ones first; the seats in the home team's colour and grey, full of people while there's a game
+  const segs = Array.from({ length: N }, (_, i) => { const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2, m = pt((a0 + a1) / 2, 0.8); return { i, a0, a1, k: m[0] + m[1] - cx - cy }; }).sort((p, q) => p.k - q.k);
+  segs.forEach(sg => {
+    const o0 = up(iso(...pt(sg.a0, 1)), H * z), o1 = up(iso(...pt(sg.a1, 1)), H * z), i0 = up(iso(...pt(sg.a0, 0.64)), h0 * z), i1 = up(iso(...pt(sg.a1, 0.64)), h0 * z);
+    const sect = Math.floor(sg.i / 6) % 2, col = sect ? team.col : '#9aa3ad';
+    poly([o0, o1, i1, i0], shade(col, sg.k < 0 ? 0.05 : -0.1));
+    for (let r = 1; r < 4; r++) { const a = lerp(i0, o0, r / 4), b = lerp(i1, o1, r / 4); line(a.x, a.y, b.x, b.y, 'rgba(255,255,255,.25)', 0.6 * z); }
+    if (z > 0.3) for (let r = 0; r < 4; r++) { if (!full && hash(sg.i, r) > 0.12) continue; const q = lerp(lerp(i0, i1, hash(r, sg.i)), lerp(o0, o1, hash(r, sg.i)), (r + 0.5) / 4); circle(q.x, q.y - 1.2 * z, 1.1 * z, ['#f3c59f', '#d39a6c', '#9a6440', '#ffe0c4'][(sg.i + r) % 4]); }
+  });
+  // the outside wall where it faces you, with arches
+  segs.forEach(sg => {
+    const m0 = pt(sg.a0, 1), m1 = pt(sg.a1, 1), nx = (m0[0] + m1[0]) / 2 - cx, ny = (m0[1] + m1[1]) / 2 - cy;
+    if (nx / RX + ny / RY <= 0) return;
+    const a = iso(...m0), b = iso(...m1), side = nx / RX > ny / RY;
+    poly([a, b, up(b, H * z), up(a, H * z)], side ? shade('#d8dde3', -0.12) : '#e4e8ec');
+    line(a.x, a.y - (H - 4) * z, b.x, b.y - (H - 4) * z, team.col, 3 * z);
+    if (sg.i % 2) { const c = lerp(a, b, 0.5); rrect(c.x - 2 * z, c.y - 16 * z, 4 * z, 13 * z, 2 * z, lit ? '#ffe39a' : '#8e99a6'); }
+  });
+  // the scoreboard over the far stands
+  { const sb = up(iso(...pt(Math.PI * 1.25, 1.0)), H * z), W2 = 30 * z, H2 = 16 * z;
+    line(sb.x - 8 * z, sb.y, sb.x - 8 * z, sb.y - 12 * z, '#5b6470', 1.6 * z); line(sb.x + 8 * z, sb.y, sb.x + 8 * z, sb.y - 12 * z, '#5b6470', 1.6 * z);
+    rrect(sb.x - W2 / 2, sb.y - 12 * z - H2, W2, H2, 2 * z, '#1d1d22', '#5b6470', 0.8 * z);
+    if (z > 0.3) { ctx.font = `900 ${Math.max(5, 6.5 * z)}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffd36b';
+      ctx.fillText(g.on || g.done ? `${g.score[0]} : ${g.score[1]}` : '– : –', sb.x, sb.y - 12 * z - H2 / 2); } }
+  corners.slice(2).forEach(tower);
+  [0.3, 0.5, 0.7].forEach((u, i) => { const p = up(iso(...pt(Math.PI * (0.15 + u), 1)), H * z), wv = Math.sin(ts / 500 + i) * 2 * z; line(p.x, p.y, p.x, p.y - 14 * z, '#c9cfd6', 0.8 * z); pg([[p.x, p.y - 14 * z], [p.x + 8 * z + wv, p.y - 12 * z], [p.x, p.y - 9 * z]], i % 2 ? team.col : '#ffffff'); });
+  return { left: [iso(x, y + d), iso(x + w, y + d)], right: [iso(x + w, y + d), iso(x + w, y)] };
+}
 // v0.38: the new district's buildings: a hospital (floors of windows, a red cross, a helipad), a bowling alley (a
 // giant pin on the roof), a swimming centre (a glass front and a glass roof), a museum (columns and a pediment) and a
 // train station (brick, with a clock tower). G: storeGeo; returns the box like box() does.
-const CIVIC_WH = { hospital: 62, bowling: 30, aquatic: 26, museum: 34, station: 30, amuse: 150 };
+const CIVIC_WH = { hospital: 62, bowling: 30, aquatic: 26, museum: 34, station: 30, amuse: 150, zoo: 60, stadium: 74 };   // v0.42: + the zoo, the stadium
 function drawCivic(k, G, x, y, w, d, wh, ts) {
   const S2 = STORES[k], z = cam.z, side = G.front === 'E' || G.front === 'W', showDoor = G.front === 'S' || G.front === 'E', lit = NIGHT > 0.3;
   const glass = lit ? '#ffe39a' : '#a9dcf5', zh = curLang() === 'zh';
@@ -2277,7 +2489,7 @@ function drawCivic(k, G, x, y, w, d, wh, ts) {
 // v0.18: a plush toy sitting on the floor (won at the mall's claw machine)
 function drawPlush(k, x, y) {
   const z = cam.z, c = iso(x + 0.5, y + 0.5);
-  const col = { plushbear: '#b07a4a', plushbunny: '#f4efe6', plushcat: '#f2a33a', plushdino: '#6cbf73', plushduck: '#f2d24b', plushpanda: '#fbfbf7' }[k] || '#b07a4a';
+  const col = { plushbear: '#b07a4a', plushbunny: '#f4efe6', plushcat: '#f2a33a', plushdino: '#6cbf73', plushduck: '#f2d24b', plushpanda: '#fbfbf7', plushlion: '#e6b35a', plushelephant: '#a9b0b8', plushgiraffe: '#f1c46a', plushpenguin: '#2d3440' }[k] || '#b07a4a';
   const dk = shade(col, -0.18), cx = c.x, by = c.y - 2 * z;
   ellipse(cx, c.y, 9 * z, 4 * z, 'rgba(0,0,0,.15)');
   if (k === 'plushdino') [[-6, -14], [-3, -18], [1, -19]].forEach(([dx, dy]) => pg([[cx + dx * z, by + (dy + 4) * z], [cx + (dx + 2) * z, by + (dy - 1) * z], [cx + (dx + 4) * z, by + (dy + 4) * z]], '#3f9a52'));
@@ -2287,11 +2499,16 @@ function drawPlush(k, x, y) {
   if (k === 'plushbunny') { ellipse(cx - 2.6 * z, hy - 9 * z, 1.8 * z, 6 * z, col); ellipse(cx + 2.6 * z, hy - 9 * z, 1.8 * z, 6 * z, col); ellipse(cx - 2.6 * z, hy - 9 * z, 0.8 * z, 4 * z, '#f4a6b8'); ellipse(cx + 2.6 * z, hy - 9 * z, 0.8 * z, 4 * z, '#f4a6b8'); }
   if (k === 'plushcat') { pg([[cx - 6 * z, hy - 2 * z], [cx - 5 * z, hy - 9 * z], [cx - 1.5 * z, hy - 5 * z]], col); pg([[cx + 6 * z, hy - 2 * z], [cx + 5 * z, hy - 9 * z], [cx + 1.5 * z, hy - 5 * z]], col); }
   if (k === 'plushbear' || k === 'plushpanda') { circle(cx - 5 * z, hy - 5 * z, 2.6 * z, k === 'plushpanda' ? '#2d2d2d' : dk); circle(cx + 5 * z, hy - 5 * z, 2.6 * z, k === 'plushpanda' ? '#2d2d2d' : dk); }
+  if (k === 'plushlion') for (let i = 0; i < 10; i++) { const an = i / 10 * Math.PI * 2; circle(cx + Math.cos(an) * 7 * z, hy + Math.sin(an) * 7 * z, 3 * z, i % 2 ? '#a8622d' : '#b8723a'); }   // v0.42: the zoo shop's
+  if (k === 'plushelephant') { ellipse(cx - 7.5 * z, hy, 4.2 * z, 5.6 * z, shade(col, -0.08)); ellipse(cx + 7.5 * z, hy, 4.2 * z, 5.6 * z, shade(col, -0.08)); }
+  if (k === 'plushgiraffe') [[-2.4, -1], [2.4, -1.4]].forEach(([dx]) => { line(cx + dx * z, hy - 5 * z, cx + dx * z, hy - 9.5 * z, col, 1.2 * z); circle(cx + dx * z, hy - 10 * z, 1.3 * z, '#7a4a2a'); });
   circle(cx, hy, 6.4 * z, col);                                      // head
+  if (k === 'plushgiraffe') [[-3, 4], [3.5, 6], [0, 9], [-4.5, 9]].forEach(([dx, dy]) => circle(cx + dx * z, by - dy * z, 1.5 * z, '#b5652e'));
+  if (k === 'plushpenguin') { ellipse(cx, by - 5.5 * z, 5 * z, 5.6 * z, '#fbfbf7'); ellipse(cx, hy + 1 * z, 4.4 * z, 3.6 * z, '#fbfbf7'); }
   if (k === 'plushpanda') { ellipse(cx - 2.4 * z, hy, 1.8 * z, 2.2 * z, '#2d2d2d'); ellipse(cx + 2.4 * z, hy, 1.8 * z, 2.2 * z, '#2d2d2d'); }
   circle(cx - 2.2 * z, hy - 0.4 * z, 0.9 * z, k === 'plushpanda' ? '#fff' : '#2d2d2d'); circle(cx + 2.2 * z, hy - 0.4 * z, 0.9 * z, k === 'plushpanda' ? '#fff' : '#2d2d2d');
-  if (k === 'plushduck') ellipse(cx, hy + 2.2 * z, 2.6 * z, 1.3 * z, '#f59e0b'); else circle(cx, hy + 1.8 * z, 0.9 * z, '#5b3a2a');
-  ellipse(cx, by - 5 * z, 4 * z, 3.6 * z, shade(col, 0.15));
+  if (k === 'plushduck' || k === 'plushpenguin') ellipse(cx, hy + 2.2 * z, 2.6 * z, 1.3 * z, '#f59e0b'); else if (k === 'plushelephant') line(cx, hy + 1.5 * z, cx + 1 * z, hy + 6.5 * z, col, 2.4 * z); else circle(cx, hy + 1.8 * z, 0.9 * z, '#5b3a2a');
+  if (k !== 'plushpenguin') ellipse(cx, by - 5 * z, 4 * z, 3.6 * z, shade(col, 0.15));
 }
 
 // v0.19, v0.21: the garage, in the style of its level (n = its number of spaces): the cars inside show through

@@ -1347,3 +1347,158 @@ const ANIMAL_DRAW = {
     ctx.restore();
   },
 };
+
+// ---------- v0.42: the zoo's animals ----------
+// The same style as the farm animals: each in its own frame (feet at 0, facing right, sizes in px at zoom 1).
+// o: { ts, seed, moving, phase, act } act: what it's doing ('lie', 'eat', 'reach', 'spray', 'swim', 'hang', 'sit').
+const ZOO_SHADOW = { lion: 13, lioness: 12, elephant: 20, giraffe: 12, zebra: 12, penguin: 5, monkey: 5, panda: 11 };
+function drawZooAnimal(k, sx, sy, s, o = {}) {
+  if (o.act !== 'swim' && o.act !== 'hang') ellipse(sx, sy, ZOO_SHADOW[k] * s, ZOO_SHADOW[k] * 0.38 * s, 'rgba(0,0,0,.16)');
+  local(sx, sy, s, o.face || 1, () => ZOO_DRAW[k](o));
+}
+// a lion (with a mane) or a lioness, standing, walking or lying in the sun
+function bigCat(o, mane) {
+  const ts = o.ts || 0, seed = o.seed || 0, fur = mane ? '#e2ad58' : '#e6b868', dk = shade(fur, -0.22), lie = o.act === 'lie';
+  const tw = Math.sin(ts / 600 + seed) * 2;
+  ctx.beginPath(); ctx.moveTo(-11, lie ? -7 : -15); ctx.quadraticCurveTo(-17, lie ? -7 : -15, -18 + tw * 0.5, lie ? -1.5 : -6);
+  ctx.strokeStyle = fur; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.stroke();
+  ellipse(-18 + tw * 0.5, lie ? -1.5 : -6, 1.6, 2, '#6b3f1f');
+  if (lie) {
+    rrect(-13, -11, 22, 10.5, 5, fur); ellipse(-2, -2.6, 9, 2.2, shade(fur, 0.12));
+    ellipse(7, -1.2, 5.4, 1.6, dk); ellipse(9, -1.4, 5.4, 1.6, fur); ellipse(13.4, -1.4, 2, 1.4, shade(fur, 0.1));
+  } else {
+    legs4([-8, 6], -9, 3, fur, o);
+    rrect(-12.5, -20, 22, 12, 5.5, fur); ellipse(-1.5, -9.6, 8.5, 2.2, shade(fur, 0.12));
+  }
+  const hx = lie ? 9 : 10.5, hy = lie ? -13 : -21;
+  if (mane) {
+    for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; circle(hx - 1 + Math.cos(a) * 6.4, hy + Math.sin(a) * 6.4, 3.4, k % 2 ? '#9a5a2a' : '#b06a30'); }
+    circle(hx - 1, hy, 7.2, '#a8622d');
+  } else { [[-1.5, -5], [2.6, -5.2]].forEach(([dx, dy]) => { circle(hx + dx, hy + dy, 1.8, fur); circle(hx + dx, hy + dy, 0.9, dk); }); }
+  circle(hx + 0.5, hy, 5, fur); ellipse(hx + 3.6, hy + 2, 2.8, 2.1, '#f6dca0');
+  pg([[hx + 4.8, hy + 0.6], [hx + 6.6, hy + 0.6], [hx + 5.7, hy + 1.8]], '#5a3a2a');
+  const dozing = lie && Math.sin(ts / 3000 + seed) > 0.2, blink = Math.sin(ts / 1700 + seed * 5) > 0.97;
+  if (dozing || blink) line(hx + 1.6, hy - 1.5, hx + 3.6, hy - 1.5, '#3a2a20', 0.7); else eyeDot(hx + 2.6, hy - 1.6, 0.8);
+  if (mane && !lie && Math.sin(ts / 2600 + seed) > 0.93) ellipse(hx + 4, hy + 3.4, 1.7, 1.5, '#7a2a2a');   // a big yawn
+}
+// a patch of a giraffe's coat (a rounded blob)
+function blob(x, y, r, seed, col) { const pts = []; for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2, rr = r * (0.75 + hash(seed, k) * 0.45); pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.85]); } pg(pts, col); }
+const ZOO_DRAW = {
+  lion(o) { bigCat(o, true); },
+  lioness(o) { bigCat(o, false); },
+  elephant(o) {
+    const ts = o.ts || 0, seed = o.seed || 0, col = '#9aa1a8', dk = shade(col, -0.18), sw = o.moving ? Math.sin(o.phase || 0) * 1.6 : 0;
+    [[-9, 1], [6, -1]].forEach(([x, k]) => rrect(x + 1.6 + k * sw, -15, 5, 15, 2, dk));   // the far legs
+    line(-17.5, -22, -19.5, -12, dk, 1); ellipse(-19.6, -11.6, 1, 1.6, '#5b6470');
+    ellipse(-3, -22, 15.5, 11, col); ellipse(-4, -28, 10, 3.4, shade(col, 0.1));
+    [[-11, -1], [4, 1]].forEach(([x, k]) => { rrect(x + k * sw, -14, 5.4, 14, 2.2, col); [0.9, 2.7, 4.5].forEach(u => ellipse(x + k * sw + u, -0.6, 0.8, 0.6, '#efe9df')); });
+    const spray = o.act === 'spray', eat = o.act === 'eat';
+    circle(11, -25, 8, col);
+    ctx.beginPath(); ctx.moveTo(15.5, -24);
+    if (spray) ctx.bezierCurveTo(20, -28, 22, -36, 19, -42); else if (eat) ctx.bezierCurveTo(20, -18, 16, -8, 12, -10); else ctx.bezierCurveTo(19.5, -20, 19, -10, 21, -5 + Math.sin(ts / 700 + seed) * 1.2);
+    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
+    if (spray) for (let k = 0; k < 8; k++) { const u = (ts / 700 + k / 8) % 1; circle(19 + u * 12, -43 - Math.sin(u * Math.PI) * 9 + u * 22, 1.2 * (1 - u * 0.5), 'rgba(150,210,245,.9)'); }
+    if (eat) { line(12, -10, 10, -6, '#6aa84f', 1.2); line(10, -6, 8.5, -4, '#8bc34a', 1); }
+    line(15.6, -20, 19.2, -18.4, '#f6f1e6', 1.5);
+    const flap = Math.sin(ts / 500 + seed * 2) * 0.14;
+    ellipse(6, -24, 6.5, 8.5, shade(col, -0.05), dk, 0.6, flap); ellipse(6.4, -24, 4, 6, '#bca6aa', null, 0, flap);
+    eyeDot(13.6, -27, 0.9);
+  },
+  giraffe(o) {
+    const ts = o.ts || 0, seed = o.seed || 0, col = '#f1c46a', sp = '#b5652e';
+    legs4([-6, 5], -22, 2.1, col, o);
+    line(-10, -29, -12, -18, shade(col, -0.1), 0.9); ellipse(-12, -17.4, 0.9, 1.7, '#4a2a1a');
+    ellipse(0, -28, 10.5, 7, col); ctx.save(); ctx.clip();
+    [[-6, -30], [-1, -26], [4, -31], [6, -25], [-7, -24], [1, -33], [-3, -21], [8, -29]].forEach(([x, y], i) => blob(x, y, 2.3, i + seed, sp));
+    ctx.restore();
+    const sway = Math.sin(ts / 1400 + seed) * 1.2;
+    const [nx, ny] = o.act === 'reach' ? [21, -42] : o.act === 'eat' ? [16, -58] : [12 + sway, -55];
+    const neck = [[2.5, -30], [9, -33.5], [nx + 1.6, ny + 1.6], [nx - 2, ny + 2]];
+    pg(neck, col); ctx.save(); ctx.beginPath(); neck.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.clip();
+    for (let k = 0; k < 5; k++) { const u = (k + 0.5) / 5; blob(6 + (nx - 6) * u + (k % 2 ? 1 : -1), -32 + (ny + 32) * u, 1.9, k + seed * 3, sp); }
+    ctx.restore();
+    line(2.8, -31, nx - 2, ny + 1, '#9a5a2a', 1.3);   // the short mane
+    const ha = o.act === 'reach' ? 0.5 : 0.25;
+    ellipse(nx + 3, ny + 0.4, 4.8, 2.6, col, null, 0, ha); ellipse(nx + 6.6, ny + 2.1, 2, 1.7, shade(col, -0.18), null, 0, ha);
+    [[0.4, 0], [2.4, 0.3]].forEach(([dx, dy]) => { line(nx + dx, ny - 1.6 + dy, nx + dx - 0.3, ny - 5.2 + dy, col, 0.9); circle(nx + dx - 0.3, ny - 5.4 + dy, 0.8, '#4a2a1a'); });
+    ellipse(nx - 1.4, ny - 0.6, 2.2, 0.9, shade(col, -0.08), null, 0, -0.5);
+    eyeDot(nx + 3, ny - 0.6, 0.7);
+    if (o.act === 'reach' && Math.sin(ts / 300) > 0) line(nx + 8, ny + 3.4, nx + 9.6, ny + 4.6, '#5a3a7a', 0.9);   // that long blue tongue
+  },
+  zebra(o) {
+    const ts = o.ts || 0, seed = o.seed || 0, col = '#fbfbf7', bk = '#2d2d34', eat = o.act === 'eat';
+    legs4([-7, 6], -12, 2.4, col, o);
+    line(-11, -21, -13, -12, col, 1); ellipse(-13, -11.4, 1, 1.8, bk);
+    ctx.save(); ctx.beginPath(); ctx.roundRect(-12, -23, 22, 11.5, 5); ctx.fillStyle = col; ctx.fill(); ctx.clip();
+    for (let k = 0; k < 8; k++) { const x = -10 + k * 2.7; ctx.beginPath(); ctx.moveTo(x, -24); ctx.quadraticCurveTo(x + 1.6, -17, x - 0.4, -11); ctx.strokeStyle = bk; ctx.lineWidth = 1.1; ctx.stroke(); }
+    ctx.restore();
+    const [hx, hy] = eat ? [16, -8] : [14, -31 + Math.sin(ts / 1500 + seed) * 0.6];
+    const neck = eat ? [[3, -22], [10.5, -19], [hx + 2.2, hy + 1.6], [hx - 2.6, hy - 1.2]] : [[4, -22], [9.5, -21], [hx + 1.5, hy + 1.5], [hx - 2.2, hy - 0.5]];
+    pg(neck, col); ctx.save(); ctx.beginPath(); neck.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.clip();
+    for (let k = 1; k < 5; k++) { const u = k / 5, x = 6.7 + (hx - 6.7) * u, y = -21.5 + (hy + 21.5) * u; if (eat) line(x - 2, y + 2.4, x + 2, y - 2.4, bk, 1); else line(x - 3, y - 1, x + 3, y + 1, bk, 0.9); }
+    ctx.restore();
+    line(eat ? 3 : 4, -23, hx - (eat ? 2.8 : 2.4), hy - (eat ? 1.6 : 1), bk, 1.8);
+    const ha = eat ? 1.2 : 0.5;
+    ellipse(hx + 1.6, hy + 1, 5, 2.6, col, null, 0, ha); ellipse(hx + 1.6 + Math.cos(ha) * 3.6, hy + 1 + Math.sin(ha) * 3.6, 1.8, 1.6, bk);
+    pg([[hx - 1, hy - 1.6], [hx - 1.8, hy - 4.6], [hx + 0.2, hy - 2]], col, bk, 0.4);
+    eyeDot(hx + 1, hy, 0.65);
+  },
+  penguin(o) {
+    const sw = o.moving ? Math.sin(o.phase || 0) : 0;
+    if (o.act === 'swim') {
+      ellipse(0, 0, 6, 2.2, '#2a2d36'); ellipse(1, 0.6, 4, 1.2, '#fbfbf7'); circle(5, -1.6, 2.3, '#2a2d36');
+      pg([[7, -1.9], [9.2, -1.3], [7, -0.8]], '#f28c28'); circle(5.8, -2.2, 0.45, '#fff');
+      return;
+    }
+    ctx.save(); ctx.rotate(sw * 0.13);
+    ellipse(-1.6, -0.3, 2, 0.9, '#f28c28'); ellipse(1.8, -0.3, 2, 0.9, '#f28c28');
+    ellipse(0, -8, 5, 8, '#2a2d36'); ellipse(1.3, -7.4, 3.4, 6.4, '#fbfbf7');
+    circle(0.6, -15.4, 3.8, '#2a2d36'); ellipse(2.6, -13.1, 1.4, 1, '#f2c230');
+    pg([[3.8, -15.8], [6.6, -15], [3.8, -14.4]], '#f28c28');
+    circle(2.4, -16.4, 0.6, '#fff'); circle(2.6, -16.4, 0.32, '#1a1a1a');
+    ellipse(-3.6, -8.6, 1.4, 4.2, '#23262e', null, 0, 0.3 + (o.moving ? Math.sin((o.phase || 0) * 2) * 0.3 : 0));
+    ctx.restore();
+  },
+  monkey(o) {
+    const ts = o.ts || 0, seed = o.seed || 0, fur = '#8a5a36', face = '#f0c8a0', hang = o.act === 'hang', sw = o.moving ? Math.sin(o.phase || 0) * 1.4 : 0;
+    ctx.beginPath(); ctx.moveTo(-3, -6); ctx.bezierCurveTo(-10, -4, -11, -14, -7, -15.5); ctx.strokeStyle = fur; ctx.lineWidth = 1.3; ctx.lineCap = 'round'; ctx.stroke();
+    if (hang) { line(-0.5, -24, 0.6, -13, fur, 1.6); line(-2, -5, -3, 1, fur, 1.6); line(2, -5, 3.4, 0.6, fur, 1.6); }
+    else { line(-2, -6, -3 - sw, 0, fur, 1.7); line(2, -6, 3 + sw, 0, fur, 1.7); }
+    ellipse(0, -9, 4.4, 5.4, fur); ellipse(0.8, -8.4, 2.6, 3.6, shade(face, -0.06));
+    if (!hang) { const scr = o.act === 'sit' && Math.sin(ts / 400 + seed) > 0.4; line(2.6, -11, scr ? 4 : 5.2, scr ? -16 : -8.6, fur, 1.4); }
+    circle(1.5, -16.5, 4.2, fur); circle(-2.3, -17, 1.4, face); circle(5.4, -17.2, 1.4, face);
+    ellipse(2.4, -15.8, 3, 2.7, face);
+    eyeDot(1.4, -16.8, 0.55); eyeDot(3.6, -16.8, 0.55);
+    line(1.8, -14.4, 3.2, -14.4, '#6b3f2a', 0.5);
+  },
+  panda(o) {
+    const ts = o.ts || 0, seed = o.seed || 0, Wc = '#fbfbf7', B = '#2d2d2d';
+    if (o.moving) {   // on all fours
+      legs4([-6, 5], -7, 3.4, B, o);
+      ellipse(0, -12, 10, 7, Wc); ellipse(4.4, -12.6, 3.4, 6.6, B, null, 0, 0.2);
+      circle(10, -14, 5.6, Wc); circle(7.4, -19, 2, B); circle(12.4, -19.2, 2, B);
+      ellipse(10.6, -14.4, 1.4, 1.9, B, null, 0, 0.4); ellipse(13, -14.2, 1.2, 1.7, B, null, 0, -0.4);
+      circle(10.9, -14.6, 0.45, '#fff'); circle(13.2, -14.4, 0.4, '#fff'); ellipse(15, -12.4, 1, 0.7, B);
+      return;
+    }
+    const chew = Math.sin(ts / 260 + seed);
+    ellipse(-5, -3, 4, 3, B); ellipse(5, -2.4, 4.2, 3, B);
+    ellipse(0, -10, 8.5, 9, Wc);
+    line(7, -2, 9.6 + chew * 0.4, -26, '#7cb342', 1.7); [-10, -16, -22].forEach(y => line(7.4 + (y + 2) * -0.1, y, 9.4 + (y + 2) * -0.1, y, '#558b2f', 0.6));
+    ellipse(10.6, -25, 3, 1, '#5a9a3a', null, 0, -0.6); ellipse(8.4, -27, 2.6, 0.9, '#6aaa45', null, 0, 0.7);
+    ellipse(4.4, -12, 3, 6, B, null, 0, 0.5);
+    circle(1.5, -21, 7, Wc); circle(-3.5, -27, 2.4, B); circle(6.5, -27, 2.4, B);
+    ellipse(-0.6, -21.4, 1.8, 2.4, B, null, 0, 0.4); ellipse(4, -21.4, 1.8, 2.4, B, null, 0, -0.4);
+    circle(-0.4, -21.8, 0.55, '#fff'); circle(3.8, -21.8, 0.55, '#fff');
+    ellipse(1.8, -18.4, 1.3, 0.9, B); ellipse(1.8, -16.6, 1.2, 0.5 + Math.max(0, chew) * 0.5, '#7a3a3a');
+  },
+};
+// v0.42: where an animal is in its enclosure: walks about on a slow loop, stopping now and then. Returns where (0..1
+// across and down), which way it faces on screen and whether it's walking.
+function zooWander(seed, ts, sp = 0.05) {
+  const tt = ts / 1000 * sp + seed * 1.37, f = tt - Math.sin(tt * Math.PI * 2) / (Math.PI * 2), v = 1 - Math.cos(tt * Math.PI * 2);
+  const a = 1.3 + hash(seed, 1) * 0.6, b = 0.9 + hash(seed, 2) * 0.5, ph = seed * 2.1;
+  const u = 0.5 + 0.42 * Math.sin(f * a * 2 + ph), w = 0.5 + 0.38 * Math.sin(f * b * 2 + ph * 1.7);
+  const du = Math.cos(f * a * 2 + ph) * a, dw = Math.cos(f * b * 2 + ph * 1.7) * b;
+  return { u, v: w, face: du - dw >= 0 ? 1 : -1, moving: v > 0.3, phase: ts / 110 + seed };
+}
