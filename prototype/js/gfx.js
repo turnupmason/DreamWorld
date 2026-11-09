@@ -13,7 +13,86 @@ const CUTE_FONT = '"MT Nunito","MT Cute","MT Round",ui-rounded,"SF Pro Rounded",
 if (typeof document !== 'undefined' && document.fonts && document.fonts.load) document.fonts.load('800 20px "MT Cute"', '镜像小镇体育场动物园').catch(() => {});   // the canvas can only use it once it's loaded
 
 // ---------- math ----------
-const iso = (x, y) => ({ x: (x - y) * TW / 2 * cam.z + cam.x, y: (x + y) * TH / 2 * cam.z + cam.y });
+const iso = (x, y) => { if (TURN && !TURN.in) { x = TURN.sx - x; y = TURN.sy - y; TURN.pt(x, y); } return { x: (x - y) * TW / 2 * cam.z + cam.x, y: (x + y) * TH / 2 * cam.z + cam.y }; };
+// v0.46: drawing a thing turned half way round (rot 2 / 3, its front away from you). It's drawn the way it faces at
+// rot 0 / 1, but every point (iso) and every solid (box, soft, flatRect) is mirrored through the middle of its
+// footprint; the faces that now look away (what box() returns as left / right, frontFace) are hidden off screen; and
+// since the pieces were drawn far-to-near for the other way round, the drawing is recorded (ctx is swapped for a
+// recorder) and played back sorted far-to-near again: a solid behind another, or under it, goes first.
+let TURN = null;
+const HIDDEN_FACE = [{ x: -1e5, y: -1e5 }, { x: -1e5, y: -1e5 }];
+function turnCall(fn, x, y, w, d, z0, z1, rest) {
+  const T = TURN, nx = T.sx - x - w, ny = T.sy - y - d;
+  T.seg({ x: nx, y: ny, w, d, z0, z1 });
+  T.in++;
+  try { const r = fn(nx, ny, w, d, ...rest); return r && r.left ? Object.assign({}, r, { left: HIDDEN_FACE, right: HIDDEN_FACE }) : r; }
+  finally { T.in--; }
+}
+const TURN_NOW = new Set(['createLinearGradient', 'createRadialGradient', 'createConicGradient', 'createPattern', 'measureText', 'getTransform', 'isPointInPath', 'getLineDash', 'getImageData']);
+function turnDraw(x, y, w, d, fn) {
+  const real = ctx, segs = [{ r: null, ops: [], i: 0 }], state = {};
+  let cur = segs[0];
+  const rec = new Proxy(real, {
+    get(t, p) { if (p in state) return state[p]; const v = t[p]; if (typeof v !== 'function') return v; if (TURN_NOW.has(p)) return v.bind(t); return (...a) => { cur.ops.push([p, a]); }; },
+    set(t, p, v) { state[p] = v; cur.ops.push([null, p, v]); return true; },
+  });
+  const prev = TURN;
+  // drawing done straight from points (iso), not a solid: a piece of its own, as big as its points, of unknown height
+  TURN = { sx: 2 * x + w, sy: 2 * y + d, in: 0, seg: r => { cur = { r, ops: [], i: segs.length }; segs.push(cur); },
+    pt: (px, py) => {
+      if (!cur.p) { cur = { r: { x: px, y: py, w: 0, d: 0, z0: 0, z1: 60 }, p: true, ops: [], i: segs.length }; segs.push(cur); return; }
+      const r = cur.r, x1 = Math.max(r.x + r.w, px), y1 = Math.max(r.y + r.d, py); r.x = Math.min(r.x, px); r.y = Math.min(r.y, py); r.w = x1 - r.x; r.d = y1 - r.y;
+    } };
+  ctx = rec;
+  try { fn(); } finally { ctx = real; TURN = prev; }
+  // far to near, only between pieces that cover each other on screen. Footprints that overlap: the lower one first
+  // (it's under), a flat thing in the order drawn, else the taller one last (a headboard, a sofa back: now in front).
+  // Footprints apart: the one behind (or below) first. Anything else by depth.
+  const e = 0.02, key = s => s.r.x + s.r.w / 2 + s.r.y + s.r.d / 2;
+  const byKey = (A, B) => { const k = key(A) - key(B); return Math.abs(k) > 1e-6 ? k < 0 : A.i < B.i; };
+  const scr = r => [(r.x - r.y - r.d) * 32, (r.x + r.w - r.y) * 32, (r.x + r.y) * 16 - r.z1, (r.x + r.w + r.y + r.d) * 16 - r.z0];
+  const cover = (a, b) => { const p = scr(a), q = scr(b); return p[0] < q[1] - 0.5 && q[0] < p[1] - 0.5 && p[2] < q[3] - 0.5 && q[2] < p[3] - 0.5; };
+  const first = (A, B) => {   // true / false, or null: no need to keep an order
+    const a = A.r, b = B.r;
+    if (!cover(a, b)) return null;
+    const ox = a.x < b.x + b.w - e && b.x < a.x + a.w - e, oy = a.y < b.y + b.d - e && b.y < a.y + a.d - e;
+    if (ox && oy) {
+      if (!A.p && !B.p && a.z1 <= b.z0 + 0.01) return true;
+      if (!A.p && !B.p && b.z1 <= a.z0 + 0.01) return false;
+      // something flat or drawn from points: mostly over the other one (water in the tub), in the order drawn; mostly
+      // beside it (the piano's keys, now behind it), by depth
+      const fa = A.p || a.z1 - a.z0 < 0.5, fb = B.p || b.z1 - b.z0 < 0.5;
+      if (fa || fb) {
+        const F = fa ? a : b, S2 = fa ? b : a, ov = Math.max(0, Math.min(F.x + F.w, S2.x + S2.w) - Math.max(F.x, S2.x)) * Math.max(0, Math.min(F.y + F.d, S2.y + S2.d) - Math.max(F.y, S2.y));
+        return ov >= 0.5 * Math.max(F.w * F.d, 1e-4) ? A.i < B.i : byKey(A, B);
+      }
+      if (Math.abs(a.z1 - b.z1) >= 0.5) return a.z1 < b.z1;
+      return byKey(A, B);
+    }
+    const zs = !A.p && !B.p, ab = a.x + a.w <= b.x + e || a.y + a.d <= b.y + e || (zs && a.z1 <= b.z0 + 0.01), ba = b.x + b.w <= a.x + e || b.y + b.d <= a.y + e || (zs && b.z1 <= a.z0 + 0.01);
+    return ab !== ba ? ab : byKey(A, B);
+  };
+  const left = segs.slice(1), order = [segs[0]], n = left.length, pre = left.map(() => []);
+  for (let u = 0; u < n; u++) for (let v = u + 1; v < n; v++) { const f = first(left[u], left[v]); if (f === true) pre[v].push(u); else if (f === false) pre[u].push(v); }
+  const done = new Uint8Array(n);
+  for (let m = 0; m < n; m++) {
+    let best = -1;
+    for (let u = 0; u < n; u++) if (!done[u] && pre[u].every(v => done[v]) && (best < 0 || byKey(left[u], left[best]))) best = u;
+    if (best < 0) for (let u = 0; u < n; u++) if (!done[u] && (best < 0 || byKey(left[u], left[best]))) best = u;   // a loop: by depth
+    done[best] = 1; order.push(left[best]);
+  }
+  order.forEach(s => {
+    real.save(); let dep = 0;
+    s.ops.forEach(op => {
+      if (op[0] === null) real[op[1]] = op[2];
+      else if (op[0] === 'save') { dep++; real.save(); }
+      else if (op[0] === 'restore') { if (dep > 0) { dep--; real.restore(); } }
+      else real[op[0]](...op[1]);
+    });
+    while (dep-- > 0) real.restore();
+    real.restore();
+  });
+}
 const unIso = (sx, sy) => {
   const a = (sx - cam.x) / (TW / 2 * cam.z), b = (sy - cam.y) / (TH / 2 * cam.z);
   return { x: (a + b) / 2, y: (b - a) / 2 };
@@ -103,6 +182,7 @@ function local(sx, sy, s, flip, fn) {
 // ---------- isometric solids (world tiles; heights in unscaled px) ----------
 const tile = (i, j, fill, stroke) => poly([iso(i, j), iso(i + 1, j), iso(i + 1, j + 1), iso(i, j + 1)], fill, stroke);
 function flatRect(x, y, w, d, fill, stroke, h = 0, lw) {
+  if (TURN && !TURN.in) return turnCall(flatRect, x, y, w, d, h, h, [fill, stroke, h, lw]);
   const k = h * cam.z;
   poly([up(iso(x, y), k), up(iso(x + w, y), k), up(iso(x + w, y + d), k), up(iso(x, y + d), k)], fill, stroke, lw);
 }
@@ -141,6 +221,7 @@ function softShadow(x, y, w, d, h) {
   poly(pts(0.22, L), 'rgba(40,30,20,.05)'); poly(pts(0.12, L * 0.8), 'rgba(40,30,20,.06)'); poly(pts(0.04, L * 0.55), 'rgba(40,30,20,.07)');
 }
 function box(x, y, w, d, h, col, base = 0, o = {}) {
+  if (TURN && !TURN.in) return turnCall(box, x, y, w, d, base, base + h, [h, col, base, o]);
   const z = cam.z, hb = base * z, hh = (base + h) * z;
   const A = iso(x, y), B = iso(x + w, y), C = iso(x + w, y + d), D = iso(x, y + d);
   const edge = o.edge === undefined ? 'rgba(0,0,0,.07)' : o.edge, fine = z >= 0.32 && h * z > 2.5 && !o.flat;
@@ -205,6 +286,7 @@ function eaveShadow(a, b, z) { if (z < 0.32) return; line(a.x, a.y + 2 * z, b.x,
 // Gable roof, ridge along x (gable end shows on the right). between() draws things like a chimney
 // after the back slope but before the front slope, so the roof hides the chimney's base.
 function gableX(x, y, w, d, baseH, roofH, roofCol, endCol, between) {
+  if (TURN && !TURN.in) return turnCall(gableX, x, y, w, d, baseH, baseH + roofH, [baseH, roofH, roofCol, endCol, between]);   // v0.46: a roof looks the same turned round
   const z = cam.z, bh = baseH * z, rh = roofH * z;
   const Au = up(iso(x, y), bh), Bu = up(iso(x + w, y), bh), Cu = up(iso(x + w, y + d), bh), Du = up(iso(x, y + d), bh);
   const R1 = up(mid(Au, Du), rh), R2 = up(mid(Bu, Cu), rh);
@@ -218,6 +300,7 @@ function gableX(x, y, w, d, baseH, roofH, roofCol, endCol, between) {
 }
 // Gable roof, ridge along y (gable end faces the road, bottom left).
 function gableY(x, y, w, d, baseH, roofH, roofCol, endCol) {
+  if (TURN && !TURN.in) return turnCall(gableY, x, y, w, d, baseH, baseH + roofH, [baseH, roofH, roofCol, endCol]);
   const z = cam.z, bh = baseH * z, rh = roofH * z;
   const Au = up(iso(x, y), bh), Bu = up(iso(x + w, y), bh), Cu = up(iso(x + w, y + d), bh), Du = up(iso(x, y + d), bh);
   const R1 = up(mid(Au, Bu), rh), R2 = up(mid(Du, Cu), rh);
@@ -239,6 +322,7 @@ function pyramid(x, y, w, d, base, rh, col) {
 }
 // Hip roof: ridge along x, sloped on all four sides.
 function hipRoof(x, y, w, d, base, rh, col) {
+  if (TURN && !TURN.in) return turnCall(hipRoof, x, y, w, d, base, base + rh, [base, rh, col]);
   if (w <= d) return pyramid(x, y, w, d, base, rh, col);
   const z = cam.z, bh = base * z;
   const Au = up(iso(x, y), bh), Bu = up(iso(x + w, y), bh), Cu = up(iso(x + w, y + d), bh), Du = up(iso(x, y + d), bh);
@@ -264,6 +348,7 @@ function softPts(x, y, w, d, r, hh) {
 // Something soft (pillow, cushion, quilt, mattress): rounded corners, sides that bulge out in the middle and
 // tuck in at the bottom, a top that puffs up with a soft highlight. Same footprint as box().
 function soft(x, y, w, d, h, col, base = 0, o = {}) {
+  if (TURN && !TURN.in) return turnCall(soft, x, y, w, d, base, base + h, [h, col, base, o]);
   const r = Math.min(w, d) * (o.round ?? 0.32), puff = o.puff ?? 0.05, n = 5;
   for (let i = 0; i <= n; i++) {
     const t = i / n, bulge = Math.sin(t * Math.PI) * puff - (1 - t) * puff * 0.6;

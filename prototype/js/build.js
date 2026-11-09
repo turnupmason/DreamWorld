@@ -536,16 +536,17 @@ function drawTwoWheeler(c, x, y, ts) {
 
 // ---------- furniture ----------
 // rot 0: long side along x, back against the y-side wall. rot 1: turned to face the other way.
-function furnSize(k, rot) { const D = FURN[k]; return rot ? [D.d, D.w] : [D.w, D.d]; }
+function furnSize(k, rot) { const D = FURN[k]; return rot & 1 ? [D.d, D.w] : [D.w, D.d]; }   // v0.46: rot 0–3 (odd: turned sideways)
 // v0.19: the arm of a sofa / armchair nearest you, drawn again over someone sitting in it (so legs don't poke through it)
 function drawSeatFront(it, x, y) {
   const k = it.k;
+  if ((it.rot || 0) >= 2) return;   // v0.46: facing away, you're behind the seat: nothing of it is in front of you
   if (k !== 'sofa' && k !== 'armchair') return;
   const tint = it.tint || '#8d99a6', [w, d] = furnSize(k, it.rot);
   if (it.rot) soft(x + 0.28, y + d - 0.28, w - 0.32, 0.24, 9, tint, 4, { round: 0.48 });
   else soft(x + w - 0.28, y + 0.28, 0.24, d - 0.32, 9, tint, 4, { round: 0.48 });
 }
-function frontFace(x, y, w, d, rot) { return rot ? [iso(x + w, y + d), iso(x + w, y)] : [iso(x, y + d), iso(x + w, y + d)]; }
+function frontFace(x, y, w, d, rot) { if (TURN && !TURN.in) return HIDDEN_FACE; return rot ? [iso(x + w, y + d), iso(x + w, y)] : [iso(x, y + d), iso(x + w, y + d)]; }
 // A strip of depth t along the back of the footprint.
 function backStrip(x, y, w, d, rot, t) { return rot ? [x, y, t, d] : [x, y, w, t]; }
 function legs(x, y, w, d, h, col, inset = 0.1) {
@@ -563,6 +564,7 @@ function quiltRect(it, x = it.x, y = it.y) {
 }
 const QUILT_BASE = { bed: 9, singlebed: 9, bunkbed: 11, sleepbag: 3.5 };
 function drawQuilt(it, base = QUILT_BASE[it.k] || 9, x = it.x, y = it.y) {
+  if ((it.rot || 0) >= 2) { const [w, d] = furnSize(it.k, it.rot); return turnDraw(x, y, w, d, () => drawQuilt({ ...it, rot: it.rot - 2 }, base, x, y)); }   // v0.46
   const tint = it.tint || '#8d99a6', [qx, qy, qw, qd] = quiltRect(it, x, y), h = it.k === 'sleepbag' ? 2 : it.k === 'bed' ? 5 : 4;
   soft(qx, qy, qw, qd, h, it.k === 'sleepbag' ? shade(tint, 0.15) : tint, base, { round: 0.14, puff: 0.03, shine: 0.22 });
   const f = 0.17, hem = shade(tint, it.k === 'sleepbag' ? 0.4 : 0.3);
@@ -581,7 +583,12 @@ function rugFringe(x, y, w, d, rot, tint) {
   }
   ctx.strokeStyle = col; ctx.lineWidth = 1 * z; ctx.lineCap = 'round'; ctx.stroke();
 }
+// v0.46: turned half way round (rot 2 / 3): drawn as rot 0 / 1, turned (turnDraw)
 function drawFurn(it, x, y, ts) {
+  if ((it.rot || 0) >= 2) { const [w, d] = furnSize(it.k, it.rot); return turnDraw(x, y, w, d, () => drawFurnAt({ ...it, rot: it.rot - 2 }, x, y, ts)); }
+  return drawFurnAt(it, x, y, ts);
+}
+function drawFurnAt(it, x, y, ts) {
   if (it.k === 'trophycase') return drawTrophyCase(it, x, y);
   if (it.k === 'bigteddy') { ctx.save(); const c = iso(x + 1, y + 1); ctx.translate(c.x, c.y); ctx.scale(2.1, 2.1); ctx.translate(-c.x, -c.y); drawPlush('plushbear', x + 0.5, y + 0.5); ctx.restore(); return; }
   if (FURN[it.k] && FURN[it.k].plush) return drawPlush(it.k, x, y);
@@ -784,7 +791,15 @@ function tvScreen(face, ts) {
 }
 
 // ---------- yard ----------
+// v0.46: square things in the yard are drawn one way only: a quarter turn (rot 1 / 3) is that drawing's mirror image
+// across the footprint's diagonal (the same as flipping the screen round the middle of it)
 function drawYardItem(it, x, y, ts) {
+  const YD = YARD[it.k], r = (it.rot || 0) & 3;
+  if (YD && YD.w === YD.d && (r & 1)) { const c = iso(x + YD.w / 2, y + YD.d / 2); ctx.save(); ctx.translate(2 * c.x, 0); ctx.scale(-1, 1); try { return drawYardItem({ ...it, rot: r - 1 }, x, y, ts); } finally { ctx.restore(); } }
+  if ((it.rot || 0) >= 2 && YARD[it.k]) { const D = YARD[it.k], [w, d] = it.rot & 1 ? [D.d, D.w] : [D.w, D.d]; return turnDraw(x, y, w, d, () => drawYardAt({ ...it, rot: it.rot - 2 }, x, y, ts)); }   // v0.46
+  return drawYardAt(it, x, y, ts);
+}
+function drawYardAt(it, x, y, ts) {
   if (YARD[it.k] && YARD[it.k].excl) return drawExcl(it, x, y, ts);
   const k = it.k, z = cam.z, c = iso(x + 0.5, y + 0.5);
   switch (k) {
@@ -1351,7 +1366,8 @@ function drawFurn2(it, x, y, w, d, rot, tint, ts) {
       local(p.x, p.y, z, 1, () => {
         line(-6, 0, 0, -36, WOOD, 1.4); line(6, 0, 0, -36, WOOD, 1.4); line(0, -30, 2, 0, WOOD, 1.2);
         rrect(-9, -34, 18, 14, 1, '#fffaf0', '#8a5a36', 0.8);
-        rrect(-8, -33, 16, 7, 0, '#a9dcf5'); ellipse(-2, -26, 10, 4, '#6cbf4a'); circle(5, -30, 2, '#f6d04d');
+        if (TURN) line(-8, -27, 8, -27, '#c9b79a', 1);   // v0.46: turned away: the back of the canvas
+        else { rrect(-8, -33, 16, 7, 0, '#a9dcf5'); ellipse(-2, -26, 10, 4, '#6cbf4a'); circle(5, -30, 2, '#f6d04d'); }
         line(-9, -20, 9, -20, WOOD, 1.2);
       });
       break;
@@ -1395,7 +1411,7 @@ function drawFurn2(it, x, y, w, d, rot, tint, ts) {
     }
     case 'singlebed': case 'bunkbed': {
       const head = rot ? [x + 0.04, y + 0.06, 0.12, d - 0.12] : [x + 0.06, y + 0.04, w - 0.12, 0.12];
-      const pillow = rot ? [x + 0.2, y + 0.2, 0.5, w - 0.4] : [x + 0.2, y + 0.2, w - 0.4, 0.5];
+      const pillow = rot ? [x + 0.2, y + 0.2, 0.5, d - 0.4] : [x + 0.2, y + 0.2, w - 0.4, 0.5];   // v0.46: sideways, the pillow is across the bed (it stuck out)
       const deck = (base) => {
         box(x + 0.08, y + 0.08, w - 0.16, d - 0.16, 7, WOOD, base);
         soft(x + 0.12, y + 0.12, w - 0.24, d - 0.24, 3, '#fbfbf7', base + 7, { round: 0.14, puff: 0.02, shine: 0.2 });
@@ -2519,6 +2535,30 @@ function drawPlush(k, x, y) {
 
 // v0.19, v0.21: the garage, in the style of its level (n = its number of spaces): the cars inside show through
 // the open doors (or through the glass, or under the carport roof).
+// v0.46: the garage turned: doors to +x is the mirror image of doors to +y across the footprint's diagonal (base drawn at
+// the swapped footprint, the screen flipped round its middle); doors away from you (-y, -x): seen from behind, plain
+// walls and the roof (an open carport or the glass showroom look the same from both sides).
+function drawGarageAt(x, y, n, cars, ts, rot = 0) {
+  const r = rot & 3, lv = Math.max(1, GARAGE.findIndex(g => g && g.cap === n)), G = GARAGE[lv], w = garageSize(lv).w, d = 3, open = G.style === 'carport' || G.style === 'showroom';
+  const draw = (gx, gy, back) => (back && !open ? drawGarageBack(gx, gy, n, ts) : drawGarage(gx, gy, n, cars, ts));
+  if (!(r & 1)) return draw(x, y, r === 2);
+  const c = iso(x + d / 2, y + w / 2);
+  ctx.save(); ctx.translate(2 * c.x, 0); ctx.scale(-1, 1);
+  let res; try { res = draw(x + (d - w) / 2, y + (w - d) / 2, r === 3); } finally { ctx.restore(); }
+  return res && { ...res, x0: 2 * c.x - res.x1, x1: 2 * c.x - res.x0 };
+}
+function drawGarageBack(x, y, n, ts) {
+  const lv = Math.max(1, GARAGE.findIndex(g => g && g.cap === n)), G = GARAGE[lv], z = cam.z, w = garageSize(lv).w, d = 3;
+  const H = { wood: 30, brick: 32, modern: 32 }[G.style] || 30, wall = { wood: '#b07a4a', brick: '#a94b37', modern: '#f1efea' }[G.style] || '#f1efea';
+  const A = iso(x, y), B = iso(x + w, y), C = iso(x + w, y + d);
+  const b = box(x, y, w, d, H, wall, 0, { noTop: true });
+  if (G.style === 'wood' || G.style === 'brick') wallMaterial(b, H, G.style, wall, 0);
+  winFace(b.left, 0.5, 0.18, 12, 22);   // a small window at the back
+  if (G.style === 'wood') gableX(x - 0.15, y - 0.15, w + 0.3, d + 0.3, H, 16, '#6b4428', wall);
+  else if (G.style === 'brick') hipRoof(x - 0.2, y - 0.2, w + 0.4, d + 0.4, H, 14, '#5b5f66');
+  else box(x - 0.2, y - 0.2, w + 0.4, d + 0.4, 3, '#b08356', H, { top: '#e9e4da' });
+  return { x0: iso(x, y + d).x, x1: B.x, y0: up(A, (H + 16) * z).y, y1: C.y };
+}
 function drawGarage(x, y, n, cars, ts) {
   const lv = Math.max(1, GARAGE.findIndex(g => g && g.cap === n)), G = GARAGE[lv], z = cam.z, w = garageSize(lv).w, d = 3, bay = (w - 0.4) / n;
   const carAt = i => { const car = cars[i]; if (!car) return; const L = (CAR_SPEC[car.k] || CAR_SPEC.mini).len || 2.4; drawCarDir(car, x + 0.2 + bay * (i + 0.5), y + d - L / 2 - 0.15, '+y', ts); };

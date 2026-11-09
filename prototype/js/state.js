@@ -27,7 +27,7 @@ function freshDay() {
 function load() {
   try { S = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { S = null; }
   if (!S || S.v !== 3) S = null;
-  if (S) { migrate(); v44(); genNPCs(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); fixBlockedYards(); }
+  if (S) { migrate(); v44(); ensurePlots(S.me); genNPCs(); [S.me, ...S.friends].forEach(h => { fixLayout(h); fitRooms(h); }); fixBlockedYards(); }
   return S;
 }
 // Saves from v0.3 get the v0.4 fields (floors, privacy, souvenirs, personal goal). Old players skip the tutorial.
@@ -180,6 +180,7 @@ function newGame(o) {
   me.animals = [newAnimal('chicken', 2), newAnimal('chicken', 0)];
   me.animals[0].last = now() - ANIMALS.chicken.every * MIN * 0.8;
   S.me = me;
+  ensurePlots(me);   // v0.46
   autoPlace(me, 'room', 'sleepbag', TINTS[4]);
   autoPlace(me, 'room', 'lamp');
   autoPlace(me, 'yard', 'flowers');
@@ -532,7 +533,7 @@ const cropWarn = f => isRipe(f) && now() - ripeAt(f) > FRESH.crop * HOUR * (1 - 
 // Farm areas can be moved around the yard (v0.15): each home keeps where its pasture, fields, orchard and pond are
 // (h.areaAt[key] = [x, y], the top-left tile); without that, the usual spot in AREA.
 const MOVABLE = ['pasture', 'fields', 'orchard', 'pond'];
-const movables = h => (h && h.garageLv ? [...MOVABLE, 'garage'] : MOVABLE);   // v0.19: the garage moves too, once built
+const movables = h => { const m = h && h.garageLv ? [...MOVABLE, 'garage'] : MOVABLE; return h && h.plots ? m.filter(k => k !== 'fields') : m; };   // v0.19: the garage moves too, once built (v0.46: single plots aren't an area)
 // v0.24: the drive (its design and where it meets the road), with the spaces cars stand in (lot tiles)
 function driveOf(h = S.me) {
   const st = (h && h.drive && DRIVES[h.drive.style]) ? h.drive.style : 'long', D = DRIVES[st], x = h && h.drive && h.drive.x !== undefined ? h.drive.x : 0, y = LOT_D - D.d;
@@ -547,11 +548,78 @@ function driveOf(h = S.me) {
 const driveCap = (h = S.me) => driveOf(h).cap;
 const onDrive = (h, x, y) => driveOf(h).rects.some(r => inRect(r, x, y));
 function areaOf(h, k) {
-  if (k === 'garage') { const at = h && h.areaAt && h.areaAt.garage, sz = garageSize(Math.max(1, (h && h.garageLv) || 1)); return { x: at ? at[0] : 0, y: at ? at[1] : 0, ...sz }; }
+  if (typeof k === 'string' && k.startsWith('plot:')) { const p = (h.plots || [])[+k.slice(5)] || [0, 0]; return { x: p[0], y: p[1], w: 1, d: 1 }; }   // v0.46
+  if (k === 'garage') { const at = h && h.areaAt && h.areaAt.garage, sz = garageSize(Math.max(1, (h && h.garageLv) || 1)), odd = h && (h.garageRot & 1); return { x: at ? at[0] : 0, y: at ? at[1] : 0, w: odd ? sz.d : sz.w, d: odd ? sz.w : sz.d }; }   // v0.46: turned sideways, w and d swap
   const A = AREA[k], at = h && h.areaAt && h.areaAt[k]; return at ? { x: at[0], y: at[1], w: A.w, d: A.d } : A;
 }
 const garageCap = (h = S.me) => (h.garageLv ? GARAGE[h.garageLv].cap : 0);
-function fieldPos(i, h = S.me) { const A = areaOf(h, 'fields'); return [A.x + i % 4, A.y + Math.floor(i / 4)]; }
+function fieldPos(i, h = S.me) { if (h.plots && h.plots[i]) return h.plots[i]; const A = areaOf(h, 'fields'); return [A.x + i % 4, A.y + Math.floor(i / 4)]; }   // v0.46: your own plots are each where you put them
+// v0.46: your farmland as single plots (h.plots[i] = [x, y] for h.fields[i]), starting where the old 4×4 block was
+function ensurePlots(h) {
+  if (!h || h.plots) return;
+  const A = areaOf(h, 'fields');
+  h.plots = h.fields.map((f, i) => [A.x + i % 4, A.y + Math.floor(i / 4)]);
+  if (h.areaAt) delete h.areaAt.fields;
+}
+// a free tile for a plot: in the yard, not the house, the drive, the path, the porch, the mailbox, a farm area, another
+// plot (but `skip`) or a yard thing
+function plotFree(h, x, y, skip = -1) {
+  if (x < 0 || y < 0 || x >= homeW(h) || y >= LOT_D) return false;
+  const [fx, fy, fw, fd] = HOUSES[h.house].fp;
+  if ([{ x: fx, y: fy, w: fw, d: fd }, AREA.path, PORCH, { x: MAILBOX[0], y: MAILBOX[1], w: 1, d: 1 }].some(r => inRect(r, x, y)) || onDrive(h, x, y)) return false;
+  if (movables(h).some(k => inRect(areaOf(h, k), x, y))) return false;
+  if ((h.plots || []).some((p, i) => i !== skip && p[0] === x && p[1] === y)) return false;
+  if (garageDoorTiles(h).some(([gx, gy]) => gx === x && gy === y)) return false;
+  return !h.yard.some(it => inRect(itemRect('yard', it), x, y));
+}
+// where the next plot goes: next to the others (filling out a neat block first), keeping everything reachable
+let PLOT_NEXT = { key: '', at: null };
+function nextPlotSpot(h = S.me) {
+  if (!h.plots || h.fields.length >= PLOT.max) return null;
+  const key = JSON.stringify([h.plots, h.yard.map(it => [it.k, it.x, it.y, it.rot]), h.areaAt, h.house, h.garageLv, h.pastureLv, h.orchardLv, h.pondLv, homeW(h), (h.drive || {})]);
+  if (PLOT_NEXT.key === key) return PLOT_NEXT.at;
+  const P = h.plots, xs = P.map(p => p[0]), ys = P.map(p => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, seen = new Set(), cand = [];
+  P.forEach(([px, py]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { const x = px + dx, y = py + dy, k = x + ',' + y; if (!seen.has(k)) { seen.add(k); cand.push([x, y]); } }));
+  if (!cand.length) for (let y = 0; y < LOT_D; y++) for (let x = 0; x < homeW(h); x++) cand.push([x, y]);
+  // inside the block's rows first (4 wide), then the nearest to its middle
+  const score = ([x, y]) => (x >= x0 && x <= Math.max(x1, x0 + 3) ? 0 : 10) + Math.abs(y - cy) * 2 + (x >= x0 && x <= Math.max(x1, x0 + 3) ? (x - x0) * 0.1 : Math.abs(x - cx)) + (y < cy ? 0.05 : 0);   // row by row, left to right
+  cand.sort((a, b) => score(a) - score(b));
+  let at = null;
+  for (const [x, y] of cand) {
+    if (!plotFree(h, x, y)) continue;
+    h.plots.push([x, y]); h.fields.push(null);
+    const ok = typeof yardKeepsWay !== 'function' || yardKeepsWay(h, h.yard);
+    h.plots.pop(); h.fields.pop();
+    if (ok) { at = [x, y]; break; }
+  }
+  PLOT_NEXT = { key, at };
+  return at;
+}
+function buyPlot(h = S.me) {
+  ensurePlots(h);
+  const n = h.fields.length;
+  if (n >= PLOT.max) return 'max';
+  const cost = { coins: plotCost(n) };
+  if (!canAfford(cost, h)) return 'poor';
+  const at = nextPlotSpot(h);
+  if (!at) return 'noroom';
+  pay(cost, h);
+  h.fields.push(null); h.plots.push(at);
+  h.fieldLv = Math.max(h.fieldLv, FIELD_LEVELS.filter(v => v <= h.fields.length).length - 1);
+  YARD_SPOTS = {};
+  return 'ok';
+}
+// moving one plot (design mode); a crop on it comes along
+function movePlot(i, x, y, h = S.me) {
+  if (!h.plots || !h.plots[i]) return 'no';
+  if (!plotFree(h, x, y, i)) return 'space';
+  const old = h.plots[i];
+  h.plots[i] = [x, y];
+  if (typeof yardKeepsWay === 'function' && !yardKeepsWay(h, h.yard)) { h.plots[i] = old; return 'block'; }
+  YARD_SPOTS = {};
+  return 'ok';
+}
 function orchardSlot(h, i) { const A = areaOf(h, 'orchard'), o = AREA.orchard; return [ORCHARD_SLOTS[i][0] - o.x + A.x, ORCHARD_SLOTS[i][1] - o.y + A.y]; }
 
 function plant(i, crop) {
@@ -918,8 +986,13 @@ function roomReachable(h, lv, items) {
     for (let j = y; j < y + d; j++) if (ok(x - 1, j) || ok(x + w, j)) return true;
     return false;
   };
-  return solid.every(it => { const [w, d] = itemSize('room', it); return nextTo(it.x, it.y, w, d); })
-    && st.every(r => ok(r.ax, r.ay));
+  // v0.46: a thing used from the front: one of the free tiles in front of it (a bed: beside it or at the foot) you can
+  // walk to; in front of a seat there may only be a low table, then any side will do
+  return solid.every(it => {
+    const [w, d] = itemSize('room', it);
+    if (needsFront('room', it.k)) { const fr = frontTiles('room', it).filter(([tx, ty]) => tx >= 0 && ty >= 0 && tx < rw && ty < rd && g[ty * rw + tx]); if (fr.length) return fr.some(([tx, ty]) => ok(tx, ty)); }
+    return nextTo(it.x, it.y, w, d);
+  }) && st.every(r => ok(r.ax, r.ay));
 }
 let PLACE_WHY = '';   // why the last canPlace said no: 'space' or 'block' (would block the way)
 function floorCost(h, n = floorsOf(h) + 1) {
@@ -945,7 +1018,8 @@ function fitRooms(h) {
   [h.room, ...h.ups].forEach((r, lv) => {
     const keep = [];
     r.items.forEach(it => {
-      const ok = lv < floorsOf(h) && canPlace(h, 'room', it.k, it.x, it.y, it.rot, it.id, lv, keep);
+      let ok = lv < floorsOf(h) && canPlace(h, 'room', it.k, it.x, it.y, it.rot, it.id, lv, keep);
+      if (!ok && lv < floorsOf(h)) for (const t of [2, 1, 3]) { const nr = ((it.rot || 0) + t) & 3; if (canPlace(h, 'room', it.k, it.x, it.y, nr, it.id, lv, keep)) { it.rot = nr; ok = true; break; } }   // v0.46: turned round first
       if (ok) keep.push(it);
       else { const key = 'room:' + it.k; h.store[key] = (h.store[key] || 0) + 1; n++; }
     });
@@ -959,18 +1033,54 @@ function allRoomItems(h) { return [h.room, ...(h.ups || []).slice(0, floorsOf(h)
 // The yard covers the whole lot, including bought land to the right of the 16-tile core.
 const itemDef = (scope, k) => (scope === 'room' ? FURN[k] : YARD[k]);
 const scopeItems = (h, scope, lv) => (scope === 'room' ? curRoom(h, lv).items : h.yard);
-function itemSize(scope, it) { const d = itemDef(scope, it.k); return it.rot ? [d.d, d.w] : [d.w, d.d]; }
+function itemSize(scope, it) { const d = itemDef(scope, it.k); return it.rot & 1 ? [d.d, d.w] : [d.w, d.d]; }   // v0.46: rot 0–3
 function roomSize(h) { return HOUSES[h.house].room; }
 const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.d;
+// v0.46: things face four ways (Mason #28: "everything can turn freely, as long as you can use it"). rot 0: the front
+// (where you use it from) to +y, 1: +x, 2: -y, 3: -x. Odd ones lie sideways (w and d swap).
+const ROT_DIR = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+// which way to draw a person looking along (dx, dy) (D247): to +x face 1, to +y face -1; to -x / -y from behind
+const faceAlong = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? { face: 1, back: false } : { face: -1, back: true }) : (dy > 0 ? { face: -1, back: false } : { face: 1, back: true }));
+// things you use from the front (seats, beds, machines) or that open to the front (fridge, wardrobe, TV…)
+const needsFront = (scope, k) => { const d = itemDef(scope, k); return !!d && !d.flat && !!(d.use || d.front); };
+// low tables may stand in front of a seat or the TV
+const LOW_FURN = ['coffeetable', 'table', 'roundtable', 'sidetable', 'desk'];
+const itemRect = (scope, it) => { const [w, d] = itemSize(scope, it); return { x: it.x, y: it.y, w, d }; };
+// the tiles just outside its front (a bed: the foot and both sides, all but the head)
+function frontTiles(scope, it) {
+  const [w, d] = itemSize(scope, it), r = (it.rot || 0) & 3, out = [];
+  const side = s => { const [dx, dy] = ROT_DIR[s]; if (dx) { const x = dx > 0 ? it.x + w : it.x - 1; for (let j = 0; j < d; j++) out.push([x, it.y + j]); } else { const y = dy > 0 ? it.y + d : it.y - 1; for (let i = 0; i < w; i++) out.push([it.x + i, y]); } };
+  side(r);
+  if (itemDef(scope, it.k).use === 'sleep') { side((r + 1) % 4); side((r + 3) % 4); }
+  return out;
+}
+// v0.46: in the yard, what's solid in front of a thing (the path, the drive and the porch are fine to face)
+function yardSolidAt(h, x, y) {
+  const [fx, fy, fw, fd] = HOUSES[h.house].fp;
+  return inRect({ x: fx, y: fy, w: fw, d: fd }, x, y) || movables(h).some(k => inRect(areaOf(h, k), x, y)) || (x === MAILBOX[0] && y === MAILBOX[1]) || h.fields.some((f, i) => { const [px, py] = fieldPos(i, h); return px === x && py === y; });
+}
+// v0.46: can the thing `only` (just put down) and everything whose front it stands in still be used? A front tile has
+// to be inside (not the wall / the fence), not the stairs or reserved yard, and not under something tall.
+function frontsOK(h, scope, items, only, lv) {
+  const [rw, rd] = scope === 'room' ? roomSize(h) : [homeW(h), LOT_D], st = scope === 'room' ? stairsTiles(h, lv) : [];
+  const tall = items.filter(o => !itemDef(scope, o.k).flat && !(scope === 'room' && LOW_FURN.includes(o.k))).map(o => [o, itemRect(scope, o)]);
+  const R = itemRect(scope, only);
+  return items.every(it => {
+    if (!needsFront(scope, it.k)) return true;
+    const fr = frontTiles(scope, it);
+    if (it !== only && !fr.some(([tx, ty]) => inRect(R, tx, ty))) return true;
+    return fr.some(([tx, ty]) => tx >= 0 && ty >= 0 && tx < rw && ty < rd && !st.some(r => inRect(r, tx, ty)) && !(scope === 'yard' && yardSolidAt(h, tx, ty)) && !tall.some(([o, r]) => o !== it && inRect(r, tx, ty)));
+  });
+}
 const PORCH = { x: AREA.house.x, y: AREA.house.y + AREA.house.d, w: AREA.house.w, d: 1 }; // keep the front of the house clear
 function yardReserved(x, y, w = LOT_W, h = S.me) {
   if (x < 0 || y < 0 || x >= w || y >= LOT_D) return true;
   if (x === MAILBOX[0] && y === MAILBOX[1]) return true;
-  return ['house', 'path'].some(k => inRect(AREA[k], x, y)) || onDrive(h, x, y) || movables(h).some(k => inRect(areaOf(h, k), x, y)) || inRect(PORCH, x, y);
+  return ['house', 'path'].some(k => inRect(AREA[k], x, y)) || onDrive(h, x, y) || movables(h).some(k => inRect(areaOf(h, k), x, y)) || inRect(PORCH, x, y) || !!(h && h.plots && h.plots.some(p => p[0] === x && p[1] === y));
 }
 function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
   const def = itemDef(scope, k);
-  const [w, d] = rot ? [def.d, def.w] : [def.w, def.d];
+  const [w, d] = rot & 1 ? [def.d, def.w] : [def.w, def.d];
   PLACE_WHY = 'space';
   if (scope === 'room') {
     const [rw, rd] = roomSize(h);
@@ -986,6 +1096,9 @@ function canPlace(h, scope, k, x, y, rot, ignoreId, lv, list) {
     const [iw, id] = itemSize(scope, it);
     if (x < it.x + iw && x + w > it.x && y < it.y + id && y + d > it.y) return false;
   }
+  const neu = { k, x, y, rot, id: '_new' };
+  if (scope === 'yard' && garageDoorTiles(h).some(([gx, gy]) => gx >= x && gx < x + w && gy >= y && gy < y + d)) { PLACE_WHY = 'garage'; return false; }   // v0.46: in front of the garage doors
+  if (!frontsOK(h, scope, [...others, neu], neu, lvOf(h, lv))) { PLACE_WHY = 'face'; return false; }   // v0.46
   if (scope === 'room' && !def.flat && !roomReachable(h, lvOf(h, lv), [...others, { k, x, y, rot }])) { PLACE_WHY = 'block'; return false; }
   if (scope === 'yard' && typeof yardKeepsWay === 'function' && !yardKeepsWay(h, [...others, { k, x, y, rot, id: '_new' }])) { PLACE_WHY = 'block'; return false; }   // v0.13
   return true;
@@ -1020,8 +1133,8 @@ function autoPlace(h, scope, k, tint, lv) {
   const def = itemDef(scope, k);
   const spots = scope === 'room' ? roomSpots(h, def.flat) : yardSpots(homeW(h), h);
   // Against the left wall, turn things so their back touches the wall.
-  for (const [x, y] of spots) for (const rot of (scope === 'room' && x === 0 && y > 0 ? [1, 0] : [0, 1])) {
-    if (rot && def.w === def.d && !(scope === 'room' && x === 0 && y > 0)) continue;
+  for (const [x, y] of spots) for (const rot of (scope === 'room' && x === 0 && y > 0 ? [1, 0, 3, 2] : [0, 1, 2, 3])) {
+    if ((rot & 1) && def.w === def.d && !needsFront(scope, k) && !(scope === 'room' && x === 0 && y > 0)) continue;
     if (canPlace(h, scope, k, x, y, rot, null, lv)) {
       const it = { id: uid(), k, x, y, rot, tint: def.tint ? (tint || rand(TINTS)) : null, placed: now() };
       scopeItems(h, scope, lv).push(it);
@@ -1035,6 +1148,7 @@ function autoPlace(h, scope, k, tint, lv) {
 function fixLayout(h) {
   h.yard.splice(0).forEach(it => {
     if (canPlace(h, 'yard', it.k, it.x, it.y, it.rot)) h.yard.push(it);
+    else if ([2, 1, 3].some(t => { const nr = ((it.rot || 0) + t) & 3; if (canPlace(h, 'yard', it.k, it.x, it.y, nr)) { it.rot = nr; return true; } return false; })) h.yard.push(it);   // v0.46
     else autoPlace(h, 'yard', it.k, it.tint);
   });
 }
@@ -1053,7 +1167,7 @@ function moveItem(scope, id, x, y, rot) {
   Object.assign(it, { x, y, rot });
   return true;
 }
-function rotateItem(scope, id) { const it = findItem(scope, id); return !!it && moveItem(scope, id, it.x, it.y, it.rot ? 0 : 1); }
+function rotateItem(scope, id) { const it = findItem(scope, id); if (!it) return false; for (let k = 1; k < 4; k++) if (moveItem(scope, id, it.x, it.y, ((it.rot || 0) + k) & 3)) return true; return false; }   // v0.46: the next of four ways that works
 function tintItem(scope, id) {
   const it = findItem(scope, id);
   if (!it || !it.tint) return false;
@@ -1251,6 +1365,7 @@ function showOffExclusives(h) {
 }
 function buyLand(kind, h = S.me) {
   if (kind === 'garage') return buildGarage(h);   // v0.19
+  if (kind === 'field' && h === S.me) return buyPlot(h);   // v0.46: one plot at a time
   const table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];
   const [levels, key] = table;
   if (h[key] >= levels.length - 1) return 'max';
@@ -1313,7 +1428,8 @@ function assetBreakdown(h) {
   const b = { cash: h.coins + h.wood * 5, house: 0, land: 0, items: 0, cars: 0, animals: 0, goods: 0 };
   if (h === S.me && S.bank) b.cash += S.bank.save - S.bank.loans.reduce((t2, l) => t2 + l.left, 0) + (S.stocks ? stocksValue() : 0);   // v0.26: savings and shares count, loans don't
   h.houses.forEach(i => { b.house += costValue(HOUSES[i].cost); });
-  for (let i = 1; i <= h.fieldLv; i++) b.land += costValue(FIELD_COST[i]);
+  if (h.plots) for (let n = FIELD_LEVELS[0]; n < h.fields.length; n++) b.land += plotCost(n);   // v0.46
+  else for (let i = 1; i <= h.fieldLv; i++) b.land += costValue(FIELD_COST[i]);
   for (let i = 1; i <= h.pastureLv; i++) b.land += costValue(PASTURE[i].cost);
   for (let i = 1; i <= h.orchardLv; i++) b.land += costValue(ORCHARD[i].cost);
   for (let i = 1; i <= h.pondLv; i++) b.land += costValue(POND[i].cost);
@@ -1809,8 +1925,26 @@ const babyStealable = (h, a) => isFriend(h.id) && !ANIMALS[a.k].pet && animalSta
 // ---------- moving a farm area (v0.15) ----------
 // It has to fit inside your yard, not cover the house, the drive, the path, another area or anything in the yard,
 // and everything must still be reachable afterwards.
+// v0.46: the garage turns four ways (h.garageRot, like a thing's rot: its doors to +y, +x, -y, -x). The row of tiles
+// in front of the doors has to stay open (Mason #28: "the garage doors can't face a wall").
+function garageDoorTiles(h = S.me) {
+  if (!h.garageLv) return [];
+  const G = areaOf(h, 'garage'), [dx, dy] = ROT_DIR[(h.garageRot || 0) & 3], out = [];
+  if (dx) { const x = dx > 0 ? G.x + G.w : G.x - 1; for (let j = 0; j < G.d; j++) out.push([x, G.y + j]); }
+  else { const y = dy > 0 ? G.y + G.d : G.y - 1; for (let i = 0; i < G.w; i++) out.push([G.x + i, y]); }
+  return out;
+}
+const garageDoorOK = h => garageDoorTiles(h).every(([x, y]) => x >= 0 && y >= 0 && x < homeW(h) && y < LOT_D && !yardSolidAt(h, x, y) && !h.yard.some(it => inRect(itemRect('yard', it), x, y)));
+function rotateGarage(h = S.me) {
+  if (!h.garageLv) return false;
+  const r0 = h.garageRot || 0, G = areaOf(h, 'garage');
+  for (let t = 1; t < 4; t++) { h.garageRot = (r0 + t) & 3; if (moveArea('garage', G.x, G.y, h) === 'ok') return true; }
+  h.garageRot = r0;
+  return false;
+}
 function moveArea(k, x, y, h = S.me) {
   if (k === 'drive') return moveDrive(x, h);
+  if (typeof k === 'string' && k.startsWith('plot:')) return movePlot(+k.slice(5), x, y, h);   // v0.46
   if (!movables(h).includes(k)) return 'no';
   const A = areaOf(h, k), LW = homeW(h);
   if (x < 0 || y < 0 || x + A.w > LW || y + A.d > LOT_D) return 'space';
@@ -1819,8 +1953,11 @@ function moveArea(k, x, y, h = S.me) {
   if ([{ x: fx, y: fy, w: fw, d: fd }, ...driveOf(h).rects, AREA.path, PORCH, { x: MAILBOX[0], y: MAILBOX[1], w: 1, d: 1 }].some(over)) return 'space';
   if (movables(h).filter(o => o !== k).some(o => over(areaOf(h, o)))) return 'space';
   if (h.yard.some(it => { const [w, d] = itemSize('yard', it); return over({ x: it.x, y: it.y, w, d }); })) return 'space';
+  if ((h.plots || []).some(([px, py]) => over({ x: px, y: py, w: 1, d: 1 }))) return 'space';   // v0.46
+  if (k !== 'garage' && garageDoorTiles(h).some(([px, py]) => over({ x: px, y: py, w: 1, d: 1 }))) return 'space';
   const old = h.areaAt ? { ...h.areaAt } : null;
   h.areaAt = { ...(h.areaAt || {}), [k]: [x, y] };
+  if (k === 'garage' && !garageDoorOK(h)) { h.areaAt = old || undefined; if (!old) delete h.areaAt; return 'door'; }
   if (typeof yardKeepsWay === 'function' && !yardKeepsWay(h, h.yard)) { h.areaAt = old || undefined; if (!old) delete h.areaAt; return 'block'; }
   YARD_SPOTS = {};
   return 'ok';

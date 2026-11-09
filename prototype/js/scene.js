@@ -41,7 +41,7 @@ const Scene = (() => {
   const LIE_H = { bed: 13.5, singlebed: 12.5, bunkbed: 14.5, sleepbag: 6 };      // lying: on top of the mattress
   const LIE_HEAD = { bed: 0.38, singlebed: 0.36, bunkbed: 0.36, sleepbag: 0.3 };  // where the head goes (on the pillow)
   // Which way your head points when lying: towards the pillow (the back of the bed).
-  const lieDir = it => (it ? (it.rot ? Math.atan2(-16, -32) : Math.atan2(-16, 32)) : 0);
+  const lieDir = it => (it ? [Math.atan2(-16, 32), Math.atan2(-16, -32), Math.atan2(16, -32), Math.atan2(16, 32)][(it.rot || 0) & 3] : 0);   // v0.46: four ways
 
   // Your townie outside (lot-local coordinates on lot `lot`) and inside (room coordinates).
   const me = { x: DOOR_X, y: 12.5, lot: 'me', path: [], face: 1, phase: 0, moving: false, jobs: [], cur: null, act: null, sneak: false };
@@ -240,8 +240,9 @@ const Scene = (() => {
       if (pr && !r(pr.x - 1, pr.y + pr.d - 1)) return false;
       if (h.pondLv) { const P = areaOf(h, 'pond'); if (!near(P.x, P.y, P.w, P.d)) return false; }
       if (!h.trees.every((t, i) => !t || i >= orchardSlots(h) || near(...orchardSlot(h, i)))) return false;
+      if (h.garageLv && !garageDoorTiles(h).some(([gx, gy]) => r(gx, gy))) return false;   // v0.46: you can walk up to the garage doors
       if (!near(MAILBOX[0], MAILBOX[1])) return false;
-      return yard.every(it => { const [w2, d2] = itemSize('yard', it); return near(it.x, it.y, w2, d2); });
+      return yard.every(it => { const [w2, d2] = itemSize('yard', it); return near(it.x, it.y, w2, d2) && (!needsFront('yard', it.k) || frontTiles('yard', it).some(([tx, ty]) => r(tx, ty))); });   // v0.46
     } finally { h.yard = saved; }
   }
   window.yardKeepsWay = yardOK;
@@ -508,7 +509,8 @@ const Scene = (() => {
         if (f) { const c = iso(ox + x + 0.5, oy + y + 0.5), ph = (performance.now() / 1300 + i * 0.37) % 1; ellipse(c.x, c.y, (6 + ph * 14) * z, (3 + ph * 7) * z, null, `rgba(255,255,255,${0.5 * (1 - ph)})`, 1 * z); }
       } else if (weatherNow().kind === 'snow') tile(ox + x + 0.05, oy + y + 0.05, 'rgba(248,251,253,.55)');
     }
-    if (opt.mine && f && h.fieldLv < FIELD_LEVELS.length - 1) { const F = areaOf(h, 'fields'); dashed(F.x, F.y + h.fields.length / 4, 4, 1); }
+    if (opt.mine && f && h.plots) { const nx = nextPlotSpot(h); if (nx) dashed(nx[0], nx[1], 1, 1); }   // v0.46: one plot at a time
+    else if (opt.mine && f && h.fieldLv < FIELD_LEVELS.length - 1) { const F = areaOf(h, 'fields'); dashed(F.x, F.y + h.fields.length / 4, 4, 1); }
     if (f) for (let k = 0; k < 18 + (LW - LOT_W); k++) {
       const x = Math.floor(hash(k, 1 + ox) * LW), y = Math.floor(hash(k, 2 + oy) * LOT_D);
       if (yardReserved(x, y, LW, h)) continue;
@@ -660,7 +662,7 @@ const Scene = (() => {
     // v0.19: the garage, with the cars that aren't in the drive parked inside
     if (h.garageLv) {
       const G = areaOf(h, 'garage'), inside = carSlots(h).garage.map(i => h.cars[i]);
-      objs.push({ d: ox + oy + G.x + G.y + (G.w + G.d) / 2, f: () => { const r = drawGarage(ox + G.x, oy + G.y, garageCap(h), inside, ts); if (focus && r) hits.push({ kind: 'garage', owner: h.id, ...r }); } });
+      objs.push({ d: ox + oy + G.x + G.y + (G.w + G.d) / 2, f: () => { const r = drawGarageAt(ox + G.x, oy + G.y, garageCap(h), inside, ts, h.garageRot || 0); if (focus && r) hits.push({ kind: 'garage', owner: h.id, ...r }); } });
     }
     // car
     carSlots(h).drive.forEach(([i, sp]) => {   // v0.24: each car on its space on the drive (not the one you're out in)
@@ -2037,7 +2039,8 @@ const Scene = (() => {
       });
       const tag = (kind, text, wx, wy) => { const c = iso(ox + wx, oy + wy); hitLabel({ kind, pri: 1 }, 2, text, c.x, c.y + 4, 'rgba(255,255,255,.92)', '#7a5a2a', `600 11px ${UI_FONT},${EMOJI_FONT}`, 20); };
       if (fine()) {
-        if (h.fieldLv < FIELD_LEVELS.length - 1) tag('buyLand', `🔓 ${t('expand_field')}`, areaOf(h, 'fields').x + 2, areaOf(h, 'fields').y + h.fields.length / 4 + 0.5);
+        if (h.plots) { const nx = nextPlotSpot(h); if (nx) tag('buyLand', `🔓 ${t('expand_plot', { n: fmtNum(plotCost(h.fields.length)) })}`, nx[0] + 0.5, nx[1] + 0.5); }   // v0.46
+        else if (h.fieldLv < FIELD_LEVELS.length - 1) tag('buyLand', `🔓 ${t('expand_field')}`, areaOf(h, 'fields').x + 2, areaOf(h, 'fields').y + h.fields.length / 4 + 0.5);
         if (!h.pastureLv) tag('buyLand', `🐄 ${t('build_pasture')}`, areaOf(h, 'pasture').x + 2, areaOf(h, 'pasture').y + 4);
         if (!h.orchardLv) tag('buyLand', `🌳 ${t('build_orchard')}`, areaOf(h, 'orchard').x + 3, areaOf(h, 'orchard').y + 1.5);
         if (!h.pondLv) tag('buyLand', `🐟 ${t('build_pond')}`, areaOf(h, 'pond').x + 2, areaOf(h, 'pond').y + 1.5);
@@ -4903,7 +4906,9 @@ const Scene = (() => {
     const trS = meIn.tr && meIn.tr.cur, usingId = meIn.useId || (meIn.using && meIn.using.id);
     const useIt = usingId && room.items.find(x => x.id === usingId), useK = useIt && FURN[useIt.k].use;
     const bedD = useK === 'sleep' && !(trS && trS.pose === 'walk') ? useIt.x + useIt.y + itemSize('room', useIt).reduce((a, b) => a + b) / 2 + 0.02 : 0;   // in bed: right after the bed
-    const meD = clipR ? clipR.x + clipR.y + 1.4 : onFlight && upR ? upR.x + upR.y + 1.38 : bedD || meIn.x + meIn.y + (meIn.seat || useK === 'sit' ? 0.7 : 0);
+    // v0.46: on a seat, a bike or a treadmill turned round (its front away from you) you're behind it: drawn first
+    const r4 = useIt ? (useIt.rot || 0) & 3 : 0, onIt = useIt && ['sit', 'bike', 'run'].includes(useK) && !(trS && trS.pose === 'walk'), behindIt = onIt && r4 >= 2;
+    const meD = clipR ? clipR.x + clipR.y + 1.4 : onFlight && upR ? upR.x + upR.y + 1.38 : bedD || (behindIt ? useIt.x + useIt.y + itemSize('room', useIt).reduce((a, b) => a + b) / 2 - 0.03 : meIn.x + meIn.y + (meIn.seat || useK === 'sit' ? 0.7 : 0));
     if (!((S.work || S.live || jailed()) && owner === 'me')) objs.push({ d: meD, f: () => {
       const p = iso(meIn.x, meIn.y), pose = trS ? trS.pose : meIn.livePose || (meIn.act ? meIn.act.pose : meIn.moving ? 'walk' : 'stand');
       const it = meIn.useId && room.items.find(x => x.id === meIn.useId), lift = meIn.lift || 0;
@@ -4916,9 +4921,10 @@ const Scene = (() => {
       // sitting: hips on the seat, feet on the floor; lying: on the mattress, then the quilt goes back over you
       const sitH = pose !== 'sit' ? 0 : trS ? trS.seatH : useK === 'sit' ? SEAT_H[useIt.k] || 9 : 0, lieH = pose === 'lie' && useIt ? LIE_H[useIt.k] || 10 : 0;
       const yOff = sitH ? 0 : lieH || meIn.seat || 0;
-      const tread = it && FURN[it.k].use === 'run' && pose === 'run';   // v0.43: on the treadmill you face its console, your back to us
-      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: tread ? 'back' : meIn.view, turn: tread ? (it.rot ? [-1, 0.1] : [0.1, -1]) : meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) }); needBubble({ x: p.x, y: p.y - (yOff + lift) * z }, z, ts);
-      if (pose === 'lie' && useIt) drawBedQuilt(useIt);
+      const tread = it && FURN[it.k].use === 'run' && pose === 'run' && r4 < 2;   // v0.43: on the treadmill you face its console, your back to us (turned round: you face us)
+      const fromBehind = (onIt && (useK === 'sit' || useK === 'bike') && r4 >= 2) || (useIt && (useK === 'lift' || useK === 'box') && r4 === 1 && !meIn.moving);
+      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: (meIn.back && meIn.moving) || fromBehind, view: tread ? 'back' : meIn.view, turn: tread ? (r4 ? [-1, 0.1] : [0.1, -1]) : meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) }); needBubble({ x: p.x, y: p.y - (yOff + lift) * z }, z, ts);
+      if (pose === 'lie' && useIt) drawBedQuilt(useIt);   // (v0.46: a bed turned round: your head stays in sight over its headboard)
       if (pose === 'sit' && useIt && sitH) drawSeatFront(useIt, useIt.x, useIt.y);   // v0.19: the near arm stays in front of you
       ctx.restore();
       if (S.live) liveBadge(p, S.live, true);
@@ -4943,17 +4949,18 @@ const Scene = (() => {
     return null;
   }
   function areaDropAt(pr, sx, sy) { const w = unIso(sx, sy), [ox, oy] = editOrigin(); return { x: Math.round(w.x - ox - pr.off[0]), y: Math.round(w.y - oy - pr.off[1]) }; }
-  const EDIT_AREAS = h => [...movables(h).filter(k => k !== 'pasture' || h.pastureLv).filter(k => k !== 'orchard' || h.orchardLv).filter(k => k !== 'pond' || h.pondLv), 'drive'];
+  const EDIT_AREAS = h => [...movables(h).filter(k => k !== 'pasture' || h.pastureLv).filter(k => k !== 'orchard' || h.orchardLv).filter(k => k !== 'pond' || h.pondLv), 'drive', ...(h.plots || []).map((p, i) => 'plot:' + i)];   // v0.46: each plot on its own
   function areaFits(k, x, y) {
-    const h = S.me, keep = h.areaAt ? JSON.parse(JSON.stringify(h.areaAt)) : null;
+    const h = S.me, keep = h.areaAt ? JSON.parse(JSON.stringify(h.areaAt)) : null, keepP = h.plots ? h.plots.map(p => p.slice()) : null;
     const r = moveArea(k, x, y, h);
     if (keep) h.areaAt = keep; else delete h.areaAt;
+    if (keepP) h.plots = keepP;
     YARD_SPOTS = {};
     return r === 'ok';
   }
   function holdOrigin(sx, sy) {
     const p = unIso(sx, sy), [ox, oy] = editOrigin(), it = edit.hold, def = itemDef(edit.scope, it.k);
-    const [w, d] = it.rot ? [def.d, def.w] : [def.w, def.d];
+    const [w, d] = it.rot & 1 ? [def.d, def.w] : [def.w, def.d];
     return { x: Math.floor(p.x - ox) - Math.floor((w - 1) / 2), y: Math.floor(p.y - oy) - Math.floor((d - 1) / 2), w, d };
   }
   function editOverlay(ts) {
@@ -5046,15 +5053,17 @@ const Scene = (() => {
     if (S.live.type === 'swim') return 'stand';
     return it && FURN[it.k].use === 'box' ? 'box' : WORKOUT_POSE[S.live.type];
   }
+  // v0.46: four ways round. Its front is ROT_DIR[rot]: you stand there facing it (weights, punch bag); you sit facing
+  // out of it; on the treadmill you face the console, away from the front; in bed your head is at the other end.
   function useSpot(it) {
-    const [w, d] = itemSize('room', it), use = FURN[it.k].use;
-    if (use === 'lift' || use === 'box') return [it.x + w / 2 - 0.1, it.y + d + 0.35, 1];
+    const [w, d] = itemSize('room', it), use = FURN[it.k].use, r = (it.rot || 0) & 3, [dx, dy] = ROT_DIR[r];
+    if (use === 'lift' || use === 'box') { const f = faceAlong(-dx, -dy); return r === 0 ? [it.x + w / 2 - 0.1, it.y + d + 0.35, 1] : [it.x + w / 2 + dx * (w / 2 + 0.35), it.y + d / 2 + dy * (d / 2 + 0.35), f.face, f.back]; }
     if (use === 'sleep') {   // head on the pillow (the body is drawn 0.27 tiles behind the head); a double bed: one side
-      const hy = (LIE_HEAD[it.k] || 0.35) + 0.27, side = it.k === 'bed' ? 0.55 : null;
-      return it.rot ? [it.x + hy, it.y + (side || d / 2), 1] : [it.x + (side || w / 2), it.y + hy, 1];
+      const hy = (LIE_HEAD[it.k] || 0.35) + 0.27, side = it.k === 'bed' ? 0.55 : null, far = r >= 2;
+      return r & 1 ? [far ? it.x + w - hy : it.x + hy, it.y + (side || d / 2), 1] : [it.x + (side || w / 2), far ? it.y + d - hy : it.y + hy, 1];
     }
-    const face = use === 'sit' || use === 'bike' ? (it.rot ? 1 : -1) : use === 'run' ? (it.rot ? -1 : 1) : 1;
-    return [it.x + w / 2, it.y + d / 2, face];
+    if (use === 'sit' || use === 'bike' || use === 'run') { const f = use === 'run' ? faceAlong(-dx, -dy) : faceAlong(dx, dy); return [it.x + w / 2, it.y + d / 2, f.face, f.back]; }
+    return [it.x + w / 2, it.y + d / 2, 1];
   }
   // Getting onto a seat or into bed, step by step: walk up to the edge, sit down (on a bed: sit on the edge first,
   // then lie back and slide under the quilt). `back` remembers the way out for getting up again.
@@ -5063,10 +5072,11 @@ const Scene = (() => {
     if (use === 'sleep') {
       // into bed: walk to the side of the bed by the pillow, sit on the edge facing out, then lie down under the quilt
       // (a quick fade, so the body never slides through the mattress). A double bed: the pillow on your side.
-      const hy = (LIE_HEAD[it.k] || 0.35) + 0.27, along = it.rot ? 'x' : 'y';
+      const hy = (LIE_HEAD[it.k] || 0.35) + 0.27, along = it.rot & 1 ? 'x' : 'y', far = (it.rot & 3) >= 2, hs = far ? -1 : 1;   // v0.46: the head at the far end when turned round
       const near = along === 'y' ? (a.x < it.x + w / 2 ? -1 : 1) : (a.y < it.y + d / 2 ? -1 : 1);
-      const L = along === 'y' ? [it.k === 'bed' ? (near < 0 ? it.x + 0.55 : it.x + w - 0.55) : it.x + w / 2, it.y + hy] : [it.x + hy, it.k === 'bed' ? (near < 0 ? it.y + 0.55 : it.y + d - 0.55) : it.y + d / 2];
-      const E = along === 'y' ? [near < 0 ? it.x + 0.22 : it.x + w - 0.22, L[1] + 0.15] : [L[0] + 0.15, near < 0 ? it.y + 0.22 : it.y + d - 0.22];
+      const H0 = along === 'y' ? (far ? it.y + d - hy : it.y + hy) : (far ? it.x + w - hy : it.x + hy);
+      const L = along === 'y' ? [it.k === 'bed' ? (near < 0 ? it.x + 0.55 : it.x + w - 0.55) : it.x + w / 2, H0] : [H0, it.k === 'bed' ? (near < 0 ? it.y + 0.55 : it.y + d - 0.55) : it.y + d / 2];
+      const E = along === 'y' ? [near < 0 ? it.x + 0.22 : it.x + w - 0.22, L[1] + 0.15 * hs] : [L[0] + 0.15 * hs, near < 0 ? it.y + 0.22 : it.y + d - 0.22];
       const F = along === 'y' ? [E[0] + near * 0.5, E[1]] : [E[0], E[1] + near * 0.5];
       const out = (F[0] - E[0]) - (F[1] - E[1]) >= 0 ? 1 : -1, seatH = (LIE_H[it.k] || 10) - 1, walk = Math.hypot(F[0] - a.x, F[1] - a.y), steps = [];
       if (walk > 0.05) steps.push({ pose: 'walk', x: F[0], y: F[1], dur: walk / 1.6 });
@@ -5233,8 +5243,14 @@ const Scene = (() => {
     const [ox, oy] = origin(owner), lx = w.x - ox, ly = w.y - oy, h = homeOf(owner);
     const small = [...hits].reverse().find(x => ['animal', 'avatar', 'mailbox', 'tree', 'yard', 'shop'].includes(x.kind) && inside(x, sx, sy));
     if (small) return onHit(small);
+    if (h.plots) {   // v0.46: single plots
+      const tx = Math.floor(lx), ty = Math.floor(ly), i = h.plots.findIndex(p => p[0] === tx && p[1] === ty);
+      if (i >= 0 && i < h.fields.length) return onHit({ kind: 'field', owner, i });
+      const nx = owner === 'me' && nextPlotSpot(h);
+      if (nx && nx[0] === tx && nx[1] === ty) return onHit({ kind: 'buyLand' });
+    }
     const fx = Math.floor(lx) - areaOf(h, 'fields').x, fy = Math.floor(ly) - areaOf(h, 'fields').y;
-    if (fx >= 0 && fx < 4 && fy >= 0 && fy < 4) {
+    if (!h.plots && fx >= 0 && fx < 4 && fy >= 0 && fy < 4) {
       const i = fy * 4 + fx;
       if (i < h.fields.length) return onHit({ kind: 'field', owner, i });
       if (owner === 'me' && fy === h.fields.length / 4) return onHit({ kind: 'buyLand' });
@@ -5308,7 +5324,7 @@ const Scene = (() => {
       case 'trough': { const pr = pastureRect(h); return pr ? () => [pr.x + 1.5, pr.y + pr.d - 0.05, 1] : null; }   // v0.44
       case 'door': { const [, fy, , fd] = HOUSES[h.house].fp; return () => [DOOR_X, fy + fd + 0.35, 1]; }
       case 'gate': return () => [3.5, LOT_D + 0.7, 0];
-      case 'yard': { const it = h.yard.find(x => x.id === tg.id); if (!it) return null; const [w, d] = itemSize('yard', it); return () => [it.x + w / 2, it.y + d + 0.15, 1]; }
+      case 'yard': { const it = h.yard.find(x => x.id === tg.id); if (!it) return null; const [w, d] = itemSize('yard', it), [dx, dy] = needsFront('yard', it.k) ? ROT_DIR[(it.rot || 0) & 3] : [0, 1]; return () => [it.x + w / 2 + dx * (w / 2 + 0.15), it.y + d / 2 + dy * (d / 2 + 0.15), faceAlong(-dx, -dy).face]; }   // v0.46: to its front
       case 'animal': {
         const e = ents.get(h.id + ':' + tg.id), a = h.animals.find(x => x.id === tg.id);
         if (!e || !a) return null;
@@ -5346,13 +5362,14 @@ const Scene = (() => {
     const [w, d] = itemSize('room', it), use = FURN[it.k].use, N = roomNav(h), free = ([x, y]) => open(N, Math.floor(x), Math.floor(y));
     let c;
     if (use === 'sleep') {
-      const hy = (LIE_HEAD[it.k] || 0.35) + 0.42, along = it.rot ? 'x' : 'y';
-      const side = n => (along === 'y' ? [n < 0 ? it.x - 0.45 : it.x + w + 0.45, it.y + hy] : [it.x + hy, n < 0 ? it.y - 0.45 : it.y + d + 0.45]);
-      const nearFirst = (along === 'y' ? a.x < it.x + w / 2 : a.y < it.y + d / 2) ? [-1, 1] : [1, -1];
-      c = [...nearFirst.map(side), it.rot ? [it.x + w + 0.45, it.y + d / 2] : [it.x + w / 2, it.y + d + 0.45]];
-    } else {
-      const front = it.rot ? [it.x + w + 0.45, it.y + d / 2] : [it.x + w / 2, it.y + d + 0.45];
-      c = [front, it.rot ? [it.x + w / 2, it.y + d + 0.45] : [it.x + w + 0.45, it.y + d / 2], [it.x - 0.45, it.y + d / 2], [it.x + w / 2, it.y - 0.45]];
+      const hy = (LIE_HEAD[it.k] || 0.35) + 0.42, along = it.rot & 1 ? 'x' : 'y', far = (it.rot & 3) >= 2;
+      const H0 = along === 'y' ? (far ? it.y + d - hy : it.y + hy) : (far ? it.x + w - hy : it.x + hy);
+      const side = n => (along === 'y' ? [n < 0 ? it.x - 0.45 : it.x + w + 0.45, H0] : [H0, n < 0 ? it.y - 0.45 : it.y + d + 0.45]);
+      const nearFirst = (along === 'y' ? a.x < it.x + w / 2 : a.y < it.y + d / 2) ? [-1, 1] : [1, -1], [dx, dy] = ROT_DIR[(it.rot || 0) & 3];
+      c = [...nearFirst.map(side), [it.x + w / 2 + dx * (w / 2 + 0.45), it.y + d / 2 + dy * (d / 2 + 0.45)]];   // beside the pillow, or at the foot
+    } else {   // v0.46: in front first, then the sides, then behind
+      const [dx, dy] = ROT_DIR[(it.rot || 0) & 3], pt = (ex, ey) => [it.x + w / 2 + ex * (w / 2 + 0.45), it.y + d / 2 + ey * (d / 2 + 0.45)];
+      c = [pt(dx, dy), pt(dy, dx), pt(-dy, -dx), pt(-dx, -dy)];
     }
     return c.find(free) || null;
   }

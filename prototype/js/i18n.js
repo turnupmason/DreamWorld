@@ -150,7 +150,7 @@ const STR = {
     snack_land_field: '菜地扩建好了', snack_land_pasture: '牧场建好了', snack_land_orchard: '果园建好了，去「树苗」里挑果树吧', snack_land_pond: '鱼塘挖好了，鱼会慢慢游来',
     snack_furn: '{name}已经摆进屋里', snack_yard: '{name}已经摆在院子里', snack_stored: '没地方摆了，{name}先放进储物间',
     snack_car: '{name}停到你家车道上了', snack_drive: '换成了{name}', snack_house: '搬进了{name}！🎉', snack_moved: '搬回了{name}',
-    snack_norotate: '转不过来，旁边有东西挡着', snack_to_store: '收进储物间了', snack_placed: '摆好了', snack_noroom: '这里放不下',
+    snack_norotate: '转不过来：转了以后正面会对着墙、被挡住，或者挡住路', snack_to_store: '收进储物间了', snack_placed: '摆好了', snack_noroom: '这里放不下',
     snack_liked: '点赞成功', snack_msg: '留言已送到 {name} 家', snack_gift: '把 {gift} 送给了 {name}',
     snack_copied: '邀请链接已复制', snack_claimed: '收下了 {gift}', snack_rest: '好好休息，奖励照发',
     snack_letter_empty: '信还是空的', snack_letter_sent: '信寄给 {name} 了 📮',
@@ -300,7 +300,7 @@ const STR = {
     snack_land_field: 'Field expanded', snack_land_pasture: 'Pasture built', snack_land_orchard: 'Orchard ready. Pick trees under Trees', snack_land_pond: 'Pond dug. Fish will swim in',
     snack_furn: '{name} placed inside', snack_yard: '{name} placed in the yard', snack_stored: 'No room, so {name} went to storage',
     snack_car: '{name} is in your driveway', snack_drive: 'Switched to {name}', snack_house: 'Moved into the {name}! 🎉', snack_moved: 'Moved back to the {name}',
-    snack_norotate: 'No room to turn it', snack_to_store: 'Stored', snack_placed: 'Placed', snack_noroom: 'Doesn\'t fit there',
+    snack_norotate: 'It can’t turn: it would face the wall, be blocked, or block the way', snack_to_store: 'Stored', snack_placed: 'Placed', snack_noroom: 'Doesn\'t fit there',
     snack_liked: 'Liked', snack_msg: 'Message left at {name}\'s', snack_gift: 'Gave {gift} to {name}',
     snack_copied: 'Invite link copied', snack_claimed: 'Got {gift}', snack_rest: 'Rest well. Rewards still come',
     snack_letter_empty: 'The letter is empty', snack_letter_sent: 'Letter sent to {name} 📮',
@@ -1278,4 +1278,15 @@ Object.assign(STR.en, {
   pg_stadium: 'Watch a game: fun +15; a home run derby with a friend brings you closer; a hot dog if you’re hungry.',
   er_btn: 'A&E: well again now 🪙{n}', er_note: 'The clinic’s medicine needs a rest in bed afterwards; A&E costs more but works at once.', er_done: 'Seen at A&E: all better!',
   perk_swim: 'walking +{n}%', perk_rest: 'well rested, good mood',
+});
+// v0.46: home design
+Object.assign(STR.zh, {
+  snack_face: '正面对着墙或被挡住了，小人用不了',
+  expand_plot: '多一块地 🪙{n}', plot_count: '{n} 块', land_plot_sub: '一块一块买，放在菜地旁边，「设计」里每块都能单独拖。{n} / {max} 块', land_plot_max: '{n} 块，已经最多了', plot_noroom: '院子里没有能放菜地的空地了，先挪一挪别的东西', area_plot: '一块菜地',
+  garage_door: '车库门前要空出来，不能对着墙、围栏、房子或别的东西',
+});
+Object.assign(STR.en, {
+  snack_face: 'Its front would face the wall or be blocked: your townie couldn’t use it',
+  expand_plot: 'One more plot 🪙{n}', plot_count: '{n} plots', land_plot_sub: 'One plot at a time, next to your others; drag each anywhere in Design. {n} of {max}', land_plot_max: '{n} plots: the most you can have', plot_noroom: 'There’s no free ground in your yard for a plot: move something first', area_plot: 'A plot',
+  garage_door: 'Keep the space in front of the garage doors clear: not a wall, the fence, the house or anything else',
 });

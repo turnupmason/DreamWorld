@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.45.0';
+const VERSION = '0.46.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -271,6 +271,11 @@ const GOODS = {
 // ---------- land ----------
 const FIELD_LEVELS = [4, 8, 12, 16];
 const FIELD_COST = [null, { coins: 120 }, { coins: 300, wood: 10 }, { coins: 600, wood: 20 }];
+// v0.46: your own farmland grows one plot at a time (Mason #28: "one by one, not a 4×4 block of 16"): each plot after
+// the first FIELD_LEVELS[0] costs `grow` times the last, starting at `first` (the first 12 come to about what the three
+// old rows of 4 cost); `max` in all. Each plot sits where you put it (drag it in design mode).
+const PLOT = { first: 200, grow: 1.2, max: 24 };
+const plotCost = n => Math.round(PLOT.first * Math.pow(PLOT.grow, n - FIELD_LEVELS[0]) / 10) * 10;   // the plot you'd have n of before buying it
 const PASTURE = [
   null,
   { w: 4, d: 4, cap: 3,  cost: { coins: 150, wood: 10 } },
@@ -347,7 +352,7 @@ const FURN = {
   sleepbag:  { zh: '睡袋',       en: 'Sleeping bag',     w: 1, d: 2, price: 20,  tint: true, use: 'sleep' },
   bed:       { zh: '双人床',     en: 'Double bed',       w: 2, d: 2, price: 180, tint: true, use: 'sleep' },
   nightstand:{ zh: '床头柜',     en: 'Nightstand',       w: 1, d: 1, price: 45 },
-  wardrobe:  { zh: '衣柜',       en: 'Wardrobe',         w: 2, d: 1, price: 160 },
+  wardrobe:  { zh: '衣柜',       en: 'Wardrobe',         w: 2, d: 1, price: 160, front: true },
   sofa:      { zh: '沙发',       en: 'Sofa',             w: 2, d: 1, price: 150, tint: true, use: 'sit' },
   armchair:  { zh: '扶手椅',     en: 'Armchair',         w: 1, d: 1, price: 70,  tint: true, use: 'sit' },
   beanbag:   { zh: '懒人沙发',   en: 'Bean bag',         w: 1, d: 1, price: 55,  tint: true, use: 'sit' },
@@ -357,16 +362,16 @@ const FURN = {
   chair:     { zh: '椅子',       en: 'Chair',            w: 1, d: 1, price: 30,  use: 'sit' },
   desk:      { zh: '书桌电脑',   en: 'Desk & computer',  w: 2, d: 1, price: 160 },
   lamp:      { zh: '落地灯',     en: 'Floor lamp',       w: 1, d: 1, price: 40 },
-  tv:        { zh: '电视',       en: 'TV',               w: 2, d: 1, price: 220 },
-  shelf:     { zh: '书架',       en: 'Bookshelf',        w: 1, d: 1, price: 80 },
+  tv:        { zh: '电视',       en: 'TV',               w: 2, d: 1, price: 220, front: true },
+  shelf:     { zh: '书架',       en: 'Bookshelf',        w: 1, d: 1, price: 80, front: true },
   plant:     { zh: '盆栽',       en: 'Potted plant',     w: 1, d: 1, price: 25 },
   monstera:  { zh: '龟背竹',     en: 'Monstera',         w: 1, d: 1, price: 65 },
   rug:       { zh: '地毯',       en: 'Rug',              w: 2, d: 2, price: 60,  tint: true, flat: true },
-  fridge:    { zh: '冰箱',       en: 'Fridge',           w: 1, d: 1, price: 200 },
-  stove:     { zh: '灶台',       en: 'Stove',            w: 1, d: 1, price: 150 },
-  kitchen:   { zh: '橱柜水槽',   en: 'Kitchen counter',  w: 2, d: 1, price: 240 },
-  washer:    { zh: '洗衣机',     en: 'Washing machine',  w: 1, d: 1, price: 180 },
-  bathtub:   { zh: '浴缸',       en: 'Bathtub',          w: 2, d: 1, price: 320 },
+  fridge:    { zh: '冰箱',       en: 'Fridge',           w: 1, d: 1, price: 200, front: true },
+  stove:     { zh: '灶台',       en: 'Stove',            w: 1, d: 1, price: 150, front: true },
+  kitchen:   { zh: '橱柜水槽',   en: 'Kitchen counter',  w: 2, d: 1, price: 240, front: true },
+  washer:    { zh: '洗衣机',     en: 'Washing machine',  w: 1, d: 1, price: 180, front: true },
+  bathtub:   { zh: '浴缸',       en: 'Bathtub',          w: 2, d: 1, price: 320, front: true },
   treadmill: { zh: '跑步机',     en: 'Treadmill',        w: 1, d: 2, price: 500, use: 'run' },
   spinbike:  { zh: '动感单车',   en: 'Exercise bike',    w: 1, d: 1, price: 380, use: 'bike' },
   dumbbells: { zh: '哑铃架',     en: 'Dumbbell rack',    w: 1, d: 1, price: 220, use: 'lift' },
@@ -375,12 +380,12 @@ const FURN = {
   guitar:    { zh: '吉他',       en: 'Guitar',           w: 1, d: 1, price: 140 },
   drums:     { zh: '架子鼓',     en: 'Drum kit',         w: 1, d: 1, price: 420 },
   record:    { zh: '唱片机',     en: 'Record player',    w: 1, d: 1, price: 190 },
-  easel:     { zh: '画架',       en: 'Easel',            w: 1, d: 1, price: 85 },
+  easel:     { zh: '画架',       en: 'Easel',            w: 1, d: 1, price: 85, front: true },
   cattree:   { zh: '猫爬架',     en: 'Cat tree',         w: 1, d: 1, price: 110 },
   grandclock:{ zh: '落地钟',     en: 'Grandfather clock', w: 1, d: 1, price: 260 },
   aquarium:  { zh: '鱼缸',       en: 'Aquarium',         w: 2, d: 1, price: 400 },
-  fireplace: { zh: '壁炉',       en: 'Fireplace',        w: 2, d: 1, price: 600 },
-  piano:     { zh: '钢琴',       en: 'Piano',            w: 2, d: 1, price: 900 },
+  fireplace: { zh: '壁炉',       en: 'Fireplace',        w: 2, d: 1, price: 600, front: true },
+  piano:     { zh: '钢琴',       en: 'Piano',            w: 2, d: 1, price: 900, front: true },
   singlebed: { zh: '单人床',     en: 'Single bed',       w: 1, d: 2, price: 120, tint: true, use: 'sleep' },
   bunkbed:   { zh: '双层床',     en: 'Bunk bed',         w: 1, d: 2, price: 260, tint: true, use: 'sleep' },
   tablelamp: { zh: '台灯小几',   en: 'Table lamp',       w: 1, d: 1, price: 55 },
@@ -417,19 +422,19 @@ const YARD = {
   tree:      { zh: '大树',       en: 'Shade tree',     w: 1, d: 1, price: 50 },
   pine:      { zh: '松树',       en: 'Pine tree',      w: 1, d: 1, price: 40 },
   lamp:      { zh: '路灯',       en: 'Lamp post',      w: 1, d: 1, price: 60 },
-  bench:     { zh: '长椅',       en: 'Bench',          w: 1, d: 1, price: 50 },
+  bench:     { zh: '长椅',       en: 'Bench',          w: 1, d: 1, price: 50, front: true },
   gnome:     { zh: '花园小矮人', en: 'Garden gnome',   w: 1, d: 1, price: 35 },
   birdbath:  { zh: '鸟浴盆',     en: 'Bird bath',      w: 1, d: 1, price: 70 },
   scarecrow: { zh: '稻草人',     en: 'Scarecrow',      w: 1, d: 1, price: 45 },
   beehive:   { zh: '蜂箱',       en: 'Beehive',        w: 1, d: 1, price: 160, prod: 'honey', n: 2, every: 20 },
-  doghouse:  { zh: '狗屋',       en: 'Doghouse',       w: 1, d: 1, price: 90 },
+  doghouse:  { zh: '狗屋',       en: 'Doghouse',       w: 1, d: 1, price: 90, front: true },
   well:      { zh: '水井',       en: 'Well',           w: 1, d: 1, price: 140 },
   campfire:  { zh: '篝火',       en: 'Campfire',       w: 1, d: 1, price: 80 },
-  bbq:       { zh: '烧烤架',     en: 'BBQ grill',      w: 1, d: 1, price: 120 },
+  bbq:       { zh: '烧烤架',     en: 'BBQ grill',      w: 1, d: 1, price: 120, front: true },
   picnic:    { zh: '野餐桌',     en: 'Picnic table',   w: 2, d: 1, price: 130 },
-  swing:     { zh: '秋千',       en: 'Swing',          w: 2, d: 1, price: 180 },
-  hammock:   { zh: '吊床',       en: 'Hammock',        w: 2, d: 1, price: 150 },
-  slide:     { zh: '滑梯',       en: 'Slide',          w: 1, d: 2, price: 220 },
+  swing:     { zh: '秋千',       en: 'Swing',          w: 2, d: 1, price: 180, front: true },
+  hammock:   { zh: '吊床',       en: 'Hammock',        w: 2, d: 1, price: 150, front: true },
+  slide:     { zh: '滑梯',       en: 'Slide',          w: 1, d: 2, price: 220, front: true },
   trampoline:{ zh: '蹦床',       en: 'Trampoline',     w: 2, d: 2, price: 260 },
   arch:      { zh: '玫瑰花拱门', en: 'Rose arch',      w: 1, d: 1, price: 150 },
   windmill:  { zh: '风车',       en: 'Windmill',       w: 1, d: 1, price: 320 },

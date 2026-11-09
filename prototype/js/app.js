@@ -315,7 +315,8 @@ function trayHTML(ed) {
     return `<div class="tray-row"><div class="grow"><b>🚗 ${t('area_drive')}</b><div class="muted small">${t('drive_note', { n: driveCap(h), g: garageCap(h) })}</div></div><button class="btn small" data-act="editSel" data-arg="">✓ ${t('done')}</button></div>
       <div class="tray-items">${Object.entries(DRIVES).map(([k, D]) => `<button class="tray-item ${k === cur ? 'on' : ''}" data-act="setDrive" data-arg="${k}"><span class="drive-pic">${drivePic(k)}</span><span>${nm(D)}</span><i>${k === cur ? '✓' : D.cost ? '🪙' + fmtNum(D.cost) : t('free')}</i></button>`).join('')}</div>`;
   }
-  if (scope === 'yard' && UI.editSel) return `<div class="tray-row"><div class="grow"><b>${t('area_' + UI.editSel)}</b><div class="muted small">${t('tray_drag_area')}</div></div><button class="btn small" data-act="editSel" data-arg="">✓ ${t('done')}</button></div>`;
+  if (scope === 'yard' && UI.editSel === 'garage') return `<div class="tray-row"><div class="grow"><b>${t('area_garage')}</b><div class="muted small">${t('tray_drag_area')}</div></div><button class="btn small" data-act="garageRotate">↻ ${t('rotate')}</button><button class="btn small" data-act="editSel" data-arg="">✓ ${t('done')}</button></div>`;   // v0.46: the garage turns
+  if (scope === 'yard' && UI.editSel) return `<div class="tray-row"><div class="grow"><b>${t('area_' + (String(UI.editSel).startsWith('plot:') ? 'plot' : UI.editSel))}</b><div class="muted small">${t('tray_drag_area')}</div></div><button class="btn small" data-act="editSel" data-arg="">✓ ${t('done')}</button></div>`;
   const colors = scope === 'room' ? `<div class="color-row"><span>${t('wallpaper')}</span>${sw(ROOM_WALLS, curRoom(h).wall, 'setRoomWall')}</div><div class="color-row"><span>${t('floor')}</span>${sw(FLOORS, curRoom(h).floor, 'setFloor')}</div>` : '';
   const hint = `<div class="tray-hint muted small">✋ ${t(scope === 'yard' ? 'tray_hint_yard' : 'tray_hint_room')}</div>`;
   const stored = Object.entries(h.store).filter(([key]) => key.startsWith(scope + ':'));
@@ -349,6 +350,11 @@ function storeForAct(act, arg = '') {
 }
 const atStore = k => !!k && VIEW_TOWN === myTown() && (Scene.here() === k || UI.inStore === k);
 const RARE_KEY = { sleep: 'rare_sleep', rings: 'rare_rings', focus: 'rare_focus', steps: 'rare_steps' };
+// v0.46: the next plot of farmland (one at a time)
+function plotDeal() {
+  const n = S.me.fields.length, next = n < PLOT.max ? { cost: { coins: plotCost(n) } } : null;
+  return { next, cost: next && next.cost, sub: next ? t('land_plot_sub', { n, max: PLOT.max }) : t('land_plot_max', { n }) };
+}
 function landCard(kind, img, icon) {
   const h = S.me, table = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind];
   if (kind === 'garage') {   // v0.19
@@ -356,6 +362,7 @@ function landCard(kind, img, icon) {
     return shopCard(img, `${icon} ${lv ? nm(GARAGE[lv]) : t('land_garage')}${lv ? ` · ${t('garage_cars', { n: GARAGE[lv].cap })}` : ''}`, next ? `${nm(next)} · ${t(lv ? 'garage_up' : 'garage_new', { n: next.cap })}` : t('garage_max'),
       next ? buyBtn('buyLand', 'garage', costText(next.cost), canAfford(next.cost)) : `<span class="tag ok">${t('maxed')}</span>`);
   }
+  if (kind === 'field' && h.plots) { const D = plotDeal(); return shopCard(img, `${icon} ${t('land_field')} · ${t('plot_count', { n: h.fields.length })}`, D.sub, D.next ? buyBtn('buyLand', kind, costText(D.cost), canAfford(D.cost)) : `<span class="tag ok">${t('maxed')}</span>`); }   // v0.46
   const [levels, key] = table, lv = h[key], next = levels[lv + 1], cost = next && (next.cost || next);
   let sub;
   if (kind === 'field') sub = next ? t('land_field_sub', { a: FIELD_LEVELS[lv], b: FIELD_LEVELS[lv + 1] }) : t('land_field_max', { n: FIELD_LEVELS[lv] });
@@ -677,6 +684,7 @@ function panelFeed() {
 function landDeal(kind) {
   const h = S.me;
   if (kind === 'garage') { const lv = h.garageLv || 0, next = GARAGE[lv + 1]; return { next, cost: next && next.cost, sub: next ? `${nm(next)} · ${t(lv ? 'garage_up' : 'garage_new', { n: next.cap })}` : t('garage_max') }; }
+  if (kind === 'field' && h.plots) return plotDeal();   // v0.46
   const [levels, key] = { field: [FIELD_COST, 'fieldLv'], pasture: [PASTURE, 'pastureLv'], orchard: [ORCHARD, 'orchardLv'], pond: [POND, 'pondLv'] }[kind], lv = h[key], next = levels[lv + 1], cost = next && (next.cost || next);
   let sub;
   if (kind === 'field') sub = next ? t('land_field_sub', { a: FIELD_LEVELS[lv], b: FIELD_LEVELS[lv + 1] }) : t('land_field_max', { n: FIELD_LEVELS[lv] });
@@ -1330,6 +1338,7 @@ function result(code, onOk) {
   else if (code === 'nopasture') snack(t('no_pasture'));
   else if (code === 'noorchard') snack(t('no_orchard'));
   else if (code === 'full') snack(t('snack_full'));
+  else if (code === 'noroom') snack(t('plot_noroom'));   // v0.46
   else if (code === 'own') snack(t('owned'));
   else if (code === 'max') snack(t('maxed'));
   else if (code === 'space') snack(`🚗 ${t('garage_space')}`);
@@ -2038,9 +2047,10 @@ const ACT = {
   areaPick(k) { UI.moveArea = k; Scene.select(null); },
   areaCancel() { UI.moveArea = null; },
   holdNew(k) { const scope = edScope(); Scene.hold({ k, rot: 0, tint: itemDef(scope, k).tint ? rand(TINTS) : null }); },
+  garageRotate() { if (rotateGarage()) { Sound.play('select'); Scene.dropEnts(); save(); } else snack(t('snack_norotate')); },   // v0.46
   trayRotate() {
     const ed = Scene.getEdit();
-    if (ed.hold) ed.hold.rot = ed.hold.rot ? 0 : 1;
+    if (ed.hold) ed.hold.rot = ((ed.hold.rot || 0) + 1) & 3;   // v0.46: four ways
     else if (ed.sel && !rotateItem(ed.scope, ed.sel)) snack(t('snack_norotate'));
   },
   trayTint() { const ed = Scene.getEdit(); tintItem(ed.scope, ed.sel); },
@@ -2265,10 +2275,10 @@ function onSceneHit(h) {
     if (!hd) return refresh();
     const ok = hd.id ? moveItem(ed.scope, hd.id, h.x, h.y, hd.rot) : placeFromStore(ed.scope, hd.k, h.x, h.y, hd.rot, hd.tint);
     if (ok) { Scene.hold(null); Sound.play('select'); if (hd.id) Scene.select(hd.id); else snack(t('snack_placed')); }
-    else { snack(t(PLACE_WHY === 'block' ? 'snack_blocks_way' : 'snack_noroom')); if (h.dragged) Scene.hold(null); }   // dragged somewhere it can't go: it stays where it was
+    else { snack(t(PLACE_WHY === 'block' ? 'snack_blocks_way' : PLACE_WHY === 'face' ? 'snack_face' : PLACE_WHY === 'garage' ? 'garage_door' : 'snack_noroom')); if (h.dragged) Scene.hold(null); }   // dragged somewhere it can't go: it stays where it was
   } else if (k === 'areaDrop') {
     const r = moveArea(h.k, h.x, h.y);
-    if (r === 'ok') { Sound.play('select'); Scene.dropEnts(); } else snack(t(r === 'block' ? 'snack_blocks_way' : 'area_no_room'));
+    if (r === 'ok') { Sound.play('select'); Scene.dropEnts(); } else snack(t(r === 'block' ? 'snack_blocks_way' : r === 'door' ? 'garage_door' : 'area_no_room'));
     UI.editSel = h.k; Scene.editSel(h.k);
   } else if (k === 'editArea' || k === 'editHouse') { Scene.select(null); UI.editSel = k === 'editHouse' ? 'house' : h.k; Scene.editSel(UI.editSel); }
   else if (k === 'item') { UI.editSel = null; Scene.editSel(null); Scene.select(h.id); }
@@ -2276,7 +2286,7 @@ function onSceneHit(h) {
     if (UI.moveArea && h.lx !== undefined) {   // v0.15: put the farm area here (its top-left corner)
       const r = moveArea(UI.moveArea, Math.floor(h.lx), Math.floor(h.ly));
       if (r === 'ok') { Sound.play('select'); snack(`✅ ${t('area_moved', { name: t('area_' + UI.moveArea) })}`); UI.moveArea = null; Scene.dropEnts(); }
-      else snack(t(r === 'block' ? 'snack_blocks_way' : 'area_no_room'));
+      else snack(t(r === 'block' ? 'snack_blocks_way' : r === 'door' ? 'garage_door' : 'area_no_room'));
       return refresh();
     }
     Scene.select(null); UI.editSel = null; Scene.editSel(null);
