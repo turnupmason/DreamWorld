@@ -1984,7 +1984,7 @@ const Scene = (() => {
     if (trip && !trip.arrived && mode === 'town' && !S.work && !S.live && !jailed()) objs.push({ d: trip.inCar ? carDepth(trip) : trip.x + trip.y + 0.6, f: () => drawTrip(ts) });
     else if (mode === 'town' && outHere() && !S.work && !S.live && !jailed()) { const [mx, my] = TOWN_USE ? TOWN_USE.at : S.out.pt; objs.push({ d: mx + my + 0.6, f: () => (TOWN_USE ? drawTownUse(ts) : drawMeOut(mx, my, ts)) }); }
     const atPlace = S.work ? S.work.place : jailed() ? 'police' : S.study ? 'school' : null;
-    if (atPlace && mode === 'town' && VIEW_TOWN === myTown() && placePt(atPlace)) {   // at work (v0.14) or held by the police (v0.18)
+    if (atPlace && mode === 'town' && VIEW_TOWN === (S.work ? S.work.town || myTown() : myTown()) && placePt(atPlace)) {   // (v0.62: a job in another city)   // at work (v0.14) or held by the police (v0.18)
       const [wx, wy] = placePt(atPlace), jail = !S.work && !S.study;
       objs.push({ d: wx + wy + 0.6, f: () => { const p = iso(wx, wy); drawPerson(p.x, p.y, cam.z, { look: S.me.look, face: 1, view: 'front', turn: [0.7, 0.7], energy: jail ? 'tired' : energyLevel(), ts, seed: 3, pose: 'stand' });
         if (jail) for (let i = -2; i <= 2; i++) line(p.x + i * 3.4 * cam.z, p.y - 2 * cam.z, p.x + i * 3.4 * cam.z, p.y - 44 * cam.z, '#5b6470', 1.2 * cam.z);
@@ -3061,7 +3061,7 @@ const Scene = (() => {
   // Where you're standing in this town right now.
   function mePos() {
     if (trip && !trip.arrived && trip.town === VIEW_TOWN) return [trip.x, trip.y];   // v0.29: on the way: right where you are
-    if (S.work && VIEW_TOWN === myTown() && placePt(S.work.place)) return placePt(S.work.place);
+    if (S.work && VIEW_TOWN === (S.work.town || myTown()) && placePt(S.work.place)) return placePt(S.work.place);
     if (S.jail && VIEW_TOWN === myTown() && placePt('police')) return placePt('police');
     if (S.study && VIEW_TOWN === myTown() && placePt('school')) return placePt('school');
     if (outHere()) return S.out.pt;
@@ -3101,13 +3101,25 @@ const Scene = (() => {
     const from = mePos(), legs = [];
     if (how === 'walk') return [{ how: 'walk', from, path: route(from, to) }];
     if (how === 'bus' || how === 'metro') {   // v0.61: walk to the stop, ride, walk from the stop
-      const ST = how === 'bus' ? busStops() : metroStops(), near = p => ST.slice().sort((a, b) => Math.hypot(a.pt[0] - p[0], a.pt[1] - p[1]) - Math.hypot(b.pt[0] - p[0], b.pt[1] - p[1]))[0];
-      const A = near(from), B = near(to);
-      if (!A || !B || A === B) return [{ how: 'walk', from, path: route(from, to) }];
-      legs.push({ how: 'walk', from, path: route(from, A.pt) });
-      if (how === 'bus') legs.push({ how: 'bus', from: A.road, path: route(A.road, B.road, false), car: true, transit: true, veh: { k: 'bus', color: '#2e9b5a' }, bay: { pt: B.pt, dir: B.dir } });
-      else { const i = ST.indexOf(A), j = ST.indexOf(B), seq = i < j ? ST.slice(i, j + 1) : ST.slice(j, i + 1).reverse(); legs.push({ how: 'metro', from: A.pt, path: seq.slice(1).map(q => q.pt), under: true, line: seq.map(q => q.pt) }); }
-      legs.push({ how: 'walk', from: B.pt, path: route(B.pt, to) });
+      // v0.62 (Mason #30: "the shortest way to everywhere, no detours"): try the few stops nearest each end and take the
+      // pair that gets you there soonest (walking + riding); the subway goes straight between two stations
+      const ST = how === 'bus' ? busStops() : metroStops(), near = p => ST.slice().sort((a, b) => Math.hypot(a.pt[0] - p[0], a.pt[1] - p[1]) - Math.hypot(b.pt[0] - p[0], b.pt[1] - p[1])).slice(0, 4);
+      const plen = (p0, P) => { let d = 0, [x, y] = p0; P.forEach(q => { d += Math.hypot(q[0] - x, q[1] - y); x = q[0]; y = q[1]; }); return d; };
+      const walkTo = new Map(), walkFrom = new Map(), WS = TRIP_SPEED.walk, RS = TRIP_SPEED[how];
+      near(from).forEach(A => walkTo.set(A, route(from, A.pt)));
+      near(to).forEach(B => walkFrom.set(B, route(B.pt, to)));
+      let best = null;
+      walkTo.forEach((pa, A) => walkFrom.forEach((pb, B) => {
+        if (A === B) return;
+        const ride = how === 'bus' ? route(A.road, B.road, false) : [B.pt], tm = plen(from, pa) / WS + plen(how === 'bus' ? A.road : A.pt, ride) / RS + plen(B.pt, pb) / WS;
+        if (!best || tm < best.tm) best = { A, B, pa, pb, ride, tm };
+      }));
+      if (!best) return [{ how: 'walk', from, path: route(from, to) }];
+      const { A, B } = best;
+      legs.push({ how: 'walk', from, path: best.pa });
+      if (how === 'bus') legs.push({ how: 'bus', from: A.road, path: best.ride, car: true, transit: true, veh: { k: 'bus', color: '#2e9b5a' }, bay: { pt: B.pt, dir: B.dir } });
+      else legs.push({ how: 'metro', from: A.pt, path: [B.pt], under: true, line: [A.pt, B.pt] });
+      legs.push({ how: 'walk', from: B.pt, path: best.pb });
       return legs;
     }
     const home = atHomeNow() && !S.carAt, pick = home && TRIP_CAR !== null ? TRIP_CAR : S.me.car;
@@ -6298,7 +6310,7 @@ const Scene = (() => {
     },
     // Public places (v0.12): where each one is (where you walk to), and whether you're there now.
     placePoint(key) { TL = layoutOf(VIEW_TOWN); return placePt(key); },
-    here() { return S && S.work && VIEW_TOWN === myTown() ? S.work.place : S && jailed() && VIEW_TOWN === myTown() ? 'police' : trip && !trip.arrived ? (trip.place === 'park' && ['stroll', 'park', 'chat'].includes(trip.kind) && inParkPt(mePos()) ? 'park' : null) : outHere() ? S.out.place : null; },   // v0.34: on a lap of the park you're still in the park
+    here() { return S && S.work && VIEW_TOWN === (S.work.town || myTown()) ? S.work.place : S && jailed() && VIEW_TOWN === myTown() ? 'police' : trip && !trip.arrived ? (trip.place === 'park' && ['stroll', 'park', 'chat'].includes(trip.kind) && inParkPt(mePos()) ? 'park' : null) : outHere() ? S.out.place : null; },   // v0.34: on a lap of the park you're still in the park
     resting() { return mode === 'interior' && owner === 'me' && !!meIn.useId && !!(homeOf('me').room.items.concat(...(homeOf('me').ups || []).map(u => u.items)).find(i => i.id === meIn.useId && FURN[i.k].use === 'sleep')); },
     arriveAt(pt, place) { if (!S) return; S.out = { town: VIEW_TOWN, pt, place: place || null, id: null }; trip = null; if (mode === 'town') flyTo(pt[0], pt[1], Math.max(cam.z, 0.5)); },
     tripTime(to, how, dest, place, pick) { if (!S) return 0; TRIP_CAR = pick === undefined ? null : pick; try { const L = planTrip(to, how, dest, place), slow = rushNow() ? TRANSIT.rushSlow : 1;   // v0.61: the roads are slower in the rush hour (not the subway)

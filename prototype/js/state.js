@@ -1870,17 +1870,19 @@ function unloadCargo() {
 
 // ---------- jobs (v0.14) ----------
 const jobRank = (rel = (S.job || {}).rel || 0) => JOB_RANKS.filter(r => rel >= r.at).length - 1;
-const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay * (1 + ((S.school || {}).certs || 0) * SCHOOL.certPay) * countyOf(myTown()).wage * (1 + knowPay()));   // v0.40: pay goes by county (v0.45: and what you've learnt at the museum)
+const jobTown = place => (S.job && S.job.place === place && S.job.town) || VIEW_TOWN;   // v0.62: a job can be in another place
+const jobWage = place => Math.round(JOBS[place].wage * JOB_RANKS[S.job && S.job.place === place ? jobRank() : 0].pay * (1 + ((S.school || {}).certs || 0) * SCHOOL.certPay) * countyOf(jobTown(place)).wage * (1 + knowPay()));   // v0.40: pay goes by county (v0.45: and what you've learnt at the museum)
 const knowPay = () => Math.min(PERKS.knowMax, Math.floor((S.know || 0) / PERKS.knowEvery) * PERKS.knowPay);
 function shiftEnd(place, ms = now()) { const d = new Date(ms); d.setHours(JOBS[place].to, 0, 0, 0); return d.getTime(); }
-function inShift(place, ms = now()) { const h = localHour(myTown(), ms); return h >= JOBS[place].from && h < JOBS[place].to; }
-function takeJob(place) { if (S.work) return 'working'; S.job = { place, rel: S.job && S.job.place === place ? S.job.rel : 0, since: now() }; return 'ok'; }
+function inShift(place, ms = now()) { const h = localHour(jobTown(place), ms); return h >= JOBS[place].from && h < JOBS[place].to; }
+function takeJob(place, town = VIEW_TOWN) { if (S.work) return 'working'; const same = S.job && S.job.place === place && (S.job.town || myTown()) === town; S.job = { place, town, how: same ? S.job.how : null, rel: same ? S.job.rel : 0, since: now() }; return 'ok'; }
 function startShift(place) {
   if (!S.job || S.job.place !== place) return 'nojob';
+  if ((S.job.town || myTown()) !== VIEW_TOWN) return 'away';   // v0.62: you have to be there
   if (S.work) return 'working';
   if (!inShift(place)) return 'closed';
   if (hungry()) return 'hungry';   // v0.44: eat first
-  S.work = { place, start: now(), end: shiftEnd(place), wage: jobWage(place) * moodPayMult(), mood: moodGood(), bad: moodBad() };   // v0.25: in a good mood you work better (v0.44: in a bad one, worse)
+  S.work = { place, town: S.job.town || myTown(), start: now(), end: shiftEnd(place), wage: jobWage(place) * moodPayMult(), mood: moodGood(), bad: moodBad() };   // v0.25: in a good mood you work better (v0.44: in a bad one, worse)
   return 'ok';
 }
 const hoursWorked = w => Math.max(0, (Math.min(now(), w.end) - w.start) / HOUR);

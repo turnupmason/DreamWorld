@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.61.0';
+const VERSION = '0.62.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -226,6 +226,9 @@ const TRIP_SPEED = { walk: 3, bike: 6, car: 10, highway: 2.5, bus: 6.5, metro: 1
 // v0.61 (Mason #30: "take the subway and the bus"): fares (coins, like a US city's), how far apart bus stops are along
 // a road (tiles), the most places a city's subway line stops at, and how much slower driving is in the rush hour
 // (the bus too: it's on the same roads; the subway isn't)
+// v0.62 (Mason #30: "work anywhere… commuting by car range, nobody flies to work"): a job can be in another place
+// no more than COMMUTE.maxKm away by road; how you get there (car, train, bus, subway, on foot) is saved with the job.
+const COMMUTE = { maxKm: 400 };
 const TRANSIT = { bus: 3, metro: 3, busEvery: 24, metroStops: 5, rushSlow: 1.5 };
 // v0.47: how fast each kind of car goes, compared with the traffic on its road (Mason #28: "every car its own speed:
 // sports cars fast, lorries slow"); your own car too (a faster car gets you there sooner)

@@ -504,7 +504,9 @@ Object.assign(STR.en, {
 Object.assign(STR.zh, {
   fab_world: '世界', world_title: '世界', world_sub: '全世界的玩家住在不同的社区。去别的社区逛逛，喜欢的话可以把家搬过去。',
   dmr_na: '北美风', dmr_eu: '欧洲风', dmr_asia: '东亚风', dmr_sa: '南美风', dmr_af: '非洲风', dmr_oc: '大洋洲风',
-  job_commute: '去上班（走路、公交、地铁、开车）', go_bus: '公交 🪙{n}', go_metro: '地铁 🪙{n}', go_fare: '车费 🪙{n}', go_rush: '现在是高峰期：开车和公交都会慢一些，地铁不堵。',
+  job_commute: '去上班', job_commute_how: '每天怎么去上班', job_go_home: '下班回家', job_no_way: '从这里去不了：先回家，或者先到有车 / 有铁路的地方',
+  way_walk: '走路', way_bus: '公交', way_metro: '地铁', way_car: '开车', way_train: '火车', job_be_there: '要先到上班的地方',
+  job_too_far: '离家 {km} km，太远了，不能每天来上班（最远 {max} km，开车能到的地方）', job_go_there: '要在这个城市里才能应聘：先开车或坐火车来。', job_commute_note: '离家 {km} km，每天开车或坐火车来上班。', go_bus: '公交 🪙{n}', go_metro: '地铁 🪙{n}', go_fare: '车费 🪙{n}', go_rush: '现在是高峰期：开车和公交都会慢一些，地铁不堵。',
   tr_info: '火车 {km} km · 🪙{n} · 约 {m} 分钟', tr_go_station: '去火车站', tr_no_here: '这里没有城际铁路：开车去别处，或者先开到有火车站的城市。', tr_no_there: '那里没有铁路，只能开车去。',
   tr_note: '城际火车：比开车快一倍，票比油费便宜，不会堵车；车留在原地。', tr_mins: '约 {m} 分钟', tr_station: '{c}站', tr_off: '下车', tr_arrived: '到{c}站了',
   dr_car_in: '你的车在{c}，要从那里开',
@@ -536,7 +538,9 @@ Object.assign(STR.zh, {
 Object.assign(STR.en, {
   fab_world: 'World', world_title: 'World', world_sub: 'Players all over the world live in different communities. Look around, and move your home if you like one.',
   dmr_na: 'American style', dmr_eu: 'European style', dmr_asia: 'East Asian style', dmr_sa: 'South American style', dmr_af: 'African style', dmr_oc: 'Oceanian style',
-  job_commute: 'Go to work (walk, bus, subway, drive)', go_bus: 'Bus 🪙{n}', go_metro: 'Subway 🪙{n}', go_fare: 'Fare 🪙{n}', go_rush: 'It’s the rush hour: cars and buses are slower; the subway isn’t.',
+  job_commute: 'Go to work', job_commute_how: 'How you get to work', job_go_home: 'Home from work', job_no_way: 'No way from here: go home first, or to where your car is / a railway',
+  way_walk: 'Walk', way_bus: 'Bus', way_metro: 'Subway', way_car: 'Drive', way_train: 'Train', job_be_there: 'You have to be at work first',
+  job_too_far: '{km} km from home: too far to come every day (up to {max} km, driving distance)', job_go_there: 'Be in this city to apply: drive or take the train here first.', job_commute_note: '{km} km from home: you’ll drive or take the train in every day.', go_bus: 'Bus 🪙{n}', go_metro: 'Subway 🪙{n}', go_fare: 'Fare 🪙{n}', go_rush: 'It’s the rush hour: cars and buses are slower; the subway isn’t.',
   tr_info: 'Train {km} km · 🪙{n} · about {m} min', tr_go_station: 'To the station', tr_no_here: 'No railway here: drive, or drive to a city with a station first.', tr_no_there: 'No railway there: you can only drive.',
   tr_note: 'Intercity trains: twice as fast as driving, cheaper than gas, never in traffic; your car stays where it is.', tr_mins: 'about {m} min', tr_station: '{c} Station', tr_off: 'Get off', tr_arrived: 'Arrived at {c} Station',
   dr_car_in: 'Your car is in {c}: drive from there',
