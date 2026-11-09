@@ -1447,6 +1447,33 @@ function awardSouvenirs() {
   return got;
 }
 
+// ---------- v0.63: travelling ----------
+// The passport: a stamp for each place you've been to (by car, train, plane or ship; home is there from the start),
+// the sea life you've photographed from ships, the free tickets you've used. Free tickets come from real life: one
+// every TRAVEL.ticketEvery days you reach your own step goal.
+function passport() { if (!S.pass) S.pass = { st: { [myTown()]: now() }, sea: {}, tix: 0 }; return S.pass; }
+const ticketsLeft = () => Math.max(0, Math.floor((S.stats.goalDays || 0) / TRAVEL.ticketEvery) - passport().tix);
+const stampCount = () => Object.keys(passport().st).filter(id => COMMUNITIES[id]).length;
+// you've just got to a place: its stamp (the first time), and a travel keepsake at 4 / 8 / 12 / 16 stamps
+function stampAt(id) {
+  const P = passport();
+  if (!COMMUNITIES[id] || P.st[id]) return null;
+  P.st[id] = now(); addNeed('fun', TRAVEL.stampFun);
+  const n = stampCount(), aw = TRAVEL.awards.find(([k]) => k === n), award = aw && !ownsFurn(aw[1]) ? aw[1] : null;
+  if (award) autoPlace(S.me, 'room', award, null, 0);
+  return { id, n, award };
+}
+// a place's keepsake: only there
+function buyTravelSouv(id) {
+  const k = 'tv_' + id, d = FURN[k];
+  if (!d) return 'none';
+  if ((S.trav && COMMUNITIES[S.trav.town] ? S.trav.town : myTown()) !== id) return 'away';
+  if (S.me.coins < d.price) return 'poor';
+  S.me.coins -= d.price; autoPlace(S.me, 'room', k, null, 0);
+  return 'ok';
+}
+const ownsFurn = k => allRoomItems(S.me).some(it => it.k === k) || (S.me.store['room:' + k] || 0) > 0;
+
 // ---------- assets & ranking ----------
 const costValue = c => (c.coins || 0) + (c.wood || 0) * 5; // wood only comes from real life, so it counts extra
 function assetBreakdown(h) {
@@ -2086,7 +2113,7 @@ function storeWares(store) {
     Object.entries(PET_FOOD).forEach(([k, f]) => add('petfood', k, 'buyPetFood', k, f.price));
     PET_FURN.forEach(k => add('furn', k, 'buyItem', 'room|' + k, FURN[k].price, FURN[k].w, FURN[k].d));
   }
-  if (store === 'furniture') grouped('furn', Object.keys(FURN).filter(k => { const d = FURN[k]; return !d.souv && !d.excl && !d.award && !d.plush && !d.poster && !PET_FURN.includes(k); }))
+  if (store === 'furniture') grouped('furn', Object.keys(FURN).filter(k => { const d = FURN[k]; return !d.souv && !d.excl && !d.award && !d.plush && !d.poster && !d.travel && !PET_FURN.includes(k); }))
     .forEach(k => add('furn', k, 'buyItem', 'room|' + k, FURN[k].price, FURN[k].w, FURN[k].d));
   if (store === 'dealer') Object.entries(CARS).filter(([, c]) => !c.excl).forEach(([k, c]) => add('car', k, 'buyCar', k, c.cost.coins, CARS[k].kind === 'two' ? 1.2 : 1.6, CARS[k].kind === 'two' ? 2 : 3));
   if (store === 'realty') {

@@ -1026,3 +1026,13 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 .rt-card-in { background: var(--card, #fffdf8); border-radius: 22px; padding: 22px; width: min(320px, 86%); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
 .rt-card-in .big-emoji { font-size: 40px; }
 .rt.train .rt-btn { visibility: hidden; }   /* v0.61: no lanes on a train */
+.rt.above { background: #a3d6ef; }   /* v0.63: the plane and the ship */
+.rt-toast { position: absolute; left: 50%; top: 42%; transform: translateX(-50%); background: rgba(255,253,248,.96); color: #3b3125; font-weight: 800; padding: 10px 16px; border-radius: 16px; box-shadow: 0 6px 18px rgba(0,0,0,.25); max-width: 84%; text-align: center; }
+.rt-toast[hidden] { display: none; }
+.stamp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 14px; }
+.pstamp { border: 2px dashed var(--line, #d8cfc0); border-radius: 14px; padding: 8px 4px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: .55; }
+.pstamp span { font-size: 24px; } .pstamp b { font-size: 11px; line-height: 1.2; } .pstamp i { font-size: 10px; font-style: normal; color: var(--muted, #8b8274); }
+.pstamp.got { opacity: 1; border: 2px solid var(--c, #e5484d); background: color-mix(in srgb, var(--c, #e5484d) 10%, transparent); transform: rotate(-2deg); }
+.pstamp.sea.got { --c: #38a3e0; }
+.pass-aws { display: flex; gap: 6px; flex-wrap: wrap; } .pass-aw { padding: 4px 10px; border-radius: 999px; background: var(--chip, #efe7da); font-weight: 800; font-size: 12px; opacity: .55; } .pass-aw.got { opacity: 1; background: #f2c230; color: #3b3125; }
+.souv-here { background: var(--chip, #efe7da); border-radius: 14px; padding: 8px 10px; }

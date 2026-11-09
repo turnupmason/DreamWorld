@@ -34,6 +34,8 @@ const Drive = (() => {
   const onLand = (x, y) => DREAM_LAND.some(P => inPoly(x, y, P));
   // the way as points on the map, how far along each is (map units), and what's there (water, a mountain)
   function plan(from, to, mode = 'car') {
+    if (mode === 'air') return planAir(from, to);   // v0.63
+    if (mode === 'sea') return planSea(from, to);
     const train = mode === 'train';
     if (train && (!onRail(from) || !onRail(to))) return null;
     const legs = findWay(from, to, train ? railEdges() : DREAM_ROADS);
@@ -239,21 +241,265 @@ const Drive = (() => {
     m.restore();
   }
   function hudHtml() {
+    if (R.above) {   // v0.63: the plane and the ship
+      const u = R.me.s / DRIVE.tilesPerUnit, alt = altAt(R.me.s), first = u < R.len / 2, p = at(R.me.s), left = Math.max(0, Math.round((R.tiles - R.me.s) / DRIVE.tilesPerUnit * DRIVE.km)), secs = Math.round((R.tiles - R.me.s) / Math.max(1, R.mode === 'air' ? TRAVEL.airSpeed : TRAVEL.shipSpeed) / mult);
+      const st = R.mode === 'air' ? (alt <= 0 ? (first ? `🛫 ${t('fl_roll')}` : `🛬 ${t('fl_taxi')}`) : alt > 0.98 ? `☁️ ${t('fl_cruise', { h: fmtNum(TRAVEL.cruiseM) })}` : `${first ? '🛫' : '🛬'} ${t(first ? 'fl_climb' : 'fl_down')} ${fmtNum(Math.round(alt * TRAVEL.cruiseM / 100) * 100)} m`) : R.car ? `🚗 ${t('sh_car_on')}` : `🌊 ${t('sh_at_sea')}`;
+      return `<div class="rt-row"><b>${R.mode === 'air' ? '✈️' : '⛴️'} ${nm(COMMUNITIES[R.p.from])} → ${nm(COMMUNITIES[R.p.to])}</b></div>
+        <div class="rt-row small"><span>${t('dr_left', { n: left })}</span><span>⏱️ ${fmtSec(secs)}</span><span>${st}</span><span>${t('dmr_' + ((COMMUNITIES[nearest(p.x, p.y)] || {}).region || 'na'))}</span></div>`;
+    }
     const leftKm = Math.max(0, Math.round((R.tiles - R.me.s) / DRIVE.tilesPerUnit * DRIVE.km)), secs = Math.round((R.tiles - R.me.s) / Math.max(1, R.train ? DRIVE.trainSpeed : DRIVE.speed) / mult), p = at(R.me.s);
     return `<div class="rt-row"><b>${R.train ? '🚆 ' : ''}${nm(COMMUNITIES[R.p.from])} → ${nm(COMMUNITIES[R.p.to])}</b>${R.train ? '' : `<span>🛣️ ${p.bridge ? '🌉' : 'I-'}${p.no}</span>`}</div>
       <div class="rt-row small"><span>${t('dr_left', { n: leftKm })}</span><span>⏱️ ${fmtSec(secs)}</span>${p.tunnel ? `<span>🚇 ${t('dr_tunnel')}</span>` : p.water ? `<span>🌊 ${t('dr_bridge')}</span>` : `<span>${t('dmr_' + ((COMMUNITIES[nearest(p.x, p.y)] || {}).region || 'na'))}</span>`}</div>`;
   }
   const fmtSec = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
 
+
+  // ================= v0.63: flying and sailing, seen from above =================
+  // The plane flies straight from airport to airport: a roll down the runway, the climb (the map falls away and the
+  // clouds come in), cruising, the descent, landing. The ship sails the shortest way by sea between two docks (a grid
+  // of the water, the shortest path on it, pulled straight wherever the water allows, the corners rounded), and now
+  // and then a sea creature swims up beside it: tap it to take its photo for the passport. Both show the DreamWorld
+  // map itself from above, a close-up piece of it drawn as you go (mapTile).
+  const ptsWithU = pts => { let u = 0; pts.forEach((p, i) => { if (i) u += Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y); p.u = u; p.water = false; p.tunnel = false; }); return u; };
+  function planAir(from, to) {
+    if (from === to || !DREAM_AIR.includes(from) || !DREAM_AIR.includes(to)) return null;
+    const [ax, ay] = DREAM_AIR_AT[from], [bx, by] = DREAM_AIR_AT[to], L = Math.hypot(bx - ax, by - ay), hx = (bx - ax) / L, hy = (by - ay) / L, r = TRAVEL.runway / 2;
+    const A = [ax - hx * r, ay - hy * r], B = [bx + hx * r, by + hy * r], pts = [];
+    for (let k = 0; k <= 60; k++) { const u = k / 60; pts.push({ x: A[0] + (B[0] - A[0]) * u, y: A[1] + (B[1] - A[1]) * u }); }
+    const len = ptsWithU(pts), km = Math.round(len * DRIVE.km), tiles = len * DRIVE.tilesPerUnit;
+    return { from, to, legs: [], pts, via: [], len, tiles, ev: [], km, cost: TRAVEL.airBase + Math.round(km * TRAVEL.airFare), bridges: 0, seed: from.length * 7 + to.length * 13, mode: 'air', mins: Math.max(1, Math.ceil(tiles / TRAVEL.airSpeed / 60)), rw: [[ax, ay], [bx, by]], hd: Math.atan2(hy, hx) };
+  }
+  // the sea: a grid of cells far enough from every coast (the coast as it's drawn: the smooth shapes)
+  let SG = null;
+  function seaGrid() {
+    if (SG) return SG;
+    const pc = document.createElement('canvas').getContext('2d'), land = new Path2D(); DREAM_LAND.forEach(P => dmShape(land, P));
+    const C = TRAVEL.seaCell, nx = Math.ceil(DREAM_MAP.w / C), ny = Math.ceil(DREAM_MAP.h / C), m = TRAVEL.seaMargin, wet = new Uint8Array(nx * ny);
+    const dry = (x, y) => x < 2 || y < 2 || x > DREAM_MAP.w - 2 || y > DREAM_MAP.h - 2 || pc.isPointInPath(land, x * DM_S, y * DM_S);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const x = (i + 0.5) * C, y = (j + 0.5) * C; wet[j * nx + i] = [[0, 0], [m, 0], [-m, 0], [0, m], [0, -m]].some(([dx, dy]) => dry(x + dx, y + dy)) ? 0 : 1; }
+    SG = { C, nx, ny, wet, dry, cell: (x, y) => { const i = Math.floor(x / C), j = Math.floor(y / C); return i < 0 || j < 0 || i >= nx || j >= ny ? -1 : j * nx + i; } };
+    return SG;
+  }
+  const isSea = (x, y) => { const G = seaGrid(), c = G.cell(x, y); return c >= 0 && G.wet[c] === 1; };
+  function seaWay(a, b) {
+    const G = seaGrid(), { nx, ny, C, wet } = G, N = nx * ny;
+    const near = ([x, y]) => { let best = -1, bd = 1e9; const ci = Math.floor(x / C), cj = Math.floor(y / C); for (let j = cj - 12; j <= cj + 12; j++) for (let i = ci - 12; i <= ci + 12; i++) { if (i < 0 || j < 0 || i >= nx || j >= ny || !wet[j * nx + i]) continue; const d = Math.hypot((i + 0.5) * C - x, (j + 0.5) * C - y); if (d < bd) { bd = d; best = j * nx + i; } } return best; };
+    const s = near(a), e = near(b);
+    if (s < 0 || e < 0) return null;
+    const gs = new Float32Array(N).fill(1e9), prev = new Int32Array(N).fill(-1), shut = new Uint8Array(N), heap = [];
+    const ex = e % nx, ey = Math.floor(e / nx), h = c => Math.hypot(c % nx - ex, Math.floor(c / nx) - ey);
+    const push = (f, c) => { heap.push([f, c]); let i = heap.length - 1; while (i) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = i * 2 + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top[1]; };
+    gs[s] = 0; push(h(s), s);
+    while (heap.length) {
+      const c = pop(); if (c === e) break; if (shut[c]) continue; shut[c] = 1;
+      const ci = c % nx, cj = Math.floor(c / nx);
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue; const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= nx || j >= ny) continue;
+        const n = j * nx + i; if (!wet[n] || shut[n] || (di && dj && (!wet[cj * nx + i] || !wet[j * nx + ci]))) continue;
+        const ng = gs[c] + (di && dj ? Math.SQRT2 : 1); if (ng < gs[n]) { gs[n] = ng; prev[n] = c; push(ng + h(n), n); }
+      }
+    }
+    if (s !== e && prev[e] < 0) return null;
+    const P = []; for (let c = e; ; c = prev[c]) { P.unshift([(c % nx + 0.5) * C, (Math.floor(c / nx) + 0.5) * C]); if (c === s) break; }
+    // pull the string: from each corner, straight on to the farthest cell you can see over open water
+    const clear = (p, q) => { const L = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.ceil(L / 2); for (let k = 1; k < n; k++) { const u = k / n; if (!isSea(p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u)) return false; } return true; };
+    let out = [P[0]]; for (let i = 0; i < P.length - 1;) { let j = i + 1; while (j + 1 < P.length && clear(P[i], P[j + 1])) j++; out.push(P[j]); i = j; }
+    out = [a, ...out, b];
+    for (let it = 0; it < 2; it++) { const o = [out[0]]; for (let i = 0; i < out.length - 1; i++) { const p = out[i], q = out[i + 1]; if (i) o.push([p[0] * 0.75 + q[0] * 0.25, p[1] * 0.75 + q[1] * 0.25]); if (i < out.length - 2) o.push([p[0] * 0.25 + q[0] * 0.75, p[1] * 0.25 + q[1] * 0.75]); } o.push(out[out.length - 1]); out = o; }   // round the corners
+    return out;
+  }
+  const seaCache = {};
+  function planSea(from, to) {
+    if (from === to || !DREAM_PORT.includes(from) || !DREAM_PORT.includes(to)) return null;
+    const key = from + '>' + to;
+    if (!(key in seaCache)) seaCache[key] = seaWay(DREAM_PORT_AT[from], DREAM_PORT_AT[to]);
+    const way = seaCache[key]; if (!way) return null;
+    const pts = way.map(([x, y]) => ({ x, y })), len = ptsWithU(pts), km = Math.round(len * DRIVE.km), tiles = len * DRIVE.tilesPerUnit;
+    pts.forEach(p => { p.water = true; });
+    return { from, to, legs: [], pts, via: [], len, tiles, ev: [], km, cost: TRAVEL.shipBase + Math.round(km * TRAVEL.shipFare), bridges: 0, seed: from.length * 7 + to.length * 13, mode: 'sea', mins: Math.max(1, Math.ceil(tiles / TRAVEL.shipSpeed / 60)) };
+  }
+  // how high the plane is (0 on the ground … 1 cruising)
+  const smooth = x => x * x * (3 - 2 * x);
+  function altAt(s) { if (!R || R.mode !== 'air') return 0; const u = s / DRIVE.tilesPerUnit, up = (u - TRAVEL.runway * 0.8) / TRAVEL.climb, dn = (R.len - TRAVEL.runway * 0.65 - u) / TRAVEL.desc; return smooth(Math.max(0, Math.min(1, up, dn))); }
+  // the sea creatures on this trip: where along the way, which kind (by the region there; whales far out)
+  function planSights() {
+    const n = Math.min(TRAVEL.sightMax, Math.floor(R.len / TRAVEL.sightEvery)), out = [];
+    for (let k = 0; k < n; k++) {
+      const s = R.tiles * (0.12 + 0.8 * (k + 0.2 + Math.random() * 0.6) / Math.max(1, n)), p = at(s), id = nearest(p.x, p.y), far = Math.hypot(DREAM_AT[id][0] - p.x, DREAM_AT[id][1] - p.y) > 95, reg = (COMMUNITIES[id] || {}).region;
+      const ok = SEA_LIFE.filter(L => L.where === 'any' || (L.where === 'deep' ? far : L.where.includes(reg))), rare = ok.filter(L => L.where !== 'any'), pick = rare.length && Math.random() < 0.6 ? rare : ok;   // the local ones more often
+      out.push({ s, k: pick[Math.floor(Math.random() * pick.length)].k });
+    }
+    return out;
+  }
+  function stepAbove(dt) {
+    const me = R.me, u = me.s / DRIVE.tilesPerUnit, L = R.len, air = R.mode === 'air', cruise = air ? TRAVEL.airSpeed : TRAVEL.shipSpeed;
+    let v = cruise;
+    if (air) { const rw = TRAVEL.runway; if (u > L - rw * 0.65) v = cruise * Math.max(0.05, (L - u) / (rw * 0.65)) * 0.45; else if (altAt(me.s) <= 0) v = cruise * (0.12 + 0.55 * Math.min(1, u / rw)); }
+    else { if (u < 12) v = cruise * (0.3 + 0.7 * u / 12); if (L - u < 15) v = cruise * Math.max(0.08, (L - u) / 15); }
+    me.v += (v - me.v) * Math.min(1, dt * 1.5);
+    me.s = Math.min(R.tiles, me.s + Math.max(0.8, me.v) * dt);
+    if (!air) {
+      const p = at(me.s), w = R.wake[R.wake.length - 1];
+      if (!w || Math.hypot(w.x - p.x, w.y - p.y) > 1.2) { R.wake.push({ x: p.x, y: p.y }); if (R.wake.length > 46) R.wake.shift(); }
+      const e = R.sights.find(x => !x.on && me.s >= x.s);
+      if (e && !R.sight) { e.on = true; const q = at(Math.min(R.tiles, me.s + 4)), hx = q.x - p.x, hy = q.y - p.y, L = Math.hypot(hx, hy) || 1, off = 52 / TRAVEL.zSea / DM_S, wet = sd => isSea(p.x - hy / L * off * sd, p.y + hx / L * off * sd);
+        R.sight = { k: e.k, age: 0, side: wet(1) ? (wet(-1) && Math.random() < 0.5 ? -1 : 1) : -1, shot: false }; }   // on the open water's side
+    }
+    if (me.s >= R.tiles - 0.01 && R.phase === 'go') arrive();
+  }
+  // a piece of the map round (cx, cy) (map drawn at DM_S) at this zoom, redrawn when you leave it or zoom a lot
+  let tile = null;
+  function mapTile(cx, cy, zoom) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), k = zoom * dpr, hw = W / zoom / 2, hh = H / zoom / 2, dark = document.body.classList.contains('dark');
+    if (tile && tile.k / k > 0.75 && tile.k / k < 1.6 && cx - hw > tile.x0 && cx + hw < tile.x1 && cy - hh > tile.y0 && cy + hh < tile.y1 && tile.dark === dark) return tile;
+    const mw = hw * 3, mh = hh * 2.6, x0 = cx - mw / 2, y0 = cy - mh / 2, cvT = (tile && tile.cv) || document.createElement('canvas');
+    cvT.width = Math.ceil(mw * k); cvT.height = Math.ceil(mh * k);
+    const tg = cvT.getContext('2d'); tg.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+    const sea = tg.createLinearGradient(0, 0, 0, DREAM_MAP.h * DM_S); sea.addColorStop(0, dark ? '#1e3a56' : '#b9e2f6'); sea.addColorStop(1, dark ? '#142a40' : '#8ccbea');   // (the same sea past the map's edges)
+    tg.fillStyle = sea; tg.fillRect(x0, y0, mw, mh);
+    drawDreamMapTo(tg, true);
+    tile = { cv: cvT, x0, y0, x1: x0 + mw, y1: y0 + mh, k, dark };
+    return tile;
+  }
+  const angTo = (a, b) => { let d = a - b; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
+  function drawAbove(ts) {
+    const me = R.me, air = R.mode === 'air', p = at(me.s), q = at(Math.min(R.tiles, me.s + 6)), p0 = at(Math.max(0, me.s - 6));
+    const hd = Math.atan2(q.y - p0.y, q.x - p0.x); R.hd = R.hd === undefined ? hd : R.hd + angTo(hd, R.hd) * 0.12;
+    const alt = altAt(me.s), zoom = air ? TRAVEL.zLow + (TRAVEL.zHigh - TRAVEL.zLow) * alt : TRAVEL.zSea;
+    const px = p.x * DM_S, py = p.y * DM_S, lead = Math.min(W, H) * (air ? 0.14 : 0.1) / zoom, cx = px + Math.cos(R.hd) * lead, cy = py + Math.sin(R.hd) * lead;
+    const SX = x => W / 2 + (x - cx) * zoom, SY = y => H / 2 + (y - cy) * zoom, dark = document.body.classList.contains('dark');
+    const T = mapTile(cx, cy, zoom);
+    g.fillStyle = dark ? '#1a3550' : '#a3d6ef'; g.fillRect(0, 0, W, H);
+    g.drawImage(T.cv, SX(T.x0), SY(T.y0), (T.x1 - T.x0) * zoom, (T.y1 - T.y0) * zoom);
+    const sx = SX(px), sy = SY(py);
+    if (air) {
+      R.p.rw.forEach(([ax, ay]) => runway(SX(ax * DM_S), SY(ay * DM_S), R.p.hd, zoom));
+      placeLabels(SX, SY, zoom, alt);
+      clouds(cx, cy, zoom, alt, ts, 1.25, 0.6);
+      const sh = 1 - alt * 0.3; plane(sx + alt * 34, sy + alt * 50, R.hd, 0.95 * sh, `rgba(20,30,40,${(0.3 - alt * 0.18).toFixed(3)})`);
+      plane(sx, sy, R.hd, 1 + (1 - alt) * 0.08, null);
+      clouds(cx, cy, zoom, alt, ts, 1.6, 0.35);   // a few higher up, over the plane
+      const fog = Math.max(0, 1 - Math.abs(alt - 0.5) / 0.14); if (fog > 0) { g.fillStyle = `rgba(255,255,255,${(fog * 0.45).toFixed(3)})`; g.fillRect(0, 0, W, H); }   // through the clouds
+    } else {
+      waves(cx, cy, zoom, ts);
+      DREAM_PORT.forEach(id => { const [x, y] = DREAM_PORT_AT[id]; harbour(SX(x * DM_S), SY(y * DM_S), id, zoom); });
+      placeLabels(SX, SY, zoom, 0);
+      R.wake.forEach((w, i) => { const a = i / R.wake.length, wx = SX(w.x * DM_S), wy = SY(w.y * DM_S); g.fillStyle = `rgba(255,255,255,${(a * 0.55).toFixed(3)})`; g.beginPath(); g.arc(wx, wy, (1 - a) * 9 + 3, 0, Math.PI * 2); g.fill(); });
+      ship(sx, sy, R.hd + Math.sin(ts / 900) * 0.025, ts);
+    }
+    if (NIGHT > 0.05) {
+      g.fillStyle = `rgba(16,22,60,${(NIGHT * 0.42).toFixed(3)})`; g.fillRect(0, 0, W, H);
+      Object.keys(DREAM_AT).forEach(id => { const x = SX(DREAM_AT[id][0] * DM_S), y = SY(DREAM_AT[id][1] * DM_S); if (x < -60 || y < -60 || x > W + 60 || y > H + 60) return; const r = 26 * Math.max(0.6, zoom / 2), gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(255,220,140,${(NIGHT * 0.7).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,220,140,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); });
+    }
+    if (R.sight && !air) sightDraw(sx, sy, ts);   // (over the night: you can always see what to tap)
+  }
+  // the places' names on the ground (as you pass over them)
+  function placeLabels(SX, SY, zoom, alt) {
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    Object.keys(DREAM_AT).forEach(id => { if (!COMMUNITIES[id]) return; const x = SX(DREAM_AT[id][0] * DM_S), y = SY(DREAM_AT[id][1] * DM_S); if (x < -80 || y < -40 || x > W + 80 || y > H + 40) return;
+      const c = COMMUNITIES[id], txt = `${c.flag} ${nm(c)}`; g.font = `800 ${12 + Math.min(3, zoom)}px ${UI_FONT}`; const tw = g.measureText(txt).width + 14;
+      g.fillStyle = `rgba(255,253,248,${(0.92 - alt * 0.25).toFixed(2)})`; g.beginPath(); g.roundRect(x - tw / 2, y - 11, tw, 22, 11); g.fill();
+      g.fillStyle = '#3b3125'; g.fillText(txt, x, y + 0.5); });
+  }
+  function runway(x, y, hd, zoom) {
+    const L = TRAVEL.runway * DM_S * zoom * 1.05, w = Math.max(10, 6 * zoom);
+    g.save(); g.translate(x, y); g.rotate(hd);
+    g.fillStyle = '#8f949a'; g.fillRect(-L / 2 - 6, -w / 2 - 6, L + 12, w + 12);
+    g.fillStyle = '#4b4f55'; g.fillRect(-L / 2, -w / 2, L, w);
+    g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = Math.max(1.2, w * 0.06); g.setLineDash([w * 0.5, w * 0.4]); g.beginPath(); g.moveTo(-L / 2 + w, 0); g.lineTo(L / 2 - w, 0); g.stroke(); g.setLineDash([]);
+    for (const e of [-1, 1]) for (let k = -2; k <= 2; k++) { g.fillStyle = '#fff'; g.fillRect(e * (L / 2 - w * 0.7) - w * 0.15, k * w * 0.16 - w * 0.05, w * 0.3, w * 0.1); }
+    g.fillStyle = '#d8dde3'; g.fillRect(-L * 0.25, w * 1.1, L * 0.5, w * 0.9); g.fillStyle = '#9fc6e0'; g.fillRect(-L * 0.23, w * 1.15, L * 0.46, w * 0.25);   // the terminal
+    g.restore();
+  }
+  // the plane from above, nose along hd (col: a shadow's colour, or null for the plane itself)
+  function plane(x, y, hd, sc, col) {
+    g.save(); g.translate(x, y); g.rotate(hd); g.scale(sc, sc);
+    const P = (pts, f) => { g.beginPath(); pts.forEach(([a, b], i) => (i ? g.lineTo(a, b) : g.moveTo(a, b))); g.closePath(); g.fillStyle = col || f; g.fill(); if (!col) { g.strokeStyle = '#9aa3ad'; g.lineWidth = 0.8; g.stroke(); } };
+    [-1, 1].forEach(s => { P([[6, s * 3], [-6, s * 28], [-13, s * 28], [-7, s * 3]], '#e3e8ee'); P([[-21, s * 2], [-27, s * 11], [-31, s * 11], [-28, s * 2]], '#e3e8ee'); });
+    if (!col) [-1, 1].forEach(s => { g.fillStyle = '#8e959c'; g.beginPath(); g.ellipse(-1, s * 12, 4.5, 2, 0, 0, Math.PI * 2); g.fill(); });
+    g.beginPath(); g.ellipse(0, 0, 30, 4.6, 0, 0, Math.PI * 2); g.fillStyle = col || '#ffffff'; g.fill();
+    if (!col) { g.strokeStyle = '#9aa3ad'; g.lineWidth = 0.8; g.stroke(); g.fillStyle = '#2f7cff'; g.fillRect(-31, -1, 9, 2); g.fillStyle = '#3d4a5c'; g.beginPath(); g.ellipse(24, 0, 3.2, 2.6, 0, 0, Math.PI * 2); g.fill(); }
+    g.restore();
+  }
+  // soft clouds in their own layer (f: how much faster than the ground they slide past: nearer the camera)
+  function clouds(cx, cy, zoom, alt, ts, f, dens) {
+    if (alt < 0.15) return;
+    const z = zoom * f, C = 70, x0 = cx * f - W / 2 / z, y0 = cy * f - H / 2 / z, a = Math.min(1, (alt - 0.15) / 0.5) * (f > 1.4 ? 0.55 : 0.8);
+    for (let j = Math.floor(y0 / C) - 1; j <= Math.ceil((y0 + H / z) / C) + 1; j++) for (let i = Math.floor(x0 / C) - 1; i <= Math.ceil((x0 + W / z) / C) + 1; i++) {
+      if (rnd(i, j, f * 10) > dens * 0.6) continue;
+      const wx = (i + rnd(i, j, 2)) * C + ts / 900, wy = (j + rnd(i, j, 3)) * C, r = 14 + rnd(i, j, 4) * 22, X = W / 2 + (wx - cx * f) * z, Y = H / 2 + (wy - cy * f) * z;
+      g.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+      for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(X + (rnd(i, j, k + 5) - 0.5) * r * 1.6 * z, Y + (rnd(i, j, k + 11) - 0.5) * r * 0.8 * z, r * (0.5 + rnd(i, j, k + 17) * 0.4) * z, 0, Math.PI * 2); g.fill(); }
+    }
+  }
+  // little white waves on the water (they bob)
+  function waves(cx, cy, zoom, ts) {
+    const C = 24, x0 = cx - W / 2 / zoom, y0 = cy - H / 2 / zoom;
+    g.strokeStyle = 'rgba(255,255,255,.6)'; g.lineWidth = 1.6; g.lineCap = 'round';
+    for (let j = Math.floor(y0 / C); j <= Math.ceil((y0 + H / zoom) / C); j++) for (let i = Math.floor(x0 / C); i <= Math.ceil((x0 + W / zoom) / C); i++) {
+      if (rnd(i, j, 7) > 0.45) continue;
+      const wx = (i + rnd(i, j, 8)) * C, wy = (j + rnd(i, j, 9)) * C, mx = wx / DM_S, my = wy / DM_S; if (!isSea(mx, my) && mx > 0 && my > 0 && mx < DREAM_MAP.w && my < DREAM_MAP.h) continue;
+      const X = W / 2 + (wx - cx) * zoom, Y = H / 2 + (wy - cy) * zoom + Math.sin(ts / 600 + i * 1.7 + j) * 2;
+      g.beginPath(); g.arc(X, Y, 5, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
+    }
+  }
+  // a port: a pier out from the shore towards its place, a lighthouse
+  function harbour(x, y, id, zoom) {
+    if (x < -80 || y < -80 || x > W + 80 || y > H + 80) return;
+    const [ax, ay] = DREAM_AT[id], [dx, dy] = DREAM_PORT_AT[id], a = Math.atan2(ay - dy, ax - dx);
+    g.save(); g.translate(x, y); g.rotate(a);
+    g.fillStyle = '#b08a5e'; g.fillRect(-4 * zoom, -3 * zoom, 16 * zoom, 6 * zoom); g.strokeStyle = '#7a5a3a'; g.lineWidth = 1; g.strokeRect(-4 * zoom, -3 * zoom, 16 * zoom, 6 * zoom);
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(-7 * zoom, -7 * zoom, 3.2 * zoom, 0, Math.PI * 2); g.fill(); g.fillStyle = '#e5484d'; g.beginPath(); g.arc(-7 * zoom, -7 * zoom, 1.8 * zoom, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
+  // the ferry from above, bow along hd: white hull, blue band, the bridge and a red funnel; your car on deck
+  function ship(x, y, hd, ts) {
+    g.save(); g.translate(x, y); g.rotate(hd);
+    const hull = [[32, 0], [21, -10], [-26, -10], [-31, -7], [-31, 7], [-26, 10], [21, 10]];
+    g.beginPath(); hull.forEach(([a, b], i) => (i ? g.lineTo(a, b) : g.moveTo(a, b))); g.closePath(); g.fillStyle = 'rgba(20,40,60,.25)'; g.save(); g.translate(2, 3); g.fill(); g.restore();
+    g.fillStyle = '#ffffff'; g.fill(); g.strokeStyle = '#2f5fa8'; g.lineWidth = 2.2; g.stroke();
+    g.fillStyle = '#d9cbb0'; g.beginPath(); g.moveTo(26, 0); g.lineTo(18, -7); g.lineTo(-4, -7); g.lineTo(-4, 7); g.lineTo(18, 7); g.closePath(); g.fill();   // the car deck
+    if (R.car) { g.fillStyle = R.me.car.color || '#e5484d'; g.beginPath(); g.roundRect(2, -4, 13, 8, 2); g.fill(); g.fillStyle = 'rgba(40,60,80,.75)'; g.fillRect(10, -3, 2.5, 6); }
+    g.fillStyle = '#f4f6f8'; g.beginPath(); g.roundRect(-25, -7, 19, 14, 3); g.fill(); g.strokeStyle = '#9aa3ad'; g.lineWidth = 0.8; g.stroke();
+    g.fillStyle = '#3d4a5c'; for (let k = 0; k < 4; k++) { g.fillRect(-23 + k * 4.3, -6, 2.4, 1.6); g.fillRect(-23 + k * 4.3, 4.4, 2.4, 1.6); }
+    g.fillStyle = '#e5484d'; g.beginPath(); g.arc(-15, 0, 3.6, 0, Math.PI * 2); g.fill(); g.fillStyle = '#2b2b30'; g.beginPath(); g.arc(-15, 0, 1.8, 0, Math.PI * 2); g.fill();
+    g.restore();
+    const puff = (ts / 1400) % 1; g.fillStyle = `rgba(240,240,240,${(0.5 * (1 - puff)).toFixed(3)})`; g.beginPath(); g.arc(x - Math.cos(hd) * (15 + puff * 22), y - Math.sin(hd) * (15 + puff * 22) - puff * 6, 3 + puff * 6, 0, Math.PI * 2); g.fill();   // smoke
+  }
+  // a creature swimming along beside the ship: jumping ones leap, a whale blows; tap it for a photo
+  function sightDraw(x, y, ts) {
+    const S2 = R.sight, L = SEA_LIFE.find(l => l.k === S2.k), life = TRAVEL.sightLife, out = S2.shot ? Math.max(0, 1 - (S2.age - S2.shotAt) / 1.2) : Math.min(1, S2.age / 0.6, (life - S2.age) / 0.8);
+    if (out <= 0) return;
+    const hd = R.hd, fx = Math.cos(hd), fy = Math.sin(hd), ox = x + fx * 16 - fy * 52 * S2.side, oy = y + fy * 16 + fx * 52 * S2.side;
+    const jump = L.jump ? Math.max(0, Math.sin(S2.age * 3.2)) : 0, bob = Math.sin(S2.age * 2) * 2;
+    g.strokeStyle = `rgba(255,255,255,${(0.7 * out).toFixed(3)})`; g.lineWidth = 1.5; [0, 0.5].forEach(k => { const r = 8 + ((S2.age * 0.9 + k) % 1) * 20; g.beginPath(); g.ellipse(ox, oy + 6, r, r * 0.4, 0, 0, Math.PI * 2); g.stroke(); });   // ripples
+    if (S2.k === 'whale') { for (let k = 0; k < 7; k++) { const a = -Math.PI / 2 + (k - 3) * 0.3, r = 10 + ((S2.age * 1.5) % 1) * 16; g.fillStyle = `rgba(255,255,255,${(0.8 * out).toFixed(3)})`; g.beginPath(); g.arc(ox + Math.cos(a) * r * 0.6, oy - 14 + Math.sin(a) * r, 2, 0, Math.PI * 2); g.fill(); } }
+    g.save(); g.globalAlpha = out; g.fillStyle = '#000'; g.font = `${S2.k === 'whale' ? 40 : 30}px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(L.e, ox, oy - jump * 22 + bob); g.restore();
+    S2.sx = ox; S2.sy = oy - jump * 22;
+    if (!S2.shot) { const txt = t('sh_tap'); g.font = `800 12px ${UI_FONT}`; const tw = g.measureText(txt).width + 14; g.globalAlpha = out; g.fillStyle = 'rgba(255,253,248,.95)'; g.beginPath(); g.roundRect(ox - tw / 2, oy - 52, tw, 22, 11); g.fill(); g.fillStyle = '#3b3125'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, ox, oy - 41); g.globalAlpha = 1; }
+    else if (S2.age - S2.shotAt < 0.25) { g.fillStyle = `rgba(255,255,255,${(0.8 - (S2.age - S2.shotAt) * 3).toFixed(3)})`; g.fillRect(0, 0, W, H); }   // the camera's flash
+  }
+  // the photo: into the passport's sea life (a new kind gets a cheer)
+  function shoot() {
+    const S2 = R.sight; if (!S2 || S2.shot) return;
+    S2.shot = true; S2.shotAt = S2.age;
+    const P = passport(), first = !P.sea[S2.k], L = SEA_LIFE.find(l => l.k === S2.k);
+    P.sea[S2.k] = (P.sea[S2.k] || 0) + 1; R.seen.push(S2.k); save();
+    Sound.play(first ? 'levelup' : 'chime'); toast(`📸 ${t(first ? 'sea_new' : 'sea_again', { e: L.e, name: nm(L) })}`);
+  }
+  function toast(txt) { const el = root.querySelector('.rt-toast'); el.textContent = txt; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 2200); }
+
   // ---------- the screen ----------
   function build() {
     root = document.createElement('div'); root.className = 'rt';
     root.innerHTML = `<canvas class="rt-cv"></canvas><div class="rt-top"><div class="rt-hud"></div><canvas class="rt-mini" width="240" height="160"></canvas></div>
       <div class="rt-bar"><button class="rt-btn" data-rt="left">◀</button><div class="rt-speed">${DRIVE.fast.map(n => `<button class="rt-chip" data-rt="x${n}">×${n}</button>`).join('')}</div><button class="rt-btn" data-rt="right">▶</button></div>
-      <div class="rt-card" hidden></div>`;
+      <div class="rt-toast" hidden></div><div class="rt-card" hidden></div>`;
     document.querySelector('.screen').appendChild(root);
     cv = root.querySelector('.rt-cv'); g = cv.getContext('2d'); hud = root.querySelector('.rt-hud'); mini = root.querySelector('.rt-mini'); card = root.querySelector('.rt-card');
     root.addEventListener('click', e => {
+      if (R && R.sight && !R.sight.shot && e.target === cv) { const r = cv.getBoundingClientRect(); if (Math.hypot(e.clientX - r.left - R.sight.sx, e.clientY - r.top - R.sight.sy) < 56) shoot(); }   // v0.63: a photo
       const b = e.target.closest('[data-rt]'); if (!b || !R) return;
       const a = b.dataset.rt; Sound.play('tick');
       if (a === 'left' && R.me.ln > 0 && laneFree(R.me, R.me.ln - 1)) R.me.ln--;
@@ -263,21 +509,25 @@ const Drive = (() => {
     });
     new ResizeObserver(resize).observe(root);
   }
+  const fastOf = () => (R && R.mode === 'air' ? TRAVEL.fastAir : R && R.mode === 'sea' ? TRAVEL.fastSea : DRIVE.fast);
   const chips = () => root.querySelectorAll('.rt-chip').forEach(b => b.classList.toggle('on', b.dataset.rt === 'x' + mult));
   function resize() { const r = root.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0); }
   function loop(ts) {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000)); last = ts;
     if (!R) return;
-    let left = dt * mult; while (left > 0) { const d = Math.min(0.05, left); left -= d; if (R.phase === 'go') { if (R.train) stepTrains(d); else stepTraffic(d); stepMe(d); } }
-    draw(ts);
+    let left = dt * mult; while (left > 0 && R) { const d = Math.min(0.05, left); left -= d; if (R.phase === 'go') { if (R.above) stepAbove(d); else { if (R.train) stepTrains(d); else stepTraffic(d); stepMe(d); } } }
+    if (!R) return;
+    if (R.sight) { R.sight.age += dt; if (R.sight.age > TRAVEL.sightLife || (R.sight.shot && R.sight.age - R.sight.shotAt > 1.3)) R.sight = null; }   // (real seconds: you can take its photo at any speed)
+    if (R.above) drawAbove(ts); else draw(ts);
     if (Math.floor(ts / 250) !== R.hudAt) { R.hudAt = Math.floor(ts / 250); hud.innerHTML = hudHtml(); drawMini(); }
   }
   function arrive() {
     R.phase = 'end'; Sound.play('chime');
     card.hidden = false;
-    card.innerHTML = `<div class="rt-card-in"><div class="big-emoji">${COMMUNITIES[R.p.to].flag}</div><h2>${t('dr_welcome', { c: nm(COMMUNITIES[R.p.to]) })}</h2><p class="muted">${t('dr_done', { km: R.p.km })}</p>
-      <button class="btn primary block" data-rt="in">${R.train ? t('tr_off') : R.opts.place ? t('dr_in_place', { p: t('venue_' + R.opts.place) }) : R.p.to === myTown() ? t('dr_in_home') : t('dr_in')}</button></div>`;
+    const seen = R.seen && R.seen.length ? `<p>${t('sh_seen', { list: R.seen.map(k => SEA_LIFE.find(l => l.k === k).e).join(' ') })}</p>` : '';
+    card.innerHTML = `<div class="rt-card-in"><div class="big-emoji">${COMMUNITIES[R.p.to].flag}</div><h2>${R.mode === 'air' ? t('fl_landed', { c: nm(COMMUNITIES[R.p.to]) }) : R.mode === 'sea' ? t('sh_arrived', { c: nm(COMMUNITIES[R.p.to]) }) : t('dr_welcome', { c: nm(COMMUNITIES[R.p.to]) })}</h2><p class="muted">${R.mode === 'air' ? t('fl_done', { km: R.p.km }) : R.mode === 'sea' ? t(R.car ? 'sh_done_car' : 'sh_done', { km: R.p.km }) : t('dr_done', { km: R.p.km })}</p>${seen}
+      <button class="btn primary block" data-rt="in">${R.mode === 'air' ? t('fl_off') : R.mode === 'sea' ? t('sh_off') : R.train ? t('tr_off') : R.opts.place ? t('dr_in_place', { p: t('venue_' + R.opts.place) }) : R.p.to === myTown() ? t('dr_in_home') : t('dr_in')}</button></div>`;
   }
   function finish() {
     cancelAnimationFrame(raf); root.hidden = true; Scene.setVisible(true);
@@ -292,17 +542,20 @@ const Drive = (() => {
       if (!root) build();
       if (!mapCv) { mapCv = document.createElement('canvas'); drawDreamMap(mapCv); }
       const car = S.me.cars[S.me.car];
-      const train = p.mode === 'train';
-      R = { p, opts, done, train, pts: p.pts, len: p.len, tiles: p.tiles, phase: 'go', cars: [], hudAt: -1, from: p.from, seed: p.seed, me: { dir: 1, s: 0, ln: 1, lx: train ? DRIVE.track : laneX(1), v: (train ? DRIVE.trainSpeed : DRIVE.speed) * 0.3, car: car ? { ...car } : { k: 'sedan', color: '#e5484d' } } };
-      root.classList.toggle('train', train);
-      if (!train) for (let s = 10; s < 110; s += 9) if (Math.random() < 0.6) { const c = spawn(Math.random() < 0.5 ? 1 : -1, s); if (!(c.dir === 1 && c.ln === 1 && s < 16)) R.cars.push(c); }
+      const train = p.mode === 'train', above = p.mode === 'air' || p.mode === 'sea';
+      R = { p, opts, done, train, above, mode: p.mode, car: !!opts.car, wake: [], sights: [], sight: null, seen: [], pts: p.pts, len: p.len, tiles: p.tiles, phase: 'go', cars: [], hudAt: -1, from: p.from, seed: p.seed, me: { dir: 1, s: 0, ln: 1, lx: train ? DRIVE.track : laneX(1), v: above ? 0 : (train ? DRIVE.trainSpeed : DRIVE.speed) * 0.3, car: car ? { ...car } : { k: 'sedan', color: '#e5484d' } } };
+      if (p.mode === 'sea') R.sights = planSights();
+      root.classList.toggle('train', train || above); root.classList.toggle('above', above);
+      root.querySelector('.rt-speed').innerHTML = fastOf().map(n => `<button class="rt-chip" data-rt="x${n}">×${n}</button>`).join('');
+      if (!train && !above) for (let s = 10; s < 110; s += 9) if (Math.random() < 0.6) { const c = spawn(Math.random() < 0.5 ? 1 : -1, s); if (!(c.dir === 1 && c.ln === 1 && s < 16)) R.cars.push(c); }
       mult = 1; root.hidden = false; card.hidden = true; chips(); Scene.setVisible(false); resize();
       last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
       return true;
     },
     // (testing) run the drive n steps of dt seconds without the screen
-    _step(n, dt = 0.05) { for (let i = 0; i < n && R && R.phase === 'go'; i++) { stepTraffic(dt); stepMe(dt); } return R && { s: R.me.s, tiles: R.tiles, cars: R.cars.length, phase: R.phase }; },
-    _draw() { if (R) draw(performance.now()); },
+    _step(n, dt = 0.05) { for (let i = 0; i < n && R && R.phase === 'go'; i++) { if (R.above) stepAbove(dt); else { stepTraffic(dt); stepMe(dt); } } return R && { s: R.me.s, tiles: R.tiles, cars: R.cars.length, phase: R.phase, alt: altAt(R.me.s) }; },
+    _shoot: () => shoot(), isSea: (x, y) => isSea(x, y), seaGrid: () => seaGrid(),
+    _draw() { if (R) { if (R.above) drawAbove(performance.now()); else draw(performance.now()); } },
     _state: () => R,
   };
 })();

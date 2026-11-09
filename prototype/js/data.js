@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.62.0';
+const VERSION = '0.63.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -909,6 +909,45 @@ const DREAM_PEAKS = [[215, 120], [250, 140], [180, 130], [300, 600], [330, 660],
 // v0.61: trains: trainSpeed (tiles a second, twice a car), trainFare (coins a km, under gas), trainMin (the cheapest
 // ticket), track (each track's distance from the middle)
 const DRIVE = { trainSpeed: 32, trainFare: 0.07, trainMin: 8, track: 1.3, tilesPerUnit: 3.5, speed: 16, km: 1, gas: 0.12, toll: 6, fast: [1, 3, 8], laneW: 1.15, median: 0.45, traffic: 0.05, city: 2, rush: 1.6, tunnel: 26 };
+// v0.63 (Mason #30: "we can fly out to travel, and collect things on the way"): planes, ships and the travel
+// passport. Each airport and port has its own spot on the map (the airport on land beside its place, the port's
+// dock in the water off it). Planes fly straight from airport to airport; ships find the shortest way by sea (worked
+// out on a grid of the water, then pulled straight).
+const DREAM_AIR_AT = { wutong: [168, 318], london: [536, 168], seoul: [912, 205], rio: [470, 668], sydney: [1085, 668], capetown: [676, 712] };
+const DREAM_PORT_AT = { palmbay: [483, 489], rio: [549, 705], capetown: [717, 747], sydney: [1083, 591], kyoto: [1089, 213], fjord: [657, 45], london: [459, 129] };
+// airSpeed / shipSpeed: tiles a second at ×1 (a car does 16); airBase + airFare a km, shipBase + shipFare a km
+// (+ shipCar when your car comes along); runway, climb, desc: map units on the runway, climbing and coming down;
+// zLow / zHigh: how close the map is on the ground and at cruising height, zSea from the ship; seaCell / seaMargin:
+// the sea grid (map units) and how far from the coast ships keep; fastAir / fastSea: the speed-ups; ticketEvery: a
+// free plane or ship ticket every this many days you reach your own step goal (real life); stampFun: a new place's
+// stamp lifts your fun; sightEvery: a sea creature about this often (map units, at most sightMax a trip), up for
+// sightLife seconds; awards: a travel keepsake at this many stamps
+const TRAVEL = {
+  airSpeed: 90, airBase: 30, airFare: 0.15, runway: 50, climb: 160, desc: 190, zLow: 4, zHigh: 1.35, cruiseM: 10000,
+  shipSpeed: 16, shipBase: 8, shipFare: 0.04, shipCar: 15, zSea: 2.6, seaCell: 6, seaMargin: 18,
+  fastAir: [1, 3, 8], fastSea: [1, 4, 16], ticketEvery: 5, stampFun: 15, sightEvery: 110, sightMax: 8, sightLife: 9,
+  awards: [[4, 'tv_map'], [8, 'tv_bag'], [12, 'tv_balloon'], [16, 'tv_globe']],
+};
+// what you can photograph from the ship (where: the regions, 'any', or 'deep': far from every place)
+const SEA_LIFE = [
+  { k: 'dolphin', e: '🐬', zh: '海豚', en: 'Dolphins', where: 'any', jump: true },
+  { k: 'whale', e: '🐋', zh: '鲸鱼', en: 'Whale', where: 'deep' },
+  { k: 'turtle', e: '🐢', zh: '海龟', en: 'Sea turtle', where: ['sa', 'oc', 'asia', 'af'] },
+  { k: 'seal', e: '🦭', zh: '海豹', en: 'Seal', where: ['eu', 'na'] },
+  { k: 'penguin', e: '🐧', zh: '企鹅', en: 'Penguins', where: ['af', 'oc'] },
+  { k: 'flyfish', e: '🐟', zh: '飞鱼', en: 'Flying fish', where: 'any', jump: true },
+];
+// each place's own keepsake: only sold there (you have to go), it goes on a little stand in your home
+const TRAVEL_SOUV = {
+  wutong: ['🌉', 80, '金门桥模型', 'Golden bridge model'], palmbay: ['🦩', 90, '火烈鸟摆件', 'Flamingo'], cactus: ['🌵', 60, '仙人掌盆栽', 'Potted cactus'],
+  vermont: ['🍁', 70, '枫糖浆罐', 'Maple syrup jug'], banff: ['🦌', 70, '驼鹿木雕', 'Carved moose'], provence: ['💐', 90, '薰衣草花束', 'Lavender bunch'],
+  holland: ['🌷', 80, '郁金香木鞋', 'Tulip clog'], fjord: ['⛵', 100, '维京小船', 'Little Viking boat'], kyoto: ['⛩️', 120, '鸟居模型', 'Torii model'],
+  hangzhou: ['🍵', 90, '龙井茶具', 'Longjing tea set'], sydney: ['🐨', 110, '考拉玩偶', 'Koala'], andes: ['☕', 60, '咖啡豆袋', 'Coffee bean sack'],
+  london: ['💂', 120, '卫兵摆件', 'Guardsman'], seoul: ['🪁', 100, '韩式风筝', 'Korean kite'], rio: ['🦜', 90, '鹦鹉摆件', 'Parrot'], capetown: ['🐧', 100, '企鹅摆件', 'Penguin'],
+};
+Object.entries(TRAVEL_SOUV).forEach(([id, [e, price, zh, en]]) => { FURN['tv_' + id] = { zh, en, w: 1, d: 1, price, travel: id, e }; });
+[['tv_map', '🗺️', '世界地图摆件', 'World map'], ['tv_bag', '🧳', '旅行箱', 'Travel trunk'], ['tv_balloon', '🎈', '热气球模型', 'Hot-air balloon'], ['tv_globe', '🌍', '环游世界地球仪', 'Round-the-world globe']]
+  .forEach(([k, e, zh, en]) => { FURN[k] = { zh, en, w: 1, d: 1, price: 0, travel: 'award', e }; });
 // your nearest team city (your teams, if your town hasn't got its own)
 function homeCity(t) { if (isTeamCity(t)) return t; const [x, y] = DREAM_AT[t] || [0, 0]; return TEAM_CITIES.slice().sort((a, b) => Math.hypot(DREAM_AT[a][0] - x, DREAM_AT[a][1] - y) - Math.hypot(DREAM_AT[b][0] - x, DREAM_AT[b][1] - y))[0]; }
 // v0.59: moving the whole town needs everyone who lives in it to say yes. Each one answers after `wait` seconds;

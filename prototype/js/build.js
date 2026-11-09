@@ -615,6 +615,7 @@ function drawFurn(it, x, y, ts) {
 }
 function drawFurnAt(it, x, y, ts) {
   if (it.k === 'trophycase') return drawTrophyCase(it, x, y);
+  if (FURN[it.k] && FURN[it.k].travel) return drawTravelSouv(it, x, y, ts);
   if (it.k === 'bigteddy') { ctx.save(); const c = iso(x + 1, y + 1); ctx.translate(c.x, c.y); ctx.scale(2.1, 2.1); ctx.translate(-c.x, -c.y); drawPlush('plushbear', x + 0.5, y + 0.5); ctx.restore(); return; }
   if (FURN[it.k] && FURN[it.k].plush) return drawPlush(it.k, x, y);
   if (FURN[it.k] && FURN[it.k].poster) return drawPosterStand(FURN[it.k].poster, x, y);
@@ -2042,6 +2043,16 @@ function drawExcl(it, x, y, ts) {
       break;
     }
   }
+}
+// v0.63: a travel keepsake: a little wooden stand with a brass plate and the thing from that place on top (the
+// four keepsakes for stamps get a gold stand and a sparkle)
+function drawTravelSouv(it, x, y, ts) {
+  const z = cam.z, d = FURN[it.k], gold = d.travel === 'award', b = box(x + 0.27, y + 0.27, 0.46, 0.46, 12, gold ? '#c9a03a' : '#8a5a36', 0, { top: gold ? '#e8c45a' : '#a8744a' });
+  wallRect(b.left, 0, 0.25, 0.75, 4.5, 8, gold ? '#fff1b8' : '#e0b84a');
+  const p = up(iso(x + 0.5, y + 0.5), 12 * z);
+  ellipse(p.x, p.y, 8 * z, 3 * z, 'rgba(0,0,0,.2)');
+  ctx.fillStyle = '#000'; emoji(d.e, p.x, p.y + 4 * z, 26 * z);   // (a colour emoji takes the fill's alpha)
+  if (gold) { const sh = (Math.sin(ts / 500) + 1) / 2; circle(p.x + 7 * z, p.y - 17 * z, (0.8 + sh * 1.4) * z, 'rgba(255,255,255,.9)'); }
 }
 // The trophy case: a glass cabinet with gold, silver and bronze cups (it.cups of them).
 function drawTrophyCase(it, x, y) {

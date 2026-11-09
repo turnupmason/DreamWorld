@@ -485,7 +485,7 @@ function panelShop() {
   } else if (cat === 'furn' || cat === 'yard') {
     const scope = cat === 'furn' ? 'room' : 'yard', list = cat === 'furn' ? FURN : YARD;
     const owned = k => (scope === 'room' ? allRoomItems(h) : h.yard).filter(i => i.k === k).length + (h.store[scope + ':' + k] || 0);
-    body = Object.entries(list).filter(([k, d]) => !d.souv && !d.excl && !d.award && !d.plush && keep(k)).map(([k, d]) => {
+    body = Object.entries(list).filter(([k, d]) => !d.souv && !d.excl && !d.award && !d.plush && !d.travel && keep(k)).map(([k, d]) => {
       const n = owned(k);
       const use = d.use ? ` · ${t('use_' + d.use)}` : d.prod ? ` · ${t('makes', { e: GOODS[d.prod].e, d: fmtDur(d.every * MIN) })}` : '';
       return shopCard(thumbImg(cat, k), nm(d), t('furn_sub', { w: d.w, d: d.d }) + use + (n ? ` · ${t('owned_n', { n })}` : ''),
@@ -2909,8 +2909,14 @@ function dmShape(path, pts) {   // a soft closed coastline through the points' m
   return path;
 }
 function drawDreamMap(cv) {
-  const dpr = Math.min(3, Math.max(2, window.devicePixelRatio || 1)), g = cv.getContext('2d'), dark = document.body.classList.contains('dark'), W = DREAM_MAP.w * DM_S, H = DREAM_MAP.h * DM_S, S0 = DM_S;
-  cv.width = W * dpr; cv.height = H * dpr; g.scale(dpr, dpr);
+  const dpr = Math.min(3, Math.max(2, window.devicePixelRatio || 1)), g = cv.getContext('2d');
+  cv.width = DREAM_MAP.w * DM_S * dpr; cv.height = DREAM_MAP.h * DM_S * dpr; g.scale(dpr, dpr);
+  drawDreamMapTo(g);
+}
+// v0.63: the map into any context (already scaled / moved): the plane and the ship draw a close-up piece of it.
+// bare: without the labels, the airports, ports and compass (they draw their own)
+function drawDreamMapTo(g, bare) {
+  const dark = document.body.classList.contains('dark'), W = DREAM_MAP.w * DM_S, H = DREAM_MAP.h * DM_S, S0 = DM_S;
   const sea = g.createLinearGradient(0, 0, 0, H); sea.addColorStop(0, dark ? '#1e3a56' : '#b9e2f6'); sea.addColorStop(1, dark ? '#142a40' : '#8ccbea');
   g.fillStyle = sea; g.fillRect(0, 0, W, H);
   g.strokeStyle = dark ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.55)'; g.lineWidth = 1.2;
@@ -2944,10 +2950,11 @@ function drawDreamMap(cv) {
     const m = P[Math.floor(P.length / 2)]; g.fillStyle = '#2f5fa8'; g.strokeStyle = '#fff'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(m[0] - 7, m[1] - 7); g.lineTo(m[0] + 7, m[1] - 7); g.lineTo(m[0] + 7, m[1] + 1); g.quadraticCurveTo(m[0], m[1] + 8, m[0] - 7, m[1] + 1); g.closePath(); g.fill(); g.stroke();
     g.fillStyle = '#fff'; g.font = `900 7px ${UI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(no), m[0], m[1] - 2);
   });
-  // airports and ports beside their places
+  if (bare) return;
+  // airports and ports at their own spots (v0.63: where the planes take off and the ships sail from)
   g.font = `14px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  DREAM_AIR.forEach(id => { const [x, y] = dmXY(id); g.fillText('✈️', x + 22, y - 2); });
-  DREAM_PORT.forEach(id => { const [x, y] = dmXY(id); g.fillText('⚓', x - 22, y + 4); });
+  DREAM_AIR.forEach(id => { const [x, y] = DREAM_AIR_AT[id]; g.fillText('✈️', x * S0, y * S0); });
+  DREAM_PORT.forEach(id => { const [x, y] = DREAM_PORT_AT[id]; g.fillText('⚓', x * S0, y * S0); });
   // the regions' names
   DREAM_REGIONS.forEach(Rg => { const x = Rg.at[0] * S0, y = (Rg.at[1] - Rg.r[1] * 0.7) * S0, txt = t('dmr_' + Rg.k);
     g.font = `800 12px ${UI_FONT}`; g.lineWidth = 3; g.strokeStyle = dark ? 'rgba(0,0,0,.45)' : 'rgba(255,255,255,.85)'; g.strokeText(txt, x, y); g.fillStyle = dark ? '#e3dccd' : '#5d5448'; g.fillText(txt, x, y); });
@@ -2987,13 +2994,14 @@ function panelWorld() {
         <div class="muted">${t('dmr_' + cm.region)} · ${THEME_E[cm.theme]} ${t('theme_' + cm.theme)} · ${isNightIn(sel) ? '🌙' : '☀️'} ${t('local_time', { t: localClock(sel) })}</div>
         <div class="world-stats">${DREAM_AIR.includes(sel) ? `<span>✈️ ${t('dm_airport')}</span>` : ''}${DREAM_PORT.includes(sel) ? `<span>⚓ ${t('dm_port')}</span>` : ''}${DREAM_RAIL.some(r => r.includes(sel)) ? `<span>🚆 ${t('dm_rail')}</span>` : ''}<span>🛣️ ${DREAM_ROADS.filter(r => r[0] === sel || r[1] === sel).map(r => (r[4] === 'bridge' ? '🌉' : 'I-') + r[2]).join(' ')}</span></div></div></div>
     ${cityTeamsHtml(sel)}
+    ${sel === whereNow() && FURN['tv_' + sel] ? (() => { const d = FURN['tv_' + sel], own = ownsFurn('tv_' + sel); return `<div class="row gap-top souv-here"><span class="big-emoji">${d.e}</span><span class="grow small"><b>${t('dm_souv')}</b> · ${nm(d)}<br><span class="muted">${t('dm_souv_note')}</span></span>${own ? '<span class="tag ok">✅</span>' : `<button class="btn small primary" data-act="buyTravelSouv" data-arg="${sel}" ${S.me.coins >= d.price ? '' : 'disabled'}>🪙${d.price}</button>`}</div>`; })() : ''}
     ${driveRow(sel)}
     <div class="row gap-top">${here ? `<button class="btn primary grow" data-act="worldVisit" data-arg="${sel}">🏘️ ${t('world_my_town')}</button>`
       : `<button class="btn grow" data-act="worldVisit" data-arg="${sel}">👀 ${t('world_visit')}</button><button class="btn primary grow" data-act="townMoveAsk" data-arg="${sel}" ${M && !M.done ? 'disabled' : ''}>🚚 ${t('tm_btn')}</button>`}</div>
     ${here ? '' : `<p class="muted small">${t('tm_note', { n: townMembers().length })}</p>`}</div>`;
   const list = (ids, title) => `<div class="card"><h3>${title}</h3>${ids.map(id => { const c = COMMUNITIES[id];
     return `<button class="list-item world-row ${id === sel ? 'on' : ''}" data-act="worldPick" data-arg="${id}"><span class="big-emoji">${c.flag}</span><div class="grow"><b>${nm(c)}</b> ${id === mine ? '🏡' : ''}<div class="muted">${t('dmr_' + c.region)} · ${isNightIn(id) ? '🌙' : '☀️'} ${localClock(id)}${isTeamCity(id) ? ' · ' + SPORT_KEYS.map(sp => LEAGUES[sp].teams[arTeamIn(sp, id)].e).join('') : ''}</div></div></button>`; }).join('')}</div>`;
-  return `<div class="world-head"><h1 class="panel-title">🌍 ${t('dm_title')}</h1></div>
+  return `<div class="world-head"><h1 class="panel-title">🌍 ${t('dm_title')}</h1><button class="btn small" data-act="passport">📕 ${t('pass_btn', { n: stampCount(), total: Object.keys(COMMUNITIES).length })}</button></div>
     <p class="muted note">${t('dm_sub')}</p>
     <div class="dm-legend">🏟️ ${t('dm_city')} · 🏘️ ${t('dm_town')} · <i class="lg-road"></i> ${t('dm_road')} · <i class="lg-rail"></i> ${t('dm_rail')} · ✈️ ${t('dm_airport')} · ⚓ ${t('dm_port')}</div>
     <div class="wmap-scroll dm"><div class="wmap" style="width:${W}px;height:${H}px"><canvas id="worldCanvas" style="width:${W}px;height:${H}px"></canvas>${pins}</div></div>
@@ -3016,8 +3024,69 @@ function driveRow(id) {
   return `<div class="card drive-card"><b>🚗 ${id === myTown() ? t('dr_home_title') : t('dr_title', { c: nm(COMMUNITIES[id]) })}</b>
     <div class="muted small">${t('dr_info', { km: P.km, via: P.legs.map(L => (L.e[4] === 'bridge' ? '🌉' : 'I-') + L.e[2]).join(' → '), m: Math.ceil(P.len * DRIVE.tilesPerUnit / DRIVE.speed / 60), n: P.cost })}</div>
     <div class="row gap-top">${btn('', id === myTown() ? `🏡 ${t('dr_go_home')}` : `🚗 ${t('dr_go')}`)}${games.length ? btn(AR_INDOOR.includes(games[0].sp) ? 'arena' : 'stadium', `${LEAGUES[games[0].sp].e} ${t('dr_go_game', { h: fmtHM(games[0].start) })}`) : ''}</div>
-    ${why ? `<p class="muted small">${why}</p>` : ''}${train}<p class="muted small">✈️ ${t('dr_later')}</p></div>`;
+    ${why ? `<p class="muted small">${why}</p>` : ''}${train}${flySailHtml(id)}</div>`;
 }
+// v0.63 (Mason #30): the plane and the ship from where you are to there; where the nearest airport / port is if
+// there isn't one. A free ticket (🎟️, from real life) pays a whole fare.
+const nearestOf = (list, id) => list.slice().sort((a, b) => Math.hypot(DREAM_AT[a][0] - DREAM_AT[id][0], DREAM_AT[a][1] - DREAM_AT[id][1]) - Math.hypot(DREAM_AT[b][0] - DREAM_AT[id][0], DREAM_AT[b][1] - DREAM_AT[id][1]))[0];
+const carWithYou = () => S.me.cars.length > 0 && (S.carAt && S.carAt.town ? S.carAt.town : myTown()) === whereNow();
+function flySailHtml(id) {
+  const from = whereNow(), tix = ticketsLeft();
+  const row = (mode, e) => {
+    const air = mode === 'air', list = air ? DREAM_AIR : DREAM_PORT, act = air ? 'flyGo' : 'sailGo';
+    if (!list.includes(id)) return `<p class="muted small">${e} ${t(air ? 'fl_no_there' : 'sh_no_there', { c: nm(COMMUNITIES[id]), a: nm(COMMUNITIES[nearestOf(list, id)]) })}</p>`;
+    if (!list.includes(from)) return `<p class="muted small">${e} ${t(air ? 'fl_no_here' : 'sh_no_here', { c: nm(COMMUNITIES[nearestOf(list, from)]) })}</p>`;
+    const P = Drive.plan(from, id, mode); if (!P) return '';
+    const car = !air && carWithYou(), cost = P.cost + (car ? TRAVEL.shipCar : 0);
+    return `<div class="row gap-top"><span class="grow small">${e} ${t(air ? 'fl_info' : 'sh_info', { km: P.km, n: cost, m: P.mins })}${car ? `<br><span class="muted">🚗 ${t('sh_car', { n: TRAVEL.shipCar })}</span>` : ''}</span>
+      ${tix ? `<button class="btn small" data-act="${act}" data-arg="${id}|tix">🎟️ ${t('tix_use')}</button>` : ''}<button class="btn small primary" data-act="${act}" data-arg="${id}|" ${S.me.coins >= cost ? '' : 'disabled'}>${e} 🪙${cost}</button></div>`;
+  };
+  return row('air', '✈️') + row('sea', '⛴️');
+}
+function travelGo(mode, arg) {
+  const [id, how] = String(arg).split('|'), from = whereNow(), P = Drive.plan(from, id, mode);
+  if (!P) return;
+  if (S.work || jailed()) return snack(t('dr_busy'));
+  const car = mode === 'sea' && carWithYou(), cost = P.cost + (car ? TRAVEL.shipCar : 0), e = mode === 'air' ? '✈️' : '⛴️';
+  if (how === 'tix') { if (ticketsLeft() < 1) return; passport().tix++; snack(`🎟️ ${t('tix_used')}`); }
+  else { if (S.me.coins < cost) { Sound.play('oops'); return snack(t('snack_poor')); } S.me.coins -= cost; snack(`${e} ${t('go_fare', { n: cost })}`); }
+  save(); Sound.play('select');
+  Drive.open({ from, to: id, mode, car }, o => travelArrived(o));
+}
+// off the plane / the ship: in that place's main square (the ship brought your car along if it was with you)
+function travelArrived(o) {
+  const to = o.to, L = layoutOf(to), pk = (L.parks || [])[0], pt = pk ? [pk[1] + pk[3] / 2, pk[2] + pk[4] / 2] : L.places[0];
+  if (o.car) S.carAt = to === myTown() ? null : { town: to, pt, dir: '+y', id: null, place: null };
+  if (to === myTown()) { S.trav = null; S.away = null; UI.wtown = null; UI.visit = null; save(); setTab('home'); Scene.recenter(); stampNews(stampAt(to)); return; }
+  S.trav = { town: to, at: now(), by: o.mode }; S.away = { town: to, until: now() + SPECIAL.visitH * HOUR };
+  UI.tab = 'world'; UI.wtown = to; UI.visit = null; UI.visitInside = false; setLevel(0); syncView();
+  Scene.arriveAt(pt, null); save(); refresh();
+  stampNews(stampAt(to));
+}
+// a new stamp in the passport (and a keepsake at 4 / 8 / 12 / 16)
+function stampNews(r) {
+  if (!r) return;
+  save();
+  setTimeout(() => { Sound.play('fanfare'); snack(`📕 ${t('pass_new_stamp', { c: nm(COMMUNITIES[r.id]), n: r.n, total: Object.keys(COMMUNITIES).length })}`);
+    if (r.award) setTimeout(() => snack(`🎁 ${t('pass_award', { n: r.n, name: nm(FURN[r.award]) })}`), 2800); }, 900);
+}
+// the passport: stamps, sea life, free tickets, each place's keepsake
+function passportHtml() {
+  const P = passport(), ids = Object.keys(COMMUNITIES), here = whereNow(), n = stampCount();
+  const stamps = ids.map(id => { const c = COMMUNITIES[id], got = P.st[id];
+    return `<div class="pstamp ${got ? 'got' : ''}" style="--c:${(DREAM_REGIONS.find(r => r.k === c.region) || {}).c || '#888'}"><span>${got ? c.flag : '❔'}</span><b>${nm(c)}</b><i>${got ? fmtDate(got) : ''}</i></div>`; }).join('');
+  const sea = SEA_LIFE.map(L => `<div class="pstamp sea ${P.sea[L.k] ? 'got' : ''}"><span>${P.sea[L.k] ? L.e : '❔'}</span><b>${nm(L)}</b><i>${P.sea[L.k] ? '×' + P.sea[L.k] : ''}</i></div>`).join('');
+  const souv = ids.map(id => { const k = 'tv_' + id, d = FURN[k], own = ownsFurn(k);
+    return `<div class="list-item"><span class="big-emoji">${d.e}</span><div class="grow"><b>${nm(d)}</b><div class="muted small">${COMMUNITIES[id].flag} ${nm(COMMUNITIES[id])}</div></div>${own ? `<span class="tag ok">✅</span>` : here === id ? `<button class="btn small primary" data-act="buyTravelSouv" data-arg="${id}" ${S.me.coins >= d.price ? '' : 'disabled'}>🪙${d.price}</button>` : `<span class="muted small">${t('pass_buy_there')}</span>`}</div>`; }).join('');
+  const aw = TRAVEL.awards.map(([k, key]) => `<span class="pass-aw ${n >= k ? 'got' : ''}">${FURN[key].e} ${k}</span>`).join('');
+  return `<h2>📕 ${t('pass_title')}</h2><p class="muted small">${t('pass_how')}</p>
+    <div class="card"><div class="row between"><b>🎟️ ${t('pass_tix', { n: ticketsLeft() })}</b></div><div class="muted small">${t('pass_tix_note', { n: TRAVEL.ticketEvery })}</div></div>
+    <h3>${t('pass_stamps')} ${n}/${ids.length}</h3><div class="pass-aws">${aw}</div><div class="stamp-grid">${stamps}</div>
+    <h3>${t('pass_sea')} ${SEA_LIFE.filter(L => P.sea[L.k]).length}/${SEA_LIFE.length}</h3><p class="muted small">${t('pass_sea_note')}</p><div class="stamp-grid">${sea}</div>
+    <h3>${t('pass_souv')}</h3><p class="muted small">${t('pass_souv_note')}</p><div class="card">${souv}</div>
+    <button class="btn block gap-top" data-act="close">${t('souv_ok')}</button>`;
+}
+SHEETS.passport = () => passportHtml();
 // v0.62 (Mason #30): commuting. How far a place is by road from home; the ways you can get to your job from where
 // you are (saved with the job: one tap every day); after work, the way home.
 // the hour before your shift and during it, when you're not at work yet: a button to go (the daily commute)
@@ -3047,11 +3116,13 @@ function trainArrived(o) {
   UI.visit = null; UI.visitInside = false; setLevel(0); syncView();
   Scene.arriveAt(pt, o.place ? null : 'station'); save(); refresh();
   setTimeout(() => { if (o.place) openSheet('go', { place: o.place }); else ACT.enterVenue('station'); snack(`🚆 ${t('tr_arrived', { c: nm(COMMUNITIES[to]) })}`); refresh(); }, 300);   // (v0.62: going to work: on from the station)
+  stampNews(stampAt(to));   // v0.63
 }
 // you've driven there: parked at the stadium / arena (or the main car park) and on foot; home: back in your own drive
 function driveArrived(o) {
   const to = o.to;
   if (to === myTown()) { S.trav = null; S.carAt = null; S.out = null; UI.wtown = null; UI.visit = null; save(); setTab('home'); Scene.recenter(); return; }
+  stampNews(stampAt(to));   // v0.63
   const L = layoutOf(to), st = o.place && (L.stores || []).find(x => x[0] === o.place), G = st ? storeGeo(st) : null;
   const pk = (L.parks || [])[0], bay = G ? G.bay : pk ? [pk[1] + pk[3] / 2, pk[2] + pk[4] / 2] : L.places[0];
   S.trav = { town: to, at: now() };
@@ -3279,6 +3350,15 @@ Object.assign(ACT, {
     if (!ms.length) townMoveTick2(); save();
   },
   townMoveClear() { S.townMove = null; save(); },
+  flyGo(arg) { travelGo('air', arg); },   // v0.63
+  sailGo(arg) { travelGo('sea', arg); },
+  passport() { openSheet('passport'); },
+  buyTravelSouv(id) {
+    const r = buyTravelSouv(id);
+    if (r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    if (r !== 'ok') return snack(t('pass_buy_there'));
+    Sound.play('coins'); snack(`🎁 ${t('tv_bought', { name: nm(FURN['tv_' + id]) })}`); save(); refresh();
+  },
   driveTo(arg) {   // v0.60
     const [id, place] = arg.split('|'), P = Drive.plan(whereNow(), id), car = S.me.cars[S.me.car];
     if (!P || !car || CARS[car.k].kind === 'two') return;
