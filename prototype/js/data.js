@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.46.0';
+const VERSION = '0.47.0';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -168,6 +168,16 @@ const LAND = { parcel: 600, grow: 1.35, move: 500, refund: 0.5 };
 // Going somewhere in town (v0.12): tiles per second on foot, by bike, by car (sped up so trips take seconds).
 // Cars and bikes on the expressway go `highway` times faster (v0.16); on foot you only use local streets.
 const TRIP_SPEED = { walk: 3, bike: 6, car: 10, highway: 2.5 };
+// v0.47: how fast each kind of car goes, compared with the traffic on its road (Mason #28: "every car its own speed:
+// sports cars fast, lorries slow"); your own car too (a faster car gets you there sooner)
+const CAR_PACE = { supercar: 1.3, champcar: 1.3, sports: 1.22, muscle: 1.18, convertible: 1.1, luxury: 1.06, sedan: 1, suv: 0.97, jeep: 0.95, mini: 0.95, minivan: 0.93, pickup: 0.92, boxtruck: 0.74, tractor: 0.5 };
+const carPace = k => CAR_PACE[k] || 1;
+// v0.47: traffic lights go in phases (Mason #28: "straight on first, then right, then left, last a U-turn"): along one
+// road straight on and right turns (right turns `rightWait` s after the green), amber, then a green arrow for left
+// turns (U-turns `uWait` s into it), amber; then the same along the other road. Lefts never go with the traffic
+// coming the other way. A car park's way out onto the road has its own light: the road's traffic goes for `road` s,
+// then stops while the cars come out for `out` s.
+const SIG = { go: 5, amber: 1, arrow: 2.5, arrowAmber: 0.5, rightWait: 1, uWait: 1.2, lotRoad: 8.5, lotAmber: 1, lotOut: 2.5 };
 // v0.39: every kind of road. lanes: lanes each way (a one-way road has all of them going its way); mph / kmh: the speed
 // limit on its signs (mph in English, km/h in Chinese); spd: how fast the town's cars go on it (1 = an avenue).
 // street: two-way, two lanes (a dashed yellow line). avenue: two-way, two lanes, a double yellow line. boulevard: two
@@ -1393,12 +1403,83 @@ function buildLayout(id, flip) {
   if (fwy) { roads.filter(r => r[4] === 'frontage' || r.o).forEach(r => busyRects.push(r.slice(0, 4))); busyRects.push(...roads.filter(r => !busyRects.some(q => q[0] === r[0] && q[1] === r[1] && q[2] === r[2] && q[3] === r[3])).map(r => r.slice(0, 4))); }
   Object.entries(STORES).filter(([, s]) => s.w && s.late === 2).forEach(placeStore);
   if (fwy) labels.push(['area_freeway', ...(fwy.axis === 'x' ? [fwy.over.s + 45, fwy.c - 3] : [fwy.c + 3, fwy.over.s + 45])]);   // v0.39
+  const culs = tidyRoads(roads, world, [...busyRects.filter(q => !roads.some(r => r[0] === q[0] && r[1] === q[1] && r[2] === q[2] && r[3] === q[3])),
+    ...stores.map(st => [st[1], st[2], st[1] + st[3], st[2] + st[4]]), ...parks.map(pk => [pk[1], pk[2], pk[1] + pk[3], pk[2] + pk[4]]),
+    [plaza.x, plaza.y, plaza.x + LOT_W, plaza.y + LOT_D], ...shops.map(([, x, y, w = 6, d = 5.5]) => [x, y, x + w, y + d])], lakeAt);   // v0.47
   return {
-    id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers, fwy,
+    id: id + (flip ? '|f' : ''), world, district, streets, npcLots, roads, water, highway, curves, parkLoop: loop, stores, parks, flyovers, fwy, culs,
     centre, plaza, shops, pocket: B.pocket ? box(B.pocket) : null,
     park: box(B.park), lake, fields: B.fields.map(f => box(f)),
     places: [...B.places.map(([x, y]) => [fx(x), y]), vert(blvd) ? [(blvd[0] + blvd[2]) / 2, (blvd[1] + blvd[3]) / 2] : [(blvd[0] + blvd[2]) / 2, blvd[3] + 0.6]], labels,
   };
+}
+// v0.47: no road just stops in the middle of town (Mason #28: "roads not tidied up… no dead ends"). Each end of a
+// road that meets nothing (not at the town's edge, where roads lead out of town; the frontage roads end in their ramps):
+// a stub past the last crossing road (up to TIDY.stub) is cut back to it; a gap of up to TIDY.gap to the next road is
+// closed; if it can carry straight on to the next road (or out of town) without going through anything, it does; if a
+// short lane round one corner reaches a road, that lane is built (a 'lane': a little road); otherwise its end becomes a
+// turning circle (a cul-de-sac). `occ`: what's built (homes and their gardens, buildings, car parks, parks, fields…).
+const TIDY = { stub: 4.5, gap: 3.5, straight: 40, turnMax: 12, laneMax: 30, lane: 2 };
+// v0.47: busy times: more cars on the roads (and queues at the lights) in the morning and evening rush
+const RUSH = { hours: [[7.5, 9.5], [16.5, 19]], cars: 16, calm: 8, every: [700, 1300], everyCalm: [1800, 2600] };
+function tidyRoads(roads, world, occ, lakeAt) {
+  const isH = r => r[2] - r[0] >= r[3] - r[1], culs = [];
+  let nLane = 0;
+  const clearOf = (x0, y0, x1, y1, skip) => !occ.some(q => x0 < q[2] - 0.05 && q[0] < x1 - 0.05 && y0 < q[3] - 0.05 && q[1] < y1 - 0.05)
+    && ![0, 0.25, 0.5, 0.75, 1].some(k => lakeAt(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k));
+  const touching = (i, px, py) => roads.some((q, j) => j !== i && px >= q[0] - 0.6 && px <= q[2] + 0.6 && py >= q[1] - 0.6 && py <= q[3] + 0.6);
+  // the first road you'd hit going from (px, py) along (dx, dy), within band ±hw: how far to its near side
+  const hit = (i, px, py, dx, dy, hw) => {
+    let best = null;
+    roads.forEach((q, j) => {
+      if (j === i) return;
+      const lo = dx ? q[1] : q[0], hi = dx ? q[3] : q[2], cc = dx ? py : px;
+      if (hi < cc - hw - 0.05 || lo > cc + hw + 0.05) return;   // (a road just touching the side counts: a T-junction)
+      const near = dx ? (dx > 0 ? q[0] - px : px - q[2]) : (dy > 0 ? q[1] - py : py - q[3]);
+      if (near < -0.05) return;
+      if (!best || near < best.d) best = { d: Math.max(0, near), far: Math.max(0, near) + (dx ? q[2] - q[0] : q[3] - q[1]), j };
+    });
+    return best;
+  };
+  roads.slice().forEach((r, i) => {
+    if (r[4] === 'frontage') return;
+    const h = isH(r), c = h ? (r[1] + r[3]) / 2 : (r[0] + r[2]) / 2, hw = h ? (r[3] - r[1]) / 2 : (r[2] - r[0]) / 2;
+    [-1, 1].forEach(sg => {
+      const e = h ? (sg < 0 ? r[0] : r[2]) : (sg < 0 ? r[1] : r[3]), px = h ? e : c, py = h ? c : e;
+      if (px < world.x0 + 3 || px > world.x1 - 3 || py < world.y0 + 3 || py > world.y1 - 3 || touching(i, px, py)) return;
+      const set = v => { if (h) { if (sg < 0) r[0] = v; else r[2] = v; } else if (sg < 0) r[1] = v; else r[3] = v; };
+      // 1. a stub just past the last road it crosses: cut back to that road's far side
+      const cross = roads.filter((q, j) => j !== i && isH(q) !== h && (h ? c >= q[1] - 0.6 && c <= q[3] + 0.6 && q[2] > r[0] - 0.6 && q[0] < r[2] + 0.6 : c >= q[0] - 0.6 && c <= q[2] + 0.6 && q[3] > r[1] - 0.6 && q[1] < r[3] + 0.6));
+      const backs = cross.map(q => ({ q, b: sg > 0 ? e - (h ? q[2] : q[3]) : (h ? q[0] : q[1]) - e })).filter(o => o.b > -0.1).sort((a2, b2) => a2.b - b2.b);
+      if (backs.length && backs[0].b <= TIDY.stub) { set(sg > 0 ? (h ? backs[0].q[2] : backs[0].q[3]) : (h ? backs[0].q[0] : backs[0].q[1])); return; }
+      const [dx, dy] = h ? [sg, 0] : [0, sg], A = hit(i, px, py, dx, dy, hw);
+      const strip = (from, to) => (h ? [Math.min(from, to), c - hw, Math.max(from, to), c + hw] : [c - hw, Math.min(from, to), c + hw, Math.max(from, to)]);
+      // 2. a small gap to the next road: close it
+      if (A && A.d <= TIDY.gap) { set(e + sg * A.far); return; }   // right across it, so they meet properly
+      // 3. straight on to the next road, or out of town
+      const edgeD = sg > 0 ? (h ? world.x1 : world.y1) + 2 - e : e - (h ? world.x0 : world.y0) + 2, L = A ? A.d : edgeD;
+      if (L <= TIDY.straight && clearOf(...strip(e, e + sg * L), i)) { set(e + sg * (A ? A.far : L)); return; }
+      // 4. a little lane round one corner
+      let best = null;
+      for (let k = hw + TIDY.lane / 2 + 0.5; k <= TIDY.turnMax; k += 0.5) {
+        if (!clearOf(...strip(e, e + sg * (k + TIDY.lane / 2)), i)) break;
+        const tx = h ? e + sg * k : c, ty = h ? c : e + sg * k;
+        [-1, 1].forEach(t => {
+          const [ex, ey] = h ? [0, t] : [t, 0], B = hit(-1, tx, ty, ex, ey, TIDY.lane / 2);
+          if (!B || B.d > TIDY.laneMax) return;
+          const lane = h ? [tx - TIDY.lane / 2, Math.min(ty, ty + t * (B.d)), tx + TIDY.lane / 2, Math.max(ty, ty + t * (B.d))] : [Math.min(tx, tx + t * B.d), ty - TIDY.lane / 2, Math.max(tx, tx + t * B.d), ty + TIDY.lane / 2];
+          const laneIn = h ? [lane[0], t > 0 ? ty + hw : lane[1], lane[2], t > 0 ? lane[3] : ty - hw] : [t > 0 ? tx + hw : lane[0], lane[1], t > 0 ? lane[2] : tx - hw, lane[3]];
+          if (!clearOf(...laneIn, i)) return;
+          const tot = k + B.d;
+          if (!best || tot < best.tot) best = { tot, k, lane };
+        });
+      }
+      if (best && r[4] !== 'boulevard') { set(e + sg * (best.k + TIDY.lane / 2)); roads.push([...best.lane, 'lane', ++nLane % 2 ? 1 : -1]); return; }   // a one-way lane (they take turns which way)
+      // 5. a turning circle at its end
+      culs.push({ x: px, y: py, h, sg, r: hw + 1.3, kind: r[4] });
+    });
+  });
+  return culs;
 }
 // ---------- public places in town (v0.12) ----------
 // Tap one in town, go there (walk / drive / straight there), then use it. Nothing here makes coins from nothing:

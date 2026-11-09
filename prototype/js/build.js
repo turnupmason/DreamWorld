@@ -255,6 +255,19 @@ function drawCarDir(c, px, py, dir, ts) {
   CAR_REAR = dir === '-x' || dir === '-y';
   try { drawCar(c, px - 0.5, py - len / 2, ts); if (!two) carExtras(c, px, py, len, s, ts, dir === '+x' || dir === '-x'); } finally { CAR_REAR = false; ctx.restore(); }
 }
+// v0.47: a car pointing any way (ang: radians, 0 = +x, π/2 = +y), so it really turns through corners and round
+// ramps instead of sliding sideways. The picture is the one along +y, turned onto the heading; when its left side is
+// the one we see, mirrored across its length; going away from us, the car the other way round showing its back.
+// Bikes and scooters (drawn flat on screen) keep to the nearest of the four ways.
+function drawCarAng(c, px, py, ang, ts) {
+  let hx = Math.cos(ang), hy = Math.sin(ang);
+  if (CARS[c.k] && CARS[c.k].kind === 'two') return drawCarDir(c, px, py, Math.abs(hx) > Math.abs(hy) ? (hx > 0 ? '+x' : '-x') : (hy > 0 ? '+y' : '-y'), ts);
+  const s = CAR_SPEC[c.k] || CAR_SPEC.mini, len = s.len || 2.4, rear = hx + hy < 0;
+  if (rear) { hx = -hx; hy = -hy; }
+  const mirror = hx > hy, m = mirror ? [-hy, hx, hx, hy] : [hy, hx, -hx, hy];
+  CROT = { cx: px, cy: py, m }; CAR_REAR = rear;
+  try { drawCar(c, px - 0.5, py - len / 2, ts); carExtras(c, px, py, len, s, ts, mirror); } finally { CROT = null; CAR_REAR = false; }
+}
 // v0.40: a police car's paint (its county's: COUNTIES[].police) and the light bar; a number plate on every car (the
 // state's colours: STATES[].plate; c.plate for your own car, which keeps your home state's plate wherever you go)
 const lumOf = col => { const [r, g, b] = rgbOf(col); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; };

@@ -6,7 +6,7 @@ const D = vm.runInNewContext(src + `;({VERSION, CROPS, TREES, ANIMALS, GOODS, FI
   HOUSES, FURN, YARD, CARS, FOCUS_REWARD, ENERGY_LEVELS, STEP_REWARD, GOAL_REWARD, RINGS, RING_REWARD, SLEEP_REWARD, MINDFUL_REWARD,
   WORKOUTS, ACTION_CAP, STEAL_CAP, STEP_GOAL, LOT_W, LOT_D, AREA, MAILBOX, TOWN_LEVELS, FLOOR_BUILD, FLOOR_H, SOUVENIRS,
   STEP_BLOCKS_MAX, STEP_GOAL_RANGE, WORKOUT_PAY_MAX, WORKOUT_PAY, CENTRE_NEW, TOWER_STOREYS, BUILDING_FLOORS, ROOM_WALLS, FLOORS, STREETS, NEIGHBORHOODS, LAND, PARCEL, NPC_LOTS, START_LOTS,
-  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY, STATES, COUNTIES, TERRAINS, SPECIALTIES, FOLK_NAMES, TOWNSFOLK, SPECIAL, CONTEST_FISH, SONGS, ZOO_ANIMALS, ZOO_SHOP, STADIUM, TEAM_MASCOTS, WOOD_USD, FRESH, FEED, NEED_LOW, NEEDS, PERKS, MUSEUM_GIFT, FURN_FLOORS, SHOP_SUBS, PLOT, plotCost})`);
+  PET_BREEDS, PET_MAX, PET_NEEDS, PET_REMIND, PET_LOVE, PET_FOOD, PET_START_FOOD, TROPHY_TIERS, STREAK_TROPHIES, SPORT_TIERS, SPORT_GROUPS, SPORTS, EXCLUSIVES, COMMUNITIES, SHOW_LIMITS, ONLINE_SHARE, VISIT_SHARE, ASK_YES, LAYOUTS, COMMUNITY_LAYOUT, TRIP_SPEED, PLACE_INFO, HARVEST_GOAL, HELP_HARVEST, BREAD, LAKE_FISH, LIB_CARDS, AWARDS, AWARD_RULES, WALK_CARRY, MARKET, ANIMAL_SIZE, BABY_SIZE, WEATHER_FARM, JOBS, JOB_RANKS, JOB_REL, SICK, STORES, BODY_TYPES, CLOTHES, POLICE, MALL, GARAGE, HANDS_VOL, BIG_VOL, DELIVERY, SCHOOL, DRIVES, NEEDS, FOOD_FILL, NEED_GAIN, SNACK, BANK, STOCKS, STOCK, VENUE, VENUE_PLACES, REL_LEVELS, REL_START, TRAITS, INTERESTS, SOCIAL_CATS, SOCIALS, SOCIAL, PARK, BALL_GAMES, BALL, VENUE_GAMES, MUSEUM_FACTS, WORLD, DISTRICT, buildLayout, ROAD_KINDS, FREEWAY, STATES, COUNTIES, TERRAINS, SPECIALTIES, FOLK_NAMES, TOWNSFOLK, SPECIAL, CONTEST_FISH, SONGS, ZOO_ANIMALS, ZOO_SHOP, STADIUM, TEAM_MASCOTS, WOOD_USD, FRESH, FEED, NEED_LOW, NEEDS, PERKS, MUSEUM_GIFT, FURN_FLOORS, SHOP_SUBS, PLOT, plotCost, CAR_PACE, SIG, RUSH, TIDY, CARS})`);
 const out = [];
 const P = s => out.push(s);
 const cost = c => [c.coins ? `🪙${c.coins}` : '', c.wood ? `🪵${c.wood}` : ''].filter(Boolean).join(' ') || '免费';
@@ -258,6 +258,20 @@ P('');
   P(`卡拉OK的歌（古老的儿歌，谁都可以唱）：${D.SONGS.map(g => `${g.e} ${g.zh} (${g.en})`).join('、')}。`);
   P(''); }
 
+// v0.47: traffic
+P('### v0.47 交通：车速、红绿灯、高峰、断头路');
+P('');
+table(['车', '速度（和同一条路上的车流比）'], Object.entries(D.CAR_PACE).map(([k, v]) => [D.CARS[k] ? `${D.CARS[k].zh} (${D.CARS[k].en})` : k, '×' + v]));
+P('你自己的车也一样：开跑车比开普通轿车早到。');
+P('');
+{ const S = D.SIG, half = S.go + S.amber + S.arrow + S.arrowAmber;
+  table(['红绿灯', '秒'], [
+    ['一条路直行和右转绿灯', `${S.go}（右转晚 ${S.rightWait} 秒起步，先让直行）`], ['黄灯', S.amber], ['左转绿箭头', `${S.arrow}（掉头再晚 ${S.uWait} 秒）`], ['左转黄箭头', S.arrowAmber],
+    ['一条路一轮', half], ['两条路一整轮', half * 2],
+    ['停车场出口：路上的车走', S.lotRoad], ['停车场出口：黄灯', S.lotAmber], ['停车场出口：车出来', S.lotOut]]); }
+table(['高峰', '数值'], [['时间（镇上的钟）', D.RUSH.hours.map(([a, b]) => `${Math.floor(a)}:${String(Math.round(a % 1 * 60)).padStart(2, '0')}–${Math.floor(b)}:${String(Math.round(b % 1 * 60)).padStart(2, '0')}`).join('、')], ['镇上最多几辆车', `高峰 ${D.RUSH.cars}，平时 ${D.RUSH.calm}`]]);
+table(['断头路整理', '数值'], [['多伸出去的一小截（剪掉）', `≤ ${D.TIDY.stub} 格`], ['差一点没接上（接上）', `≤ ${D.TIDY.gap} 格`], ['一直往前接到别的路或镇外', `≤ ${D.TIDY.straight} 格，路上没有东西`], ['拐一个弯接上的小路（单行）', `往前 ≤ ${D.TIDY.turnMax} 格再拐，小路 ≤ ${D.TIDY.laneMax} 格，宽 ${D.TIDY.lane} 格`], ['都不行', '路尽头修成回车场（能掉头的圆形）']]);
+P('');
 // v0.46: farmland one plot at a time
 P('### v0.46 菜地一块一块买');
 P('');

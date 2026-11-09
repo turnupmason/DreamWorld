@@ -13,13 +13,16 @@ const CUTE_FONT = '"MT Nunito","MT Cute","MT Round",ui-rounded,"SF Pro Rounded",
 if (typeof document !== 'undefined' && document.fonts && document.fonts.load) document.fonts.load('800 20px "MT Cute"', '镜像小镇体育场动物园').catch(() => {});   // the canvas can only use it once it's loaded
 
 // ---------- math ----------
-const iso = (x, y) => { if (TURN && !TURN.in) { x = TURN.sx - x; y = TURN.sy - y; TURN.pt(x, y); } return { x: (x - y) * TW / 2 * cam.z + cam.x, y: (x + y) * TH / 2 * cam.z + cam.y }; };
+const iso = (x, y) => { if (TURN && !TURN.in) { x = TURN.sx - x; y = TURN.sy - y; TURN.pt(x, y); } if (CROT) { const dx = x - CROT.cx, dy = y - CROT.cy, m = CROT.m; x = CROT.cx + m[0] * dx + m[1] * dy; y = CROT.cy + m[2] * dx + m[3] * dy; } return { x: (x - y) * TW / 2 * cam.z + cam.x, y: (x + y) * TH / 2 * cam.z + cam.y }; };
 // v0.46: drawing a thing turned half way round (rot 2 / 3, its front away from you). It's drawn the way it faces at
 // rot 0 / 1, but every point (iso) and every solid (box, soft, flatRect) is mirrored through the middle of its
 // footprint; the faces that now look away (what box() returns as left / right, frontFace) are hidden off screen; and
 // since the pieces were drawn far-to-near for the other way round, the drawing is recorded (ctx is swapped for a
 // recorder) and played back sorted far-to-near again: a solid behind another, or under it, goes first.
 let TURN = null;
+// v0.47: a car pointing any way at all (drawCarAng): every point of it is turned round its middle by the matrix m
+// (with a mirror when its other side is the one we see); its wheels' ellipses turn with it (wheelOn)
+let CROT = null;
 const HIDDEN_FACE = [{ x: -1e5, y: -1e5 }, { x: -1e5, y: -1e5 }];
 function turnCall(fn, x, y, w, d, z0, z1, rest) {
   const T = TURN, nx = T.sx - x - w, ny = T.sy - y - d;
@@ -368,6 +371,7 @@ function soft(x, y, w, d, h, col, base = 0, o = {}) {
 // on that side really looks in this view, so it leans with the car body instead of a tilted oval.
 const AXIS_X = { x: 2, y: 1 }, AXIS_Y = { x: -2, y: 1 };
 function wheelOn(cx, cy, dir, r, fill, stroke, lw) {
+  if (CROT && (dir === AXIS_X || dir === AXIS_Y)) { const m = CROT.m, u = dir === AXIS_X ? m[0] : m[1], v = dir === AXIS_X ? m[2] : m[3]; dir = { x: 2 * (u - v), y: u + v }; }   // v0.47
   const L = Math.hypot(dir.x, dir.y), k = r * 0.9;
   ctx.save(); ctx.transform(dir.x / L * k, dir.y / L * k, 0, -r, cx, cy);
   ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.restore();

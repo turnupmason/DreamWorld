@@ -1284,9 +1284,11 @@ Object.assign(STR.zh, {
   snack_face: '正面对着墙或被挡住了，小人用不了',
   expand_plot: '多一块地 🪙{n}', plot_count: '{n} 块', land_plot_sub: '一块一块买，放在菜地旁边，「设计」里每块都能单独拖。{n} / {max} 块', land_plot_max: '{n} 块，已经最多了', plot_noroom: '院子里没有能放菜地的空地了，先挪一挪别的东西', area_plot: '一块菜地',
   garage_door: '车库门前要空出来，不能对着墙、围栏、房子或别的东西',
+  fwy_onramp: '上高速',
 });
 Object.assign(STR.en, {
   snack_face: 'Its front would face the wall or be blocked: your townie couldn’t use it',
   expand_plot: 'One more plot 🪙{n}', plot_count: '{n} plots', land_plot_sub: 'One plot at a time, next to your others; drag each anywhere in Design. {n} of {max}', land_plot_max: '{n} plots: the most you can have', plot_noroom: 'There’s no free ground in your yard for a plot: move something first', area_plot: 'A plot',
   garage_door: 'Keep the space in front of the garage doors clear: not a wall, the fence, the house or anything else',
+  fwy_onramp: 'ON-RAMP',
 });
