@@ -1007,3 +1007,21 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 .city-team { display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,.05); border-radius: 999px; padding: 2px 8px 2px 2px; }
 .city-team small { font-weight: 700; }
 .town-move .row { margin-top: 4px; align-items: center; gap: 6px; }
+
+/* v0.60: the drive */
+.rt { position: absolute; inset: 0; z-index: 40; background: #8fc469; overflow: hidden; user-select: none; -webkit-user-select: none; }
+.rt[hidden] { display: none; }
+.rt-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.rt-top { position: absolute; left: 0; right: 0; top: 0; padding: max(14px, env(safe-area-inset-top)) 12px 18px; display: flex; gap: 10px; align-items: flex-start; background: linear-gradient(rgba(25,25,35,.6), rgba(25,25,35,0)); color: #fff; pointer-events: none; }
+.rt-hud { flex: 1; min-width: 0; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.rt-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; } .rt-row b { font-size: 16px; } .rt-row.small { font-size: 12.5px; margin-top: 3px; opacity: .95; }
+.rt-mini { width: 120px; height: 80px; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.35); border: 2px solid rgba(255,255,255,.85); }
+.rt-bar { position: absolute; left: 0; right: 0; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; justify-content: space-between; align-items: center; padding: 0 16px; }
+.rt-btn { width: 58px; height: 58px; border-radius: 50%; border: 0; background: rgba(255,255,255,.88); font-size: 22px; font-weight: 900; color: #3b3125; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
+.rt-speed { display: flex; gap: 6px; background: rgba(30,30,40,.45); padding: 5px; border-radius: 999px; }
+.rt-chip { border: 0; border-radius: 999px; padding: 8px 13px; font-weight: 900; background: transparent; color: #fff; }
+.rt-chip.on { background: #fff; color: #3b3125; }
+.rt-card { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(20,20,30,.35); }
+.rt-card[hidden] { display: none; }
+.rt-card-in { background: var(--card, #fffdf8); border-radius: 22px; padding: 22px; width: min(320px, 86%); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+.rt-card-in .big-emoji { font-size: 40px; }

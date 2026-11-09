@@ -504,6 +504,11 @@ Object.assign(STR.en, {
 Object.assign(STR.zh, {
   fab_world: '世界', world_title: '世界', world_sub: '全世界的玩家住在不同的社区。去别的社区逛逛，喜欢的话可以把家搬过去。',
   dmr_na: '北美风', dmr_eu: '欧洲风', dmr_asia: '东亚风', dmr_sa: '南美风', dmr_af: '非洲风', dmr_oc: '大洋洲风',
+  dr_title: '开车去{c}', dr_home_title: '开车回家', dr_info: '{km} km · {via} · 约 {m} 分钟 · 油费过桥费 🪙{n}', dr_go: '开车去', dr_go_home: '开车回家', dr_go_game: '去看比赛（{h}）',
+  dr_no_car: '要先有一辆车（车行买）', dr_two: '自行车、电动车不能上州际公路', dr_later: '坐火车、飞机在后面两版做', dr_busy: '在上班或在警察局，走不开',
+  dr_paid: '加油、过路费 🪙{n}', dr_you_here: '你现在在这里', dr_away: '你现在在{c}，先开车回去（世界页）', dr_drive_first: '要去别的地方，在世界页开车过去',
+  dr_leave: '再见 {c}', dr_welcome: '欢迎来到 {c}', dr_exit: '出口 · {c}', dr_left: '还有 {n} km', dr_tunnel: '隧道', dr_bridge: '跨海大桥', dr_done: '开了 {km} km。车停在这里。',
+  dr_in: '进城', dr_in_home: '回家', dr_in_place: '进{p}',
   dm_title: '梦想大陆 DreamWorld', dm_sub: '一整张我们自己的地图：10 座有球队的城市和 6 个小镇，州际公路把每个地方都连起来（海上有跨海大桥），还有铁路、机场和港口。',
   dm_city: '球队城市', dm_town: '小镇', dm_road: '州际公路', dm_rail: '铁路', dm_airport: '机场', dm_port: '港口', dm_sea: '梦想海', dm_cities: '10 座球队城市', dm_towns: '小镇',
   dm_note: '开车、坐火车飞机去别的城市在后面几版做（v0.60–v0.62）。原型里别的地方的居民是模拟的。',
@@ -527,6 +532,11 @@ Object.assign(STR.zh, {
 Object.assign(STR.en, {
   fab_world: 'World', world_title: 'World', world_sub: 'Players all over the world live in different communities. Look around, and move your home if you like one.',
   dmr_na: 'American style', dmr_eu: 'European style', dmr_asia: 'East Asian style', dmr_sa: 'South American style', dmr_af: 'African style', dmr_oc: 'Oceanian style',
+  dr_title: 'Drive to {c}', dr_home_title: 'Drive home', dr_info: '{km} km · {via} · about {m} min · gas and tolls 🪙{n}', dr_go: 'Drive there', dr_go_home: 'Drive home', dr_go_game: 'See the game ({h})',
+  dr_no_car: 'You need a car first (the car dealer)', dr_two: 'Bikes and e-bikes can’t go on the interstate', dr_later: 'Trains and planes come in the next two versions', dr_busy: 'You can’t get away right now (work or the police)',
+  dr_paid: 'Gas and tolls 🪙{n}', dr_you_here: 'You’re here now', dr_away: 'You’re in {c} now: drive back first (World tab)', dr_drive_first: 'To go somewhere else, drive there from the World tab',
+  dr_leave: 'Goodbye {c}', dr_welcome: 'Welcome to {c}', dr_exit: 'Exit · {c}', dr_left: '{n} km to go', dr_tunnel: 'Tunnel', dr_bridge: 'Sea bridge', dr_done: '{km} km driven. Your car is parked here.',
+  dr_in: 'Into town', dr_in_home: 'Home', dr_in_place: 'Into the {p}',
   dm_title: 'DreamWorld', dm_sub: 'One big map of our own: 10 team cities and 6 small towns, every place joined by interstates (with bridges over the sea), plus railways, airports and ports.',
   dm_city: 'Team city', dm_town: 'Town', dm_road: 'Interstate', dm_rail: 'Railway', dm_airport: 'Airport', dm_port: 'Port', dm_sea: 'Dream Sea', dm_cities: 'The 10 team cities', dm_towns: 'Towns',
   dm_note: 'Driving, trains and flights to other cities come in the next versions (v0.60–v0.62). In the prototype the people elsewhere are made up.',

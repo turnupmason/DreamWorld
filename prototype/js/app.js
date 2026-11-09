@@ -160,11 +160,11 @@ const sceneTab = () => UI.tab === 'home' || UI.tab === 'town' || (UI.tab === 'wo
 function syncView() {
   setViewTown(UI.tab === 'world' && UI.wtown ? UI.wtown : myTown());
   if (UI.tab === 'home') Scene.setView(UI.inside ? 'interior' : 'home', 'me');
-  else if (sceneTab()) { if (UI.tab === 'town' && UI.inVenue) Scene.setView('shop', UI.inVenue); else if (UI.tab === 'town' && UI.inStore) Scene.setView('shop', UI.inStore === 'mall' ? UI.mallFloor || 'mall' : UI.inStore === 'furniture' ? UI.furnFloor || 'furniture' : UI.inStore); else Scene.setView(UI.visit ? (UI.visitInside ? 'interior' : 'home') : 'town', UI.visit || 'me'); }
+  else if (sceneTab()) { if ((UI.tab === 'town' || (UI.tab === 'world' && UI.wtown)) && UI.inVenue) Scene.setView('shop', UI.inVenue); else if (UI.tab === 'town' && UI.inStore) Scene.setView('shop', UI.inStore === 'mall' ? UI.mallFloor || 'mall' : UI.inStore === 'furniture' ? UI.furnFloor || 'furniture' : UI.inStore); else Scene.setView(UI.visit ? (UI.visitInside ? 'interior' : 'home') : 'town', UI.visit || 'me'); }
   Scene.setVisible(sceneTab() && !Games.isOpen());   // v0.33: not under a ball game
   // each place has its own tune
   const inside = (UI.tab === 'home' && UI.inside) || (UI.visit && UI.visitInside);
-  const pk = UI.tab === 'town' ? UI.inVenue || UI.inStore || null : null;   // v0.56: each building has its own tune and sounds
+  const pk = UI.tab === 'town' || UI.tab === 'world' ? UI.inVenue || UI.inStore || null : null;   // v0.56: each building has its own tune and sounds
   Sound.setScene(UI.tab === 'shop' || UI.inStore || UI.inVenue ? 'shop' : inside ? 'inside' : UI.tab === 'world' && !UI.wtown ? 'world' : (UI.tab === 'town' || UI.tab === 'world') ? (UI.visit ? 'home' : 'town') : 'home', pk && (SOUND_PLACE[pk] ? pk : VENUE_HOME[pk] || pk));
   try { const c = countyOf(VIEW_TOWN); Sound.setFolk(c && c.folk); } catch (e) { /* no county */ }
 }
@@ -1776,6 +1776,8 @@ const ACT = {
   travel(how) {
     const arg = UI.sheet && UI.sheet.arg, a = typeof arg === 'string' ? { place: arg } : arg;
     if (!a) return;
+    if (S.trav && VIEW_TOWN !== S.trav.town) { closeSheet(); return snack(t('dr_away', { c: nm(COMMUNITIES[S.trav.town]) })); }   // v0.60: you're in another city: drive back first
+    if (!S.trav && VIEW_TOWN !== myTown() && !awayIn(VIEW_TOWN)) { closeSheet(); return snack(t('dr_drive_first')); }
     if (S.work) {   // v0.14: you're at work; leaving means leaving early
       if (!confirm(t('job_leave_q', { n: Math.round(hoursWorked(S.work) * S.work.wage) }))) return;
       const r = quitShift(); snack(`💼 ${t('job_quit_done', { n: r.pay })}`);
@@ -1792,7 +1794,7 @@ const ACT = {
       refresh();
     };
     if (UI.visit) { leaveHost(UI.visit); UI.visit = null; UI.visitInside = false; setLevel(0); }
-    if (UI.tab !== 'town') UI.tab = 'town';
+    if (UI.tab !== 'town' && !(UI.tab === 'world' && UI.wtown && S.trav && S.trav.town === UI.wtown)) UI.tab = 'town';   // (v0.60: in the city you drove to, stay there)
     syncView();
     // v0.19: "straight there" goes the same way (by car if you have one), it just skips the time on the road
     const pick = UI.tripCar != null && !S.carAt && S.me.cars[UI.tripCar] ? UI.tripCar : null; UI.tripCar = null;
@@ -1846,9 +1848,9 @@ const ACT = {
   },
   // v0.30: walk into a building (you must be there), walk out again
   enterVenue(k) {
-    if (!VENUE_PLACES.includes(k) || VIEW_TOWN !== myTown()) return;
+    if (!VENUE_PLACES.includes(k) || (VIEW_TOWN !== myTown() && !(S.trav && S.trav.town === VIEW_TOWN))) return;   // v0.60: or the city you drove to
     if (Scene.here() !== k) return openSheet('place', k);
-    closeSheet(); UI.inVenue = BUILDING_FLOORS[k] ? BUILDING_FLOORS[k][0] : k; UI.visit = null; UI.tab = 'town'; syncView(); Sound.play('doorbell');   // v0.37: a tower: its ground floor
+    closeSheet(); UI.inVenue = BUILDING_FLOORS[k] ? BUILDING_FLOORS[k][0] : k; UI.visit = null; UI.tab = S.trav && S.trav.town === VIEW_TOWN && VIEW_TOWN !== myTown() ? 'world' : 'town'; syncView(); Sound.play('doorbell');   // (v0.60: in another city you stay there)   // v0.37: a tower: its ground floor
     if (!S.venueTip) { S.venueTip = 1; setTimeout(() => snack(`👀 ${t('venue_tip')}`), 400); }
     if (k === 'school' && S.study) setTimeout(() => Scene.venueUse('desk', Math.max(5, Math.round((S.study.end - now()) / 1000)), null), 300);   // in class: at your desk
     refresh();
@@ -2897,7 +2899,7 @@ function drawDreamMap(cv) {
     g.save(); g.translate(x, y); g.scale(1, ry / rx); const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx);
     gr.addColorStop(0, Rg.c + (dark ? '40' : '38')); gr.addColorStop(1, Rg.c + '00'); g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx, 0, Math.PI * 2); g.fill(); g.restore();
   });
-  const peaks = [[215, 120], [250, 140], [180, 130], [300, 600], [330, 660], [640, 60], [690, 75], [960, 240], [1080, 230]], deserts = [[262, 440, 60, 28], [680, 560, 50, 40], [1030, 690, 60, 34]], woods = [[400, 260, 50, 30], [560, 240, 50, 30], [900, 300, 60, 40], [420, 620, 60, 40]];
+  const peaks = DREAM_PEAKS, deserts = [[262, 440, 60, 28], [680, 560, 50, 40], [1030, 690, 60, 34]], woods = [[400, 260, 50, 30], [560, 240, 50, 30], [900, 300, 60, 40], [420, 620, 60, 40]];
   deserts.forEach(([x, y, rx, ry]) => { g.save(); g.translate(x * S0, y * S0); g.scale(1, ry / rx); const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx * S0); gr.addColorStop(0, dark ? 'rgba(170,140,80,.8)' : 'rgba(240,214,150,.95)'); gr.addColorStop(1, 'rgba(240,214,150,0)'); g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rx * S0, 0, Math.PI * 2); g.fill(); g.restore(); });
   woods.forEach(([x, y, rx, ry], fi) => { for (let k = 0; k < 26; k++) { const a = hash(k, fi * 5) * Math.PI * 2, r = Math.sqrt(hash(k, fi * 5 + 1)), tx = (x + Math.cos(a) * r * rx) * S0, ty = (y + Math.sin(a) * r * ry) * S0; g.fillStyle = k % 3 ? (dark ? '#2d5a33' : '#5fa356') : (dark ? '#25502b' : '#4f9448'); g.beginPath(); g.arc(tx, ty, 2.8, 0, Math.PI * 2); g.fill(); } });
   peaks.forEach(([x, y]) => { const px = x * S0, py = y * S0; g.fillStyle = dark ? '#6a6f68' : '#9a9f8e'; g.beginPath(); g.moveTo(px - 8, py + 4); g.lineTo(px, py - 9); g.lineTo(px + 8, py + 4); g.closePath(); g.fill(); g.fillStyle = '#f7fafb'; g.beginPath(); g.moveTo(px - 3, py - 4); g.lineTo(px, py - 9); g.lineTo(px + 3, py - 4); g.closePath(); g.fill(); });
@@ -2959,6 +2961,7 @@ function panelWorld() {
         <div class="muted">${t('dmr_' + cm.region)} · ${THEME_E[cm.theme]} ${t('theme_' + cm.theme)} · ${isNightIn(sel) ? '🌙' : '☀️'} ${t('local_time', { t: localClock(sel) })}</div>
         <div class="world-stats">${DREAM_AIR.includes(sel) ? `<span>✈️ ${t('dm_airport')}</span>` : ''}${DREAM_PORT.includes(sel) ? `<span>⚓ ${t('dm_port')}</span>` : ''}${DREAM_RAIL.some(r => r.includes(sel)) ? `<span>🚆 ${t('dm_rail')}</span>` : ''}<span>🛣️ ${DREAM_ROADS.filter(r => r[0] === sel || r[1] === sel).map(r => (r[4] === 'bridge' ? '🌉' : 'I-') + r[2]).join(' ')}</span></div></div></div>
     ${cityTeamsHtml(sel)}
+    ${driveRow(sel)}
     <div class="row gap-top">${here ? `<button class="btn primary grow" data-act="worldVisit" data-arg="${sel}">🏘️ ${t('world_my_town')}</button>`
       : `<button class="btn grow" data-act="worldVisit" data-arg="${sel}">👀 ${t('world_visit')}</button><button class="btn primary grow" data-act="townMoveAsk" data-arg="${sel}" ${M && !M.done ? 'disabled' : ''}>🚚 ${t('tm_btn')}</button>`}</div>
     ${here ? '' : `<p class="muted small">${t('tm_note', { n: townMembers().length })}</p>`}</div>`;
@@ -2971,6 +2974,33 @@ function panelWorld() {
     ${townMoveHtml()}${card}${countyCard(sel)}
     ${list(TEAM_CITIES.filter(id => COMMUNITIES[id]), '🏟️ ' + t('dm_cities'))}${list(Object.keys(COMMUNITIES).filter(id => !isTeamCity(id)), '🏘️ ' + t('dm_towns'))}
     <p class="muted center">${t('dm_note')}</p>`;
+}
+// v0.60 (Mason #30): driving to another place: where you are now (another city, or home), the way there, gas and tolls
+const whereNow = () => (S.trav && COMMUNITIES[S.trav.town] ? S.trav.town : myTown());
+function driveRow(id) {
+  const from = whereNow();
+  if (id === from) return S.trav ? `<p class="muted small gap-top">📍 ${t('dr_you_here')}</p>` : '';
+  const P = Drive.plan(from, id), car = S.me.cars[S.me.car], two = car && CARS[car.k].kind === 'two';
+  if (!P) return '';
+  const can = car && !two && S.me.coins >= P.cost, why = !car ? t('dr_no_car') : two ? t('dr_two') : S.me.coins < P.cost ? t('snack_poor') : '';
+  const btn = (place, label) => `<button class="btn ${place ? '' : 'primary'} grow" data-act="driveTo" data-arg="${id}|${place || ''}" ${can ? '' : 'disabled'}>${label}</button>`;
+  const games = isTeamCity(id) && id !== myTown() ? SPORT_KEYS.flatMap(sp => todayGames(sp).filter(G => G.h === arTeamIn(sp, id) && G.state !== 'done')) : [];
+  return `<div class="card drive-card"><b>🚗 ${id === myTown() ? t('dr_home_title') : t('dr_title', { c: nm(COMMUNITIES[id]) })}</b>
+    <div class="muted small">${t('dr_info', { km: P.km, via: P.legs.map(L => (L.e[4] === 'bridge' ? '🌉' : 'I-') + L.e[2]).join(' → '), m: Math.ceil(P.len * DRIVE.tilesPerUnit / DRIVE.speed / 60), n: P.cost })}</div>
+    <div class="row gap-top">${btn('', id === myTown() ? `🏡 ${t('dr_go_home')}` : `🚗 ${t('dr_go')}`)}${games.length ? btn(AR_INDOOR.includes(games[0].sp) ? 'arena' : 'stadium', `${LEAGUES[games[0].sp].e} ${t('dr_go_game', { h: fmtHM(games[0].start) })}`) : ''}</div>
+    ${why ? `<p class="muted small">${why}</p>` : ''}<p class="muted small">🚆 ✈️ ${t('dr_later')}</p></div>`;
+}
+// you've driven there: parked at the stadium / arena (or the main car park) and on foot; home: back in your own drive
+function driveArrived(o) {
+  const to = o.to;
+  if (to === myTown()) { S.trav = null; S.carAt = null; S.out = null; UI.wtown = null; UI.visit = null; save(); setTab('home'); Scene.recenter(); return; }
+  const L = layoutOf(to), st = o.place && (L.stores || []).find(x => x[0] === o.place), G = st ? storeGeo(st) : null;
+  const pk = (L.parks || [])[0], bay = G ? G.bay : pk ? [pk[1] + pk[3] / 2, pk[2] + pk[4] / 2] : L.places[0];
+  S.trav = { town: to, at: now() };
+  S.carAt = { town: to, pt: bay, dir: G ? G.dir : '+y', id: null, place: o.place || null };
+  UI.tab = 'world'; UI.wtown = to; UI.visit = null; UI.visitInside = false; setLevel(0); syncView();
+  Scene.arriveAt(bay, o.place || null); save(); refresh();
+  if (o.place) setTimeout(() => { ACT.enterVenue(o.place); refresh(); }, 300);
 }
 // v0.59: the whole town moves (you and every friend who lives here) once everyone has said yes
 function townMoveTick() {
@@ -3185,6 +3215,15 @@ Object.assign(ACT, {
     if (!ms.length) townMoveTick2(); save();
   },
   townMoveClear() { S.townMove = null; save(); },
+  driveTo(arg) {   // v0.60
+    const [id, place] = arg.split('|'), P = Drive.plan(whereNow(), id), car = S.me.cars[S.me.car];
+    if (!P || !car || CARS[car.k].kind === 'two') return;
+    if (S.work || jailed()) return snack(t('dr_busy'));
+    if (S.me.coins < P.cost) { Sound.play('oops'); return snack(t('snack_poor')); }
+    S.me.coins -= P.cost; save();
+    Sound.play('select'); snack(`⛽ ${t('dr_paid', { n: P.cost })}`);
+    Drive.open({ from: whereNow(), to: id, place: place || null }, o => driveArrived(o));
+  },
 });
 function townMoveTick2() { const M = S.townMove; if (M && !Object.keys(M.votes).length) { moveWholeTown(M.to); snack(`🚚 ${t('tm_moved', { c: nm(COMMUNITIES[M.to]) })}`); S.townMove = null; Scene.moveHome(); syncView(); Scene.recenter(); } }
 Object.assign(ACT, {
