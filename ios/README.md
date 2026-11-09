@@ -84,3 +84,9 @@ ios/
 - **Oura 准备度 / Whoop 恢复分**：它们写进 Apple 健康的是睡眠阶段和心率，不包括它们自己的评分。要直接拿评分得接它们的开放接口（需要用户登录授权和服务器），之后做。
 - **屏幕使用时间**（少刷短视频）：要用 Family Controls / DeviceActivity，需要向苹果申请权限，之后做。
 - 朋友、排行、写信目前是单机模拟，正式版需要服务器。
+
+## GitHub 自动编译（v0.57）
+
+每次推送改了 `ios/`，GitHub 会在它的 Mac 上为模拟器编译一遍 App（`.github/workflows/ios-build.yml`，不签名）。在 GitHub 仓库的 **Actions → Build iPhone app** 看结果：绿勾是编译通过，红叉点进去看 `error:` 那几行（完整日志在 `ios-build-log` 里）。也可以在那一页点 **Run workflow** 手动跑。
+
+它只检查 Swift 能不能编译，不能装到手机上：真机运行、健康权限、通知还是要在 Mac 的 Xcode 里试。

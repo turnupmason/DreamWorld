@@ -226,11 +226,27 @@ const REPLIES = {
   },
 };
 const GAME_NAMES = { tennis: { zh: '网球', en: 'tennis' }, basketball: { zh: '篮球', en: 'basketball' }, soccer: { zh: '足球', en: 'soccer' }, bowling: { zh: '保龄球', en: 'bowling' }, golf: { zh: '迷你高尔夫', en: 'mini golf' }, karaoke: { zh: '卡拉 OK', en: 'karaoke' }, fishing: { zh: '钓鱼', en: 'fishing' }, derby: { zh: '本垒打', en: 'home run derby' }, race: { zh: '游泳比赛', en: 'a swim race' }, claw: { zh: '抓娃娃', en: 'the claw machine' } };
+// v0.57 (Mason #30: no typing, just tap): what you can say in a text. Each line is one intent (talkReply answers it);
+// 'play' opens the games to pick from.
+const SAY = [
+  { k: 'greet', e: '👋', zh: '嗨！在吗？', en: 'Hey! You around?' },
+  { k: 'how', e: '😊', zh: '最近怎么样？', en: 'How are you doing?' },
+  { k: 'askLike', e: '🎨', zh: '你平时喜欢做什么？', en: 'What are you into?' },
+  { k: 'steps', e: '👟', zh: '今天走了好多步！', en: 'I walked loads today!' },
+  { k: 'compliment', e: '🌷', zh: '你家好漂亮', en: 'Your place looks lovely' },
+  { k: 'joke', e: '😂', zh: '讲个笑话？', en: 'Tell me a joke?' },
+  { k: 'sad', e: '😔', zh: '今天有点不开心', en: 'Having a bit of a bad day' },
+  { k: 'thanks', e: '🙏', zh: '谢谢你！', en: 'Thank you!' },
+  { k: 'meet', e: '🌳', zh: '出来公园走走？', en: 'Meet at the park?' },
+  { k: 'play', e: '🎮', zh: '一起玩{game}吗？', en: 'Want to play {game}?' },
+  { k: 'bye', e: '🌙', zh: '回头聊，晚安～', en: 'Talk later, night!' },
+];
+const SAY_GAMES = ['tennis', 'basketball', 'soccer', 'bowling', 'golf', 'karaoke', 'fishing', 'derby', 'race'];
 // Where each game is played (for "come to the …")
 const PLAY_PLACE = { tennis: 'park', basketball: 'park', soccer: 'park', bowling: 'bowling', golf: 'amuse', karaoke: 'amuse', fishing: 'lake', derby: 'stadium', race: 'aquatic' };
 // Their answer to what you texted, and what it did: { text, meet?, play? }
-function talkReply(id, text) {
-  const R = REPLIES[curLang() === 'en' ? 'en' : 'zh'], U = understand(text), w = whoIs(id), seed = hashStr(text + id + now());
+function talkReply(id, text, U0) {
+  const R = REPLIES[curLang() === 'en' ? 'en' : 'zh'], U = U0 || understand(text), w = whoIs(id), seed = hashStr(text + id + now());
   const ints = interestsOf(id), v = { me: S.me.name || '', l1: nm(INTERESTS[ints[0]]), l2: nm(INTERESTS[ints[1]]), hobby: U.hobby ? nm(INTERESTS[U.hobby]) : '', weather: t('w_' + weatherNow().kind) };
   v.doing = pickLine(R.doing, seed + 3);
   const say = (k, x) => fillLine(pickLine(R[k] || R.other, seed), { ...v, ...(x || {}) });

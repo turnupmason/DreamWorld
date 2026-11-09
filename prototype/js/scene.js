@@ -2869,6 +2869,8 @@ const Scene = (() => {
     return dir === '+x' || dir === '-x' ? N.H.find(r => Math.abs(r.y - y) < 0.05 && x >= r.a - 0.7 && x <= r.b + 0.7) : N.V.find(r => Math.abs(r.x - x) < 0.05 && y >= r.a - 0.7 && y <= r.b + 0.7);
   }
   const lanesOf = r => (!r ? [0.45] : r.kind === 'boulevard' ? [0.705, 1.635] : r.kind === 'frontage' ? (r.ow ? [-0.52, 0.52] : [0.52]) : [0.45]);
+  // v0.57: half a car's length (cars are 1.6–2.4 long; gaps are measured bumper to bumper, not middle to middle)
+  const halfLen = c => (c.car && CARS[c.car.k] && CARS[c.car.k].kind === 'two' ? 0.45 : ((CAR_SPEC[c.car && c.car.k] || CAR_SPEC.sedan).len || 2) / 2);
   // v0.29: a car waits behind the one in front of it in its lane (a queue at the lights doesn't pile into one car)
   function blocked(c, others, reach = 2.7) {
     const v = DIRV[c.dir];
@@ -2877,7 +2879,7 @@ const Scene = (() => {
     return others.find(o => {
       if (o === c || o.dir !== c.dir || Math.abs((o.h || 0) - (c.h || 0)) > 2) return false;
       const dx = o.x + (o.ox || 0) - mx, dy = o.y + (o.oy || 0) - my, ahead = dx * v[0] + dy * v[1], side = Math.abs(dx * v[1] - dy * v[0]);
-      return ahead > 0.05 && ahead < reach && side < 0.45;
+      return ahead > 0.05 && ahead - halfLen(c) - halfLen(o) < reach - 2 && side < 0.45;
     }) || null;
   }
   // v0.49: the nearest car ahead in the same lane, and how far (its back to our front)
@@ -2889,14 +2891,15 @@ const Scene = (() => {
     others.forEach(o => {
       if (o === c || o.dir !== c.dir || Math.abs((o.h || 0) - (c.h || 0)) > 2) return;
       const dx = o.x + (o.ox || 0) - mx, dy = o.y + (o.oy || 0) - my, ahead = dx * v[0] + dy * v[1], side = Math.abs(dx * v[1] - dy * v[0]);
-      if (ahead > 0.05 && ahead < reach && side < 0.45 && (!best || ahead < best.gap)) best = { o, gap: ahead };
+      const gap = ahead - halfLen(c) - halfLen(o);   // v0.57: bumper to bumper
+      if (ahead > 0.05 && gap < reach && side < 0.45 && (!best || gap < best.gap)) best = { o, gap };
     });
     return best;
   }
   // how fast to go behind it: stop at a car's length, ease up to its speed as the gap opens to a safe distance
-  const followSpeed = (vmax, L, v) => { if (!L) return vmax; const s0 = 1.05, safe = 1.9 + v * 0.12; return L.gap <= s0 ? 0 : Math.min(vmax, (L.o.v === undefined ? vmax : L.o.v) + (L.gap - safe) * 1.6, vmax * (L.gap - s0) / (safe - s0)); };
+  const followSpeed = (vmax, L, v) => { if (!L) return vmax; const s0 = 0.35, safe = 1.1 + v * 0.12; return L.gap <= s0 ? 0 : Math.min(vmax, (L.o.v === undefined ? vmax : L.o.v) + (L.gap - safe) * 1.6, vmax * (L.gap - s0) / (safe - s0)); };
   // nobody in that lane just ahead or just behind
-  function laneClear(c, others, off, fwd, back = 2) {
+  function laneClear(c, others, off, fwd, back = 2.8) {
     const v = DIRV[c.dir], Rv = RIGHT[c.dir];
     return !others.some(o => {
       if (o === c || o.dir !== c.dir || Math.abs((o.h || 0) - (c.h || 0)) > 2) return false;
@@ -2915,7 +2918,7 @@ const Scene = (() => {
       else if (!ahead && c.ln < L.length - 1 && c.cool <= 0 && laneClear(c, others, L[c.ln + 1], 4.5, 2.5)) { c.ln++; c.cool = 3; }
     }
     // v0.47: coming up to a crossing where it turns: left (or round) from the left-hand lane, right from the right-hand one
-    if (L.length > 1 && !hi && c.path && c.path.length > 1 && Math.hypot(c.path[0][0] - c.x, c.path[0][1] - c.y) < 9) { const tn = turnAt(c); if (tn === 'l' || tn === 'u') c.ln = 0; else if (tn === 'r') c.ln = L.length - 1; }
+    if (L.length > 1 && !hi && c.path && c.path.length > 1 && Math.hypot(c.path[0][0] - c.x, c.path[0][1] - c.y) < 9) { const tn = turnAt(c); const want = tn === 'l' || tn === 'u' ? 0 : tn === 'r' ? L.length - 1 : c.ln; if (want !== c.ln && (!others || laneClear(c, others, L[want], 3.2))) c.ln = want; }   // v0.57: only into a gap
     // v0.47: off the road (a car park, a drive): no lane, it drives straight in or out and swings into its lane
     const Rv = RIGHT[c.dir] || [0, 1], off = hi || !r ? 0 : L[c.ln], k = c.ox === undefined ? 1 : 1 - Math.exp(-dt * (r ? 5 : 4));
     c.ox = (c.ox || 0) + (Rv[0] * off - (c.ox || 0)) * k; c.oy = (c.oy || 0) + (Rv[1] * off - (c.oy || 0)) * k;
@@ -2937,11 +2940,11 @@ const Scene = (() => {
         let b = ends[Math.floor(Math.random() * ends.length)], fwy;
         if (TL.fwy && Math.random() < FREEWAY.leave) { const on = fwGeo().ramps.filter(Rp => !Rp.off), Rp = on[Math.floor(Math.random() * on.length)]; if (Rp) { b = [Rp.start[0], Rp.start[1]]; fwy = Rp.i; } }   // v0.39: out of town, up the ramp
         const k = kinds[Math.floor(Math.random() * kinds.length)];
-        if (a !== b) { const path = route(a, b, false); if (path.length > 2) CARS_OUT.list.push({ car: { k, color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)] }, x: path[0][0], y: path[0][1], path: path.slice(1), dir: '+x', h: 0, alpha: 0, fwy, spd: carPace(k) * (0.94 + Math.random() * 0.12) }); }   // v0.47: each kind its own speed
+        if (a !== b && !CARS_OUT.list.some(o => Math.hypot(o.x - a[0], o.y - a[1]) < 3.2)) { const path = route(a, b, false); if (path.length > 2) CARS_OUT.list.push({ car: { k, color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)] }, x: path[0][0], y: path[0][1], path: path.slice(1), dir: '+x', h: 0, alpha: 0, fwy, spd: carPace(k) * (0.94 + Math.random() * 0.12) }); }   // v0.47: each kind its own speed
       }
     }
     CARS_OUT.list = CARS_OUT.list.filter(c => {
-      const others = [...CARS_OUT.list.filter(o => o !== c && o.alpha > 0.3), ...(trip && trip.inCar && !trip.arrived && trip.town === VIEW_TOWN ? [trip] : [])];
+      const others = [...CARS_OUT.list.filter(o => o !== c && (o.alpha > 0.05 || o.path.length)), ...(trip && trip.inCar && !trip.arrived && trip.town === VIEW_TOWN ? [trip] : [])];
       const rd = laneStep(c, dt, others);   // v0.39: its lane, and how fast traffic goes on this road
       const vmax = 6 * (rd ? (ROAD_KINDS[rd.kind] || ROAD_KINDS.avenue).spd : 0.8) * (c.spd || 1);
       let vt = vmax;
@@ -3569,6 +3572,7 @@ const Scene = (() => {
       spot('board', 0.1, 0.1, 2.9, 2.9, { draw: 'scoreboard', stand: [4.4, 15.2] });
       spot('seats', 0.1, 3.1, 2.9, 11.4, { draw: 'stands', stand: [3.3, 15.0], use: { at: [3.3, 15.0], pose: 'sit', ride: 'seats' } });
       spot('hotdog', 9.4, 15.0, 1.8, 1.0, { draw: 'hotdogstand', stand: [10.3, 16.6] });
+      spot('bets', 0.9, 15.0, 2.4, 1.0, { draw: 'betbooth', stand: [2.1, 16.7] });   // v0.57: the betting window (the only place with odds)
       spot('cage', 17.8, 14.7, 5.4, 2.4, { draw: 'battingcage', stand: [20.5, 17.4] });
       guest(8.2, 16.0, { face: 1 }); guest(12.6, 15.4, { view: 'back', turn: [0.3, -1] }); who(13.2, 15.7, { view: 'back', turn: [0.2, -1], scale: 0.72, look: 4 });
       guest(16.4, 16.6, { view: 'front', turn: [-0.3, 1] }); guest(23.2, 15.6, { face: -1 });
@@ -4131,6 +4135,10 @@ const Scene = (() => {
       case 'ticketmachines': { [0, 1].forEach(k2 => { const b = box(x + k2 * d.w / 2 + 0.1, y, d.w / 2 - 0.2, d.d, 40, '#2f6fb2', 0, { top: '#24589a' }); const q = wallPt(b.left, 0, 0.5, 30); rrect(q.x - 5 * z, q.y - 4 * z, 10 * z, 8 * z, 1 * z, '#9fd3f2'); const s2 = wallPt(b.left, 0, 0.5, 16); rrect(s2.x - 3 * z, s2.y - 1 * z, 6 * z, 2 * z, 0.5 * z, '#1d1d22'); if (z > 0.35) emoji('🎫', q.x, q.y + 1 * z, 5 * z); }); return true; }
       case 'kiosk': { const b = box(x, y, d.w, d.d, 16, '#2f5d50', 0, { top: '#c99a6b' }); [0.05, 0.95].forEach(u => wallLine(b.left, 0, u, 16, u, 40, '#2f5d50', 1.2)); for (let k2 = 0; k2 < 8; k2++) wallRect(b.left, 0, k2 / 8, (k2 + 1) / 8, 40, 46, k2 % 2 ? '#fffaf0' : '#2f5d50');
         const q = up(c, 16 * z); emoji('☕', q.x - 6 * z, q.y, 9 * z); emoji('🥯', q.x + 6 * z, q.y + 1 * z, 9 * z); return true; }
+      case 'betbooth': { const b = box(x, y, d.w, d.d, 18, '#1f3b6e', 0, { top: '#e8ecf2' }); for (let k2 = 0; k2 < 6; k2++) wallRect(b.left, 0, k2 / 6, (k2 + 1) / 6, 40, 47, k2 % 2 ? '#fffaf0' : '#e5484d');   // v0.57: a booth with a striped awning
+        [0.05, 0.95].forEach(u => wallLine(b.left, 0, u, 18, u, 40, '#1f3b6e', 1.2)); wallRect(b.left, 0, 0.15, 0.85, 22, 36, '#0f1a2e');
+        const sg = up(c, 60 * z), lb = curLang() === 'zh' ? '竞猜' : 'BETS'; line(sg.x, sg.y + 6 * z, sg.x, sg.y + 14 * z, '#5b6470', 1.2 * z); rrect(sg.x - 17 * z, sg.y - 7 * z, 34 * z, 14 * z, 3 * z, '#e5484d');
+        ctx.font = `900 ${8.5 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText('🎟️ ' + lb, sg.x, sg.y + 0.5 * z); return true; }
       case 'bigclock': { const tp = up(c, 94 * z), m = up(c, 70 * z); line(tp.x, tp.y, m.x, m.y - 8 * z, '#5b6470', 1 * z); circle(m.x, m.y, 8 * z, '#fffaf0', '#2d2d34', 1.4 * z); const tm = new Date();
         line(m.x, m.y, m.x + Math.sin(tm.getHours() / 6 * Math.PI) * 4 * z, m.y - Math.cos(tm.getHours() / 6 * Math.PI) * 4 * z, '#2d2d34', 1.2 * z); line(m.x, m.y, m.x + Math.sin(tm.getMinutes() / 30 * Math.PI) * 6 * z, m.y - Math.cos(tm.getMinutes() / 30 * Math.PI) * 6 * z, '#2d2d34', 0.8 * z); return true; }
       // ----- the hotel room -----
@@ -6200,6 +6208,7 @@ const Scene = (() => {
     _trip() { return trip && { x: trip.x, y: trip.y, ox: trip.ox, oy: trip.oy, ang: trip.ang, dir: trip.dir, inCar: trip.inCar, li: trip.li, path: trip.path.slice(0, 4), cam: { ...cam } }; },
     _plan(k) { const P = shopPlan(k || owner); return P && { RW: P.RW, RD: P.RD, esc: P.wares.filter(w => w.kind === 'escalator').map(w => [w.k, w.x, w.y]), n: P.wares.length }; },   // (testing, v0.43)
     _shoppers() { const P = shopPlan(owner); return (P.npcs || []).map(n => ({ x: +n.x.toFixed(2), y: +n.y.toFixed(2), path: (n.path || []).map(q => q.map(v => +v.toFixed(2))) })); },   // (testing, v0.45)
+    _run(n, step = 33) { let ts = performance.now(); for (let i = 0; i < n; i++) { ts += step; render(ts); } },   // (testing, v0.57: steps frames by hand when the page is hidden)
     _traffic() { const N = roadNet(); return { walk: WALK.list.map(w => [w.id, Math.round(w.x), Math.round(w.y)]), fw: FW, town: CARS_OUT, stops: stops().list.length, signs: roadSigns().list.length, signals: signals().list.length, juncs: junctions().list.map(J => [J.x, J.y, J.h.kind, J.v.kind, J.k, signals().at.has(J.key) ? 'L' : stops().at.has(J.key) ? 'S' : '-']) }; },   // (testing, v0.39)
     trainBoard: () => trainBoard(),   // v0.38: the station's departures
     tripPlan(to, how, dest, place) { return planTrip(to, how, dest, place); },   // for testing

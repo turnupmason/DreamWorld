@@ -980,3 +980,16 @@ body.dark .pill.perk { background: #24412c; color: #a8e6b8; }
 /* v0.56: the volume sliders under each sound switch */
 .vol-row { display: flex; flex-direction: column; gap: 2px; }
 .vol-row .vol-slider { width: 100%; margin: 0 0 8px; accent-color: #ef7d3c; height: 22px; }
+
+/* v0.57: the stadium's betting window */
+.bw-game { background: var(--card, #fff); border-radius: 14px; padding: 8px 10px; margin-top: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.bw-side { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 5px 0; font-size: 14px; text-align: left; cursor: pointer; color: inherit; }
+.bw-side span { flex: 1; } .bw-side .tlogo { flex: none; } .bw-side em { font-style: normal; opacity: .6; font-size: 12px; } .bw-side b { min-width: 46px; text-align: right; color: #2f7d4a; }
+.bw-side.picked { font-weight: 800; } .bw-side:disabled { opacity: .55; cursor: default; }
+.bw-pick b { display: block; margin-top: 6px; } .bw-chips { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 6px; }
+.bw-chips .btn small { display: block; opacity: .75; font-size: 11px; }
+/* v0.57: what you can say: two rows that scroll sideways, so the chat stays in view */
+.ph-reply .ph-quick { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: max-content; overflow-x: auto; gap: 6px; padding-bottom: 4px; scrollbar-width: none; }
+.ph-reply .ph-quick::-webkit-scrollbar { display: none; }
+.ph-reply .ph-btn { white-space: nowrap; }
+.ph-thread { min-height: 120px; max-height: min(300px, 24vh); }   /* v0.57: room for the lines to tap below */
