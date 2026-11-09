@@ -844,3 +844,50 @@ body.dark .mg-got span { background: #3a2c1f; }
 /* v0.42: the stadium's game card */
 .game-card .gm-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-size: 15px; }
 .game-card .gm-row b { font-size: 20px; font-weight: 900; min-width: 28px; text-align: right; }
+/* v0.43: the phone's texts: their messages (white, with a face and a name), yours (blue), and the replies you can pick in their own box */
+.ph-thread { gap: 2px; }
+.ph-thread .msg { display: flex; align-items: flex-end; gap: 6px; margin: 3px 0; }
+.ph-thread .msg.me { justify-content: flex-end; }
+.ph-thread .msg > div { display: flex; flex-direction: column; align-items: flex-start; max-width: 78%; }
+.ph-thread .msg small { font-size: 10.5px; opacity: .75; margin: 0 0 2px 4px; }
+.ph-thread .bubble { max-width: 100%; }
+.ph-thread .msg.me .bubble { max-width: 78%; }
+.ph-thread .bubble.them { background: #ffffff; color: #1d1d1f; box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.ph-thread .typing { letter-spacing: 1px; opacity: .6; }
+.ava.sm { width: 26px; height: 26px; border-width: 1.5px; }
+.ph-reply { margin-top: 12px; background: rgba(0,0,0,.28); border-radius: 18px; padding: 9px 10px 11px; }
+.ph-reply-t { font-size: 12px; font-weight: 800; opacity: .85; margin: 0 2px 6px; }
+.ph-reply .ph-quick { margin-top: 0; }
+.ph-reply .ph-btn { background: transparent; border: 1.5px solid rgba(255,255,255,.65); }
+.back-phone { margin-bottom: 8px; }
+/* v0.43: notifications: a white card with the sender's face, a coloured badge for what happened, a soft pop-in */
+.toast.note { display: flex; align-items: center; gap: 11px; padding: 10px 14px 10px 10px; background: #fffdf8; border-left: 5px solid var(--nk, #ef7d3c); border-radius: 18px; box-shadow: 0 10px 28px rgba(60, 40, 20, .2); animation: note-in .45s cubic-bezier(.2, 1.5, .4, 1); }
+@keyframes note-in { from { opacity: 0; transform: translateY(-18px) scale(.94); } to { opacity: 1; transform: none; } }
+.nt-ava { position: relative; flex: none; }
+.nt-ava .ava { width: 42px; height: 42px; }
+.nt-ava i { position: absolute; right: -4px; bottom: -3px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-style: normal; border: 2px solid #fffdf8; }
+.nt-app { display: inline-flex !important; align-items: center; justify-content: center; font-size: 20px; background: linear-gradient(135deg, #ffb36b, #ef7d3c) !important; }
+.nt-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.nt-top b { font-size: 14px; font-weight: 900; color: #3b3125; }
+.nt-top span { font-size: 11px; color: #9a8f80; font-weight: 700; }
+.nt-text { font-size: 13.5px; font-weight: 700; color: #4a3f33; line-height: 1.35; }
+.nt-time { font-size: 11.5px; color: #9a8f80; font-weight: 700; margin-top: 2px; }
+.nt-done { font-size: 12px; font-weight: 800; color: #34b27b; }
+.feed-list { display: flex; flex-direction: column; gap: 8px; }
+.feed-group { font-size: 13px; font-weight: 900; color: #9a8f80; margin: 6px 4px 0; letter-spacing: .04em; }
+.feed-item { display: flex; align-items: center; gap: 11px; background: #fffdf8; border-radius: 18px; padding: 11px 12px; box-shadow: 0 2px 8px rgba(60, 40, 20, .08); border-left: 4px solid var(--nk, #ef7d3c); }
+body.dark .toast.note, body.dark .feed-item { background: #2f2a25; }
+body.dark .nt-ava i { border-color: #2f2a25; }
+body.dark .nt-top b, body.dark .nt-text { color: #f4ece0; }
+.toast.note .nt-top b { text-transform: none; letter-spacing: 0; display: inline; }
+/* v0.43: a building's card: a rounder, bigger title, a picture, what's there as chips, who works there */
+.place-head h2 { font-size: 22px; font-weight: 900; letter-spacing: .01em; }
+.place-head .big-emoji { width: 54px; height: 54px; border-radius: 18px; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(145deg, #fff3df, #ffe0b8); box-shadow: 0 3px 8px rgba(239, 125, 60, .18); font-size: 30px; }
+.place-pic { margin: 10px 0 8px; border-radius: 20px; background: radial-gradient(ellipse at 50% 85%, #d9efc4 0%, #bfe3f5 70%); overflow: hidden; display: flex; justify-content: center; }
+.place-img { width: 100%; max-width: 330px; height: auto; display: block; }
+.place-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.place-chips span { background: #fff3df; color: #8a5a2a; font-weight: 800; font-size: 12.5px; padding: 5px 10px; border-radius: 999px; }
+.place-staff { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #7a6a58; margin: 0 0 10px; }
+body.dark .place-chips span { background: #3a3128; color: #f2d2a8; }
+body.dark .place-pic { background: radial-gradient(ellipse at 50% 85%, #3c4a33 0%, #2b3a48 70%); }
+body.dark .place-staff { color: #cdbfae; }

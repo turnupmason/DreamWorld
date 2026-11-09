@@ -33,6 +33,11 @@ function giftText(g) {
 }
 const goodE = k => (CROPS[k] || GOODS[k] || {}).e || '';
 function fname(id) { const h = homeOf(id); return h ? homeName(h) : ''; }
+// v0.43: each kind of news has its own badge and colour
+const NOTE_KIND = { gift: { e: '🎁', c: '#ff9f0a' }, like: { e: '❤️', c: '#ff375f' }, msg: { e: '💬', c: '#30a2ff' }, join: { e: '👋', c: '#34c759' }, stole: { e: '🥷', c: '#8e8e93' },
+  caught: { e: '🚓', c: '#5e5ce6' }, letter: { e: '💌', c: '#bf5af2' }, goal: { e: '🏆', c: '#e0a800' }, pet: { e: '🐾', c: '#ac8e68' } };
+const noteKind = k => NOTE_KIND[k] || { e: '🔔', c: '#ef7d3c' };
+function noteFace(it) { const f = homeOf(it.from), K = noteKind(it.kind); return `<div class="nt-ava">${f ? avatar(f.look) : '<span class="ava nt-app">🏡</span>'}<i style="background:${K.c}">${K.e}</i></div>`; }
 function feedText(it) {
   if (it.kind === 'pet') { const a = myPets().find(x => x.id === it.pet); return petAskText(a ? a.name : '', a ? a.k : 'dog', it.need); }
   const name = esc(fname(it.from));
@@ -85,9 +90,10 @@ function ripeCount() { const r = readyLists(); return r.fields.length + r.animal
 function notify(item) {
   if (!item || !['gift', 'like', 'msg', 'join', 'stole', 'caught', 'letter'].includes(item.kind)) return;
   const el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = `<div class="app">🏡</div><div><b>${t('app_name')} · ${t('now')}</b>${feedText(item)}</div>`;
-  el.onclick = () => { if (item.kind === 'letter') openSheet('mail'); else setTab('feed'); refresh(); };
+  el.className = 'toast note';   // v0.43: who it's from (their face, a coloured badge for what happened), then what
+  el.style.setProperty('--nk', noteKind(item.kind).c);
+  el.innerHTML = `${noteFace(item)}<div class="grow"><div class="nt-top"><b>${esc(fname(item.from)) || t('app_name')}</b><span>${t('now')}</span></div><div class="nt-text">${feedText(item)}</div></div>`;
+  el.onclick = () => { if (item.kind === 'letter') openSheet('mail', 'box'); else setTab('feed'); refresh(); };
   el.style.pointerEvents = 'auto';
   $('#toasts').prepend(el);
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, 4200);
@@ -648,19 +654,22 @@ function privacyCard() {
 function panelFeed() {
   const n = unreadMail();
   const mail = `<div class="card mail-card"><div class="row between"><h3>📮 ${t('mailbox')}</h3>
-      <div class="row tight"><button class="btn small" data-act="mailOpen">${n ? t('mail_unread', { n }) : t('mail_open')}</button>
+      <div class="row tight"><button class="btn small" data-act="mailOpen" data-arg="box">${n ? t('mail_unread', { n }) : t('mail_open')}</button>
       <button class="btn small primary" data-act="compose">✉️ ${t('write_letter')}</button></div></div></div>`;
   const feed = S.feed.filter(feedVisible);
   const calm = `<button class="chip ${S.calm ? 'on' : ''}" data-act="calm">😌 ${t('calm_title')}${S.calm ? ' ✓' : ''}</button>`;
   if (!feed.length) return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<p class="muted center gap-top">${t('feed_empty')}</p>`;
-  const items = [...feed].reverse().map(it => {
-    const f = homeOf(it.from);
-    const btn = it.gift ? (it.claimed ? `<span class="muted">${t('claimed')}</span>` : `<button class="btn small primary" data-act="claim" data-arg="${it.id}">${t('claim')}</button>`)
+  // v0.43: today's news and older news, each a little card: their face with a badge for what happened, what, when
+  const day0 = new Date(now()); day0.setHours(0, 0, 0, 0);
+  const row = it => {
+    const btn = it.gift ? (it.claimed ? `<span class="nt-done">✓ ${t('claimed')}</span>` : `<button class="btn small primary" data-act="claim" data-arg="${it.id}">🎁 ${t('claim')}</button>`)
       : it.kind === 'stole' || it.kind === 'caught' ? `<button class="btn small" data-act="goTo" data-arg="${it.from}">${t('visit_back')}</button>`
-      : it.kind === 'letter' ? `<button class="btn small" data-act="mailOpen">${t('read')}</button>` : '';
-    return `<div class="list-item">${f ? avatar(f.look, '', f.id === 'me' ? energyLevel() : friendEnergy(f)) : ''}<div class="grow"><div>${feedText(it)}</div><div class="muted">${ago(it.t)}</div></div>${btn}</div>`;
-  }).join('');
-  return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<div class="row between note"><p class="muted">${t('feed_note')}</p>${calm}</div><div class="card">${items}</div>`;
+      : it.kind === 'letter' ? `<button class="btn small" data-act="mailOpen" data-arg="box">💌 ${t('read')}</button>` : '';
+    return `<div class="feed-item" style="--nk:${noteKind(it.kind).c}">${noteFace(it)}<div class="grow"><div class="nt-text">${feedText(it)}</div><div class="nt-time">${ago(it.t)}</div></div>${btn}</div>`;
+  };
+  const list = [...feed].reverse(), fresh = list.filter(it => it.t >= day0.getTime()), old = list.filter(it => it.t < day0.getTime());
+  const group = (title, L) => (L.length ? `<div class="feed-group">${title}</div>${L.map(row).join('')}` : '');
+  return `<h1 class="panel-title">${t('tab_feed')}</h1>${mail}<div class="row between note"><p class="muted">${t('feed_note')}</p>${calm}</div><div class="feed-list">${group(t('feed_today'), fresh)}${group(t('feed_earlier'), old)}</div>`;
 }
 
 // v0.20: the next step of a farm area or the garage, for the estate agent's plans
@@ -981,7 +990,7 @@ const SHEETS = {
   // A public place in town (v0.12): what it's for; go there first, then use it.
   place(key) {
     const P = placeInfo(key), here = Scene.here() === key || Scene.here() === VENUE_HOME[key] || (UI.inVenue === key), mineTown = VIEW_TOWN === myTown();
-    const head = `<div class="place-head"><span class="big-emoji">${P.e}</span><div class="grow"><h2>${nm(P)}</h2><p class="muted">${t(STORES[key] && key !== 'market' ? 'st_short_' + key : 'pl_desc_' + (key === 'lake' && P === PLACE_INFO.beach ? 'beach' : key))}</p></div></div>`;
+    const head = `<div class="place-head"><span class="big-emoji">${P.e}</span><div class="grow"><h2>${nm(P)}</h2><p class="muted">${t(STORES[key] && key !== 'market' ? 'st_short_' + key : 'pl_desc_' + (key === 'lake' && P === PLACE_INFO.beach ? 'beach' : key))}</p></div></div>` + placeCard(key);
     if (!mineTown) return head + `<p class="muted">${t('pl_other_town')}</p>`;
     if (!here && key === 'market') return head + marketBody(false) + `<div class="sec-title">${t('mk_go')}</div>${goTiles(goTarget({ place: key }))}<p class="muted small center">${t('mk_carry', { w: WALK_CARRY, c: carryCap('car') })}</p>`;
     if (!here && key !== 'plaza') return head + `<div class="sec-title">${t('pl_go_first')}</div>${goTiles(goTarget({ place: key }))}`;
@@ -1016,7 +1025,7 @@ const SHEETS = {
     else if (key === 'library|featured') { const c = libCard(), P2 = placeDay(); body = `<div class="card lib-card"><p class="lib-text">${nm(c)}</p></div><button class="btn ${P2.lib ? '' : 'primary'} block" data-act="placeDo" data-arg="library|read|" ${P2.lib ? 'disabled' : ''}>${P2.lib ? `✅ ${t('pl_read')}` : `📖 ${t('pl_read_it')}`}</button>`; }
     else if (key === 'library|table') body = once('libRead', 'readbook', `📖 ${t('sp_read_btn', { n: VENUE.libRead.fun })}`);
     else if (gymK) body = venueLeft('gym') > 0 ? go('gym', `💪 ${t('sp_gym_btn', { n: VENUE.gym.fun })}`) + `<p class="muted small center">${t('sp_gym_left', { n: venueLeft('gym') })}</p>` : `<p class="muted center gap-top">✅ ${t('sp_done_today')}</p>`;
-    else if (key === 'post|boxes') body = `<button class="btn primary block gap-top" data-act="mailOpen">📬 ${t('sp_mail_btn')}</button>`;
+    else if (key === 'post|boxes') body = `<button class="btn primary block gap-top" data-act="mailOpen" data-arg="box">📬 ${t('sp_mail_btn')}</button>`;
     else if (key === 'post|cards') { const P2 = placeDay(), fr = S.friends.filter(f => lotOf(f.id)); body = `<div class="card">${fr.map(f => `<div class="list-item">${avatar(f.look)}<div class="grow"><b>${esc(homeName(f))}</b></div>${P2.cards[f.id] ? `<span class="tag ok">${t('pl_sent')}</span>` : `<button class="btn small primary" data-act="placeDo" data-arg="post|card|${f.id}">📮 ${t('pl_send')}</button>`}</div>`).join('') || `<p class="muted">${t('pl_no_friends')}</p>`}</div>`; }
     else if (key === 'school|desk' || key === 'police|board') body = placeBody(v);
     else if (key === 'plaza|board') body = `<button class="btn primary block gap-top" data-act="ranking">🏆 ${t('sp_rank_btn')}</button>`;
@@ -1032,7 +1041,7 @@ const SHEETS = {
     else if (key === 'hotel|tea') body = go('tea', `🫖 ${t('sp_tea_btn', { n: VENUE.tea.price, h: VENUE.tea.hunger, f: VENUE.tea.fun })}`, S.me.coins >= VENUE.tea.price);
     else if (key === 'rooftop|pool') body = venueLeft('swim') > 0 ? go('swim', `🏊 ${t('sp_swim_btn', { n: VENUE.swim.fun })}`) + `<p class="muted small center">${t('sp_swim_left', { n: venueLeft('swim') })}</p>` : `<p class="muted center gap-top">✅ ${t('sp_done_today')}</p>`;
     else if (key === 'rooftop|lounger') body = once('sunbathe', 'sunbathe', `😎 ${t('sp_sunbathe_btn', { n: VENUE.sunbathe.fun })}`);
-    else if (key === 'apartments|mail') body = `<button class="btn primary block gap-top" data-act="mailOpen">📬 ${t('sp_mail_btn')}</button>`;
+    else if (key === 'apartments|mail') body = `<button class="btn primary block gap-top" data-act="mailOpen" data-arg="box">📬 ${t('sp_mail_btn')}</button>`;
     else if (key === 'apartments|lounge') body = once('lounge', 'lounge', `💬 ${t('sp_lounge_btn', { n: VENUE.lounge.social })}`);
     else if (key === 'bookstore|table') body = go('book', `📖 ${t('sp_book_btn', { n: VENUE.book.price, f: VENUE.book.fun })}`, S.me.coins >= VENUE.book.price);
     else if (key === 'florist|buckets') body = `<p class="muted small">${t('sp_bouquet_note', { n: S.me.barn.bouquet || 0 })}</p><button class="btn primary block gap-top" data-act="bouquetBuy" ${S.me.coins >= VENUE.bouquet.price ? '' : 'disabled'}>💐 ${t('sp_bouquet_btn', { n: VENUE.bouquet.price })}</button>`;
@@ -1211,14 +1220,15 @@ const SHEETS = {
       <button class="btn primary block gap-top" data-act="close">${t('cap_ok')}</button></div>`;
   },
   // mailbox: letters in, a letter open, writing one
-  mail() {
+  mail(arg) {
+    if (arg === 'phone') UI.mailPhone = true; else if (arg === 'box') UI.mailPhone = false;   // v0.43: opened from the phone: a way back to it
     const inbox = S.mail.inbox;
     const rows = inbox.length ? inbox.map(l => { const f = homeOf(l.from), p = PAPERS.find(x => x.id === l.paper) || PAPERS[0];
       return `<button class="list-item letter-row ${l.read ? '' : 'unread'}" data-act="readLetter" data-arg="${l.id}">${f ? avatar(f.look) : ''}
         <div class="grow"><b>${esc(fname(l.from))}</b>${l.gift && !l.claimed ? ' 🎁' : ''}<div class="muted clip">${esc(l.text)}</div></div>
         <span class="stamp" style="background:${p.ac}">✉️</span></button>`; }).join('') : `<p class="muted">${t('mail_empty')}</p>`;
     const sent = S.mail.sent.length ? `<p class="muted gap-top">${t('mail_sent_n', { n: S.mail.sent.length })}</p>` : '';
-    return `<h2>📮 ${t('mailbox')}</h2><p class="muted">${t('mail_desc')}</p><div class="card">${rows}</div>${sent}
+    return `${UI.mailPhone ? `<button class="btn small back-phone" data-act="phone" data-arg="home">‹ 📱 ${t('back_phone')}</button>` : ''}<h2>📮 ${t('mailbox')}</h2><p class="muted">${t('mail_desc')}</p><div class="card">${rows}</div>${sent}
       <button class="btn primary block" data-act="compose">✉️ ${t('write_letter')}</button>`;
   },
   letter(id) {
@@ -1470,7 +1480,8 @@ const ACT = {
   close: () => closeSheet(),
   energyInfo: () => openSheet('energy'),
   // v0.26: the phone
-  phone(arg) { if (arg === 'mail') { closeSheet(); return ACT.mailGo(); } if (arg === 'map') { closeSheet(); return ACT.findMe(); } if (typeof arg === 'string' && arg.startsWith('texts|')) seeTexts(arg.split('|')[1]); openSheet('phone', arg || 'home'); },
+  // v0.43: the mail app opens your mail right here, with a way back to the phone
+  phone(arg) { if (arg === 'mail') return openSheet('mail', 'phone'); if (arg === 'map') { closeSheet(); return ACT.findMe(); } if (typeof arg === 'string' && arg.startsWith('texts|')) seeTexts(arg.split('|')[1]); openSheet('phone', arg || 'home'); },
   phoneCall(id) { const r = callPerson(id); if (r === 'ok') { Sound.play('chime'); save(); } openSheet('phone', 'call|' + id + '|' + r); },
   phoneText(a) { const [id, i] = a.split('|'); textPerson(id, +i); seeTexts(id); Sound.play('tick'); save(); renderSheet(); },
   phoneMeet(id) { const r = meetInPark(id), who = whoIs(id); if (r === 'ok') { Sound.play('chime'); snack(`🌳 ${t('meet_ok', { name: who ? who.name : '' })}`); save(); } else snack(t('meet_done')); renderSheet(); },
@@ -1666,6 +1677,7 @@ const ACT = {
       if (home) { if (cargoUsed()) { unloadCargo(); snack(`📦 ${t('mk_unloaded')}`); } UI.visit = null; UI.visitInside = false; setLevel(0); setTab('home'); }
       else if (a.id) ACT.visit(a.id);
       else if (a.place && VENUE_PLACES.includes(a.place)) { arrivedFx(a.place); ACT.enterVenue(a.place); }   // v0.30: straight in
+      else if (a.place && STORES[a.place] && STORES[a.place].cats.length) { arrivedFx(a.place); ACT.enterStore(a.place); }   // v0.43: shops too: straight in
       else if (a.place) { openSheet('place', a.place); arrivedFx(a.place); }
       refresh();
     };
@@ -2055,10 +2067,10 @@ const ACT = {
   reset() { if (confirm(t('reset_confirm'))) { localStorage.removeItem(STORAGE_KEY); location.reload(); } },
   // mail
   mailGo() {
-    if (UI.tab === 'home' && !UI.inside && !S.live) walkDo({ kind: 'mailbox' }, { pose: 'mail', dur: 600, done: after(() => openSheet('mail')) });
-    else openSheet('mail');
+    if (UI.tab === 'home' && !UI.inside && !S.live) walkDo({ kind: 'mailbox' }, { pose: 'mail', dur: 600, done: after(() => openSheet('mail', 'box')) });
+    else openSheet('mail', 'box');
   },
-  mailOpen: () => openSheet('mail'),
+  mailOpen: arg => openSheet('mail', arg),
   readLetter(id) { const l = S.mail.inbox.find(x => x.id === id); if (l) l.read = true; openSheet('letter', id); },
   claimLetter(id) { const g = claimLetterGift(id); if (g) snack(t('snack_claimed', { gift: giftText(g) })); },
   compose(to) { newDraft(to); openSheet('compose'); },
@@ -3292,6 +3304,17 @@ function roleOf(id) {
   return wp ? `💼 ${t(wp.boss ? 'boss' : 'coworker')} · ${nm(JOBS[S.job.place])}` : isFriend(id) ? `💛 ${t('friend')}` : h && h.fam ? `👪 ${t('family')}` : h && h.town && h.town !== myTown() ? `🏘️ ${t('from_town', { town: nm(COMMUNITIES[h.town]) })}` : `🏡 ${t('neighbour')}`;
 }
 function relTag(id) { const lv = relLevel(relOf(id)); return `${lv.e} ${nm(lv)}`; }
+// v0.43: the top of a building's card: a picture of it, what you can do there (or what it sells), and who works there
+const CAT_E = { seeds: '🌱', sell: '💰', trees: '🌳', animals: '🐄', land: '🏞️', furn: '🛋️', yard: '🪴', cars: '🚗', houses: '🏠', food: '🍱', clothes: '👕', pets: '🐶' };
+function placeCard(key) {
+  const S2 = STORES[key], pic = S2 && S2.w ? `<div class="place-pic">${thumbImg('store', key, {}, 330, 150, 'place-img')}</div>` : '';
+  let chips = [];
+  if (VENUE_PLACES.includes(key)) chips = Object.keys(STR.zh).filter(k => k.startsWith('sp_' + key + '_') && k.split('_').length === 3 && SPOT_E[key + '|' + k.split('_')[2]]).map(k => `${SPOT_E[key + '|' + k.split('_')[2]]} ${t(k)}`);
+  else if (S2 && S2.cats) chips = S2.cats.map(c => `${CAT_E[c] || '•'} ${t('cat_' + c)}`);
+  const staff = (VENUE_PLACES.includes(key) || (S2 && S2.w)) && VIEW_TOWN ? staffOf(VIEW_TOWN, key) : null;
+  return pic + (chips.length ? `<div class="place-chips">${chips.slice(0, 10).map(c => `<span>${c}</span>`).join('')}</div>` : '')
+    + (staff ? `<div class="place-staff">${avatar(staff.look, 'sm')}<span>${t('pc_staff', { name: esc(nm(staff.name)) })}</span></div>` : '');
+}
 // v0.42: how far a hit went, in metres (Chinese) or feet (English)
 const derbyDist = m => (curLang() === 'zh' ? Math.round(m) : Math.round(m * 3.281));
 // v0.42: the game at the stadium: who's playing, the score and how far it's got (or when the next one is)
@@ -3363,8 +3386,11 @@ function phoneScreen(arg) {
     const w = whoIs(a); if (!w) return phoneScreen('texts');
     const th = ((S.texts || {})[a] || []).filter(m => m.t <= now()), typing = ((S.texts || {})[a] || []).some(m => m.t > now());
     const msg = m => m.me ? nm(TEXTS[m.i]) : m.inbox !== undefined ? nm((m.boss ? BOSS_INBOX : INBOX)[m.inbox]) : nm(TEXTS[m.i].re[m.r]);
-    body = head(esc(w.name), 'texts') + `<div class="ph-thread">${th.map(m => `<div class="bubble ${m.me ? 'me' : 'them'}">${esc(msg(m))}</div>`).join('') || `<p class="ph-muted">${t('ph_say_hi')}</p>`}${typing ? '<div class="bubble them typing">…</div>' : ''}</div>
-      <div class="ph-quick">${TEXTS.map((x, i) => `<button class="ph-btn" data-act="phoneText" data-arg="${a}|${i}">${esc(nm(x))}</button>`).join('')}</div>`;
+    // v0.43: what they said (white, with their face and name) and what you said (blue) up top; the replies you can pick
+    // in their own box at the bottom, so it's clear which is which
+    const them = txt => `<div class="msg them">${avatar(w.look, 'sm')}<div><small>${esc(w.name)}</small><div class="bubble them">${txt}</div></div></div>`;
+    body = head(esc(w.name), 'texts') + `<div class="ph-thread">${th.map(m => (m.me ? `<div class="msg me"><div class="bubble me">${esc(msg(m))}</div></div>` : them(esc(msg(m))))).join('') || `<p class="ph-muted center">${t('ph_say_hi')}</p>`}${typing ? them('<span class="typing">• • •</span>') : ''}</div>
+      <div class="ph-reply"><div class="ph-reply-t">✏️ ${t('ph_pick_reply', { name: esc(w.name) })}</div><div class="ph-quick">${TEXTS.map((x, i) => `<button class="ph-btn" data-act="phoneText" data-arg="${a}|${i}">${esc(nm(x))}</button>`).join('')}</div></div>`;
   } else if (scr === 'texts') {
     const ids = Object.keys(S.texts || {}).filter(id => whoIs(id) && S.texts[id].length).sort((x, y) => S.texts[y][S.texts[y].length - 1].t - S.texts[x][S.texts[x].length - 1].t);
     body = head(`💬 ${t('ph_texts')}`) + (ids.map(id => { const w = whoIs(id), th = S.texts[id].filter(m => m.t <= now()), last = th[th.length - 1], n = th.filter(m => !m.me && m.t > ((S.textSeen || {})[id] || 0)).length;

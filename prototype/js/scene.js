@@ -1839,23 +1839,23 @@ const Scene = (() => {
       const rk = ranking();
       // label sizes follow the zoom, so zoomed far out the names don't cover the town
       const fs = Math.round(clamp(7 + z * 40, 9, 13)), small = Math.round(clamp(6 + z * 30, 8.5, 11));
-      if (z < 0.17) TL.labels.forEach(([key, x, y]) => { const c = iso(x, y); pill(key === 'area_maple' && VIEW_TOWN !== HOME_TOWN ? nm(COMMUNITIES[VIEW_TOWN]) : t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs}px ${UI_FONT},${EMOJI_FONT}`, fs + 9); });
+      if (z < 0.17) TL.labels.forEach(([key, x, y]) => { const c = iso(x, y); label(key === 'area_maple' && VIEW_TOWN !== HOME_TOWN ? nm(COMMUNITIES[VIEW_TOWN]) : t(key), c.x, c.y, 'rgba(59,49,37,.78)', '#fff', `800 ${fs}px ${UI_FONT},${EMOJI_FONT}`, fs + 9, 0.5); });
       // zoomed all the way out: the neighbouring villages, and a way on to the world map
       if (z < 0.1) {
-        [[WX1 + 40, (WY0 + WY1) / 2 - 20, 'out_east'], [(WX0 + WX1) / 2 + 30, WY1 + 40, 'out_south'], [WX0 - 34, WY1 + 34, 'out_west']].filter(([x, y]) => !inLake(x, y)).forEach(([x, y, key]) => { const c = iso(x, y); pill(t(key), c.x, c.y, 'rgba(255,255,255,.82)', '#5d5448', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8); });
+        [[WX1 + 40, (WY0 + WY1) / 2 - 20, 'out_east'], [(WX0 + WX1) / 2 + 30, WY1 + 40, 'out_south'], [WX0 - 34, WY1 + 34, 'out_west']].filter(([x, y]) => !inLake(x, y)).forEach(([x, y, key]) => { const c = iso(x, y); label(t(key), c.x, c.y, 'rgba(255,255,255,.82)', '#5d5448', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8, 0.4); });
         if (z <= minWorldZoom() * 1.02) hits.push({ kind: 'worldMap', pri: 2, ...pill(t('pinch_world'), W / 2, H - 70, 'rgba(59,49,37,.86)', '#fff', `800 13px ${UI_FONT},${EMOJI_FONT}`, 30) });
       }
       tops.forEach(tp => {
-        if (tp.land) { if (z > 0.11 && tp.land.n >= CORE_PARCELS) hits.push({ kind: 'land', st: tp.land.st, p: tp.land.p, n: tp.land.n, pri: 1, ...pill(`🏷️ ${t('land_lot', { n: tp.land.n * PARCEL })}`, tp.x, tp.y, 'rgba(255,246,226,.95)', '#a9773f', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8) }); return; }
+        if (tp.land) { if (z > 0.11 && tp.land.n >= CORE_PARCELS) hitLabel({ kind: 'land', st: tp.land.st, p: tp.land.p, n: tp.land.n, pri: 1 }, 1, `🏷️ ${t('land_lot', { n: tp.land.n * PARCEL })}`, tp.x, tp.y, 'rgba(255,246,226,.95)', '#a9773f', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8); return; }
         const top = tp.opt.houseTop;
         if (!top) return;
-        if (tp.npc) { if (z > 0.11) hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(homeName(tp.h), top.x, top.y - 4, 'rgba(255,255,255,.78)', '#6b5f50', `600 ${small}px ${UI_FONT}`, small + 8) }); return; }
+        if (tp.npc) { if (z > 0.11) hitLabel({ kind: 'lot', owner: tp.h.id, pri: 1 }, 1.5, homeName(tp.h), top.x, top.y - 4, 'rgba(255,255,255,.78)', '#6b5f50', `600 ${small}px ${UI_FONT}`, small + 8); return; }
         if (z < 0.08 && tp.h.id !== 'me') return;
         const i = rk.findIndex(r => r.h.id === tp.h.id), medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`, mine = tp.h.id === 'me';
         const label = S.calm ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode: names only
-        hits.push({ kind: 'lot', owner: tp.h.id, pri: 1, ...pill(label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 9) });
+        hitLabel({ kind: 'lot', owner: tp.h.id, pri: 1 }, mine ? 5 : 3, label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 9);
       });
-      if (out.hall) { const { x: px, y: py } = TL.plaza; hits.push({ kind: 'plaza', pri: 1, ...pill(VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22) }); }
+      if (out.hall) { const { x: px, y: py } = TL.plaza; hitLabel({ kind: 'plaza', pri: 1 }, 4, VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `bold 12px ${UI_FONT},${EMOJI_FONT}`, 22); }
       return;
     }
   }
@@ -2021,22 +2021,22 @@ const Scene = (() => {
         const [x, y] = fieldPos(i, h), c = iso(ox + x + 0.5, oy + y + 0.5);
         if (Math.sin(ts / 500 + i) > 0.2) emoji('✨', c.x + 12 * z, c.y - 22 * z, 12 * z);
       });
-      const tag = (kind, text, wx, wy) => { const c = iso(ox + wx, oy + wy); hits.push({ kind, pri: 1, ...pill(text, c.x, c.y + 4, 'rgba(255,255,255,.92)', '#7a5a2a', `600 11px ${UI_FONT},${EMOJI_FONT}`, 20) }); };
+      const tag = (kind, text, wx, wy) => { const c = iso(ox + wx, oy + wy); hitLabel({ kind, pri: 1 }, 2, text, c.x, c.y + 4, 'rgba(255,255,255,.92)', '#7a5a2a', `600 11px ${UI_FONT},${EMOJI_FONT}`, 20); };
       if (fine()) {
         if (h.fieldLv < FIELD_LEVELS.length - 1) tag('buyLand', `🔓 ${t('expand_field')}`, areaOf(h, 'fields').x + 2, areaOf(h, 'fields').y + h.fields.length / 4 + 0.5);
         if (!h.pastureLv) tag('buyLand', `🐄 ${t('build_pasture')}`, areaOf(h, 'pasture').x + 2, areaOf(h, 'pasture').y + 4);
         if (!h.orchardLv) tag('buyLand', `🌳 ${t('build_orchard')}`, areaOf(h, 'orchard').x + 3, areaOf(h, 'orchard').y + 1.5);
         if (!h.pondLv) tag('buyLand', `🐟 ${t('build_pond')}`, areaOf(h, 'pond').x + 2, areaOf(h, 'pond').y + 1.5);
-        if (canExpand()) { const c = iso(ox + homeW(h) + PARCEL / 2, oy + LOT_D / 2); hits.push({ kind: 'buyParcel', pri: 2, ...pill(`🏷️ ${t('buy_parcel')} · 🪙${fmtNum(parcelCost().coins)}`, c.x, c.y - 40 * z, '#fff6e2', '#b5641e', `800 12px ${UI_FONT},${EMOJI_FONT}`, 24) }); }
+        if (canExpand()) { const c = iso(ox + homeW(h) + PARCEL / 2, oy + LOT_D / 2); hitLabel({ kind: 'buyParcel', pri: 2 }, 2.5, `🏷️ ${t('buy_parcel')} · 🪙${fmtNum(parcelCost().coins)}`, c.x, c.y - 40 * z, '#fff6e2', '#b5641e', `800 12px ${UI_FONT},${EMOJI_FONT}`, 24); }
       }
-      if (S.pending.length && tp.opt.houseTop) hits.push({ kind: 'pending', pri: 3, ...pill(`📦 ${S.pending.length}`, tp.opt.houseTop.x, tp.opt.houseTop.y - 6 - bob, '#ef7d3c', '#fff', `bold 14px ${UI_FONT},${EMOJI_FONT}`) });
+      if (S.pending.length && tp.opt.houseTop) hitLabel({ kind: 'pending', pri: 3 }, 4, `📦 ${S.pending.length}`, tp.opt.houseTop.x, tp.opt.houseTop.y - 6 - bob, '#ef7d3c', '#fff', `bold 14px ${UI_FONT},${EMOJI_FONT}`, 22);
     } else {
       if (isFriend(h.id)) h.fields.forEach((fl, i) => {
         if (!stealable(h, i)) return;
         const [x, y] = fieldPos(i, h), c = iso(ox + x + 0.5, oy + y + 0.5);
         hits.push({ kind: 'bubble', what: 'field', owner, i, pri: 2, ...bubble('🖐️', c.x, c.y - 18 * z, 0.9, bob) });
       });
-      if (tp.opt.houseTop) pill(t('home_of', { name: homeName(h) }), tp.opt.houseTop.x, tp.opt.houseTop.y - 6, 'rgba(255,255,255,.94)', '#3b3125', `600 12px ${UI_FONT}`);
+      if (tp.opt.houseTop) label(t('home_of', { name: homeName(h) }), tp.opt.houseTop.x, tp.opt.houseTop.y - 6, 'rgba(255,255,255,.94)', '#3b3125', `600 12px ${UI_FONT}`, 22, 4);
     }
     // more people here than we draw: say how many (by the gate)
     const nv = visitorsAt(h.id).length, nc = crowdAt(h.id), more = nv + nc - Math.max(Math.min(nv, SHOW_LIMITS.home), Math.min(nc, SHOW_LIMITS.home));
@@ -2353,8 +2353,8 @@ const Scene = (() => {
         else drawPerson(p.x, p.y, z, { look, face: w.face, back: w.back && w.moving, view: w.view, turn: w.turn, moving: w.moving, phase: w.phase, energy: 'good', ts, seed: w.x, wave: chatWave(w.id) || (!w.moving && !chatting(w.id) && Math.sin(ts / 900 + w.x) > 0.7) });
         ctx.restore();
         if (chatting(w.id)) chatBubble(p.x + 12 * z, p.y - 58 * z, z, false, ts);   // v0.25: talking with you
-        if (w.who) { if (z > 0.3) pill(nm(w.who.name), p.x, p.y - 50 * z, 'rgba(255,255,255,.85)', '#5a4a3a', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z)); }   // v0.40: a townsperson
-        else if (z > 0.3) pill(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z));
+        if (w.who) { if (z > 0.3) label(nm(w.who.name), p.x, p.y - 50 * z, 'rgba(255,255,255,.85)', '#5a4a3a', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z), 2); }   // v0.40: a townsperson
+        else if (z > 0.3) label(`● ${homeName(w.h)}`, p.x, p.y - 50 * z, 'rgba(255,255,255,.9)', '#2f7d47', `700 ${Math.max(9, 10 * z)}px ${UI_FONT}`, Math.max(15, 17 * z), 2);
         else if (z > 0.12) circle(p.x, p.y - 48 * z, Math.max(2, 3.5 * z), '#34c759', '#fff', 1);
         if (z > 0.2) hits.push({ kind: 'person', id: w.id, pri: 2, x0: p.x - 12 * z, x1: p.x + 12 * z, y0: p.y - 46 * z, y1: p.y + 4 });   // v0.25: talk to them
       } });
@@ -2402,7 +2402,7 @@ const Scene = (() => {
     list.forEach(pp => objs.push({ d: pp.x + pp.y + 0.3, f: () => {
       const z = cam.z, q = iso(pp.x, pp.y);
       drawPerson(q.x, q.y, z, { look: pp.look, face: pp.i % 2 ? -1 : 1, view: 'front', turn: [pp.i % 2 ? -0.6 : 0.6, 1], energy: 'good', ts, seed: pp.i, pose: 'stand', wave: chatWave(pp.id) || (!chatting(pp.id) && Math.sin(ts / 1100 + pp.i) > 0.85) });
-      if (z > 0.35) { if (pp.work) pill(pp.boss ? `💼 ${t('boss')}` : `💼 ${t('coworker')}`, q.x, q.y - 50 * z - 12, '#fff1d6', '#9a5b12', `800 ${Math.max(9, 10 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(14, 17 * z)); else if (Math.sin(ts / 1500 + pp.i) > 0.6) emoji('💬', q.x + 9 * z, q.y - 44 * z, 10 * z); }
+      if (z > 0.35) { if (pp.work) label(pp.boss ? `💼 ${t('boss')}` : `💼 ${t('coworker')}`, q.x, q.y - 50 * z - 12, '#fff1d6', '#9a5b12', `800 ${Math.max(9, 10 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(14, 17 * z), 2); else if (Math.sin(ts / 1500 + pp.i) > 0.6) emoji('💬', q.x + 9 * z, q.y - 44 * z, 10 * z); }
       if (chatting(pp.id)) chatBubble(q.x + 12 * z, q.y - 56 * z, z, false, ts);
       hits.push({ kind: 'person', id: pp.id, work: !!pp.work, pri: 2, x0: q.x - 12 * z, x1: q.x + 12 * z, y0: q.y - 46 * z, y1: q.y + 4 });
     } }));
@@ -2868,7 +2868,7 @@ const Scene = (() => {
       spot('table', 4.4, 5.0, 1.3, 1.3, { draw: 'table', i: 1, menu: CAFE_MENU, stand: [5.05, 6.8], use: { at: [4.3, 5.65], pose: 'sit', face: 1, seatH: 9, sit: 'drink', mate: true } });
       [[2.05, 2.45], [5.05, 2.45], [2.05, 5.65], [5.05, 5.65]].forEach(([px, py]) => dec('pendant', px, py, 0.1, 0.1, { air: true, col: '#2d2d2d' }));
       dec('rug', 7.8, 6.0, 3.6, 3.0, { col: '#b5563c', flat: true });
-      spot('sofa', 8.2, 7.2, 2, 1, { furn: 'sofa', tint: '#7a4a2a', stand: [9.2, 8.8], use: { at: [9.2, 7.65], pose: 'sit', face: 1, view: 'front', seatH: 8.5, prop: '🎧' } });
+      spot('sofa', 8.2, 7.2, 2, 1, { furn: 'sofa', tint: '#7a4a2a', stand: [9.2, 8.8], use: { at: [9.2, 7.65], pose: 'sit', face: -1, seatH: 8.5, prop: '🎧' } });
       furn('coffeetable', 8.4, 6.2); furn('armchair', 11.4, 6.4, { tint: '#6b8e5a' }); guest(11.9, 6.9, { pose: 'sit', seatH: 8.5, sit: 'read', face: -1 });
       furn('shelf', 0.3, 9.0); furn('shelf', 1.3, 9.0); furn('monstera', 12.0, 9.6); furn('arclamp', 11.2, 8.6); furn('plant', 6.6, 0.3);
       P = { RW: 13, RD: 11, door: [3, 10.3], counter: { x: 8.6, y: 2.4, w: 3.2, d: 0.9 } };
@@ -2896,7 +2896,7 @@ const Scene = (() => {
       furn('desk', 4.2, 5.4); furn('desk', 6.2, 5.4); guest(5.2, 6.75, { pose: 'sit', seatH: 9, sit: 'type', face: 1, back: true }); guest(7.2, 6.75, { pose: 'sit', seatH: 9, sit: 'type', face: 1, back: true });
       furn('roundrug', 4.6, 8.6, { flat: true }); furn('beanbag', 4.7, 8.8, { tint: '#f2a33a' }); furn('beanbag', 5.9, 9.3, { tint: '#6cbf73' });
       who(5.2, 9.3, { pose: 'sit', seatH: 4.5, sit: 'read', face: 1, scale: 0.72, look: 2 }); who(6.4, 9.8, { pose: 'sit', seatH: 4.5, sit: 'read', face: -1, scale: 0.72, look: 5 });
-      furn('armchair', 2.8, 9.4); guest(3.3, 9.9, { pose: 'sit', seatH: 8.5, sit: 'read', face: 1 }); furn('arclamp', 3.9, 9.6);
+      furn('armchair', 2.8, 9.4); guest(3.3, 9.9, { pose: 'sit', seatH: 8.5, sit: 'read', face: -1 }); furn('arclamp', 3.9, 9.6);
       dec('bookcart', 12.6, 3.9, 1.0, 0.6); dec('newsrack', 13.2, 7.4, 0.6, 0.8);
       furn('plant', 0.4, 10.6); furn('plant', 13.2, 10.6);
       P = { RW: 14, RD: 12, door: [3, 11.3], counter: { x: 9.6, y: 9.0, w: 3.2, d: 0.9 } };
@@ -2907,11 +2907,12 @@ const Scene = (() => {
       dec('rubber', 3.3, 4.3, 6.9, 4.4, { flat: true }); dec('rubber', 10.6, 4.3, 5.1, 4.4, { flat: true, col: '#3d434c' });
       const work = (key, fk, x, y, at, pose, ex = {}) => spot(key, x, y, ex.w || FURN[fk].w, ex.d || FURN[fk].d, { ...(ex.draw ? { draw: ex.draw } : { furn: fk, tint: '#38a3e0' }), stand: ex.stand || [x + (ex.w || FURN[fk].w) / 2, y + (ex.d || FURN[fk].d) + 0.6], use: { at, pose, face: 1, ...ex.use } });
       // cardio
-      work('treadmill', 'treadmill', 0.8, 1.0, [1.3, 2.0], 'run', { use: { lift: 4, moving: true } });
-      furn('treadmill', 2.2, 1.0); guest(2.7, 2.0, { walk: true, pose: 'run', lift: 4, face: 1, moving: true });
-      furn('treadmill', 3.6, 1.0); guest(4.1, 2.0, { walk: true, pose: 'walk', lift: 4, face: 1, moving: true });
-      work('elliptical', 'treadmill', 5.2, 1.0, [5.7, 1.9], 'walk', { draw: 'elliptical', w: 1.0, d: 1.6, use: { lift: 7, moving: true } });
-      dec('elliptical', 6.5, 1.0, 1.0, 1.6, { busy: true }); guest(7.0, 1.9, { walk: true, pose: 'walk', lift: 7, face: 1, moving: true });
+      const toWall = { view: 'back', turn: [0.1, -1] };   // v0.43: facing the console at the mirror wall, backs to us
+      work('treadmill', 'treadmill', 0.8, 1.0, [1.3, 2.0], 'run', { use: { lift: 4, moving: true, ...toWall } });
+      furn('treadmill', 2.2, 1.0); guest(2.7, 2.0, { walk: true, pose: 'run', lift: 4, moving: true, ...toWall });
+      furn('treadmill', 3.6, 1.0); guest(4.1, 2.0, { walk: true, pose: 'walk', lift: 4, moving: true, ...toWall });
+      work('elliptical', 'treadmill', 5.2, 1.0, [5.7, 1.9], 'walk', { draw: 'elliptical', w: 1.0, d: 1.6, use: { lift: 7, moving: true, ...toWall } });
+      dec('elliptical', 6.5, 1.0, 1.0, 1.6, { busy: true }); guest(7.0, 1.9, { walk: true, pose: 'walk', lift: 7, moving: true, ...toWall });
       work('spinbike', 'spinbike', 8.0, 1.3, [8.5, 1.8], 'bike', { use: { moving: true } });
       furn('spinbike', 9.2, 1.3); guest(9.7, 1.8, { walk: true, pose: 'bike', face: 1, moving: true });
       work('rower', 'treadmill', 10.8, 1.0, [11.25, 1.3], 'row', { draw: 'rower', w: 1.8, d: 0.6, stand: [11.2, 2.1], use: { seatH: 5 } });
@@ -2953,7 +2954,7 @@ const Scene = (() => {
     } else if (k === 'school') {
       dec('blackboard', 3.0, 0.1, 7.0, 0.15); dec('abc', 1.0, 0.05, 12.0, 0.1); dec('worldmap', 10.6, 0.05, 1.8, 0.1); dec('clock', 2.0, 0.05, 0.6, 0.1);
       [[2.0, 4.4, 0], [5.0, 4.4, 1], [8.0, 4.4, 2], [11.0, 4.4, -1], [2.0, 6.8, 3], [5.0, 6.8, -1], [11.0, 6.8, 4]].forEach(([x, y, kid]) => dec('schooldesk', x, y, 1.2, 0.8, { kid }));
-      spot('desk', 8.0, 6.8, 1.2, 0.8, { draw: 'schooldesk', kid: -1, stand: [8.6, 8.5], use: { at: [8.6, 7.75], pose: 'sit', face: 1, seatH: 7, prop: '✏️' } });
+      spot('desk', 8.0, 6.8, 1.2, 0.8, { draw: 'schooldesk', kid: -1, stand: [8.6, 8.5], use: { at: [8.6, 7.95], pose: 'sit', face: 1, back: true, seatH: 7, prop: '✏️' } });
       dec('cubbies', 0.05, 3.2, 0.7, 4.4);
       furn('shelf', 0.3, 9.6); furn('shelf', 1.3, 9.6); dec('globe', 12.6, 1.0, 0.8, 0.8); furn('plant', 12.8, 9.6);
       furn('aquarium', 10.2, 9.6); furn('easel', 12.8, 6.2); who(12.6, 7.6, { pose: 'work', face: 1, back: true, scale: 0.78, look: 3 });
@@ -3020,7 +3021,7 @@ const Scene = (() => {
       spot('date', 7.0, 1.4, 1.3, 1.3, { draw: 'table', i: 1, menu: RM, stand: [7.65, 3.2], use: { at: [6.9, 2.05], pose: 'sit', face: 1, seatH: 9, sit: 'eat', food: '🥩', mate: true } });
       dec('table', 10.0, 1.4, 1.3, 1.3, { i: 0, menu: RM }); dec('table', 4.0, 4.6, 1.3, 1.3, { i: 3, menu: RM }); dec('table', 7.0, 4.6, 1.3, 1.3, { i: 5, menu: RM }); dec('table', 10.0, 4.6, 1.3, 1.3, { i: 2, menu: RM });
       [[4.65, 2.05], [7.65, 2.05], [10.65, 2.05], [4.65, 5.25], [7.65, 5.25], [10.65, 5.25]].forEach(([px, py]) => dec('pendant', px, py, 0.1, 0.1, { air: true, col: '#c9a24a' }));
-      spot('bar', 0.3, 3.6, 0.9, 3.6, { draw: 'barcounter', stand: [2.2, 5.4], use: { at: [1.75, 5.4], pose: 'sit', face: -1, seatH: 10, sit: 'drink' } });
+      spot('bar', 0.3, 3.6, 0.9, 3.6, { draw: 'barcounter', stand: [2.2, 5.4], use: { at: [1.75, 5.4], pose: 'sit', face: -1, back: true, seatH: 10, sit: 'drink' } });
       guest(1.75, 4.2, { pose: 'sit', seatH: 10, sit: 'drink', face: -1 });
       furn('piano', 11.4, 8.0); who(12.4, 9.35, { staff: true, pose: 'sit', seatH: 8, sit: 'type', face: 1, back: true, look: { shirt: '#2d2d2d', top: 'jacket', inner: '#f4f4f0', hair: 'long', hairCol: '#2b1d14', skin: '#d39a6c' } });
       dec('kitchenpass', 4.0, 8.4, 3.6, 0.8); who(5.8, 7.95, { staff: true, pose: 'work', face: -1, dz: -1, look: { shirt: '#ffffff', top: 'jacket', inner: '#ffffff', hat: 'beanie', hatCol: '#ffffff', hair: 'short', hairCol: '#2b1d14', skin: '#f3c59f' } });
@@ -3034,7 +3035,7 @@ const Scene = (() => {
       spot('bar', 10.4, 0.4, 3.2, 0.9, { draw: 'barcounter', along: true, stand: [11.4, 2.6], use: { at: [11.4, 1.95], pose: 'sit', face: 1, back: true, seatH: 10, sit: 'drink' } });
       guest(12.6, 1.95, { pose: 'sit', seatH: 10, sit: 'chat', face: 1, back: true, dz: 0.3 });
       dec('rug', 4.8, 4.0, 4.4, 3.0, { col: '#8a2a34', flat: true });
-      spot('tea', 5.4, 4.6, 2.0, 1.0, { furn: 'coffeetable', stand: [6.4, 6.6], use: { at: [5.0, 5.2], pose: 'sit', face: 1, seatH: 8.5, sit: 'drink' } });
+      spot('tea', 5.4, 4.6, 2.0, 1.0, { furn: 'coffeetable', stand: [6.4, 6.6], use: { at: [4.9, 5.2], pose: 'sit', face: -1, seatH: 8.5, sit: 'drink' } });
       furn('armchair', 4.4, 4.7, { tint: '#b08d57' }); furn('armchair', 7.6, 4.7, { tint: '#b08d57' }); guest(8.1, 5.2, { pose: 'sit', seatH: 8.5, sit: 'drink', face: -1, dz: 0.4 });
       furn('sofa', 5.4, 6.4, { tint: '#8a2a34' }); guest(6.0, 6.85, { pose: 'sit', seatH: 8.5, sit: 'chat', face: -1, dz: 0.5 });
       dec('luggage', 11.4, 6.6, 1.0, 0.6); who(12.3, 7.6, { staff: true, face: -1, view: 'front', turn: [-0.4, 1], look: { shirt: '#c0453a', top: 'jacket', inner: '#f2c230', hat: 'cap', hatCol: '#c0453a', hair: 'short', hairCol: '#2b1d14', skin: '#9a6440' } });
@@ -3064,7 +3065,7 @@ const Scene = (() => {
       dec('bookwall', 0.4, 0.2, 10.2, 0.7); dec('bookwall', 0.25, 1.4, 0.7, 4.6, { low: true });
       spot('table', 3.4, 2.4, 2.2, 1.2, { draw: 'booktable', stand: [4.5, 4.2], use: { at: [8.7, 6.65], pose: 'sit', face: -1, seatH: 8.5, sit: 'read' } });
       dec('booktable', 6.6, 2.4, 2.2, 1.2); guest(7.6, 4.0, back); guest(2.0, 3.0, { face: -1, view: 'back', turn: [-1, -0.2] });
-      furn('armchair', 8.2, 6.2, { tint: '#2f5d50' }); furn('armchair', 5.6, 6.6, { tint: '#2f5d50' }); guest(6.1, 7.1, { pose: 'sit', seatH: 8.5, sit: 'read', face: 1, dz: 0.4 }); furn('arclamp', 9.4, 6.0);
+      furn('armchair', 8.2, 6.2, { tint: '#2f5d50' }); furn('armchair', 5.6, 6.6, { tint: '#2f5d50' }); guest(6.1, 7.1, { pose: 'sit', seatH: 8.5, sit: 'read', face: -1, dz: 0.4 }); furn('arclamp', 9.4, 6.0);
       dec('bookcat', 3.2, 6.4, 1.0, 0.8); furn('roundrug', 6.2, 6.0, { flat: true });
       furn('plant', 10.2, 1.4); furn('plant', 0.4, 7.6);
       P = { RW: 11, RD: 9, door: [3, 8.3], counter: { x: 7.4, y: 4.6, w: 2.8, d: 0.9 } };
@@ -3116,8 +3117,7 @@ const Scene = (() => {
         if (i < 3) dec('ballreturn', lx + 2.12, 6.0, 0.3, 1.2);
       });
       guest(4.05, 7.5, back); guest(6.6, 7.6, back); guest(9.05, 7.5, back);
-      furn('sofa', 2.8, 9.0, { tint: '#ec6aa8' }); furn('sofa', 7.8, 9.0, { tint: '#38d39f' });
-      guest(3.4, 9.45, { pose: 'sit', seatH: 8.5, sit: 'chat', face: 1, back: true, dz: 0.3 }); guest(8.4, 9.45, { pose: 'sit', seatH: 8.5, sit: 'drink', face: 1, back: true, dz: 0.3 }); guest(9.3, 9.45, { pose: 'sit', seatH: 8.5, sit: 'phone', face: 1, back: true, dz: 0.3 });
+      dec('lanesofa', 2.8, 9.0, 2, 1, { tint: '#ec6aa8', sat: [0.25] }); dec('lanesofa', 7.8, 9.0, 2, 1, { tint: '#38d39f', sat: [0.25, 0.75] });   // v0.43: sofas facing the lanes, people watching
       spot('arcade', 10.9, 0.3, 1.0, 0.8, { draw: 'arcade', stand: [11.4, 1.8], use: { at: [11.4, 1.35], pose: 'stand', view: 'back', turn: [0.1, -1] } });
       dec('arcade', 12.1, 0.3, 1.0, 0.8, { i: 1 }); spot('claw', 13.3, 0.3, 1.1, 1.0, { draw: 'clawbox', stand: [13.85, 1.9] }); dec('arcade', 14.6, 0.3, 1.0, 0.8, { i: 2 });   // v0.41: a claw machine you really play
       who(12.6, 1.4, { ...back, scale: 0.75, look: 3 }); guest(15.1, 1.45, back);
@@ -3126,13 +3126,11 @@ const Scene = (() => {
       furn('plant', 0.4, 10.6); furn('monstera', 15.2, 6.8);
       P = { RW: 16, RD: 12, door: [6.0, 11.3], counter: { x: 12.4, y: 5.6, w: 3.2, d: 0.9 } };
     } else if (k === 'aquatic') {   // a 25 m pool with four lanes, starting blocks, a diving board, stands, the lifeguard, a sauna
-      dec('bleachers', 1.0, 0.15, 9.6, 1.3);
-      guest(2.2, 0.45, { pose: 'sit', seatH: 19, sit: 'chat', face: 1, dz: 0.3 }); guest(5.4, 1.1, { pose: 'sit', seatH: 10, sit: 'phone', face: 1, dz: 0.3 }); guest(7.8, 0.45, { pose: 'sit', seatH: 19, sit: 'lean', face: -1, dz: 0.3 });
-      spot('pool', 1.0, 2.0, 12.0, 6.2, { draw: 'bigpool', stand: [7.4, 9.3], use: { at: [7.0, 4.6], pose: 'swim', face: 1 } });
+      dec('bleachers', 1.0, 0.1, 9.6, 1.35, { crowd: [[0.12, 2, 'chat'], [0.2, 2, 'phone'], [0.45, 1, 'phone'], [0.7, 2, 'lean'], [0.78, 0, 'chin'], [0.9, 1, 'drink']] });   // v0.43: they sit on the steps, facing the pool
+      spot('pool', 1.0, 2.0, 12.0, 6.2, { draw: 'bigpool', stand: [7.4, 9.3], use: { at: [7.4, 9.3], pose: 'swim', face: 1, ride: 'pool' } });   // v0.43: the pool draws you swimming in it
       [0, 1, 2, 3].forEach(i => { const bx = 1.0 + (i + 0.5) * 3 - 0.3; if (i === 0) spot('race', bx, 8.25, 0.6, 0.5, { draw: 'block', n: 1, stand: [bx + 0.3, 9.4] }); else dec('block', bx, 8.25, 0.6, 0.5, { n: i + 1 }); });
-      guest(5.5, 3.6, { walk: true, pose: 'swim', face: -1 }); guest(8.5, 6.2, { walk: true, pose: 'swim', face: 1 }); guest(11.5, 4.4, { walk: true, pose: 'swim', face: -1 });
       spot('dive', 12.4, 4.6, 2.6, 0.6, { draw: 'divingboard', stand: [15.6, 5.9], use: { at: [13.0, 4.9], pose: 'stand', lift: 9, face: -1, view: 'front' } });
-      dec('lifeguard', 13.8, 2.0, 0.9, 0.9); who(14.25, 2.45, { staff: true, pose: 'sit', seatH: 30, face: -1, look: { shirt: '#e5484d', top: 'tshirt', bottom: 'shorts', pants: '#2d2d2d', hair: 'short', hairCol: '#e9cf7a', skin: '#d39a6c' } });
+      dec('lifeguard', 13.6, 2.0, 0.9, 0.9, { guard: { shirt: '#e5484d', top: 'tshirt', bottom: 'shorts', pants: '#2d2d2d', hair: 'short', hairCol: '#e9cf7a', skin: '#d39a6c', mob: 'walk', body: 'regular' } });   // v0.43: up on the chair, facing the pool
       spot('sauna', 14.0, 8.4, 2.6, 2.6, { draw: 'sauna', stand: [13.4, 11.0], use: { at: [15.2, 9.9], pose: 'sit', face: -1, seatH: 8, sit: 'lean' } });
       dec('lockers', 0.3, 11.7, 4.0, 0.6, { along: true }); dec('bench', 1.0, 10.0, 2.4, 0.6); guest(1.8, 10.45, { pose: 'sit', seatH: 7, sit: 'phone', face: -1, dz: 0.4 });
       furn('plant', 16.4, 12.0); dec('towels', 9.4, 11.8, 1.2, 0.5);
@@ -3279,7 +3277,7 @@ const Scene = (() => {
   // A person placed in a room (not you): standing, sitting, working out. d.cast: one of the townsfolk (tap to
   // talk); d.staff: works here (tap opens what the place offers, like the person at the counter).
   function roomPerson(d, ts, i) {
-    const z = cam.z * (d.scale || 1), p = iso(d.x, d.y), id = d.cast ? castId('dec' + i + ':' + d.x, d.walk) : null;
+    const z = cam.z * (d.scale || 1), p = iso(d.x, d.y), id = d.cast ? castId('dec' + i + ':' + d.x, d.walk || (d.pose && d.pose !== 'stand') || !!d.lift) : null;   // v0.43: sitting, on a machine, up on something: on foot
     const L = id ? castLook(id, FOLK(i)) : typeof d.look === 'object' ? { skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', ...d.look } : FOLK(d.look || i);
     drawPerson(p.x, p.y - (d.lift || 0) * z, z, { look: L, face: d.face || 1, back: !!d.back, view: d.view || null, turn: d.turn, energy: 'good', ts, seed: i + 11, pose: d.pose || 'stand', moving: !!d.moving, phase: ts / (d.pose === 'bike' ? 120 : d.pose === 'walk' ? 110 : 80) + i, noBike: true, seatH: d.seatH, sit: d.sit, dir: d.dir, matCol: '#ec6aa8' });
     if (d.prop && z > 0.35) emoji(d.prop, p.x + 10 * z, p.y - 22 * z, 9 * z);
@@ -3558,14 +3556,51 @@ const Scene = (() => {
         flatRect(x - 0.4, y - 0.4, d.w + 0.8, d.d + 0.8, '#f4f7f9'); flatRect(x, y, d.w, d.d, '#2fa6d6');
         for (let k2 = 0; k2 < 4; k2++) { const cx2 = x + (k2 + 0.5) * d.w / 4; flatRect(cx2 - 0.07, y + 0.6, 0.14, d.d - 1.2, 'rgba(20,60,110,.35)'); flatRect(cx2 - 0.4, y + 0.6, 0.8, 0.14, 'rgba(20,60,110,.35)'); }
         for (let k2 = 0; k2 < 20; k2++) { const u = (k2 * 0.37 + t * 0.05) % 1, v = (k2 * 0.61) % 1, q = iso(x + u * d.w, y + v * d.d); ellipse(q.x, q.y, 7 * z, 1.6 * z, 'rgba(255,255,255,.3)'); }
+        // v0.43: the swimmers (and you, while you swim) go up and down the lanes, drawn in the water
+        const swim = (lane, ph, L, id, cap) => { const v = 0.5 + 0.5 * Math.sin(t * 0.22 + ph), dv = Math.cos(t * 0.22 + ph), sy = y + 0.6 + (d.d - 1.2) * v, sx = x + (lane + 0.5) * d.w / 4, q = iso(sx, sy);
+          drawPerson(q.x, q.y, z, { look: L, face: dv > 0 ? -1 : 1, energy: 'good', ts, seed: lane + 40, pose: 'swim', moving: true, phase: ts / 90, cap }); if (id) folkSeen(id, sx, sy, q, z, ts); return q; };
+        [[1, 0.6, '#f2c230'], [2, 2.9, '#2f6fb2'], [3, 4.4, '#e5484d']].forEach(([lane, ph, cap], i) => { const id = castId('sw' + i, true); swim(lane, ph, castLook(id, FOLK(i + 1)), id, cap); });
+        if (meS.use && !meS.moving && meS.use.ride === 'pool') {   // you, in the first lane, in a cap of your favourite colour, with a tag so you can find yourself
+          const q = swim(0, 1.2, S.me.look, null, S.me.look.shirt || '#34b27b'), U = meS.use, left = Math.max(0, (U.until - performance.now()) / 1000);
+          pill(curLang() === 'zh' ? '你' : 'You', q.x, q.y - 26 * z, '#34b27b', '#ffffff', `800 ${Math.max(8, 9 * z)}px ${UI_FONT}`, Math.max(13, 15 * z));
+          if (U.until && z > 0.35) { const w = 34 * z, by = q.y - 40 * z; rrect(q.x - w / 2, by, w, 5 * z, 2.5 * z, 'rgba(0,0,0,.25)'); rrect(q.x - w / 2, by, w * (1 - left / (U.secs || 1)), 5 * z, 2.5 * z, '#6cbf73'); }
+        }
         for (let k2 = 1; k2 < 4; k2++) { const xx = x + k2 * d.w / 4; for (let s = 0; s < 24; s++) { const q = iso(xx, y + (s + 0.5) * d.d / 24); circle(q.x, q.y - 0.5 * z, 1.3 * z, s < 3 || s > 20 ? '#e5484d' : s % 2 ? '#ffffff' : '#2f6fb2'); } }
         const ld = iso(x + d.w - 0.3, y + d.d + 0.1); line(ld.x, ld.y, ld.x, ld.y - 10 * z, '#c9cfd6', 1.2 * z); line(ld.x + 4 * z, ld.y + 2 * z, ld.x + 4 * z, ld.y - 8 * z, '#c9cfd6', 1.2 * z);
         return true;
       }
       case 'block': { box(x + 0.1, y + 0.05, d.w - 0.2, d.d - 0.1, 8, '#f4f4f0', 0, { top: '#38a3e0' }); const q = wallPt([iso(x + 0.1, y + d.d - 0.05), iso(x + d.w - 0.1, y + d.d - 0.05)], 0, 0.5, 4); if (z > 0.35) { ctx.font = `800 ${4.4 * z}px ${UI_FONT}`; ctx.fillStyle = '#2d2d2d'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(d.n || 1), q.x, q.y); } return true; }
-      case 'bleachers': { box(x, y, d.w, d.d * 0.5, 18, '#5aa2e0', 0, { top: '#7cb8ea' }); box(x, y + d.d * 0.5, d.w, d.d * 0.5, 9, '#4a8fd0', 0, { top: '#7cb8ea' }); return true; }
+      case 'bleachers': {   // v0.43: three steps; the people on them sit on the edge of a step, feet on the one below, facing the pool
+        const n = 3, sd = d.d / n, H = 7;
+        for (let r = n - 1; r >= 0; r--) box(x, y + (n - 1 - r) * sd, d.w, sd, (r + 1) * H, r % 2 ? '#4a8fd0' : '#5aa2e0', 0, { top: '#7cb8ea', shadow: r === n - 1 });
+        (d.crowd || []).map((c2, i) => ({ c2, i })).sort((a, b) => b.c2[1] - a.c2[1] || a.c2[0] - b.c2[0]).forEach(({ c2: [u, r, act], i }) => {
+          const px = x + u * d.w, py = y + (n - r) * sd - 0.12, q = up(iso(px, py), r * H * z), id = castId('bl' + i + ':' + x, true);
+          drawPerson(q.x, q.y, z, { look: castLook(id, AUDIENCE_LOOKS[i % AUDIENCE_LOOKS.length]), face: -1, energy: 'good', ts, seed: i + 30, pose: 'sit', seatH: H, sit: act });
+          folkSeen(id, px, py, q, z, ts);
+        });
+        return true;
+      }
+      case 'lanesofa': {   // v0.43: a sofa facing the lanes (its back to us), with people on it watching the game
+        const tint = d.tint || '#38d39f';
+        box(x + 0.06, y + 0.06, d.w - 0.12, d.d - 0.12, 4, shade(tint, -0.25), 0, { top: shade(tint, -0.1) });
+        box(x + 0.3, y + 0.08, d.w - 0.6, d.d - 0.4, 3, tint, 4, { top: shade(tint, 0.08), shadow: false });
+        box(x + 0.04, y + 0.08, 0.26, d.d - 0.12, 9, tint, 0, { shadow: false, top: shade(tint, 0.1) });
+        (d.sat || []).forEach((u, i) => { const id = castId('ls' + i + ':' + x, true), sx = x + 0.3 + u * (d.w - 0.6), sy = y + d.d * 0.42, q = iso(sx, sy);
+          drawPerson(q.x, q.y, z, { look: castLook(id, FOLK(i + 2)), face: 1, back: true, energy: 'good', ts, seed: i + 5, pose: 'sit', seatH: 7, sit: ['chat', 'drink', 'phone'][i % 3] }); folkSeen(id, sx, sy, q, z, ts); });
+        box(x + d.w - 0.3, y + 0.08, 0.26, d.d - 0.12, 9, tint, 0, { shadow: false, top: shade(tint, 0.1) });
+        box(x + 0.04, y + d.d - 0.3, d.w - 0.08, 0.26, 17, shade(tint, -0.05), 0, { shadow: false, top: shade(tint, 0.1) });
+        return true;
+      }
       case 'divingboard': { box(x + d.w - 0.7, y + 0.1, 0.6, d.d - 0.2, 8, '#c9cfd6', 0); box(x, y + 0.15, d.w, d.d - 0.3, 1.2, '#f4f4f0', 8, { top: busy ? '#ffffff' : '#38a3e0', shadow: false }); return true; }
-      case 'lifeguard': { [[0.1, 0.1], [0.7, 0.1], [0.1, 0.7], [0.7, 0.7]].forEach(([dx, dy]) => box(x + dx, y + dy, 0.1, 0.1, 28, '#f4f4f0', 0, { shadow: false })); box(x + 0.05, y + 0.05, d.w - 0.1, d.d - 0.1, 2, '#e5484d', 28, { shadow: false }); return true; }
+      case 'lifeguard': {   // v0.43: a tall white chair with a ladder at the back; the lifeguard sits up on it, looking over the pool
+        [[0.15, 0.15], [0.65, 0.15], [0.15, 0.65], [0.65, 0.65]].forEach(([dx, dy]) => box(x + dx, y + dy, 0.08, 0.08, 30, '#f4f4f0', 0, { shadow: false }));
+        for (let k2 = 1; k2 < 5; k2++) box(x + 0.66, y + 0.2, 0.06, 0.5, 1.2, '#dfe6ea', k2 * 6, { shadow: false });
+        box(x + 0.05, y + 0.12, 0.2, 0.66, 1.4, '#f4f4f0', 18, { shadow: false });   // the footrest
+        box(x + 0.15, y + 0.12, 0.62, 0.66, 2.5, '#e5484d', 30, { shadow: false, top: '#f05a5f' });
+        if (d.guard) { const q = up(iso(x + 0.42, y + 0.45), 21 * z); drawPerson(q.x, q.y, z, { look: d.guard, face: -1, back: true, energy: 'good', ts, seed: 12, pose: 'sit', seatH: 9, sit: 'lean' }); }
+        box(x + 0.66, y + 0.12, 0.1, 0.66, 9, '#e5484d', 32, { shadow: false });   // the low back
+        return true;
+      }
       case 'sauna': { const b = box(x, y, d.w, d.d, 50, '#b07a4a', 0, { top: '#8a5a36' }); for (let k2 = 1; k2 < 10; k2++) { wallLine(b.left, 0, 0, k2 * 5, 1, k2 * 5, 'rgba(90,60,30,.35)', 0.6); wallLine(b.right, 0, 0, k2 * 5, 1, k2 * 5, 'rgba(90,60,30,.35)', 0.6); }
         wallRect(b.left, 0, 0.3, 0.7, 2, 40, busy ? 'rgba(255,200,140,.8)' : 'rgba(255,220,180,.55)', '#8a5a36', 1); const q = wallPt(b.left, 0, 0.5, 45); if (z > 0.35) { ctx.font = `800 ${5 * z}px ${UI_FONT}`; ctx.fillStyle = '#fffaf0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SAUNA', q.x, q.y); }
         for (let k2 = 0; k2 < 3; k2++) { const u = (t * 0.4 + k2 / 3) % 1, p = up(iso(x + d.w * 0.5, y + d.d * 0.5), (52 + u * 20) * z); circle(p.x + Math.sin(u * 6 + k2) * 4 * z, p.y, (2 + u * 4) * z, `rgba(255,255,255,${0.5 * (1 - u)})`); } return true; }
@@ -3812,7 +3847,7 @@ const Scene = (() => {
       case 'menuboard': drawMenuBoard(d, ts); break;
       case 'glass': drawDecor(d, ts); break;
       case 'bench': drawDecor(d, ts); break;
-      case 'chairs': { const n = d.n || 4, sw = d.w / n; for (let k = 0; k < n; k++) { box(x + k * sw + 0.05, y + 0.1, sw - 0.1, d.d - 0.2, 7, '#5aa2e0', 0, { top: '#7cb8ea' }); box(x + k * sw + 0.05, y, sw - 0.1, 0.15, 16, '#4a8fd0', 0, { shadow: false }); if ((d.sat || []).includes(k)) { const id = castId('wait' + k + ':' + y), q = iso(x + k * sw + sw / 2, y + 0.45); drawPerson(q.x, q.y, z, { look: castLook(id, FOLK(k + 2)), face: -1, energy: k ? 'tired' : 'good', ts, seed: k + y, pose: 'sit', seatH: 7, sit: ['phone', 'lean', 'read', 'chin'][(k + Math.round(y)) % 4] }); folkSeen(id, x + k * sw + sw / 2, y + 0.45, q, z, ts); } } break; }
+      case 'chairs': { const n = d.n || 4, sw = d.w / n; for (let k = 0; k < n; k++) { box(x + k * sw + 0.05, y + 0.1, sw - 0.1, d.d - 0.2, 7, '#5aa2e0', 0, { top: '#7cb8ea' }); box(x + k * sw + 0.05, y, sw - 0.1, 0.15, 16, '#4a8fd0', 0, { shadow: false }); if ((d.sat || []).includes(k)) { const id = castId('wait' + k + ':' + y, true), q = iso(x + k * sw + sw / 2, y + 0.45); drawPerson(q.x, q.y, z, { look: castLook(id, FOLK(k + 2)), face: -1, energy: k ? 'tired' : 'good', ts, seed: k + y, pose: 'sit', seatH: 7, sit: ['phone', 'lean', 'read', 'chin'][(k + Math.round(y)) % 4] }); folkSeen(id, x + k * sw + sw / 2, y + 0.45, q, z, ts); } } break; }
       case 'exambed': { box(x + 0.1, y + 0.1, d.w - 0.2, d.d - 0.2, 8, '#c9cfd6', 0); box(x, y, d.w, d.d, 3, '#e8f4f6', 8, { top: '#f6fbfc' }); box(x + d.w - 0.6, y + 0.15, 0.45, d.d - 0.3, 2, '#ffffff', 11, { shadow: false }); box(x + 0.2, y - 0.1, d.w - 0.4, 0.1, 40, 'rgba(159,214,210,.5)', 0, { shadow: false, edge: null }); break; }
       case 'healthpod': { const b = box(x + 0.15, y + 0.15, d.w - 0.3, d.d - 0.3, 4, '#d6dce2', 0, { top: '#eef2f5' }); box(x + 0.2, y + 0.1, 0.2, 0.2, 40, '#9aa3ad', 0, { shadow: false }); const q = up(iso(x + 0.3, y + 0.2), 44 * z); rrect(q.x - 9 * z, q.y - 7 * z, 18 * z, 12 * z, 2 * z, '#1b2a3a', '#9aa3ad', 0.8 * z); emoji('❤️', q.x, q.y + 3 * z, 7 * z); break; }
       case 'medshelf': { const b = box(x, y, d.w, d.d, 44, '#ffffff', 0, { top: '#f4f4f0' }); [12, 26, 40].forEach(h => ['💊', '🧴', '🩹', '💊'].forEach((e, k) => { const q = wallPt(b.left, 0, (k + 0.5) / 4, h - 8); emoji(e, q.x, q.y, 8 * z); })); wallRect(b.left, 0, 0.35, 0.65, 34, 42, '#e5484d'); const q = wallPt(b.left, 0, 0.5, 38); emoji('➕', q.x, q.y + 3 * z, 7 * z); break; }
@@ -3820,7 +3855,7 @@ const Scene = (() => {
       case 'bookwall': { const H = d.low ? 30 : 56, b = box(x, y, d.w, d.d, H, '#8a5a36', 0, { top: '#a46e40' }), cols = ['#e5484d', '#38a3e0', '#f2c230', '#34b27b', '#a46ef0', '#f59e0b', '#2f6fb2'], face = d.w > d.d ? b.left : b.right, len = Math.max(d.w, d.d);
         for (let s = 0; s < (d.low ? 2 : 4); s++) { const h0 = 3 + s * 13; wallRect(face, 0, 0.01, 0.99, h0 + 11, h0 + 12.4, '#6b4428'); for (let k = 0; k < len * 6; k++) { const u0 = k / (len * 6), u1 = (k + 0.8) / (len * 6); wallRect(face, 0, u0, u1, h0, h0 + 8 + hash(k, s) * 3, cols[(k * 3 + s) % cols.length]); } } break; }
       case 'bookstand': { box(x + 0.2, y + 0.2, d.w - 0.4, d.d - 0.4, 22, '#8a5a36', 0, { top: '#a46e40' }); const q = up(c, 30 * z); rrect(q.x - 12 * z, q.y - 9 * z, 24 * z, 16 * z, 2 * z, '#fffaf0', '#c9b98f', 1); line(q.x, q.y - 9 * z, q.x, q.y + 7 * z, '#c9b98f', 0.8 * z); emoji('⭐', q.x + 10 * z, q.y - 10 * z, 9 * z); break; }
-      case 'longtable': { const R = d.readers || []; R.forEach(r => { const rx2 = r ? x + d.w + 0.45 : x - 0.45, id = castId('read' + r + ':' + y), q = iso(rx2, y + d.d / 2); drawPerson(q.x, q.y, z, { look: castLook(id, FOLK(r + 3)), face: r ? -1 : 1, back: !!r, energy: 'good', ts, seed: r + 4, pose: 'sit', seatH: 8, sit: r ? 'chin' : 'read' }); folkSeen(id, rx2, y + d.d / 2, q, z, ts); });
+      case 'longtable': { const R = d.readers || []; R.forEach(r => { const rx2 = r ? x + d.w + 0.45 : x - 0.45, id = castId('read' + r + ':' + y, true), q = iso(rx2, y + d.d / 2); drawPerson(q.x, q.y, z, { look: castLook(id, FOLK(r + 3)), face: r ? -1 : 1, back: !!r, energy: 'good', ts, seed: r + 4, pose: 'sit', seatH: 8, sit: r ? 'chin' : 'read' }); folkSeen(id, rx2, y + d.d / 2, q, z, ts); });
         [x - 0.75, x + d.w + 0.15].forEach(cx2 => box(cx2, y + d.d / 2 - 0.3, 0.6, 0.6, 8, '#a46e40', 0, { top: '#c99a6b' }));
         box(x, y, d.w, d.d, 14, '#b07a4a', 0, { top: '#c99a6b' }); const q = up(iso(x + d.w / 2, y + d.d / 2), 14 * z); emoji('📚', q.x - 8 * z, q.y, 9 * z); const lp = up(iso(x + d.w - 0.3, y + 0.3), 14 * z); line(lp.x, lp.y, lp.x, lp.y - 12 * z, '#3b6b4a', 1.2 * z); ellipse(lp.x, lp.y - 13 * z, 5 * z, 2.5 * z, '#34b27b'); if (NIGHT > 0.2) glow(lp.x, lp.y - 12 * z, 30 * z, 0.6); break; }
       case 'mirrorwall': { const b = box(x, y, d.w, d.d, 52, '#cfe6f2', 6, { top: '#e8f4fa', shadow: false }); for (let k = 0; k < 5; k++) wallRect(b.left, 6, k / 5 + 0.02, k / 5 + 0.06, 4, 48, 'rgba(255,255,255,.55)'); break; }
@@ -3832,7 +3867,8 @@ const Scene = (() => {
       case 'redbox': { box(x + 0.15, y + 0.15, d.w - 0.3, d.d - 0.3, 26, '#e5484d', 0, { top: '#c9373c' }); const q = up(c, 30 * z); ellipse(q.x, q.y, 8 * z, 4 * z, '#c9373c'); break; }
       case 'scaletable': { box(x, y, d.w, d.d, 14, '#b9c1ca', 0, { top: '#d6dce2' }); const q = up(c, 14 * z); emoji('📦', q.x, q.y, 10 * z); break; }
       case 'blackboard': { const b = box(x, y, d.w, d.d, 34, '#8a5a36', 22, { shadow: false }); wallRect(b.left, 22, 0.02, 0.98, 2, 32, '#2f4a3a'); ['ABC', '1+1=2', '🌍'].forEach((s, k) => { const q = wallPt(b.left, 22, 0.2 + k * 0.3, 18); ctx.font = `700 ${Math.max(6, 8 * z)}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f4f1ea'; ctx.fillText(s, q.x, q.y); }); break; }
-      case 'schooldesk': { box(x, y, d.w, d.d, 14, '#c99a6b', 0, { top: '#e6c79a' }); box(x + d.w / 2 - 0.3, y + d.d + 0.05, 0.6, 0.5, 8, '#5aa2e0', 0, { top: '#7cb8ea' }); if (d.kid >= 0) { const q = iso(x + d.w / 2, y + d.d + 0.15); drawPerson(q.x, q.y, z, { look: FOLK(d.kid + 1), face: 1, energy: 'good', ts, seed: d.kid, pose: 'sit', seatH: 7 }); } const q = up(iso(x + 0.4, y + 0.4), 14 * z); emoji('📓', q.x, q.y, 8 * z); break; }
+      case 'schooldesk': {   // v0.43: the kid faces the desk and the board (back to us)
+        box(x, y, d.w, d.d, 14, '#c99a6b', 0, { top: '#e6c79a' }); box(x + d.w / 2 - 0.3, y + d.d + 0.05, 0.6, 0.5, 8, '#5aa2e0', 0, { top: '#7cb8ea' }); if (d.kid >= 0) { const q = iso(x + d.w / 2, y + d.d + 0.35); drawPerson(q.x, q.y, z, { look: FOLK(d.kid + 1), face: 1, back: true, energy: 'good', ts, seed: d.kid, pose: 'sit', seatH: 7 }); } const q = up(iso(x + 0.4, y + 0.4), 14 * z); emoji('📓', q.x, q.y, 8 * z); break; }
       case 'globe': { box(x + 0.25, y + 0.25, 0.3, 0.3, 14, '#8a5a36', 0); const q = up(c, 22 * z); circle(q.x, q.y, 8 * z, '#5aa2e0'); emoji('🌍', q.x, q.y + 6 * z, 14 * z); break; }
       case 'townboard': { const b = box(x, y, d.w, d.d, 34, '#6b4428', 26, { shadow: false }); wallRect(b.left, 26, 0.03, 0.97, 2, 32, '#fffaf0'); const q = wallPt(b.left, 26, 0.5, 24); ctx.font = `800 ${Math.max(7, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#6b4428'; ctx.fillText(`🏆 ${t('fab_rank')}`, q.x, q.y); [0.25, 0.5, 0.75].forEach((u, k) => { const r = wallPt(b.left, 26, u, 12); rrect(r.x - 9 * z, r.y - 4 * z, 18 * z, 7 * z, 1.5 * z, ['#f2c230', '#c9cfd6', '#d9915a'][k]); }); break; }
       case 'flag': { box(x + 0.25, y + 0.25, 0.1, 0.1, 64, '#9aa3ad', 0, { shadow: false }); const q = up(iso(x + 0.3, y + 0.3), 62 * z), wv = Math.sin(ts / 400 + x) * 2 * z; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.quadraticCurveTo(q.x + 10 * z, q.y - 3 * z + wv, q.x + 20 * z, q.y + wv); ctx.lineTo(q.x + 20 * z, q.y + 12 * z + wv); ctx.quadraticCurveTo(q.x + 10 * z, q.y + 9 * z + wv, q.x, q.y + 12 * z); ctx.closePath(); ctx.fillStyle = d.col; ctx.fill(); break; }
@@ -3857,6 +3893,11 @@ const Scene = (() => {
     const U = meS.use;
     if (U && U.ride && !meS.moving) return;   // v0.41: on a ride: the ride draws you
     if (U && !meS.moving) {
+      if (S.me.look.mob === 'wheel' && ['sit', 'lie', 'bike', 'row'].includes(U.pose) && U.stand) {   // v0.43: a wheelchair stays on the floor, beside it
+        const q = iso(U.stand[0], U.stand[1]); drawPerson(q.x, q.y, z, { look: S.me.look, face: U.face || 1, energy: energyLevel(), ts, seed: 3, pose: 'stand' });
+        const left2 = Math.max(0, (U.until - performance.now()) / 1000); if (U.until && z > 0.35) { const w = 34 * z, by = q.y - 54 * z; rrect(q.x - w / 2, by, w, 5 * z, 2.5 * z, 'rgba(0,0,0,.25)'); rrect(q.x - w / 2, by, w * (1 - left2 / (U.secs || 1)), 5 * z, 2.5 * z, '#6cbf73'); }
+        return;
+      }
       const p = iso(U.at[0], U.at[1]);
       drawPerson(p.x, p.y - (U.lift || 0) * z, z, { look: S.me.look, face: U.face || 1, view: U.view || null, turn: U.turn || [0, -1], energy: energyLevel(), ts, seed: 3, pose: U.pose, moving: !!U.moving, phase: ts / (U.pose === 'bike' ? 120 : 80), noBike: true, seatH: U.seatH, sit: U.sit, dir: U.dir, matCol: '#38a3e0' });
       if (U.mate && Math.floor(ts / 900) % 2 === 0) emoji('😄', p.x + 8 * z, p.y - 44 * z, 12 * z);
@@ -3877,7 +3918,7 @@ const Scene = (() => {
     const P = shopPlan(owner), w = P.wares.find(x => x.id === id || x.k === id);
     if (!w || !w.use) { if (done) done(); return; }
     shopWalk(w.stand || [w.x + w.w / 2, w.y + w.d + 0.55], () => {
-      meS.use = { ...w.use, k: w.k, secs, until: performance.now() + secs * 1000, done, mate: w.use.mate ? mate || FOLK(3) : null };
+      meS.use = { ...w.use, k: w.k, stand: w.stand || [w.x + w.w / 2, w.y + w.d + 0.55], secs, until: performance.now() + secs * 1000, done, mate: w.use.mate ? mate || FOLK(3) : null };
     });
   }
   function shopPlan(k) {
@@ -4041,7 +4082,7 @@ const Scene = (() => {
       const stool = s => { const q = iso(cx2 + SEATS[s][0], cy2 + SEATS[s][1]); line(q.x, q.y, q.x, q.y - 9 * z, '#4a4f57', 1.6 * z); ellipse(q.x, q.y - 9 * z, 7 * z, 3.5 * z, '#e5734f'); };
       const act = s => ACTS[(d.i * 3 + s * 7 + Math.floor(x)) % ACTS.length];
       const sitter = s => {
-        const [dx, dy, face, back] = SEATS[s], sx = cx2 + dx, sy = cy2 + dy, q = iso(sx, sy), id = d.crew ? null : castId('tb' + d.i + ':' + s + ':' + Math.round(x * 10) + ':' + Math.round(y * 10));
+        const [dx, dy, face, back] = SEATS[s], sx = cx2 + dx, sy = cy2 + dy, q = iso(sx, sy), id = d.crew ? null : castId('tb' + d.i + ':' + s + ':' + Math.round(x * 10) + ':' + Math.round(y * 10), true);
         const L = d.crew ? { skin: '#f3c59f', hair: 'short', hairCol: '#2b1d14', mob: 'walk', body: 'regular', ...d.crew[s % d.crew.length] } : castLook(id, TABLE_LOOKS[(d.i + s) % TABLE_LOOKS.length]);
         drawPerson(q.x, q.y, z, { look: L, face, back, energy: 'good', ts, seed: d.i * 4 + s, pose: 'sit', seatH: 9, sit: d.crew ? ['chat', 'eat'][s % 2] : act(s) });
         folkSeen(id, sx, sy, q, z, ts);
@@ -4208,7 +4249,7 @@ const Scene = (() => {
       else { const b = box(x, y, w.w, 0.4, 42, '#2d2540', 0, { top: '#3b3152' }); wallRect(b.left, 0, 0.15, 0.85, 0, 28, '#1b1530', '#f2c230', 1.6); const p2 = wallPt(b.left, 0, 0.5, 36); emoji('🎬', p2.x, p2.y, 11 * z); }
     }
     const f0 = iso(x + w.w / 2, y + w.d);
-    if (w.price && z > 0.5 && w.kind !== 'act') pill(`🪙${fmtPrice(w.price)}`, f0.x, f0.y + 9 * z, 'rgba(255,253,248,.92)', '#6b4a1f', `800 ${Math.max(8, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(13, 15 * z));
+    if (w.price && z > 0.5 && w.kind !== 'act') label(`🪙${fmtPrice(w.price)}`, f0.x, f0.y + 9 * z, 'rgba(255,253,248,.92)', '#6b4a1f', `800 ${Math.max(8, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(13, 15 * z), 1);
     return { x0: iso(x, y + w.d).x - 4 * z, x1: iso(x + w.w, y).x + 4 * z, y0: c.y - 60 * z, y1: iso(x + w.w, y + w.d).y + 8 * z };
   }
   function renderShop(ts, dt) {
@@ -4252,7 +4293,7 @@ const Scene = (() => {
     if (!P.noClerk) objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]), ST = staffOf(VIEW_TOWN, owner), me2 = { skin: ST.look.skin, hair: ST.look.hair, hairCol: ST.look.hairCol, body: ST.look.body || 'regular' };   // v0.40: somebody from town, with a name
       FOLK_AT[ST.id] = P.clerk;
       drawPerson(p2.x, p2.y, z, { look: VL ? { shirt: acc, mob: 'walk', top: 'polo', bottom: 'jeans', shoes: 'sneakers', hat: 'nohat', ...VL.clerk, ...me2 } : { shirt: acc, mob: 'walk', top: 'polo', ...me2 }, face: -1, view: Math.sin(ts / 2300) > 0.75 ? null : 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
-      hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${nm(ST.name)} · ${VL ? t('vrole_' + owner) : t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
+      hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) label(`💬 ${nm(ST.name)} · ${VL ? t('vrole_' + owner) : t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z), 2); } });
     if (!P.noClerk) objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#c99a6b', 0, { top: '#e6c79a' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji(VL ? VL.till : '💳', p2.x, p2.y, 9 * z); } });
     shoppers(P, objs, dt, ts);
     objs.push({ d: meS.use && !meS.moving ? meS.use.at[0] + meS.use.at[1] + 0.5 : meS.x + meS.y + 0.3, f: () => drawMeShop(z, ts) });
@@ -4262,7 +4303,7 @@ const Scene = (() => {
     { const S3 = S2, acc2 = S3.roof || '#c9893a', F1 = [iso(0, RD), iso(RW, RD)], F2 = [iso(RW, RD), iso(RW, 0)];
       [F1, F2].forEach((F, k) => { wallRect(F, 0, 0, 1, 0, 5, shade(acc2, k ? -0.08 : -0.18)); wallRect(F, 0, 0, 1, 5, 6.2, '#ffffff'); });
       const du0 = (P.door[0] - 1.2) / RW, du1 = (P.door[0] + 1.2) / RW; wallRect(F1, 0, du0, du1, 0, 6.2, '#cfc9bd'); }
-    const dp = iso(P.door[0], RD - 0.2); pill(`🚪 ${t(VL ? 'venue_leave' : 'store_leave')}`, dp.x, dp.y + 12 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z));
+    const dp = iso(P.door[0], RD - 0.2); label(`🚪 ${t(VL ? 'venue_leave' : 'store_leave')}`, dp.x, dp.y + 12 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z), 4);
   }
   // v0.37: what you see from high up a tower: the sky (day or night) and the town's roofs far below
   function skyOutside(RW, RD, ts) {
@@ -4313,7 +4354,7 @@ const Scene = (() => {
     if (P.counter) {
       const C = P.counter;
       objs.push({ d: C.x + C.y - 0.6 + 1.2, f: () => { const p2 = iso(P.clerk[0], P.clerk[1]), ST = staffOf(VIEW_TOWN, owner); FOLK_AT[ST.id] = P.clerk; drawPerson(p2.x, p2.y, z, { look: { shirt: acc, mob: 'walk', top: 'polo', skin: ST.look.skin, hair: ST.look.hair, hairCol: ST.look.hairCol }, face: -1, view: 'front', turn: [0.3, 1], energy: 'great', ts, seed: 5, pose: 'stand', wave: Math.sin(ts / 2300) > 0.75 });
-        hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) pill(`💬 ${nm(ST.name)} · ${t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z)); } });
+        hits.push({ kind: 'clerk', x0: p2.x - 16 * z, x1: p2.x + 16 * z, y0: p2.y - 50 * z, y1: p2.y + 30 * z }); if (z > 0.45) label(`💬 ${nm(ST.name)} · ${t('shop_clerk')}`, p2.x, p2.y - 54 * z, '#fffdf8', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z), 2); } });
       objs.push({ d: C.x + C.y + (C.w + C.d) / 2, f: () => { box(C.x, C.y, C.w, C.d, 16, '#f4f1ea', 0, { top: '#c9a26b' }); const p2 = up(iso(C.x + 0.6, C.y + 0.45), 18 * z); emoji('💳', p2.x, p2.y, 9 * z); } });
     }
     if (!P.dark) shoppers(P, objs, dt, ts);
@@ -4325,13 +4366,13 @@ const Scene = (() => {
       const F1 = [iso(0, RD), iso(RW, RD)], F2 = [iso(RW, RD), iso(RW, 0)];
       [F1, F2].forEach((F, k) => { poly([F[0], F[1], up(F[1], 30 * z), up(F[0], 30 * z)], 'rgba(200,230,250,.16)', 'rgba(255,255,255,.55)', 1); wallRect(F, 0, 0, 1, 0, 3, shade(acc, k ? -0.08 : -0.18)); });
       const dp = iso(P.door[0], RD - 0.45); hits.push({ kind: 'shopDoor', x0: dp.x - 30 * z, x1: dp.x + 30 * z, y0: dp.y - 14 * z, y1: dp.y + 14 * z });
-      pill(`🚪 ${t('store_leave')}`, dp.x, dp.y + 14 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z));
+      label(`🚪 ${t('store_leave')}`, dp.x, dp.y + 14 * z, 'rgba(255,253,248,.95)', '#3b3125', `800 ${Math.max(9, 11 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(15, 20 * z), 4);
     } else if (!P.dark) { const F1 = [iso(0, RD), iso(RW, RD)]; poly([F1[0], F1[1], up(F1[1], 16 * z), up(F1[0], 16 * z)], 'rgba(200,230,250,.22)', 'rgba(255,255,255,.8)', 1.2); line(up(F1[0], 16 * z).x, up(F1[0], 16 * z).y, up(F1[1], 16 * z).x, up(F1[1], 16 * z).y, '#c9c3b6', 2.4 * z); }   // a glass railing
     if (FILM && FILM.t0 && owner === 'cinema' && performance.now() - FILM.t0 > 11500 && !FILM.ended) { FILM.ended = true; onHit({ kind: 'filmEnd', k: FILM.k }); }
   }
   function drawMallWare(w, ts) {
     const z = cam.z, { x, y } = w, c = iso(x + w.w / 2, y + w.d / 2), f0 = iso(x + w.w / 2, y + w.d);
-    const tag = (txt) => { if (z > 0.5) pill(txt, f0.x, f0.y + 9 * z, 'rgba(255,253,248,.92)', '#6b4a1f', `800 ${Math.max(8, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(13, 15 * z)); };
+    const tag = (txt) => { if (z > 0.5) label(txt, f0.x, f0.y + 9 * z, 'rgba(255,253,248,.92)', '#6b4a1f', `800 ${Math.max(8, 9 * z)}px ${UI_FONT},${EMOJI_FONT}`, Math.max(13, 15 * z), 1); };
     if (w.kind === 'clothes' || w.kind === 'excl' || w.kind === 'act') return drawWare(w, ts);
     if (w.kind === 'stall') {   // a food stall: a counter, a striped awning, the menu and a cook
       const col = STALL_COL[w.k] || '#f59e0b', F = MALL.foods[w.k];
@@ -4445,7 +4486,7 @@ const Scene = (() => {
     if (z < 0.4) for (const c of outChunks()) {   // v0.40: the county's other towns
       if (!c.name || c.x > vr.x1 || c.x + S2 < vr.x0 || c.y > vr.y1 || c.y + S2 < vr.y0) continue;
       const p = iso(c.x + S2 / 2, c.y + S2 / 2);
-      pill(`🏘️ ${curLang() === 'zh' ? c.name[0] : c.name[1]}`, p.x, p.y - 60 * z, 'rgba(255,253,248,.92)', '#3b3125', `800 ${Math.max(10, 13 * Math.min(1, z * 3))}px ${UI_FONT},${EMOJI_FONT}`, Math.max(18, 22 * Math.min(1, z * 3)));
+      label(`🏘️ ${curLang() === 'zh' ? c.name[0] : c.name[1]}`, p.x, p.y - 60 * z, 'rgba(255,253,248,.92)', '#3b3125', `800 ${Math.max(10, 13 * Math.min(1, z * 3))}px ${UI_FONT},${EMOJI_FONT}`, Math.max(18, 22 * Math.min(1, z * 3)), 1);
     }
   }
   // A few house styles for the villages around town (a short list, so their pictures can be reused).
@@ -4725,7 +4766,8 @@ const Scene = (() => {
       // sitting: hips on the seat, feet on the floor; lying: on the mattress, then the quilt goes back over you
       const sitH = pose !== 'sit' ? 0 : trS ? trS.seatH : useK === 'sit' ? SEAT_H[useIt.k] || 9 : 0, lieH = pose === 'lie' && useIt ? LIE_H[useIt.k] || 10 : 0;
       const yOff = sitH ? 0 : lieH || meIn.seat || 0;
-      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: meIn.view, turn: meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
+      const tread = it && FURN[it.k].use === 'run' && pose === 'run';   // v0.43: on the treadmill you face its console, your back to us
+      drawPerson(p.x, p.y - (yOff + lift) * z, z, { look: S.me.look, face: meIn.face, back: meIn.back && meIn.moving, view: tread ? 'back' : meIn.view, turn: tread ? (it.rot ? [-1, 0.1] : [0.1, -1]) : meIn.turn, moving: meIn.moving, phase: meIn.phase, energy: energyLevel(), ts, seed: 3, pose, noBike: true, wave: meIn.wave > performance.now(), matCol: it && it.tint, seatH: sitH, dir: lieDir(useIt) });
       if (pose === 'lie' && useIt) drawBedQuilt(useIt);
       if (pose === 'sit' && useIt && sitH) drawSeatFront(useIt, useIt.x, useIt.y);   // v0.19: the near arm stays in front of you
       ctx.restore();
@@ -4924,6 +4966,8 @@ const Scene = (() => {
     LAWN = th === TOWN_THEMES.maple ? LAWN_MAPLE : [-0.03, -0.015, 0.01, 0.025].map(k => shade(th.lawn, k));
     HOUSE_SPR.clear();
   }
+  // v0.43: a label you can tap: the hit gets the label's box once the labels are laid out
+  const hitLabel = (H, pri, ...a) => { hits.push(H); label(...a, pri, H); };
   function render(ts) {
     if (!visible || !S || !W) return;
     setPal();
@@ -4941,11 +4985,13 @@ const Scene = (() => {
     GLOWS = [];
     ctx.clearRect(0, 0, W, H);
     hits = [];
+    labelsBegin();   // v0.43: every label is drawn last, laid out so none overlap
     try {
       if (mode === 'interior') renderInterior(ts, dt);
       else if (mode === 'shop') renderShop(ts, dt);
       else renderWorld(ts, dt);
     } catch (e) { console.error(e); }
+    try { labelsFlush(); } catch (e) { console.error(e); LABEL_Q = null; }
     drawFloats(ts);
     drawPing(ts);
   }
@@ -4962,7 +5008,7 @@ const Scene = (() => {
     ctx.save(); ctx.globalAlpha = a;
     ellipse(p.x, p.y, (14 + k * 40) * Math.max(0.5, z), (7 + k * 20) * Math.max(0.5, z), null, `rgba(239,125,60,${1 - k})`, 3);
     const bob = Math.sin(ts / 180) * 4, py = p.y - Math.max(70, 64 * z) - bob;
-    pill(`📍 ${t('you_here')}`, p.x, py, '#ef7d3c', '#ffffff', `800 13px ${UI_FONT},${EMOJI_FONT}`, 26);
+    label(`📍 ${t('you_here')}`, p.x, py, '#ef7d3c', '#ffffff', `800 13px ${UI_FONT},${EMOJI_FONT}`, 26, 6);
     ctx.restore();
   }
 
@@ -5291,6 +5337,14 @@ const Scene = (() => {
       drawYardItem({ k, rot: 0, placed: now() }, 0, 0, 1000);
     },
     car(k, o, w, h) { if (CARS[k].kind === 'two') frameFoot(1, 1.6, 30, w, h, 2.8); else frameFoot(1.1, 2.5, 34, w, h, 2); drawCar({ k, color: o.color || CAR_COLORS[0] }, 0, 0, 0); },
+    // v0.43: a shop or a building in town, for the top of its card (without its name sign)
+    store(k, o, w, h) {
+      const S2 = STORES[k]; if (!S2 || !S2.w) return;
+      const wh = CIVIC_WH[k] || (k === 'mall' ? 52 : 34), sv = LABEL_Q;
+      frameFoot(S2.w + 0.8, S2.d + 0.8, Math.min(wh, 110) + 24, w, h, 1.6);
+      LABEL_Q = [];
+      try { drawStore([k, 0.4, 0.4, S2.w, S2.d + STORE_FRONT, 'S'], o.ts || 0); } finally { LABEL_Q = sv; }
+    },
     house(k, o, w, h) {
       const H = HOUSES[k], [fx, fy, fw, fd] = H.fp, ex = o.extra || 0;
       frameFoot(fw + 0.6, fd + 0.6, (HOUSE_H[H.id] || (H.spec ? specHouseH(H) : 120)) + ex * (H.id === 'chinese' ? 38 : FLOOR_H), w, h, 1.6);
@@ -5562,6 +5616,7 @@ const Scene = (() => {
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
     _fly(x, y, z) { flyTo(x, y, z, true); },   // (testing: jump the camera)
+    _plan(k) { const P = shopPlan(k || owner); return P && { RW: P.RW, RD: P.RD }; },   // (testing, v0.43)
     _traffic() { const N = roadNet(); return { walk: WALK.list.map(w => [w.id, Math.round(w.x), Math.round(w.y)]), fw: FW, town: CARS_OUT, stops: stops().list.length, signs: roadSigns().list.length, signals: signals().list.length, juncs: junctions().list.map(J => [J.x, J.y, J.h.kind, J.v.kind, J.k, signals().at.has(J.key) ? 'L' : stops().at.has(J.key) ? 'S' : '-']) }; },   // (testing, v0.39)
     trainBoard: () => trainBoard(),   // v0.38: the station's departures
     tripPlan(to, how, dest, place) { return planTrip(to, how, dest, place); },   // for testing

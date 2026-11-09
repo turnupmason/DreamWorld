@@ -325,6 +325,28 @@ function pill(text, x, y, bg, fg, font, h = 22) {
   ctx.fillText(text, x, y - h / 2 + 1);
   return { x0: x - w / 2, x1: x + w / 2, y0: y - h, y1: y };
 }
+// v0.43: labels (names, signs, prices) go in a queue while the scene draws and are drawn last, on top of everything,
+// so nothing drawn later covers one. The most important first (pri); one that would overlap a label already placed
+// moves up or down a little, or waits until you zoom in. hit: an object that gets the label's final box (for taps).
+let LABEL_Q = null;
+function labelsBegin() { LABEL_Q = []; }
+function label(text, x, y, bg, fg, font, h = 22, pri = 1, hit = null) {
+  if (!LABEL_Q) { const b = pill(text, x, y, bg, fg, font, h); if (hit) Object.assign(hit, b); return; }
+  LABEL_Q.push({ text, x, y, bg, fg, font, h, pri, hit, i: LABEL_Q.length });
+}
+function labelsFlush() {
+  const Q = LABEL_Q; LABEL_Q = null; if (!Q || !Q.length) return;
+  const placed = [], over = b => placed.some(q => b.x0 < q.x1 && q.x0 < b.x1 && b.y0 < q.y1 && q.y0 < b.y1);
+  Q.sort((a, b) => b.pri - a.pri || a.i - b.i).forEach(l => {
+    ctx.font = l.font; const w = ctx.measureText(l.text).width + 16, st = l.h + 2;
+    for (const dy of [0, -st, st, -2 * st, 2 * st]) {
+      const b = { x0: l.x - w / 2 - 1, x1: l.x + w / 2 + 1, y0: l.y + dy - l.h - 1, y1: l.y + dy + 1 };
+      if (over(b)) continue;
+      placed.push(b); l.at = l.y + dy; break;
+    }
+  });
+  Q.filter(l => l.at !== undefined).sort((a, b) => a.pri - b.pri || a.i - b.i).forEach(l => { const b = pill(l.text, l.x, l.at, l.bg, l.fg, l.font, l.h); if (l.hit) Object.assign(l.hit, b); });
+}
 // Round speech bubble with an emoji, used for "ready" products above animals and crops.
 function bubble(ch, x, y, s, bob) {
   const r = 12 * s, cy = y - r - 6 * s - bob;

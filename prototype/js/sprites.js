@@ -736,7 +736,7 @@ function drawSwimmer(sx, sy, s, o) {
     });
     const hy = -7.6;
     drawHead(1, hy, { ...L, hat: 'nohat', hair: 'swimcap' }, o.energy || 'good', ts, o.seed || 0, 0.62, false);
-    pPart(() => pShape('#e5484d', 1, hy - 4.5, 2 * HEAD_R + 1.6, 10, () => { pBegin(); ctx.moveTo(1 - HEAD_R - 0.8, hy); ctx.ellipse(1, hy, HEAD_R + 0.8, HEAD_R * 0.95 + 0.8, 0, Math.PI, Math.PI * 2); ctx.quadraticCurveTo(1, hy + 1.5, 1 - HEAD_R - 0.8, hy); ctx.closePath(); }));   // swim cap
+    pPart(() => pShape(o.cap || '#e5484d', 1, hy - 4.5, 2 * HEAD_R + 1.6, 10, () => { pBegin(); ctx.moveTo(1 - HEAD_R - 0.8, hy); ctx.ellipse(1, hy, HEAD_R + 0.8, HEAD_R * 0.95 + 0.8, 0, Math.PI, Math.PI * 2); ctx.quadraticCurveTo(1, hy + 1.5, 1 - HEAD_R - 0.8, hy); ctx.closePath(); }));   // swim cap
     ellipse(1, 1.6, 10.5, 2.6, 'rgba(120,190,230,.6)');   // the water at the chin
   });
 }

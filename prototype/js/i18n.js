@@ -1212,3 +1212,6 @@ Object.assign(STR.en, {
   mg_d_hr: 'Home run!', mg_d_out: 'Out', mg_d_foul: 'Foul ball', mg_d_miss: 'Swing and a miss', mg_d_tap: 'Tap in the ring', mg_d_their: '{name}’s turn', mg_d_dist: '{n} ft', mg_d_left: '{n} left',
   mg_rec_derby: 'most {b} home runs · longest {f} ft',
 });
+// ---------- v0.43: people face the right way, labels never overlap, the phone's mail and texts, straight in on arrival ----------
+Object.assign(STR.zh, { back_phone: '回到手机', ph_pick_reply: '选一句发给 {name}', feed_today: '今天', feed_earlier: '更早', pc_staff: '今天在这里上班的是 {name}' });
+Object.assign(STR.en, { back_phone: 'Back to the phone', ph_pick_reply: 'Pick something to send {name}', feed_today: 'Today', feed_earlier: 'Earlier', pc_staff: '{name} is working here today' });
