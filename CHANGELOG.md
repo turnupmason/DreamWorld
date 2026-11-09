@@ -2,6 +2,11 @@
 
 每个版本在 GitHub 上都有同名标签（tag），可以随时切回去看。
 
+## v0.57.1 · 2026-11-09
+
+- 第一次用 GitHub 的 Mac 编译 iPhone App，查出 3 个 Swift 错误（不是 v0.54 的比赛提醒，是更早的「手表实时运动」那段）：`HKLiveWorkoutBuilder` 只有手表上有，iPhone 上不能用。改成由手表 App 把心率发到手机（`didReceiveDataFromRemoteWorkoutSession`）。
+- 编译出错时，错误会直接显示在 GitHub 的 Actions 页面上。
+
 ## v0.57.0 · 2026-11-09
 
 需求 #30 的第一部分：先修几个问题，回答「卖点是什么」。

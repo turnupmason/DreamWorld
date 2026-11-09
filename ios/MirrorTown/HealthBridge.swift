@@ -198,8 +198,10 @@ final class HealthBridge {
 
 /// A workout started on the Apple Watch app and mirrored to this phone: tells the game it's live,
 /// with the type and heart rate, and when it ends.
+/// v0.57: HKLiveWorkoutBuilder only exists on the Watch, so the phone can't read the heart rate itself. The Watch app
+/// sends it over the mirrored session (`sendToRemoteWorkoutSession`) as small JSON like {"hr": 128}.
 @available(iOS 17.0, *)
-final class MirroredWorkout: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderDelegate {
+final class MirroredWorkout: NSObject, HKWorkoutSessionDelegate {
     private let session: HKWorkoutSession
     private let send: (String) -> Void
     private var heartRate = 0
@@ -209,7 +211,6 @@ final class MirroredWorkout: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBu
         self.send = send
         super.init()
         session.delegate = self
-        session.associatedWorkoutBuilder().delegate = self
         report(active: true)
     }
 
@@ -227,12 +228,13 @@ final class MirroredWorkout: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBu
         report(active: false)
     }
 
-    func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder, didCollectDataOf collectedTypes: Set<HKSampleType>) {
-        guard let hr = HKQuantityType.quantityType(forIdentifier: .heartRate), collectedTypes.contains(hr),
-              let q = workoutBuilder.statistics(for: hr)?.mostRecentQuantity() else { return }
-        heartRate = Int(q.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
+    /// Messages from the Watch app over the mirrored session: {"hr": beats per minute}.
+    func workoutSession(_ workoutSession: HKWorkoutSession, didReceiveDataFromRemoteWorkoutSession data: [Data]) {
+        for d in data {
+            guard let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                  let hr = (obj["hr"] as? NSNumber)?.intValue else { continue }
+            heartRate = hr
+        }
         report(active: true)
     }
-
-    func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
 }

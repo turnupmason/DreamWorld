@@ -90,3 +90,5 @@ ios/
 每次推送改了 `ios/`，GitHub 会在它的 Mac 上为模拟器编译一遍 App（`.github/workflows/ios-build.yml`，不签名）。在 GitHub 仓库的 **Actions → Build iPhone app** 看结果：绿勾是编译通过，红叉点进去看 `error:` 那几行（完整日志在 `ios-build-log` 里）。也可以在那一页点 **Run workflow** 手动跑。
 
 它只检查 Swift 能不能编译，不能装到手机上：真机运行、健康权限、通知还是要在 Mac 的 Xcode 里试。
+
+v0.57.1：第一次编译查出 `HealthBridge.swift` 用了只有手表上才有的 `HKLiveWorkoutBuilder`（3 个错误），已改（D312）：手机不自己读实时心率，等以后的手表 App 在镜像的运动里发 `{"hr": 心率}` 过来。
