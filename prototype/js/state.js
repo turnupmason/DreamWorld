@@ -173,7 +173,7 @@ function newGame(o) {
   };
   S.today = freshDay();
   const me = emptyHome('me');
-  Object.assign(me, { name: o.name, look: o.look, coins: 2000, wood: 20, roof: o.look.shirt });   // v0.35: dollars
+  Object.assign(me, { name: o.name, look: o.look, coins: FIRST_DAY.startCoins, wood: 0, roof: o.look.shirt });   // v0.35: dollars (v0.72: from 0, and no wood: everything you have comes from your real day)
   me.seeds = { wheat: 4, carrot: 3, potato: 2 };
   // A head start: the wheat is ripe for the tutorial, the carrots are growing.
   me.fields[0] = { crop: 'wheat', at: now() - CROPS.wheat.grow * MIN * 1.05, left: CROPS.wheat.yield, thieves: [] };
@@ -498,6 +498,13 @@ function processHealth() {
   if (mind > 0) { p.mindful += mind; S.stats.mindful += mind; addPending('mindful', { coins: mind * MINDFUL_REWARD }, { min: mind }); }
   if (S.sleep && S.sleep.score >= 80 && !p.sleep) { p.sleep = true; S.stats.sleepStreak++; addPending('sleep', clone(SLEEP_REWARD), { score: S.sleep.score }); }
 }
+// v0.72: the first open: yesterday's real day (steps, last night's sleep) and what it pays, the same rules as every day
+function yesterdayRows() {
+  const out = [], y = S.ySteps, s = S.sleep;
+  if (typeof y === 'number' && y > 0) { const blocks = Math.min(STEP_BLOCKS_MAX, Math.floor(y / stepBlock())); out.push({ k: 'steps', e: '🚶', n: y, coins: blocks * STEP_REWARD.coins + (y >= stepGoal() ? GOAL_REWARD.coins : 0) }); }
+  if (s && s.asleep > 0) out.push({ k: 'sleep', e: '😴', n: s.asleep, score: s.score, coins: s.score >= 80 ? SLEEP_REWARD.coins : FIRST_DAY.sleepBase });
+  return out;
+}
 // Your own step goal (follows your last 7 days) and how many steps one paid block is.
 function stepGoal() { return (S && S.stepGoal) || STEP_GOAL; }
 function stepBlock() { return Math.max(250, Math.round(stepGoal() / 6 / 50) * 50); }
@@ -542,6 +549,7 @@ function applyNative(d) {
     if (!t.workouts.some(x => x.id === w.id)) t.workouts.push({ id: w.id, type: WORKOUTS[w.type] ? w.type : 'walk', min: Math.round(w.min || 0), kcal: Math.round(w.kcal || 0), at: w.start || now(), sport: SPORT_BY_RAW[w.sport] });
   });
   if (d.sleep && (d.sleep.asleep > 0 || d.sleep.score != null)) setSleep(d.sleep);
+  if (typeof d.ySteps === 'number') S.ySteps = Math.round(d.ySteps);   // v0.72: yesterday's steps (for the first open)
   S.vitals = { resp: d.resp || S.vitals.resp, rhr: d.rhr || S.vitals.rhr, hrv: d.hrv || S.vitals.hrv };
   processHealth();
 }

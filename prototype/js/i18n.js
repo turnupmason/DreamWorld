@@ -317,7 +317,7 @@ const STR = {
 
 // ---------- v0.4: first screens, tutorial, storeys, privacy & calm mode, personal goal, souvenirs ----------
 Object.assign(STR.zh, {
-  ob_slogan: '现实里过得好，小镇里就过得好', ob_start_note: '一分钟就能住进来', ob_skip: '跳过',
+  ob_slogan: '只住你和好朋友的小镇', ob_start_note: '一分钟就能住进来', ob_skip: '跳过',
   story0_t: '睡得好，小人就精神', story0_s: '昨晚的睡眠决定今天的表情和奖励',
   story1_t: '动一动，就有金币', story1_s: '走路、运动、少刷短视频都算',
   story2_t: '种地盖房，和朋友做邻居', story2_s: '只比谁的家更好看，不比谁更能跑',
@@ -349,7 +349,7 @@ Object.assign(STR.zh, {
   souv_need_workouts: '{n} 次 10 分钟以上的运动',
 });
 Object.assign(STR.en, {
-  ob_slogan: 'Live well. Your little town grows.', ob_start_note: 'Move in within a minute', ob_skip: 'Skip',
+  ob_slogan: 'A tiny town for you and your closest friends', ob_start_note: 'Move in within a minute', ob_skip: 'Skip',
   story0_t: 'Sleep well, wake up bright', story0_s: 'Last night\'s sleep sets today\'s mood and rewards',
   story1_t: 'Move a little, earn coins', story1_s: 'Walks, workouts and less scrolling all count',
   story2_t: 'Farm, build, and live next to friends', story2_s: 'Compare homes, never who runs more',
@@ -1473,6 +1473,13 @@ Object.assign(STR.zh, {
   harvest_coins: '收了 {n} 个 {e}，卖了 🪙{c}',
   full_title: '完整版', full_note: '打开所有以前的系统（世界、交通、体育、手机、打工、需求条……），只给开发看', full_on: '现在：完整版', full_off: '现在：简单版',
   lot_free: '空着', lot_invite: '邀请朋友住这里',
+  ob2_pick: '选一个你', ob2_pick_note: '以后在衣柜里随时换', ob2_this_me: '就是我',
+  ob2_ask: '看看你昨天过得怎么样？', ob2_ask_sub: '读取 Apple 健康里昨天的步数和昨晚的睡眠，变成你在小镇里的金币。', ob2_ask_btn: '看看昨天', ob2_reading: '正在读取…', ob2_not_now: '先不用',
+  ob2_yday: '这是你昨天的一天', ob2_steps: '走了 {n} 步', ob2_steps_sub: '每一步都算数', ob2_sleep: '睡了 {d}', ob2_sleep_sub: '睡眠分 {n}',
+  ob2_nodata_t: '欢迎住进来', ob2_nodata: '没关系。从今天起，你走的每一步、睡的每一个好觉，都会变成金币。', ob2_gift: '入住礼物', ob2_total: '一共', ob2_rule: '以后每天都一样：现实里过得好，小镇里就有钱。', ob2_go_home: '去我的家',
+  first_title: '给家添第一样东西', first_sub: '用你刚挣的 🪙{n}，挑一样放在院子里。', first_note: '买了马上就摆好，以后在「设计」里能挪。', first_placed: '{name}摆好了！',
+  inv_login_first: '邀请朋友前先登录，朋友才能找到你，换手机也不会丢家。',
+  tut_firstbuy: '用昨天挣的金币，给家添第一样东西。', tut_invite: '叫个朋友住你隔壁？发个链接就行。', tut_done2: '就这些！明早再来：你今晚的觉会变成金币 🌙',
   me_title: '我', me_today: '今天现实里挣了', me_dress: '换装',
 });
 Object.assign(STR.en, {
@@ -1485,5 +1492,12 @@ Object.assign(STR.en, {
   harvest_coins: 'Picked {n} {e}, sold for 🪙{c}',
   full_title: 'Full game', full_note: 'Turns every older system back on (world, transport, sports, phone, jobs, need bars…): for development only', full_on: 'Now: full game', full_off: 'Now: simple game',
   lot_free: 'Free', lot_invite: 'Invite a friend here',
+  ob2_pick: 'Pick your townie', ob2_pick_note: 'Change anything later in the wardrobe', ob2_this_me: 'That’s me',
+  ob2_ask: 'How was your day yesterday?', ob2_ask_sub: 'We read yesterday’s steps and last night’s sleep from Apple Health and turn them into coins for your town.', ob2_ask_btn: 'Show me yesterday', ob2_reading: 'Reading…', ob2_not_now: 'Not now',
+  ob2_yday: 'Here’s your day yesterday', ob2_steps: '{n} steps', ob2_steps_sub: 'Every step counts', ob2_sleep: '{d} of sleep', ob2_sleep_sub: 'Sleep score {n}',
+  ob2_nodata_t: 'Welcome home', ob2_nodata: 'No problem. From today, every step you take and every good night’s sleep turns into coins.', ob2_gift: 'Welcome gift', ob2_total: 'Total', ob2_rule: 'It works like this every day: live well, and your town gets coins.', ob2_go_home: 'Go to my home',
+  first_title: 'Your first thing for home', first_sub: 'You just earned 🪙{n}. Pick something for your yard.', first_note: 'It goes in right away; move it later in Design.', first_placed: 'Your {name} is in!',
+  inv_login_first: 'Sign in before you invite a friend, so they can find you (and you never lose your home).',
+  tut_firstbuy: 'Spend yesterday’s coins: add the first thing to your home.', tut_invite: 'Ask a friend to live next door? Just send a link.', tut_done2: 'That’s it! Come back tomorrow morning: tonight’s sleep turns into coins 🌙',
   me_title: 'Me', me_today: 'Earned in real life today', me_dress: 'Outfit',
 });

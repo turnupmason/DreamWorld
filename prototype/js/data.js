@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.71.0';
+const VERSION = '0.72.0';
 // v0.71 (Mason #34 / #35: "the game is far too complex"; docs/精简方案.md): Mirror Town is three things: your real
 // day, your home, and a town with only your friends in it. Everything else is switched off here (true = on). The code
 // stays: 🛠 → "完整版" (S.full) turns all of it back on.
@@ -23,6 +23,12 @@ const FEATURES = {
 // the mini-games you play with a friend (Mason #35: "all the little games you can play with friends"): three quick,
 // turn-based ones (so a friend can take their turn later); the rest stay in the full game
 const FRIEND_GAMES = ['basketball', 'soccer', 'golf'];
+// v0.72 (Mason #34: "the first 90 seconds decide whether they come back"): the first open shows yesterday's real day
+// as coins, then you spend them on your first thing for the home. gift: the welcome coins; sleepBase: for a night under
+// 80 (80+ pays SLEEP_REWARD); simSteps: what the prototype invents for yesterday; looks: how many ready-made townies to
+// pick from; items: the three first things for the yard (outside, so you see them; each costs less than the gift);
+// startCoins: what a new game starts with (0: every coin you have came from your real day)
+const FIRST_DAY = { gift: 500, sleepBase: 15, simSteps: [4200, 8800], looks: 6, items: ['hammock', 'campfire', 'arch'], startCoins: 0 };
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
@@ -992,7 +998,7 @@ const WMAP_CFG = { townTile: 0.3, planPx: 3, zMax: 16, plansAt: 2.2, airAt: 1.4,
 // v0.68 (Mason #33): day and night by each place's real clock: fully light from `light` (8:00) to `dimFrom` (16:00),
 // slowly darker till fully dark at `dark0` (19:00), light again from `dawn` (5:30); dark: how dark the night is;
 // dusk: how warm the sky goes while the sun sets
-const DAYLIGHT = { light: 8, dimFrom: 16, dark0: 19, dawn: 5.5, dark: 0.55, dusk: 0.1 };
+const DAYLIGHT = { light: 8, dimFrom: 16, dark0: 19, dawn: 5.5, dark: 0.55, dusk: 0.1, firstNight: 0.55 };   // (v0.72: firstNight: how dark the night is during your first-minute tutorial)
 // your nearest team city (your teams, if your town hasn't got its own)
 function homeCity(t) { if (isTeamCity(t)) return t; const [x, y] = DREAM_AT[t] || [0, 0]; return TEAM_CITIES.slice().sort((a, b) => Math.hypot(DREAM_AT[a][0] - x, DREAM_AT[a][1] - y) - Math.hypot(DREAM_AT[b][0] - x, DREAM_AT[b][1] - y))[0]; }
 // v0.59: moving the whole town needs everyone who lives in it to say yes. Each one answers after `wait` seconds;

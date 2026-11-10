@@ -68,6 +68,18 @@ final class HealthBridge {
 
         sum(.stepCount, .count(), "steps")
         sum(.pushCount, .count(), "pushes")
+
+        // v0.72: yesterday's steps. The first time you open the game it shows your real yesterday as coins.
+        if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount),
+           let yStart = cal.date(byAdding: .day, value: -1, to: start) {
+            group.enter()
+            let pred = HKQuery.predicateForSamples(withStart: yStart, end: start, options: .strictStartDate)
+            let q = HKStatisticsQuery(quantityType: stepType, quantitySamplePredicate: pred, options: .cumulativeSum) { _, stats, _ in
+                if let v = stats?.sumQuantity()?.doubleValue(for: .count()) { set("ySteps", v) }
+                group.leave()
+            }
+            store.execute(q)
+        }
         sum(.activeEnergyBurned, .kilocalorie(), "kcal")
         sum(.appleExerciseTime, .minute(), "exMin")
         latest(.restingHeartRate, perMinute, "rhr")

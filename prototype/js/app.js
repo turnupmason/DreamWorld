@@ -811,6 +811,12 @@ function stagesRow(kind, k, n, cur, names, w = 72) {
 }
 const SHEETS = {
   shop() { return panelShop(); },   // v0.71
+  first() {   // v0.72: the first thing for your home
+    const got = (S.firstDay && S.firstDay.rows || []).reduce((n, r) => n + r.coins, 0) + FIRST_DAY.gift;
+    return `<h2>🏡 ${t('first_title')}</h2><p class="muted">${t('first_sub', { n: fmtNum(got) })}</p>
+      <div class="first-row">${FIRST_DAY.items.map(k => `<button class="first-card" data-act="firstBuy" data-arg="${k}">${thumbImg('yard', k, {}, 120, 100, 'thumb')}<b>${nm(YARD[k])}</b><span>🪙${fmtNum(YARD[k].price)}</span></button>`).join('')}</div>
+      <p class="muted small center">${t('first_note')}</p>`;
+  },
   feed() { return panelFeed(); },   // v0.71
   // v0.71 (Mason #35): play with a friend: pick a game, then who (a friend says yes first, like an invite)
   play(id) {
@@ -1262,6 +1268,7 @@ const SHEETS = {
   },
   invite() {
     const code = S.created.toString(36).slice(-6);
+    if (!S.account && simpleUI()) return `<h2>🪧 ${t('invite_title')}</h2><p class="muted">${t('inv_login_first')}</p><button class="btn primary block" data-act="showLogin">${t('sign_in')}</button>`;   // v0.72
     return `<h2>🪧 ${t('invite_title')}</h2><p class="muted">${t('invite_desc')}</p>
       <div class="invite-link">https://mirror.town/join/${code}</div>
       <button class="btn primary block" data-act="copyInvite">${t('copy_link')}</button>
@@ -2225,7 +2232,14 @@ const ACT = {
   },
   // shop
   openShop(cat) { closeSheet(); if (simpleUI()) return openShopSheet(cat); UI.shop = cat; setTab('shop'); },
-  shopOpen() { closeSheet(); openShopSheet(); },   // v0.71
+  shopOpen() { closeSheet(); if (tutStep() && tutStep().id === 'firstbuy') return openSheet('first'); openShopSheet(); },   // v0.71 (v0.72: the first time, three things to choose from)
+  firstBuy(k) {   // v0.72
+    const r = buyItem('yard', k);
+    if (r.r === 'poor') { Sound.play('oops'); return snack(t('snack_poor')); }
+    Sound.play('buy'); closeSheet(); tutDone('firstbuy');
+    setTimeout(() => { Scene.floatHouse(`🎉 ${nm(YARD[k])}`); Sound.play('levelup'); }, 250);
+    snack(t('first_placed', { name: nm(YARD[k]) }));
+  },
   shopCat(c) { UI.shop = c; $('#panel').scrollTop = 0; if (UI.sheet && UI.sheet.type === 'shop') $('#sheet').scrollTop = 0; },
   feedOpen() { closeSheet(); openFeedSheet(); },   // v0.71
   playOpen(id) { closeSheet(); UI.fgame = UI.fgame || FRIEND_GAMES[0]; openSheet('play', id || ''); },   // v0.71: games with friends
@@ -2308,7 +2322,7 @@ const ACT = {
     Scene.wave('me');
     maybeReply(id, 'gift');
   },
-  invite: () => openSheet('invite'),
+  invite: () => { tutDone('invite'); openSheet('invite'); },
   buyParcel() {
     result(buyParcel(), () => { closeSheet(); snack(t('snack_parcel', { w: homeW(S.me) })); UI.tab = 'home'; UI.inside = false; syncView(); Scene.recenter(); });
   },
@@ -2572,7 +2586,54 @@ window.onNativeWorkout = d => {
 // The game is created first (newGame preview), so these screens float over your actual street.
 let obAnim = null;
 function obLook() { S.me.look = { ...OB.look }; S.me.roof = OB.look.shirt; }
+// v0.72 (Mason #34): the simple game's first minute: start (no sign-in) → pick a townie (one tap) → "how was yesterday?"
+// (Apple Health asks here, with a reason) → yesterday's steps and sleep turn into coins → your home, where the first
+// thing you do is spend them (the tutorial). Signing in and picking apps to scroll less come later.
+const OB_LOOKS = () => Array.from({ length: FIRST_DAY.looks }, (_, i) => ({ shirt: COLORS[(i * 3 + 4) % COLORS.length], skin: SKINS[i % SKINS.length], hair: HAIRS[i % HAIRS.length], hairCol: HAIR_COLORS[[1, 3, 0, 0, 2, 4][i % 6]] }));
+function renderOnboarding2() {
+  const el = $('#onboard'), st = OB.step;
+  cancelAnimationFrame(obAnim);
+  document.body.classList.add('ob-mode');
+  el.className = 'onboard ob2 ob-s' + st;
+  const langs = `<div class="ob-lang"><button class="chip ${OB.lang === 'zh' ? 'on' : ''}" data-act="obLang" data-arg="zh">中文</button>
+    <button class="chip ${OB.lang === 'en' ? 'on' : ''}" data-act="obLang" data-arg="en">English</button></div>`;
+  if (st === 0) {
+    Scene.setView('town', 'me'); Scene.attract(0.42);
+    el.innerHTML = `<div class="ob-top">${langs}</div>
+      <div class="ob-logo"><div class="ob-icon">🏡</div><h1>${t('app_name')}</h1><p>${t('ob_slogan')}</p></div>
+      <div class="ob-card ob-start"><button class="btn primary big block" data-act="ob2Go" data-arg="1">${t('ob_start')}</button>
+        <p class="muted center">${t('ob_start_note')}</p></div>`;
+  } else if (st === 1) {   // one tap: this is you (everything else later, in the wardrobe)
+    Scene.attract(false); Scene.setView('home', 'me'); Scene.focusMe(1.9, 0.3);
+    const L = OB.look, same = (a, b) => a.shirt === b.shirt && a.skin === b.skin && a.hair === b.hair && a.hairCol === b.hairCol;
+    el.innerHTML = `<div class="ob-top"></div><div class="ob-card ob-look2"><h2>${t('ob2_pick')}</h2>
+      <div class="ob-faces">${OB_LOOKS().map((lk, i) => `<button class="ob-face ${same(L, lk) ? 'on' : ''}" data-act="ob2Look" data-arg="${i}">${avatar({ ...L, ...lk }, 'xl')}</button>`).join('')}</div>
+      <div class="ob-row2"><input id="obName" class="input" maxlength="12" placeholder="${t('ob_name_ph')}" value="${esc(OB.name)}">
+        <button class="chip ${L.mob === 'wheel' ? 'on' : ''}" data-act="ob2Mob">🦽 ${t('mob_wheel')}</button></div>
+      <p class="muted center small">${t('ob2_pick_note')}</p>
+      <button class="btn primary big block" data-act="ob2Go" data-arg="2">${t('ob2_this_me')}</button></div>`;
+  } else if (st === 2) {   // why we'd like Apple Health: to show you yesterday
+    Scene.attract(false); Scene.setView('home', 'me'); Scene.focusMe(1.5, 0.3);
+    el.innerHTML = `<div class="ob-top"></div><div class="ob-card ob-ask"><div class="ob-big">🌙 → ☀️</div><h2>${t('ob2_ask')}</h2><p class="ob-sub">${t('ob2_ask_sub')}</p>
+      ${OB.reading ? `<button class="btn primary big block" disabled>⏳ ${t('ob2_reading')}</button>` : `<button class="btn primary big block" data-act="ob2Ask">❤️ ${t('ob2_ask_btn')}</button>`}
+      <button class="link block center" data-act="ob2Go" data-arg="3">${t('ob2_not_now')}</button>
+      <p class="muted center small">🔒 ${t('ob_privacy_short')}</p></div>`;
+  } else {   // the reveal: yesterday, in coins (the "aha": your real day made something happen here)
+    Scene.attract(false); Scene.setView('home', 'me'); Scene.focusMe(1.5, 0.3);
+    const rows = OB.asked ? yesterdayRows() : [], total = rows.reduce((n, r) => n + r.coins, 0) + FIRST_DAY.gift;
+    const line = r => `<div class="ob-pay"><span class="ob-pay-e">${r.e}</span><div class="grow"><b>${r.k === 'steps' ? t('ob2_steps', { n: fmtNum(r.n) }) : t('ob2_sleep', { d: fmtDur(r.n * MIN) })}</b><small>${r.k === 'steps' ? t('ob2_steps_sub') : t('ob2_sleep_sub', { n: r.score })}</small></div><b class="ob-coin">+🪙${r.coins}</b></div>`;
+    el.innerHTML = `<div class="ob-top"></div><div class="ob-card ob-reveal"><h2>${rows.length ? t('ob2_yday') : t('ob2_nodata_t')}</h2>
+      ${rows.length ? rows.map(line).join('') : `<p class="ob-sub">${t('ob2_nodata')}</p>`}
+      <div class="ob-pay gift"><span class="ob-pay-e">🎁</span><div class="grow"><b>${t('ob2_gift')}</b></div><b class="ob-coin">+🪙${FIRST_DAY.gift}</b></div>
+      <div class="ob-total">${t('ob2_total')} <b id="obTotal">🪙0</b></div>
+      <p class="muted center small">${t('ob2_rule')}</p>
+      <button class="btn primary big block" data-act="ob2Done">🏡 ${t('ob2_go_home')}</button></div>`;
+    const t0 = performance.now(), el2 = $('#obTotal'), tick = ts => { const k = Math.min(1, (ts - t0) / 1100); if (el2) el2.textContent = '🪙' + fmtNum(Math.round(total * (1 - (1 - k) ** 3))); if (k < 1) obAnim = requestAnimationFrame(tick); };
+    obAnim = requestAnimationFrame(tick); Sound.play('coins');
+  }
+}
 function renderOnboarding() {
+  if (simpleUI()) return renderOnboarding2();   // v0.72
   const el = $('#onboard'), st = OB.step;
   cancelAnimationFrame(obAnim);
   document.body.classList.add('ob-mode');
@@ -2619,11 +2680,32 @@ function renderOnboarding() {
         <span>${a.emoji}</span>${a.name || t('app_games')}</button>`).join('')}</div>
       <div class="ob-limit"><span>⏱️ ${t('ob_limit')}</span><div>${[30, 60, 90, 120].map(m => `<button class="chip ${OB.limit === m ? 'on' : ''}" data-act="obLimit" data-arg="${m}">${fmtDur(m * MIN)}</button>`).join('')}</div></div>
       <div class="ob-promise"><div>❤️ ${t('ob_health_short')}</div><div>🔒 ${t('ob_privacy_short')}</div></div>${dots}
-      <button class="btn primary big block" data-act="obDone" ${OB.apps.length ? '' : 'disabled'}>🏡 ${t('ob_move_in')}</button></div>`;
+      <button class="btn primary big block" data-act="obDone" ${OB.apps.length || simpleUI() ? '' : 'disabled'}>🏡 ${t('ob_move_in')}</button></div>`;
   }
 }
 Object.assign(ACT, {
   obLang(l) { OB.lang = l; S.lang = l; document.documentElement.lang = l; renderOnboarding(); renderConsole(); },
+  // v0.72: the simple game's first screens
+  ob2Go(n) { OB.step = +n; if (OB.step === 1 && !OB.picked) { OB.picked = true; Object.assign(OB.look, OB_LOOKS()[0]); obLook(); } renderOnboarding(); },
+  ob2Look(i) { Object.assign(OB.look, OB_LOOKS()[+i]); obLook(); renderOnboarding(); },
+  ob2Mob() { OB.look.mob = OB.look.mob === 'wheel' ? 'walk' : 'wheel'; obLook(); renderOnboarding(); },
+  ob2Ask() {   // the phone asks for Apple Health now (with a reason on screen); the prototype makes up a believable yesterday
+    OB.asked = true; OB.reading = true; renderOnboarding();
+    const native = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mirror);
+    if (native) postNative({ type: 'ready' });
+    else { const [a, b] = FIRST_DAY.simSteps; S.ySteps = Math.round((a + Math.random() * (b - a)) / 10) * 10; }
+    const t0 = Date.now(), wait = () => { if (!OB) return; if (!native || S.ySteps != null || (S.native && S.sleep && S.sleep.source !== 'sim') || Date.now() - t0 > 6000) { OB.reading = false; OB.step = 3; renderOnboarding(); } else setTimeout(wait, 250); };
+    setTimeout(wait, native ? 250 : 700);
+  },
+  ob2Done() {   // yesterday's coins and the welcome gift go straight in; then home, and the first thing you do is spend them
+    if (!OB) return;
+    const rows = OB.asked ? yesterdayRows() : [];
+    earn(rows.reduce((n, r) => n + r.coins, 0) + FIRST_DAY.gift);
+    const w = S.pending.find(p => p.src === 'welcome'); if (w && w.reward.seeds) Object.entries(w.reward.seeds).forEach(([k, n]) => { S.me.seeds[k] = (S.me.seeds[k] || 0) + n; });
+    S.pending = S.pending.filter(p => p.src !== 'welcome');
+    S.firstDay = { rows, at: now() };
+    OB.apps = OB.apps || []; ACT.obDone();
+  },
   obNext() {
     if (OB.step === 0 && !S.account) { UI.login = { step: 'pick' }; return renderLoginInto($('#onboard')); }   // sign in first
     OB.step = Math.min(5, OB.step + 1); renderOnboarding();
@@ -2662,8 +2744,18 @@ const TUT = [
   { id: 'tab:real', at: () => domAt('.tab[data-arg="real"]') },
   { id: 'done' },
 ];
+// v0.72: the simple game's first minute at home: spend yesterday's coins on your first thing, pick a crop, see your
+// friends, ask one to live next door; then "come back tomorrow morning"
+const TUT2 = [
+  { id: 'firstbuy', at: () => domAt('#fab [data-act="shopOpen"]') },
+  { id: 'harvest', at: () => sceneAt('field', S.me.fields.findIndex(isRipe)), skip: () => !S.me.fields.some(isRipe) },
+  { id: 'tab:town', at: () => domAt('.tab[data-arg="town"]') },
+  { id: 'invite', at: () => (UI.tab === 'town' ? domAt('.fr-chip.add') : null), skip: () => UI.tab !== 'town' },
+  { id: 'done2' },
+];
+const tutList = () => (simpleUI() ? TUT2 : TUT);
 let coachRAF = 0;
-function tutStep() { return S && !S.onboarding && S.tut >= 0 && S.tut < TUT.length ? TUT[S.tut] : null; }
+function tutStep() { const L = tutList(); return S && !S.onboarding && S.tut >= 0 && S.tut < L.length ? L[S.tut] : null; }
 function tutDone(id) {
   const st = tutStep();
   if (!st || st.id !== id) return;
@@ -2708,7 +2800,7 @@ function coachLoop() {
   if (st.skip && st.skip()) { S.tut++; save(); return; }
   if (UI.sheet || Scene.getEdit()) { el.hidden = true; return; }
   el.hidden = false;
-  const done = st.id === 'done', bub = el.querySelector('.coach-bubble');
+  const done = st.id === 'done' || st.id === 'done2', bub = el.querySelector('.coach-bubble');
   if (el.dataset.step !== st.id + curLang()) {
     el.dataset.step = st.id + curLang();
     bub.innerHTML = `${avatar(S.me.look)}<div><p>${t('tut_' + st.id.replace('tab:', ''))}</p>
@@ -2749,7 +2841,7 @@ function start() {
     if (S.pending.length) { UI.welcome = true; openSheet('collect'); }
     welcomeGifts();
   }
-  if (!S.account) showLogin();   // players from before v0.8 sign in once
+  if (!S.account && !simpleUI()) showLogin();   // players from before v0.8 sign in once (v0.72: the simple game asks when you invite a friend)
   syncPetReminders();
 }
 
@@ -4096,7 +4188,7 @@ setInterval(() => {
   { const c = classTick(); if (c) { Sound.play(c === 'cert' ? 'levelup' : 'chime'); snack(c === 'cert' ? `🎓 ${t('school_cert', { n: S.school.certs, p: Math.round(S.school.certs * SCHOOL.certPay * 100) })}` : `📚 ${t('school_class', { n: S.school.classes % SCHOOL.perCert, m: SCHOOL.perCert })}`); refresh(); } }   // v0.24
   if (jailTick()) { Sound.play('chime'); snack(`🚔 ${t('jail_out')}`); outOfJail(); refresh(); }
   { const L = loanTick(); if (L.done) { Sound.play('levelup'); snack(`🏦 ${t('loan_paid_off')}`); save(); } if (L.late) { snack(`🏦 ${t('loan_late_note')}`); save(); } }   // v0.26
-  { const who = dailyText(); if (who) { const p = whoIs(who); if (p) { Sound.play('chime'); snack(`💬 ${t('text_new', { name: p.name })}`); } save(); } }
+  if (feat('phone')) { const who = dailyText(); if (who) { const p = whoIs(who); if (p) { Sound.play('chime'); snack(`💬 ${t('text_new', { name: p.name })}`); } save(); } }
   if (UI.sheet && UI.sheet.type === 'phone') { const sig = stockT() + ':' + Object.values(S.texts || {}).map(th => th.filter(m => m.t <= now()).length).join(','); if (sig !== UI.phoneSig) { UI.phoneSig = sig; renderSheet(); } }
   if (S.work && now() >= S.work.end) { const r = finishShift(); if (r) { Sound.play('coins'); snack(`💼 ${t(r.promoted ? 'job_promoted' : 'job_done', { n: r.pay, rank: nm(JOB_RANKS[jobRank()]) })}`); refresh(); } }
   if (S.sick && Scene.resting() && restInBed(1)) { Sound.play('chime'); snack(`😊 ${t('sick_cured')}`); refresh(); }

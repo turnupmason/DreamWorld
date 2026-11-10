@@ -1077,3 +1077,33 @@ body.dark .fr-chip > i { border-color: #2a2420; }
 .me-head { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
 .me-head .panel-title { margin: 0; }
 .vitals.one > div:not(:first-child) { display: none; }
+
+/* v0.72: the simple game's first minute: pick a townie, how was yesterday, the reveal, the first thing for home */
+.ob-look2 { display: flex; flex-direction: column; gap: 10px; }
+.ob-faces { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ob-face { border: 3px solid transparent; border-radius: 20px; background: #fff3e6; padding: 6px 0; display: flex; justify-content: center; cursor: pointer; }
+.ob-face.on { border-color: #ef7d3c; background: #ffe2c6; }
+.ob-face:active { transform: scale(.96); }
+.ob-row2 { display: flex; gap: 8px; align-items: center; }
+.ob-row2 .input { flex: 1; padding: 10px; font-size: 16px; }
+.ob-row2 .chip { margin: 0; white-space: nowrap; }
+.ob-ask .ob-big, .ob-reveal .ob-big { font-size: 40px; text-align: center; margin-bottom: 4px; }
+.ob-ask .btn.big { margin-top: 14px; }
+.ob-ask .link { margin: 10px auto 2px; display: block; }
+.ob-reveal { display: flex; flex-direction: column; gap: 8px; }
+.ob-pay { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 16px; padding: 10px 12px; box-shadow: 0 2px 8px rgba(70,45,10,.08); }
+.ob-pay small { display: block; color: #8a7e70; font-size: 12px; font-weight: 600; }
+.ob-pay-e { font-size: 28px; }
+.ob-coin { color: #c4581f; font-size: 17px; white-space: nowrap; }
+.ob-pay.gift { background: #fff6e2; }
+.ob-total { text-align: center; font-size: 15px; margin-top: 2px; }
+.ob-total b { font-size: 26px; color: #c4581f; margin-left: 6px; }
+.first-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.first-card { border: 2px solid transparent; border-radius: 18px; background: var(--card); box-shadow: 0 3px 10px rgba(60, 40, 10, .1); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 10px; font: inherit; font-size: 13px; color: var(--ink); cursor: pointer; }
+.first-card .thumb { width: 100%; height: auto; }
+.first-card span { color: #c4581f; font-weight: 800; }
+.first-card:active { transform: scale(.96); border-color: #ef7d3c; }
+body.dark .ob-face { background: #3a2a1c; }
+body.dark .ob-pay { background: #2f2822; }
+body.dark .ob-pay.gift { background: #3a2a1c; }
+.ob-ask .link { background: none; border: 0; color: #8a7e70; font: inherit; font-size: 14px; font-weight: 600; text-decoration: underline; cursor: pointer; padding: 6px; }

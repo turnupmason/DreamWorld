@@ -48,9 +48,9 @@ ios/
 
 | 方向 | 调用 | 内容 |
 | --- | --- | --- |
-| 网页 → Swift | `window.webkit.messageHandlers.mirror.postMessage({type: 'ready'})` | 游戏加载完，Swift 请求健康授权并开始推数据 |
+| 网页 → Swift | `window.webkit.messageHandlers.mirror.postMessage({type: 'ready'})` | Swift 请求健康授权并开始推数据。老玩家：游戏加载完就发；**新玩家（v0.72）：开屏第 3 屏点「看看昨天」时才发**（屏幕上先说清楚为什么要健康数据，系统的授权框在这时弹出） |
 | 网页 → Swift | `postMessage({type: 'refresh'})` | 打开「健康」页时要一次最新数据 |
-| Swift → 网页 | `window.onNativeHealth(json)` | 今天的 steps、pushes、kcal、exMin、standH、mindful、workouts[]（每个训练：id、type 动画类型、**sport：HealthKit 的运动类型编号（v0.10，奖杯用）**、min、kcal、start）、rhr、hrv、resp、sleep{asleep, deep, rem, core, awake, source}。每分钟一次，App 回到前台时也推 |
+| Swift → 网页 | `window.onNativeHealth(json)` | 今天的 steps、pushes、kcal、exMin、standH、mindful、workouts[]（每个训练：id、type 动画类型、**sport：HealthKit 的运动类型编号（v0.10，奖杯用）**、min、kcal、start）、rhr、hrv、resp、sleep{asleep, deep, rem, core, awake, source}、**ySteps：昨天一整天的步数（v0.72，开屏「这是你昨天的一天」用）**。每分钟一次，App 回到前台时也推 |
 | Swift → 网页 | `window.onNativeWorkout(json)` | 正在进行的训练 {active, type, start, hr}，小人同步做这个运动 |
 | 网页 → Swift | `postMessage({type: 'signIn', provider: 'apple'})` | 点「通过 Apple 登录」（v0.8.0）。Swift 弹出苹果的登录框 |
 | Swift → 网页 | `window.onNativeSignIn(json)` | 登录结果 {ok, provider, id, email, name}；失败是 {ok: false, error}，游戏会提示并先用模拟登录 |

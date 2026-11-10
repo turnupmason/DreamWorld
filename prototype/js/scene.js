@@ -5400,7 +5400,8 @@ const Scene = (() => {
     if (NIGHT > 0.01) {   // v0.68 (Mason #33): really dark at night; a warm glow while the sun goes down
       const dusk = Math.max(0, 1 - Math.abs(NIGHT - 0.35) / 0.35) * DAYLIGHT.dusk;
       if (dusk > 0.01) { ctx.fillStyle = `rgba(255,140,60,${dusk.toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
-      ctx.fillStyle = `rgba(14,22,58,${(DAYLIGHT.dark * NIGHT).toFixed(3)})`; ctx.fillRect(0, 0, W, H);
+      const soft = S && S.tut >= 0 ? DAYLIGHT.firstNight : 1;   // v0.72: your very first evening here is a cosy, lamp-lit one (you can see your home)
+      ctx.fillStyle = `rgba(14,22,58,${(DAYLIGHT.dark * NIGHT * soft).toFixed(3)})`; ctx.fillRect(0, 0, W, H);
     }
     drawGlows();
   }
