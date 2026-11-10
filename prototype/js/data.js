@@ -2,7 +2,27 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.70.1';
+const VERSION = '0.71.0';
+// v0.71 (Mason #34 / #35: "the game is far too complex"; docs/精简方案.md): Mirror Town is three things: your real
+// day, your home, and a town with only your friends in it. Everything else is switched off here (true = on). The code
+// stays: 🛠 → "完整版" (S.full) turns all of it back on.
+const FEATURES = {
+  world: false,      // the world tab, the big map, other cities, planes, trains, ships, tickets, the passport
+  shops: false,      // walking into stores to buy (the catalogue sells straight to your home instead)
+  places: false,     // the town's buildings, park spots, stadiums, venues and the people in them
+  townsfolk: false,  // strangers living in and walking round the town (it's only you and your friends)
+  jobs: false,       // work, promotions, commuting, evening classes
+  phone: false,      // the phone: bank, loans, stocks, sports and betting, texts, the travel app
+  needs: false,      // hunger / social / fun bars and what they do
+  trouble: false,    // getting ill, the police, the holding cell, guard-dog fines
+  decay: false,      // ripe crops rotting, floods spoiling them, produce going off
+  farmPlus: false,   // pasture, orchard, pond, feed, the market and its prices (harvests pay straight away)
+  cars: false,       // cars, garages, driving round town
+  rank: false,       // the ranking on the home screen (比家不比人: it stays in the friends tab, under the street)
+};
+// the mini-games you play with a friend (Mason #35: "all the little games you can play with friends"): three quick,
+// turn-based ones (so a friend can take their turn later); the rest stay in the full game
+const FRIEND_GAMES = ['basketball', 'soccer', 'golf'];
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)

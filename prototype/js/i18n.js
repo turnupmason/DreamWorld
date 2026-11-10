@@ -1462,3 +1462,28 @@ Object.assign(STR.en, {
   lg_placed: '🪙{n} on {name} to win', lg_won_snack: 'Bet won! 🪙{n} back', lg_lost_snack: '{n} bets didn’t come in',
   lg_today_snack: '{n} games today{mine}: open Sports on your phone', lg_push_title: 'Today’s games', lg_push_body: '{n} games today: who will win?', lg_push_bet: 'A game you bet on has finished: see how it went',
 });
+// v0.71: the simple game (Mason #34 / #35): three tabs, the catalogue in a sheet, games with friends
+Object.assign(STR.zh, {
+  tab2_home: '家', tab2_town: '朋友', tab2_real: '我',
+  fab_shop: '添东西', fab_play: '一起玩', fab_feed: '动态', fab_invite: '邀请',
+  fr_street: '{street} · 你和 {n} 个朋友', fr_none: '还没有朋友住进来：邀请他们住你隔壁', fr_tap: '点头像看看朋友',
+  play_title: '和朋友玩', play_sub: '一局不到一分钟。朋友答应了就能开始。', play_pick: '玩什么', play_with: '和谁玩', play_none: '先邀请朋友住进小镇，才能一起玩。',
+  play_tile_sub: '投篮、点球、高尔夫', fg_basketball: '投篮', fg_soccer: '点球', fg_golf: '迷你高尔夫',
+  shop_simple: '添东西', shop_simple_note: '买了直接送到家里。钱主要来自你现实里的睡眠、走路和运动。',
+  harvest_coins: '收了 {n} 个 {e}，卖了 🪙{c}',
+  full_title: '完整版', full_note: '打开所有以前的系统（世界、交通、体育、手机、打工、需求条……），只给开发看', full_on: '现在：完整版', full_off: '现在：简单版',
+  lot_free: '空着', lot_invite: '邀请朋友住这里',
+  me_title: '我', me_today: '今天现实里挣了', me_dress: '换装',
+});
+Object.assign(STR.en, {
+  tab2_home: 'Home', tab2_town: 'Friends', tab2_real: 'Me',
+  fab_shop: 'Shop', fab_play: 'Play', fab_feed: 'News', fab_invite: 'Invite',
+  fr_street: '{street} · you and {n} friends', fr_none: 'No friends here yet: invite them to live next door', fr_tap: 'Tap a face to see a friend',
+  play_title: 'Play with friends', play_sub: 'Each game takes under a minute. Start once your friend says yes.', play_pick: 'What to play', play_with: 'Who with', play_none: 'Invite friends to your town first, then you can play together.',
+  play_tile_sub: 'Hoops, penalties, golf', fg_basketball: 'Hoops', fg_soccer: 'Penalties', fg_golf: 'Mini golf',
+  shop_simple: 'Shop', shop_simple_note: 'Things go straight to your home. Your coins come mostly from your real sleep, steps and workouts.',
+  harvest_coins: 'Picked {n} {e}, sold for 🪙{c}',
+  full_title: 'Full game', full_note: 'Turns every older system back on (world, transport, sports, phone, jobs, need bars…): for development only', full_on: 'Now: full game', full_off: 'Now: simple game',
+  lot_free: 'Free', lot_invite: 'Invite a friend here',
+  me_title: 'Me', me_today: 'Earned in real life today', me_dress: 'Outfit',
+});

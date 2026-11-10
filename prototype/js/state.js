@@ -10,6 +10,8 @@ const rand = a => a[Math.floor(Math.random() * a.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // The prototype can fast-forward time, so all game time goes through now().
+// v0.71: is this part of the game on? (FEATURES in data.js; 🛠 "完整版" turns everything on)
+const feat = k => !!(S && S.full) || !!FEATURES[k];
 function now() { return Date.now() + (S ? S.timeOffset : 0); }
 function dayKey(ms) { const d = new Date(ms); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
 const today = () => dayKey(now());   // v0.22
@@ -190,7 +192,7 @@ function newGame(o) {
   S.friends.forEach(showOffExclusives); S.trophyV = 1; S.trophySeen = {};
   genNPCs();
   simSleep(78);
-  S.pending.push({ id: uid(), src: 'welcome', reward: { coins: 500, wood: 10, seeds: { tomato: 2 } }, info: {} });
+  S.pending.push({ id: uid(), src: 'welcome', reward: { coins: 500, seeds: { tomato: 2 } }, info: {} });
   S.priceV = 35; S.income = [];
   save();
 }
@@ -412,6 +414,8 @@ function sumRewards(list) {
 function useAction() { S.today.actions++; return true; }
 function actionsLeft() { return Infinity; }
 function addBarn(h, k, n) { h.barn[k] = (h.barn[k] || 0) + n; }
+// v0.71: what you collect at home: into the barn (full game), or sold right away (simple game: no market). Coins made.
+function intoBarn(h, k, n) { if (h === S.me && !feat('farmPlus')) { const v = n * barnInfo(k).sell; earn(v); return v; } addBarn(h, k, n); return 0; }
 function seedCount(h = S.me) { return Object.values(h.seeds).reduce((a, b) => a + b, 0); }
 
 // ---------- energy: last night's sleep sets today's mood and the exercise multiplier ----------
@@ -547,9 +551,9 @@ function cropProg(f) { return f ? Math.min(1, (now() - f.at) / (CROPS[f.crop].gr
 function cropStage(f) { const p = cropProg(f); return p >= 1 ? 4 : p >= 0.65 ? 3 : p >= 0.35 ? 2 : p >= 0.1 ? 1 : 0; }
 // v0.44: ripe crops keep FRESH.crop hours (from when they ripened, or from the v0.44 update), then rot in the ground
 const ripeAt = f => Math.max(f.at + CROPS[f.crop].grow * MIN, f.fresh || 0);
-function isRotten(f) { return !!f && cropProg(f) >= 1 && now() - ripeAt(f) > FRESH.crop * HOUR; }
+function isRotten(f) { return feat('decay') && !!f && cropProg(f) >= 1 && now() - ripeAt(f) > FRESH.crop * HOUR; }
 function isRipe(f) { return !!f && cropProg(f) >= 1 && !isRotten(f); }
-const cropWarn = f => isRipe(f) && now() - ripeAt(f) > FRESH.crop * HOUR * (1 - FRESH.warn);   // ⏰ going off soon
+const cropWarn = f => feat('decay') && isRipe(f) && now() - ripeAt(f) > FRESH.crop * HOUR * (1 - FRESH.warn);   // ⏰ going off soon
 // Farm areas can be moved around the yard (v0.15): each home keeps where its pasture, fields, orchard and pond are
 // (h.areaAt[key] = [x, y], the top-left tile); without that, the usual spot in AREA.
 const MOVABLE = ['pasture', 'fields', 'orchard', 'pond'];
@@ -655,8 +659,9 @@ function harvest(i) {
   const f = S.me.fields[i];
   if (isRotten(f)) { S.me.fields[i] = null; S.me.rotten = (S.me.rotten || 0) + 1; return { crop: f.crop, n: 0, i, rotten: true }; }   // v0.44: cleared away
   if (!isRipe(f)) return null;
-  addBarn(S.me, f.crop, f.left);
   S.me.fields[i] = null;
+  if (!feat('farmPlus')) { const v = f.left * CROPS[f.crop].sell; earn(v); S.stats.harvested = (S.stats.harvested || 0) + f.left; return { crop: f.crop, n: f.left, i, coins: v }; }   // v0.71: no market: it pays now
+  addBarn(S.me, f.crop, f.left);
   return { crop: f.crop, n: f.left, i };
 }
 
@@ -672,7 +677,7 @@ function stealable(h, i, who = 'me') {
 // won't let you in again today. It's a prank with a price, not a loss of anything you grew.
 function dogFine(value) { return clamp(Math.round(value * 2), STEAL_FINE[0], STEAL_FINE[1]); }
 // v0.18: a neighbour may see you too ('witness'); a baby animal, or the 3rd time in 7 days, brings the police.
-function catchRoll(h, dogChance) { return hasGuardDog(h) && Math.random() < dogChance ? 'dog' : Math.random() < POLICE.witness ? 'witness' : null; }
+function catchRoll(h, dogChance) { if (!feat('trouble')) return null; return hasGuardDog(h) && Math.random() < dogChance ? 'dog' : Math.random() < POLICE.witness ? 'witness' : null; }
 function caught(fid, value, how = 'dog', baby = false) {
   const f = friendById(fid);
   S.record = (S.record || []).filter(r => now() - r.t < POLICE.strikeDays * DAY);
@@ -750,7 +755,7 @@ function friendStealsFromMe(fid) {
   const crops = S.me.fields.map((f, i) => i).filter(i => stealable(S.me, i, fid));
   const eggs = S.me.animals.filter(a => animalReady(a) && !nextIsBaby(a) && ANIMALS[a.k].prod && !(a.thieves || []).includes(fid) && (a.stolen || 0) < ANIMALS[a.k].n - 1);
   if (!crops.length && !eggs.length) return null;
-  const dog = hasGuardDog(S.me) && Math.random() < 0.5;
+  const dog = feat('trouble') && hasGuardDog(S.me) && Math.random() < 0.5;
   if (crops.length && (!eggs.length || Math.random() < 0.6)) {
     const f = S.me.fields[rand(crops)];
     f.thieves.push(fid);
@@ -782,11 +787,11 @@ function prodProg(a) {
 }
 // v0.44: each egg, churn, bag… needs a portion of feed (taken when it's ready, see farmTick); a hungry animal waits
 const cycleStart = a => a.last || a.born + ANIMALS[a.k].grow * MIN;
-const fedNow = a => ANIMALS[a.k].pet || a.fedFor === cycleStart(a);
+const fedNow = a => !feat('farmPlus') || ANIMALS[a.k].pet || a.fedFor === cycleStart(a);   // (v0.71: no feed in the simple game)
 function animalReady(a) { return ANIMALS[a.k].every > 0 && animalStage(a) === 2 && prodProg(a) >= 1 && fedNow(a); }
 const animalHungry = a => ANIMALS[a.k].every > 0 && !ANIMALS[a.k].pet && animalStage(a) === 2 && prodProg(a) >= 1 && !fedNow(a);
 const prodFrom = a => Math.max(cycleStart(a) + ANIMALS[a.k].every * MIN, a.fedAt || 0, a.fresh || 0);
-const prodWarn = a => animalReady(a) && now() - prodFrom(a) > FRESH.prod * HOUR * (1 - FRESH.warn);
+const prodWarn = a => feat('decay') && animalReady(a) && now() - prodFrom(a) > FRESH.prod * HOUR * (1 - FRESH.warn);
 function nextIsBaby(a) { const d = ANIMALS[a.k]; return d.babyEvery > 0 && (a.cycles + 1) % d.babyEvery === 0; }
 function pastureCap(h = S.me) { return h.pastureLv ? PASTURE[h.pastureLv].cap : 0; }
 function pastureCount(h = S.me) { return h.animals.filter(a => !ANIMALS[a.k].pet).length; }
@@ -807,9 +812,8 @@ function collectAnimal(id, h = S.me) {
     addBarn(h, 'baby_' + a.k, 1);
     return { type: 'baby', k: a.k, placed: false, id: a.id };
   }
-  const n = Math.max(1, d.n - stolen);
-  addBarn(h, d.prod, n);
-  return { type: 'prod', k: d.prod, n, id: a.id };
+  const n = Math.max(1, d.n - stolen), coins = intoBarn(h, d.prod, n);
+  return { type: 'prod', k: d.prod, n, id: a.id, coins };
 }
 function sellAnimal(id) {
   const h = S.me, i = h.animals.findIndex(a => a.id === id);
@@ -854,10 +858,9 @@ function buyTree(k) {
 function collectTree(i, h = S.me) {
   const t = h.trees[i];
   if (!treeReady(t)) return null;
-  const d = TREES[t.k], n = Math.max(1, d.n - (t.stolen || 0));
-  addBarn(h, d.fruit, n);
+  const d = TREES[t.k], n = Math.max(1, d.n - (t.stolen || 0)), coins = intoBarn(h, d.fruit, n);
   t.last = now(); t.thieves = []; t.stolen = 0;
-  return { k: d.fruit, n, i };
+  return { k: d.fruit, n, i, coins };
 }
 
 // ---------- pond ----------
@@ -881,10 +884,9 @@ function yardReady(it) { const d = YARD[it.k]; return !!d.prod && now() - (it.la
 function collectYard(id, h = S.me) {
   const it = h.yard.find(x => x.id === id);
   if (!it || !yardReady(it)) return null;
-  const d = YARD[it.k];
-  addBarn(h, d.prod, d.n);
+  const d = YARD[it.k], coins = intoBarn(h, d.prod, d.n);
   it.last = now();
-  return { k: d.prod, n: d.n };
+  return { k: d.prod, n: d.n, coins };
 }
 
 // ---------- barn ----------
@@ -949,7 +951,7 @@ function weatherFarm(ms) {
       if (isRipe(f) && f.left > 1) { f.rot = (f.rot || 0) + hrs; if (f.rot >= WEATHER_FARM.rotHours) { f.left--; f.rot = 0; } }
       return;
     }
-    if (heavy && Math.random() < WEATHER_FARM.flood[heavy] * hrs) { f.flood = now() + WEATHER_FARM.floodHours * HOUR; if (h === S.me) flooded++; return; }
+    if (heavy && feat('decay') && Math.random() < WEATHER_FARM.flood[heavy] * hrs) { f.flood = now() + WEATHER_FARM.floodHours * HOUR; if (h === S.me) flooded++; return; }
     if (isRipe(f)) return;
     if (k === 'rain' || k === 'storm') f.at -= ms * WEATHER_FARM.rainGrow;
     else if (k === 'snow') f.at += ms * WEATHER_FARM.snowSlow;
@@ -1607,6 +1609,7 @@ function likeFriend(id) {
 function giftOptions() {
   const out = [];
   Object.keys(S.me.barn).forEach(k => { if (!k.startsWith('baby_')) out.push({ type: 'barn', k, n: 1 }); });
+  Object.keys(S.me.seeds).forEach(k => { if (S.me.seeds[k] > 0) out.push({ type: 'seed', k, n: 1 }); });   // v0.71: a seed packet (harvests sell straight away now)
   if (S.me.coins >= 50) out.push({ type: 'coins', n: 50 });
   return out;
 }
@@ -1614,6 +1617,7 @@ function giveGift(id, g) {
   const h = S.me, f = friendById(id);
   if (g.type === 'barn') { if (!(h.barn[g.k] >= 1)) return false; h.barn[g.k]--; if (!h.barn[g.k]) delete h.barn[g.k]; addBarn(f, g.k, 1); }
   else if (g.type === 'coins') { if (h.coins < g.n) return false; h.coins -= g.n; f.coins += g.n; }
+  else if (g.type === 'seed') { if (!(h.seeds[g.k] >= 1)) return false; h.seeds[g.k]--; if (!h.seeds[g.k]) delete h.seeds[g.k]; f.seeds = f.seeds || {}; f.seeds[g.k] = (f.seeds[g.k] || 0) + 1; }
   return true;
 }
 function applyGift(g) {
@@ -1972,6 +1976,7 @@ function quitShift() {
 function closeDayHealth(y) {
   const st = S.stats;
   st.workStreak = y.worked ? (st.workStreak || 0) + 1 : 0;
+  if (!feat('trouble')) { S.sick = null; return; }   // v0.71: nobody gets ill in the simple game
   if (S.sick) { if (now() - S.sick.since > SICK.days * DAY || (S.sick.med && S.sick.rested)) S.sick = null; return; }
   const sleep = (S.sleep && S.sleep.score) || 75;
   const p = SICK.base + (st.workStreak >= SICK.overworkDays ? SICK.overwork : 0) + (sleep < SICK.lowSleepScore ? SICK.lowSleep : 0);
@@ -2318,6 +2323,7 @@ function setTint(scope, id, col) { const it = findItem(scope, id); if (!it || !i
 
 // ---------- needs (v0.25) ----------
 function needs() {
+  if (!feat('needs')) return { hunger: 100, social: 100, fun: 100, at: now() };   // v0.71: no need bars in the simple game
   S.needs = S.needs || { hunger: 80, social: 70, fun: 70, at: now() };
   const n = S.needs, dt = (now() - n.at) / HOUR;
   if (dt > 0.005) { ['hunger', 'social', 'fun'].forEach(k => { n[k] = Math.max(NEEDS.floor, n[k] - dt * 100 / NEEDS[k].hours); }); n.at = now(); }
@@ -2325,11 +2331,11 @@ function needs() {
 }
 function addNeed(k, v) { const n = needs(); n[k] = Math.max(0, Math.min(100, n[k] + v)); return n[k]; }
 const moodScore = () => { const n = needs(); return Math.round((n.hunger + n.social + n.fun) / 3); };
-const moodGood = () => moodScore() >= NEEDS.goodMood || S.rested === today();   // v0.45: after a night in the hotel bed, all day
+const moodGood = () => feat('needs') && moodScore() >= NEEDS.goodMood || S.rested === today();   // v0.45: after a night in the hotel bed, all day
 // v0.44: what low needs do (D244): hungry → slower, no work or matches until you've eaten; a bad mood pays less at work;
 // a good mood pays more and you walk a little faster
-const hungry = () => needs().hunger < NEED_LOW.low;
-const moodBad = () => moodScore() < NEED_LOW.badMood && S.rested !== today();
+const hungry = () => feat('needs') && needs().hunger < NEED_LOW.low;
+const moodBad = () => feat('needs') && moodScore() < NEED_LOW.badMood && S.rested !== today();
 const walkMult = () => (hungry() ? NEED_LOW.slowWalk : moodGood() ? NEED_LOW.fastWalk : 1) * (S.swam === today() ? 1 + PERKS.swimWalk : 1);   // v0.45: after a swim
 const moodPayMult = () => (moodGood() ? 1 + NEEDS.moodPay : moodBad() ? 1 - NEED_LOW.badPay : 1);
 // a bite at the café / bakery
@@ -2768,7 +2774,7 @@ function v44() {
 // each from the trough; none left: they wait, hungry), and throws away what's waited too long (it's gone; the next one
 // starts). Crops rot by themselves (isRotten). Returns how many things went off this time.
 function farmTick(h = S.me) {
-  if (!h || !h.animals) return 0;
+  if (!h || !h.animals || !feat('decay')) return 0;   // (v0.71: nothing goes off in the simple game)
   const t0 = now(), keep = FRESH.prod * HOUR; let lost = 0;
   h.animals.forEach(a => {
     const d = ANIMALS[a.k];

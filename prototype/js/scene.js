@@ -634,7 +634,7 @@ const Scene = (() => {
       objs.push({ d: ox + oy + pr.x + 1.6 + pr.y + pr.d - 0.3, f: () => {   // v0.44: the feed trough (yours shows how full it is; tap it to fill it)
         const tx = ox + pr.x + 1.05, ty = oy + pr.y + pr.d - 0.55, mineT = h.id === 'me', fill = mineT ? (h.trough || 0) / FEED.trough : null;
         drawTrough(tx, ty, ts, fill);
-        if (focus && mineT) { const c = iso(tx + 0.45, ty + 0.2); hits.push({ kind: 'trough', owner: h.id, x0: c.x - 18 * z, x1: c.x + 18 * z, y0: c.y - 16 * z, y1: c.y + 8 * z });
+        if (focus && mineT && feat('farmPlus')) { const c = iso(tx + 0.45, ty + 0.2); hits.push({ kind: 'trough', owner: h.id, x0: c.x - 18 * z, x1: c.x + 18 * z, y0: c.y - 16 * z, y1: c.y + 8 * z });
           if (!(h.trough > 0) && h.animals.some(a => !ANIMALS[a.k].pet && ANIMALS[a.k].every)) opt.bubbles.push({ kind: 'trough', p: { x: c.x, y: c.y - 14 * z }, ch: FEED.e, ok: true }); }
       } });
       objs.push({ d: ox + oy + pr.x + 0.7 + pr.y + 0.6, f: () => drawHay(ox + pr.x + 0.4, oy + pr.y + 0.4) });
@@ -1970,7 +1970,7 @@ const Scene = (() => {
         line(c.x, c.y, c.x, c.y - 34 * z, '#8a5a36', 3 * z);
         rrect(c.x - 26 * z, c.y - 56 * z, 52 * z, 24 * z, 5 * z, '#fff6e2', '#c9893a', 1.6 * z);
         ctx.fillStyle = '#b5641e'; ctx.font = `bold ${13 * z}px ${UI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(t('for_sale'), c.x, c.y - 44 * z);
+        ctx.fillText(t(feat('places') ? 'for_sale' : 'lot_free'), c.x, c.y - 44 * z);   // (v0.71: in the friends' town a free lot waits for a friend)
       } });
       tops.push({ land: r, x: c.x, y: c.y - 62 * z });
     });
@@ -2025,16 +2025,17 @@ const Scene = (() => {
         if (z <= minWorldZoom() * 1.02) hits.push({ kind: 'worldMap', pri: 2, ...pill(t('pinch_world'), W / 2, H - 70, 'rgba(59,49,37,.86)', '#fff', `800 13px ${UI_FONT},${EMOJI_FONT}`, 30) });
       }
       tops.forEach(tp => {
+        if (tp.land && !feat('places')) { if (z > 0.11 && tp.land.n >= CORE_PARCELS) hitLabel({ kind: 'emptyLot', pri: 1 }, 1, `➕ ${t('lot_invite')}`, tp.x, tp.y, 'rgba(255,246,226,.95)', '#c4581f', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8); return; }   // v0.71
         if (tp.land) { if (z > 0.11 && tp.land.n >= CORE_PARCELS) hitLabel({ kind: 'land', st: tp.land.st, p: tp.land.p, n: tp.land.n, pri: 1 }, 1, `🏷️ ${t('land_lot', { n: tp.land.n * PARCEL })}`, tp.x, tp.y, 'rgba(255,246,226,.95)', '#a9773f', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 8); return; }
         const top = tp.opt.houseTop;
         if (!top) return;
         if (tp.npc) { if (z > 0.11) hitLabel({ kind: 'lot', owner: tp.h.id, pri: 1 }, 1.5, homeName(tp.h), top.x, top.y - 4, 'rgba(255,255,255,.78)', '#6b5f50', `600 ${small}px ${UI_FONT}`, small + 8); return; }
         if (z < 0.08 && tp.h.id !== 'me') return;
         const i = rk.findIndex(r => r.h.id === tp.h.id), medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`, mine = tp.h.id === 'me';
-        const label = S.calm ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode: names only
+        const label = S.calm || !feat('rank') ? homeName(tp.h) : `${medal} ${homeName(tp.h)} · ${fmtCompact(rk[i].v)}`;   // calm mode (v0.71: and the simple game): names only
         hitLabel({ kind: 'lot', owner: tp.h.id, pri: 1 }, mine ? 5 : 3, label, top.x, top.y - 4, mine ? '#3b3125' : 'rgba(255,255,255,.95)', mine ? '#fff' : '#3b3125', `700 ${small}px ${UI_FONT},${EMOJI_FONT}`, small + 9);
       });
-      if (out.hall) { const { x: px, y: py } = TL.plaza; hitLabel({ kind: 'plaza', pri: 1 }, 4, VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `800 13px ${CUTE_FONT},${EMOJI_FONT}`, 23); }
+      if (out.hall && feat('places')) { const { x: px, y: py } = TL.plaza; hitLabel({ kind: 'plaza', pri: 1 }, 4, VIEW_TOWN === HOME_TOWN ? `🏛️ ${t('street_name')} Lv${lv}` : `🏛️ ${nm(COMMUNITIES[VIEW_TOWN])}`, iso(px + 7, py + 3).x, out.hall.top - 6, '#ef7d3c', '#fff', `800 13px ${CUTE_FONT},${EMOJI_FONT}`, 23); }
       return;
     }
   }
@@ -2201,12 +2202,12 @@ const Scene = (() => {
         if (Math.sin(ts / 500 + i) > 0.2) emoji('✨', c.x + 12 * z, c.y - 22 * z, 12 * z);
       });
       const tag = (kind, text, wx, wy) => { const c = iso(ox + wx, oy + wy); hitLabel({ kind, pri: 1 }, 2, text, c.x, c.y + 4, 'rgba(255,255,255,.92)', '#7a5a2a', `600 11px ${UI_FONT},${EMOJI_FONT}`, 20); };
-      if (fine()) {
+      if (fine() && !(S.tut >= 0)) {   // (v0.71: none during the first-minute tutorial: "多一块地" sat on the wheat it points at)
         if (h.plots) { const nx = nextPlotSpot(h); if (nx) tag('buyLand', `🔓 ${t('expand_plot', { n: fmtNum(plotCost(h.fields.length)) })}`, nx[0] + 0.5, nx[1] + 0.5); }   // v0.46
         else if (h.fieldLv < FIELD_LEVELS.length - 1) tag('buyLand', `🔓 ${t('expand_field')}`, areaOf(h, 'fields').x + 2, areaOf(h, 'fields').y + h.fields.length / 4 + 0.5);
-        if (!h.pastureLv) tag('buyLand', `🐄 ${t('build_pasture')}`, areaOf(h, 'pasture').x + 2, areaOf(h, 'pasture').y + 4);
-        if (!h.orchardLv) tag('buyLand', `🌳 ${t('build_orchard')}`, areaOf(h, 'orchard').x + 3, areaOf(h, 'orchard').y + 1.5);
-        if (!h.pondLv) tag('buyLand', `🐟 ${t('build_pond')}`, areaOf(h, 'pond').x + 2, areaOf(h, 'pond').y + 1.5);
+        if (!h.pastureLv && feat('farmPlus')) tag('buyLand', `🐄 ${t('build_pasture')}`, areaOf(h, 'pasture').x + 2, areaOf(h, 'pasture').y + 4);
+        if (!h.orchardLv && feat('farmPlus')) tag('buyLand', `🌳 ${t('build_orchard')}`, areaOf(h, 'orchard').x + 3, areaOf(h, 'orchard').y + 1.5);
+        if (!h.pondLv && feat('farmPlus')) tag('buyLand', `🐟 ${t('build_pond')}`, areaOf(h, 'pond').x + 2, areaOf(h, 'pond').y + 1.5);
         if (canExpand()) { const c = iso(ox + homeW(h) + PARCEL / 2, oy + LOT_D / 2); hitLabel({ kind: 'buyParcel', pri: 2 }, 2.5, `🏷️ ${t('buy_parcel')} · 🪙${fmtNum(parcelCost().coins)}`, c.x, c.y - 40 * z, '#fff6e2', '#b5641e', `800 12px ${UI_FONT},${EMOJI_FONT}`, 24); }
       }
       if (S.pending.length && tp.opt.houseTop) hitLabel({ kind: 'pending', pri: 3 }, 4, `📦 ${S.pending.length}`, tp.opt.houseTop.x, tp.opt.houseTop.y - 6 - bob, '#ef7d3c', '#fff', `bold 14px ${UI_FONT},${EMOJI_FONT}`, 22);
@@ -2560,7 +2561,7 @@ const Scene = (() => {
     if (now2 > WALK.next && WALK.list.length < SHOW_LIMITS.town) {
       WALK.next = now2 + 2500 + Math.random() * 4000;
       const ids = allLots().map(l => l.id).filter(id => id !== 'me' && !WALK.list.some(w => w.id === id) && homeOf(id));
-      const folk = townsfolk(VIEW_TOWN).filter(p => !WALK.list.some(w => w.id === p.id));
+      const folk = (feat('townsfolk') ? townsfolk(VIEW_TOWN) : []).filter(p => !WALK.list.some(w => w.id === p.id));
       if (folk.length && (Math.random() < 0.55 || !ids.length)) {   // v0.40: one of the townsfolk
         const p = folk[Math.floor(Math.random() * folk.length)], ends = [...TL.places, ...(TL.stores || []).map(st => storeGeo(st).door)].filter(Boolean);
         const a = ends[Math.floor(Math.random() * ends.length)], b = ends[Math.floor(Math.random() * ends.length)];
@@ -2685,7 +2686,7 @@ const Scene = (() => {
   function parkList() {
     if (VIEW_TOWN !== myTown() || !TL.park) return [];
     const P = TL.park, dayN = Math.floor(now() / DAY), list = [];
-    const ids = [...allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id)), ...townsfolk(VIEW_TOWN).map(p => p.id)];   // v0.40: + townsfolk
+    const ids = [...allLots().map(l => l.id).filter(id => id !== 'me' && homeOf(id)), ...(feat('townsfolk') ? townsfolk(VIEW_TOWN) : []).map(p => p.id)];   // v0.40: + townsfolk (v0.71: not in the simple game)
     const PP = parkPlan(), b0 = PP.benches[0], pc = PP.picnic[0] || [PP.play.x + 1, PP.play.y + 6], T = PP.ten;   // v0.32
     [[b0[0] + 0.4, b0[1] + 1.4], [b0[0] + 1.3, b0[1] + 1.3], [pc[0] - 0.5, pc[1] + 0.6], [T.x + 2.2, T.y + T.d + 0.9]].forEach(([x, y], i) => { const id = ids[(dayN * 3 + i * 7) % Math.max(1, ids.length)]; if (id) list.push({ id, look: whoIs(id).look, x, y, i }); });
     if (S.meet && S.meet.until > now()) { const who = whoIs(S.meet.id); if (who) list.push({ id: S.meet.id, look: who.look, x: PP.cx - 1.6, y: PP.cy + 2.7, i: 11, work: !!who.wp, boss: !!(who.wp && who.wp.boss) }); }   // v0.26: you asked them on the phone
@@ -3946,7 +3947,7 @@ const Scene = (() => {
     const ids = allLots(myTown()).map(l => l.id).filter(id => id !== 'me' && homeOf(id));
     if (S.job) workPeople(S.job.place).forEach(p => ids.push(p.id));
     visitorTowns().forEach(t2 => npcLots(t2).forEach(l => { if (homeOf(l.id)) ids.push(l.id); }));
-    townsfolk(VIEW_TOWN).forEach(p => ids.push(p.id));   // v0.40: the people who live here
+    if (feat('townsfolk')) townsfolk(VIEW_TOWN).forEach(p => ids.push(p.id));   // v0.40: the people who live here
     return ids;
   }
   const onWheels = id => { const w = id && whoIs(id); return !!(w && w.look && w.look.mob === 'wheel'); };
@@ -6530,6 +6531,15 @@ const Scene = (() => {
     _tripInfo() { return trip && { li: trip.li, how: (trip.legs[trip.li] || {}).how, legs: trip.legs.map(l => l.how + (l.wait ? ':' + Math.round(l.wait) : '') + (l.ride ? ':L' + l.ride.no + (l.ride.dir > 0 ? '+' : '-') : '')), x: +trip.x.toFixed(1), y: +trip.y.toFixed(1), inCar: trip.inCar, arrived: trip.arrived }; },
     liveAt() { TL = layoutOf(VIEW_TOWN); return liveSpotTown(); },
     lookAt(x, y) { if (mode === 'town') flyTo(x, y, Math.max(cam.z, 0.45)); },
+    // v0.71: the friends' town: everyone's homes in view at once (you and your friends), as close as they fit
+    showFriends(ids) {
+      if (mode !== 'town' || !W) return false;
+      const box = ids.filter(id => lotOf(id) && townOf(id) === VIEW_TOWN).map(id => { const [ox, oy] = origin(id); return [ox, oy, ox + lotW(id), oy + LOT_D]; });
+      if (!box.length) return false;
+      const x0 = Math.min(...box.map(b => b[0])), y0 = Math.min(...box.map(b => b[1])), x1 = Math.max(...box.map(b => b[2])), y1 = Math.max(...box.map(b => b[3]));
+      const wI = ((x1 - y0) - (x0 - y1)) * TW / 2, hI = ((x1 + y1) - (x0 + y0)) * TH / 2;
+      flyTo((x0 + x1) / 2, (y0 + y1) / 2 + 1, clamp(Math.min(W * 0.95 / wI, H * 0.62 / hI), 0.3, ME_ZOOM), true); follow = false; return true;
+    },
     showMe() { if (mode !== 'town') return false; const p = meInView(); if (!p) return false; flyTo(p[0], p[1], Math.max(ME_ZOOM, cam.z), true); follow = false; return true; },   // v0.64
     _fly(x, y, z) { flyTo(x, y, z, true); },   // (testing: jump the camera)
     // (testing, v0.47) walking to every door from a few far points: how many legs go through a building
