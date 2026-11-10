@@ -2,7 +2,7 @@
 // Catalogs and tuning: what you can grow, raise, buy and build, what it costs, and how real-life health pays out.
 // Item names are bilingual; nm(item) picks the current language. Times are in minutes unless noted.
 
-const VERSION = '0.70.0';
+const VERSION = '0.70.1';
 const TW = 64, TH = 32;                 // isometric tile size in px at zoom 1
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const ACTION_CAP = 24;                  // (until v0.43: farm actions per day. v0.44: no limit any more, D243; sneaking keeps STEAL_CAP)
